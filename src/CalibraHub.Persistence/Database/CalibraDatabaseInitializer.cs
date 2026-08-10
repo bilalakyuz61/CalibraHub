@@ -5814,6 +5814,42 @@ END;";
                 UPDATE [{s}].[ItemKit] SET [PriceMode] = N'FixedPackage' WHERE [PriceMode] = N'Fixed';
                 UPDATE [{s}].[ItemKit] SET [PriceMode] = N'ListComponent' WHERE [PriceMode] = N'RollUp';
             END;
+
+            -- 2026-08-10: Kit revizyon gecmisi. ItemKit satirlari UPDATE ile yerinde
+            -- degistigi (bilesenler DELETE+INSERT) icin eski icerik kayboluyordu;
+            -- belgelerdeki KitVersionNo'nun neye karsilik geldigi izlenemiyordu.
+            -- Her kaydetmede o anki icerik JSON snapshot olarak buraya yazilir
+            -- (RevisionNo = yazildigi andaki ItemKit.VersionNo). Salt-okunur gecmis.
+            IF OBJECT_ID(N'[{s}].[ItemKitRevision]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ItemKitRevision]
+                (
+                    [Id]          INT            NOT NULL IDENTITY(1,1) CONSTRAINT [PK_ItemKitRevision] PRIMARY KEY,
+                    [ItemKitId]   INT            NOT NULL,
+                    [ItemId]      INT            NOT NULL,
+                    [RevisionNo]  INT            NOT NULL,
+                    [PriceMode]   NVARCHAR(20)   NOT NULL,
+                    [FixedPrice]  DECIMAL(18,4)  NULL,
+                    [Description] NVARCHAR(500)  NULL,
+                    [LineCount]   INT            NOT NULL CONSTRAINT [DF_ItemKitRevision_LineCount] DEFAULT 0,
+                    [Fingerprint] NVARCHAR(64)   NOT NULL,
+                    [Snapshot]    NVARCHAR(MAX)  NOT NULL,
+                    [CreatedById] INT            NULL,
+                    [Created]     DATETIME       NOT NULL CONSTRAINT [DF_ItemKitRevision_Created] DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT [FK_ItemKitRevision_ItemKit]
+                        FOREIGN KEY ([ItemKitId]) REFERENCES [{s}].[ItemKit]([Id]) ON DELETE CASCADE
+                );
+            END;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE object_id = OBJECT_ID(N'[{s}].[ItemKitRevision]') AND name = N'IX_ItemKitRevision_ItemId')
+                CREATE INDEX [IX_ItemKitRevision_ItemId]
+                    ON [{s}].[ItemKitRevision]([ItemId], [RevisionNo] DESC);
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE object_id = OBJECT_ID(N'[{s}].[ItemKitRevision]') AND name = N'IX_ItemKitRevision_ItemKitId')
+                CREATE INDEX [IX_ItemKitRevision_ItemKitId]
+                    ON [{s}].[ItemKitRevision]([ItemKitId], [RevisionNo] DESC);
             """;
 
         await using var cmd = connection.CreateCommand();

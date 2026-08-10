@@ -499,6 +499,57 @@ public sealed record SaveItemKitLineRequest(
     decimal? UnitPrice = null,      // yalniz kit PriceMode=FixedComponent iken anlamli (elle bilesen fiyati)
     int? UnitId = null);            // secili olcu birimi (Unit.Id) — NULL = bilesenin kendi varsayilan birimi
 
+// ── Kit revizyon gecmisi (ItemKitRevision) ─────────────────────────────────
+// Kit her kaydedildiginde o anki icerik JSON snapshot olarak saklanir. RevisionNo,
+// snapshot alindigi andaki ItemKit.VersionNo'dur — belgelerdeki
+// DocumentLineKitComponent.KitVersionNo dogrudan bu revizyona isaret eder.
+// Salt-okunur gecmis: geri yukleme (restore) YOK.
+public sealed record ItemKitRevisionSummaryDto(
+    int Id,
+    int ItemKitId,
+    int RevisionNo,
+    string PriceMode,
+    decimal? FixedPrice,
+    int LineCount,
+    string? CreatedBy,          // kullanici tam adi (JOIN ile) — null = sistem/bilinmiyor
+    DateTime CreatedAt);
+
+public sealed record ItemKitRevisionDetailDto(
+    int Id,
+    int ItemKitId,
+    int RevisionNo,
+    string PriceMode,
+    decimal? FixedPrice,
+    string? Description,
+    string? CreatedBy,
+    DateTime CreatedAt,
+    IReadOnlyList<ItemKitRevisionLineDto> Lines);
+
+// Snapshot JSON'in icindeki bilesen satiri — kod/ad DAHIL saklanir ki gecmis,
+// bilesen karti sonradan degisse/silinse bile okunabilir kalsin.
+public sealed record ItemKitRevisionLineDto(
+    int ItemId,
+    string ItemCode,
+    string ItemName,
+    int? ConfigId,
+    string? ConfigCode,
+    decimal Quantity,
+    int? UnitId,
+    string? UnitCode,
+    decimal? UnitPrice,
+    string? Note);
+
+// Snapshot JSON kok nesnesi (ItemKitRevision.Snapshot icerigi).
+public sealed record ItemKitRevisionSnapshot(
+    int ItemId,
+    string ItemCode,
+    string ItemName,
+    int VersionNo,
+    string PriceMode,
+    decimal? FixedPrice,
+    string? Description,
+    IReadOnlyList<ItemKitRevisionLineDto> Lines);
+
 // ── Kit snapshot kaynagi (Faz 2) — belge kaydinda aktif ItemKit icerigi ────
 // Bir kit belge kalemine eklendiginde bu icerik DocumentLineKitComponent'e dondurulur.
 // PriceMode (Seq 1073 Part B, genisletildi Seq 1078) — ListComponent/ListPackage modundaki

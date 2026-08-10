@@ -104,6 +104,9 @@ public static class CalibraTableCatalog
         // Varlik Yonetimi (Asset Management)
         "Asset", "AssetEvent", "AssetAssignment",
 
+        // Kit (Paket Urun)
+        "ItemKit", "ItemKitLine", "ItemKitRevision",
+
         // Onay Akisi
         "ApprovalFlow", "ApprovalFlowStep", "ApprovalFlowRule", "ApprovalFlowEdge",
         "ApprovalFlowVariable", "ApprovalFlowRevision", "ApprovalFlowRunLog",

@@ -3155,6 +3155,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         foreach (var line in kit.Lines)
             await InsertKitLineAsync(connection, transaction, newId, line, kit.CreatedById, cancellationToken);
 
+        // Revizyon snapshot — ilk kayit her zaman v1 olarak gecmise yazilir.
+        await WriteKitRevisionAsync(connection, transaction, newId, kit.CreatedById, cancellationToken);
+
         await transaction.CommitAsync(cancellationToken);
         return newId;
     }
@@ -3197,6 +3200,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
         foreach (var line in kit.Lines)
             await InsertKitLineAsync(connection, transaction, kit.Id, line, kit.UpdatedById, cancellationToken);
+
+        // Revizyon snapshot — icerik semantik olarak degismediyse yeni satir yazilmaz.
+        await WriteKitRevisionAsync(connection, transaction, kit.Id, kit.UpdatedById, cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
     }
@@ -3241,6 +3247,228 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@ItemId", itemId));
         command.Parameters.Add(new SqlParameter("@UpdatedById", (object?)userId ?? DBNull.Value));
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /* ── Kit revizyon gecmisi (ItemKitRevision) ───────────────────── */
+
+    private static readonly System.Text.Json.JsonSerializerOptions KitRevisionJsonOptions = new()
+    {
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+    };
+
+    /// <summary>
+    /// Kit'in AKTIF (yeni yazilmis) icerigini ayni transaction icinde geri okuyup JSON
+    /// snapshot olarak ItemKitRevision'a yazar. RevisionNo = o andaki ItemKit.VersionNo.
+    /// Semantik parmak izi onceki revizyonla ayniysa yeni satir YAZILMAZ (gereksiz
+    /// revizyon uretmemek icin — ornegin sadece aciklama disi hicbir sey degismediyse).
+    /// Snapshot bilesen kod/adlarini da tasir: bilesen karti sonradan degisse bile
+    /// gecmis okunabilir kalir.
+    /// </summary>
+    private async Task WriteKitRevisionAsync(
+        SqlConnection connection, SqlTransaction transaction, int kitId, int? userId,
+        CancellationToken cancellationToken)
+    {
+        int itemId, versionNo, lineCount = 0;
+        string itemCode, itemName, priceMode;
+        decimal? fixedPrice;
+        string? description;
+        var lines = new List<ItemKitRevisionLineDto>();
+
+        await using (var readCmd = connection.CreateCommand())
+        {
+            readCmd.Transaction = transaction;
+            readCmd.CommandText = $"""
+                SELECT
+                    k.[ItemId], ki.[code], ISNULL(ki.[name], ki.[code]),
+                    k.[VersionNo], k.[PriceMode], k.[FixedPrice], k.[Description],
+                    l.[ItemId], ci.[code], ISNULL(ci.[name], ci.[code]),
+                    l.[ConfigId], lcfg.[RecordCode],
+                    l.[Quantity], l.[UnitId], lu.[Code], l.[UnitPrice], l.[Note]
+                FROM [{_schema}].[ItemKit] k
+                INNER JOIN {_stockCardsTableName} ki ON ki.[id] = k.[ItemId]
+                LEFT  JOIN [{_schema}].[ItemKitLine] l ON l.[ItemKitId] = k.[Id]
+                LEFT  JOIN {_stockCardsTableName} ci ON ci.[id] = l.[ItemId]
+                LEFT  JOIN [{_schema}].[ItemConfiguration] lcfg ON lcfg.[Id] = l.[ConfigId]
+                LEFT  JOIN [{_schema}].[Unit] lu ON lu.[Id] = l.[UnitId]
+                WHERE k.[Id] = @KitId
+                ORDER BY l.[Id];
+                """;
+            readCmd.Parameters.Add(new SqlParameter("@KitId", kitId));
+
+            await using var reader = await readCmd.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken))
+                return;  // kit satiri yok — yazacak snapshot da yok
+
+            itemId      = reader.GetInt32(0);
+            itemCode    = reader.GetString(1);
+            itemName    = reader.GetString(2);
+            versionNo   = reader.GetInt32(3);
+            priceMode   = reader.GetString(4);
+            fixedPrice  = reader.IsDBNull(5) ? null : reader.GetDecimal(5);
+            description = reader.IsDBNull(6) ? null : reader.GetString(6);
+
+            do
+            {
+                if (reader.IsDBNull(7)) continue;  // LEFT JOIN — bilesensiz kit
+                lines.Add(new ItemKitRevisionLineDto(
+                    ItemId:     reader.GetInt32(7),
+                    ItemCode:   reader.IsDBNull(8)  ? "" : reader.GetString(8),
+                    ItemName:   reader.IsDBNull(9)  ? "" : reader.GetString(9),
+                    ConfigId:   reader.IsDBNull(10) ? null : reader.GetInt32(10),
+                    ConfigCode: reader.IsDBNull(11) ? null : reader.GetString(11),
+                    Quantity:   reader.GetDecimal(12),
+                    UnitId:     reader.IsDBNull(13) ? null : reader.GetInt32(13),
+                    UnitCode:   reader.IsDBNull(14) ? null : reader.GetString(14),
+                    UnitPrice:  reader.IsDBNull(15) ? null : reader.GetDecimal(15),
+                    Note:       reader.IsDBNull(16) ? null : reader.GetString(16)));
+            }
+            while (await reader.ReadAsync(cancellationToken));
+
+            lineCount = lines.Count;
+        }
+
+        var snapshot = new ItemKitRevisionSnapshot(
+            itemId, itemCode, itemName, versionNo, priceMode, fixedPrice, description, lines);
+        var snapshotJson = System.Text.Json.JsonSerializer.Serialize(snapshot, KitRevisionJsonOptions);
+        var fingerprint  = ComputeKitFingerprint(snapshot);
+
+        // Dedup — son revizyonun parmak izi ayniysa yeni revizyon uretme.
+        await using (var prevCmd = connection.CreateCommand())
+        {
+            prevCmd.Transaction = transaction;
+            prevCmd.CommandText = $"""
+                SELECT TOP 1 [Fingerprint] FROM [{_schema}].[ItemKitRevision]
+                WHERE [ItemKitId] = @KitId ORDER BY [RevisionNo] DESC, [Id] DESC;
+                """;
+            prevCmd.Parameters.Add(new SqlParameter("@KitId", kitId));
+            if (await prevCmd.ExecuteScalarAsync(cancellationToken) is string prev && prev == fingerprint)
+                return;
+        }
+
+        await using var insCmd = connection.CreateCommand();
+        insCmd.Transaction = transaction;
+        insCmd.CommandText = $"""
+            INSERT INTO [{_schema}].[ItemKitRevision]
+                ([ItemKitId],[ItemId],[RevisionNo],[PriceMode],[FixedPrice],[Description],
+                 [LineCount],[Fingerprint],[Snapshot],[CreatedById],[Created])
+            VALUES
+                (@KitId,@ItemId,@RevNo,@PriceMode,@FixedPrice,@Description,
+                 @LineCount,@Fingerprint,@Snapshot,@CreatedById,SYSUTCDATETIME());
+            """;
+        insCmd.Parameters.Add(new SqlParameter("@KitId",       kitId));
+        insCmd.Parameters.Add(new SqlParameter("@ItemId",      itemId));
+        insCmd.Parameters.Add(new SqlParameter("@RevNo",       versionNo));
+        insCmd.Parameters.Add(new SqlParameter("@PriceMode",   priceMode));
+        insCmd.Parameters.Add(new SqlParameter("@FixedPrice",  (object?)fixedPrice ?? DBNull.Value));
+        insCmd.Parameters.Add(new SqlParameter("@Description", (object?)description ?? DBNull.Value));
+        insCmd.Parameters.Add(new SqlParameter("@LineCount",   lineCount));
+        insCmd.Parameters.Add(new SqlParameter("@Fingerprint", fingerprint));
+        insCmd.Parameters.Add(new SqlParameter("@Snapshot",    snapshotJson));
+        insCmd.Parameters.Add(new SqlParameter("@CreatedById", (object?)userId ?? DBNull.Value));
+        await insCmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Semantik parmak izi — Id/LineGuid gibi her kaydetmede degisen alanlar DISARIDA.
+    /// Bilesen sirasi kaydetmeye gore degisebildiginden satirlar deterministik siralanir.
+    /// </summary>
+    private static string ComputeKitFingerprint(ItemKitRevisionSnapshot s)
+    {
+        var sb = new StringBuilder();
+        sb.Append(s.PriceMode).Append('|')
+          .Append(s.FixedPrice?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "-").Append('|')
+          .Append(s.Description?.Trim() ?? "-").Append('\n');
+
+        foreach (var l in s.Lines
+                     .OrderBy(l => l.ItemId)
+                     .ThenBy(l => l.ConfigId ?? 0)
+                     .ThenBy(l => l.UnitId ?? 0)
+                     .ThenBy(l => l.Quantity)
+                     .ThenBy(l => l.UnitPrice ?? 0m)
+                     .ThenBy(l => l.Note ?? "", StringComparer.Ordinal))
+        {
+            sb.Append(l.ItemId).Append(';')
+              .Append(l.ConfigId?.ToString() ?? "-").Append(';')
+              .Append(l.Quantity.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append(';')
+              .Append(l.UnitId?.ToString() ?? "-").Append(';')
+              .Append(l.UnitPrice?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "-").Append(';')
+              .Append(l.Note?.Trim() ?? "-").Append('\n');
+        }
+
+        var hash = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
+        return Convert.ToHexString(hash);
+    }
+
+    public async Task<IReadOnlyList<ItemKitRevisionSummaryDto>> GetKitRevisionsAsync(
+        int itemId, CancellationToken cancellationToken)
+    {
+        // Kit karti (ItemId) bazli TUM gecmis — kit silinip yeniden kurulmus olsa bile
+        // (yeni ItemKit satiri) gecmis kesintisiz okunur.
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT r.[Id], r.[ItemKitId], r.[RevisionNo], r.[PriceMode], r.[FixedPrice],
+                   r.[LineCount], u.[FullName], r.[Created]
+            FROM [{_schema}].[ItemKitRevision] r
+            LEFT JOIN [{_schema}].[Users] u ON u.[Id] = r.[CreatedById]
+            WHERE r.[ItemId] = @ItemId
+            ORDER BY r.[RevisionNo] DESC, r.[Id] DESC;
+            """;
+        command.Parameters.Add(new SqlParameter("@ItemId", itemId));
+
+        var list = new List<ItemKitRevisionSummaryDto>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            list.Add(new ItemKitRevisionSummaryDto(
+                Id:         reader.GetInt32(0),
+                ItemKitId:  reader.GetInt32(1),
+                RevisionNo: reader.GetInt32(2),
+                PriceMode:  reader.GetString(3),
+                FixedPrice: reader.IsDBNull(4) ? null : reader.GetDecimal(4),
+                LineCount:  reader.GetInt32(5),
+                CreatedBy:  reader.IsDBNull(6) ? null : reader.GetString(6),
+                CreatedAt:  reader.GetDateTime(7)));
+        }
+        return list;
+    }
+
+    public async Task<ItemKitRevisionDetailDto?> GetKitRevisionDetailAsync(
+        int revisionId, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT r.[Id], r.[ItemKitId], r.[RevisionNo], r.[PriceMode], r.[FixedPrice],
+                   r.[Description], u.[FullName], r.[Created], r.[Snapshot]
+            FROM [{_schema}].[ItemKitRevision] r
+            LEFT JOIN [{_schema}].[Users] u ON u.[Id] = r.[CreatedById]
+            WHERE r.[Id] = @Id;
+            """;
+        command.Parameters.Add(new SqlParameter("@Id", revisionId));
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken)) return null;
+
+        var snapshotJson = reader.IsDBNull(8) ? null : reader.GetString(8);
+        IReadOnlyList<ItemKitRevisionLineDto> lines = Array.Empty<ItemKitRevisionLineDto>();
+        if (!string.IsNullOrWhiteSpace(snapshotJson))
+        {
+            var snap = System.Text.Json.JsonSerializer.Deserialize<ItemKitRevisionSnapshot>(
+                snapshotJson, KitRevisionJsonOptions);
+            if (snap?.Lines is { Count: > 0 }) lines = snap.Lines;
+        }
+
+        return new ItemKitRevisionDetailDto(
+            Id:          reader.GetInt32(0),
+            ItemKitId:   reader.GetInt32(1),
+            RevisionNo:  reader.GetInt32(2),
+            PriceMode:   reader.GetString(3),
+            FixedPrice:  reader.IsDBNull(4) ? null : reader.GetDecimal(4),
+            Description: reader.IsDBNull(5) ? null : reader.GetString(5),
+            CreatedBy:   reader.IsDBNull(6) ? null : reader.GetString(6),
+            CreatedAt:   reader.GetDateTime(7),
+            Lines:       lines);
     }
 
     public async Task<IReadOnlyCollection<int>> GetBOMComponentItemIdsAsync(

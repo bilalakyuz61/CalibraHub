@@ -155,6 +155,15 @@ public interface ILogisticsConfigurationService
     Task DeleteKitAsync(int itemId, int? userId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Kit kartinin revizyon gecmisi (ItemKitRevision) — her kaydetmede alinan icerik
+    /// snapshot'lari, RevisionNo azalan. Salt-okunur; geri yukleme yoktur.
+    /// </summary>
+    Task<IReadOnlyList<ItemKitRevisionSummaryDto>> GetKitRevisionsAsync(int itemId, CancellationToken cancellationToken);
+
+    /// <summary>Tek revizyonun bilesen listesi dahil detayi. Yoksa null.</summary>
+    Task<ItemKitRevisionDetailDto?> GetKitRevisionDetailAsync(int revisionId, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Multi-level BOM patlatma (rapor 2026-05-17 madde 3.3): X mamulden
     /// <paramref name="quantity"/> adet uretmek icin tum alt-receteleri gezerek
     /// hammadde + ara mamul ihtiyacini birikmis (aggregated) olarak doner.

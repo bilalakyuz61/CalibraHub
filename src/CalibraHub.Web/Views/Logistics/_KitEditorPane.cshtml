@@ -165,6 +165,68 @@
     .ke-msg.is-show { opacity: 1; transform: translateX(-50%) translateY(0); }
     .ke-msg.is-err { background: #e11d48; }
 
+    /* ── Revizyon geçmişi modalı (salt-okunur) ──
+       Ölçü SABİT (CLAUDE.md "Modal boyut sabitliği"): revizyon seçtikçe içerik
+       değişir ama kabuk büyüyüp küçülmez; taşan içerik kendi içinde kayar. */
+    .ke-embed .ke-ver-badge { cursor: pointer; border: 1px solid transparent; }
+    .ke-embed .ke-ver-badge:hover { border-color: var(--ke-primary); }
+
+    .ikh-backdrop {
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 70;
+        background: rgba(15, 23, 42, .55); backdrop-filter: blur(2px);
+        display: flex; align-items: center; justify-content: center;
+    }
+    .ikh-box {
+        width: min(920px, calc(100vw - 96px));
+        height: min(580px, calc(100vh - 64px));
+        display: flex; flex-direction: column;
+        background: var(--ke-surface); color: var(--ke-text);
+        border: 1px solid var(--ke-border); border-radius: 14px;
+        box-shadow: 0 24px 60px rgba(0,0,0,.32); overflow: hidden;
+    }
+    .ikh-head {
+        display: flex; align-items: center; gap: 10px;
+        padding: 13px 16px; border-bottom: 1px solid var(--ke-border);
+    }
+    .ikh-head h3 { margin: 0; font-size: .95rem; font-weight: 700; }
+    .ikh-head .ikh-sub { font-size: .76rem; color: var(--ke-muted); }
+    .ikh-close {
+        margin-left: auto; width: 30px; height: 30px; border-radius: 8px; cursor: pointer;
+        border: 1px solid var(--ke-border); background: var(--ke-surface-2); color: var(--ke-muted);
+        display: inline-flex; align-items: center; justify-content: center;
+    }
+    .ikh-close:hover { color: var(--ke-danger); border-color: var(--ke-danger); }
+
+    .ikh-body { flex: 1; min-height: 0; display: flex; }
+    /* Sol ray HER ZAMAN mount ve sabit genişlikte — koşullu mount layout shift üretir. */
+    .ikh-rail {
+        width: 246px; flex: 0 0 246px; min-height: 0; overflow-y: auto;
+        border-right: 1px solid var(--ke-border); background: var(--ke-surface-2);
+    }
+    .ikh-rev {
+        width: 100%; text-align: left; cursor: pointer; padding: 9px 12px;
+        border: none; border-bottom: 1px solid var(--ke-border); background: transparent; color: inherit;
+        display: flex; flex-direction: column; gap: 2px;
+    }
+    .ikh-rev:hover { background: var(--ke-primary-weak); }
+    .ikh-rev.is-active { background: var(--ke-primary-weak); box-shadow: inset 3px 0 0 var(--ke-primary); }
+    .ikh-rev b { font-size: .82rem; font-weight: 700; color: var(--ke-primary); }
+    .ikh-rev span { font-size: .72rem; color: var(--ke-muted); }
+
+    .ikh-detail { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; padding: 14px 16px; }
+    .ikh-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 12px; }
+    .ikh-meta div { font-size: .78rem; }
+    .ikh-meta div b { display: block; font-size: .7rem; font-weight: 600; color: var(--ke-muted); }
+    .ikh-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+    .ikh-table th {
+        text-align: left; font-size: .7rem; font-weight: 600; color: var(--ke-muted);
+        padding: 6px 8px; border-bottom: 1px solid var(--ke-border); white-space: nowrap;
+    }
+    .ikh-table td { padding: 6px 8px; border-bottom: 1px dashed var(--ke-border); }
+    .ikh-table td.ikh-num { text-align: right; font-variant-numeric: tabular-nums; }
+    .ikh-table td.ikh-code { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; color: var(--ke-primary); }
+    .ikh-empty { padding: 26px 10px; text-align: center; font-size: .82rem; color: var(--ke-muted); }
+
     /* Dar ekran — kolonlar 2'li bloklara iner (giriş ve satırlar yine hizalı kalır). */
     @@media (max-width: 720px) {
         .ke-embed .ke-grid { grid-template-columns: 1fr; max-width: none; }
@@ -208,7 +270,8 @@
         <p class="ke-card__title">
             Paket İçeriği
             <span class="ke-badge" id="keCount" style="margin-left:8px;">0 bileşen</span>
-            <span class="ke-badge" id="keHeaderVer" style="margin-left:6px;display:none;"></span>
+            <span class="ke-badge ke-ver-badge" id="keHeaderVer" style="margin-left:6px;display:none;"
+                  role="button" tabindex="0" title="Revizyon geçmişini görüntüle"></span>
         </p>
         <!-- Giriş satırı — hep görünür; eklenen bileşenler altına (keLinesBody) dizilir. -->
         <div class="ke-addbar" id="keAddrow">
@@ -257,6 +320,26 @@
         <!-- Eklenen bileşenler — giriş satırının altına, aynı kolon düzeninde -->
         <div class="ke-lines" id="keLinesBody"></div>
         <div class="ke-hint">Kod alanında <strong>Enter</strong> ile alanlar arasında ilerleyip hızlıca ekleyin; eklenen satırın miktar/fiyat/açıklaması aşağıda yerinde düzenlenir.</div>
+    </div>
+
+    <!-- Revizyon geçmişi — SALT OKUNUR (geri yükleme yok). Kit her kaydedildiğinde
+         o anki içerik ItemKitRevision'a snapshot olarak yazılır. -->
+    <div class="ikh-backdrop" id="keRevBackdrop" style="display:none;">
+        <div class="ikh-box" role="dialog" aria-modal="true" aria-label="Kit Revizyon Geçmişi">
+            <div class="ikh-head">
+                <div>
+                    <h3>Revizyon Geçmişi</h3>
+                    <div class="ikh-sub" id="keRevSub">Kit içeriğinin kayıt anındaki halleri (salt okunur)</div>
+                </div>
+                <button type="button" class="ikh-close" id="keRevClose" title="Kapat (Esc)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="ikh-body">
+                <div class="ikh-rail" id="keRevList"></div>
+                <div class="ikh-detail" id="keRevDetail"></div>
+            </div>
+        </div>
     </div>
 
     <div class="ke-msg" id="keMsg"></div>
@@ -766,6 +849,191 @@
         })
         .catch(function () { return { ok: false, message: 'Sunucuya ulaşılamadı (kit içeriği).' }; });
     }
+
+    // ── Revizyon geçmişi (salt okunur) ──
+    // Kit her kaydedildiğinde backend ItemKitRevision'a snapshot yazar (içerik semantik
+    // olarak değişmediyse yazmaz). Buradaki liste o snapshot'ları gösterir; geri yükleme
+    // BİLİNÇLİ olarak yok — geçmiş belgeler kendi KitVersionNo snapshot'larını taşır.
+    var PRICE_MODE_LABELS = {
+        FixedPackage: 'Sabit Paket Fiyatı', FixedComponent: 'Sabit Bileşen Fiyatı',
+        ListPackage: 'Liste Paket Fiyatı', ListComponent: 'Liste Bileşen Fiyatı'
+    };
+
+    function fmtNum(v) {
+        if (v == null || v === '') return '—';
+        var n = Number(v);
+        return isFinite(n) ? n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : String(v);
+    }
+    function fmtDateTime(iso) {
+        if (!iso) return '—';
+        var d = new Date(iso);
+        return isNaN(d.getTime()) ? String(iso) : d.toLocaleString('tr-TR');
+    }
+    function metaItem(label, value) {
+        var d = document.createElement('div');
+        var b = document.createElement('b'); b.textContent = label;
+        d.appendChild(b);
+        d.appendChild(document.createTextNode(value));
+        return d;
+    }
+
+    function openRevisions() {
+        if (!KIT_ITEM_ID || KIT_ITEM_ID <= 0) { showMsg('Önce malzeme kartını kaydedin.', true); return; }
+        $('keRevBackdrop').style.display = 'flex';
+        document.addEventListener('keydown', revEscHandler);
+
+        var list = $('keRevList');
+        list.innerHTML = '';
+        var loading = document.createElement('div');
+        loading.className = 'ikh-empty'; loading.textContent = 'Yükleniyor...';
+        list.appendChild(loading);
+        $('keRevDetail').innerHTML = '';
+
+        fetch('/Logistics/KitRevisions?itemId=' + KIT_ITEM_ID, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : { items: [] }; })
+            .then(function (d) { renderRevList((d && d.items) || []); })
+            .catch(function () {
+                list.innerHTML = '';
+                var err = document.createElement('div');
+                err.className = 'ikh-empty'; err.textContent = 'Revizyon geçmişi yüklenemedi.';
+                list.appendChild(err);
+            });
+    }
+
+    function renderRevList(items) {
+        var list = $('keRevList');
+        list.innerHTML = '';
+        $('keRevSub').textContent = items.length
+            ? items.length + ' revizyon — kit içeriğinin kayıt anındaki halleri (salt okunur)'
+            : 'Kit içeriğinin kayıt anındaki halleri (salt okunur)';
+
+        if (!items.length) {
+            var empty = document.createElement('div');
+            empty.className = 'ikh-empty';
+            empty.textContent = 'Henüz revizyon yok.';
+            list.appendChild(empty);
+            $('keRevDetail').innerHTML = '';
+            var hint = document.createElement('div');
+            hint.className = 'ikh-empty';
+            hint.textContent = 'Kit bir sonraki kaydedişte geçmişe alınacak.';
+            $('keRevDetail').appendChild(hint);
+            return;
+        }
+
+        items.forEach(function (it, idx) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'ikh-rev' + (idx === 0 ? ' is-active' : '');
+            var b = document.createElement('b'); b.textContent = 'v' + it.revisionNo;
+            var s1 = document.createElement('span'); s1.textContent = fmtDateTime(it.createdAt);
+            var s2 = document.createElement('span');
+            s2.textContent = (it.lineCount || 0) + ' bileşen · ' + (it.createdBy || 'Bilinmiyor');
+            btn.appendChild(b); btn.appendChild(s1); btn.appendChild(s2);
+            btn.addEventListener('click', function () {
+                Array.prototype.forEach.call(list.children, function (c) { c.classList.remove('is-active'); });
+                btn.classList.add('is-active');
+                loadRevDetail(it.id);
+            });
+            list.appendChild(btn);
+        });
+
+        loadRevDetail(items[0].id);
+    }
+
+    function loadRevDetail(revisionId) {
+        var pane = $('keRevDetail');
+        pane.innerHTML = '';
+        var loading = document.createElement('div');
+        loading.className = 'ikh-empty'; loading.textContent = 'Yükleniyor...';
+        pane.appendChild(loading);
+
+        fetch('/Logistics/KitRevisionDetail?id=' + revisionId, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : { found: false }; })
+            .then(function (d) {
+                pane.innerHTML = '';
+                if (!d || !d.found) {
+                    var nf = document.createElement('div');
+                    nf.className = 'ikh-empty'; nf.textContent = 'Revizyon bulunamadı.';
+                    pane.appendChild(nf);
+                    return;
+                }
+
+                var meta = document.createElement('div');
+                meta.className = 'ikh-meta';
+                meta.appendChild(metaItem('Revizyon', 'v' + d.revisionNo));
+                meta.appendChild(metaItem('Tarih', fmtDateTime(d.createdAt)));
+                meta.appendChild(metaItem('Kaydeden', d.createdBy || 'Bilinmiyor'));
+                meta.appendChild(metaItem('Fiyat Modu', PRICE_MODE_LABELS[d.priceMode] || d.priceMode || '—'));
+                if (d.priceMode === 'FixedPackage')
+                    meta.appendChild(metaItem('Sabit Fiyat', fmtNum(d.fixedPrice)));
+                if (d.description)
+                    meta.appendChild(metaItem('Açıklama', d.description));
+                pane.appendChild(meta);
+
+                var linesArr = d.lines || [];
+                if (!linesArr.length) {
+                    var e = document.createElement('div');
+                    e.className = 'ikh-empty'; e.textContent = 'Bu revizyonda bileşen yok.';
+                    pane.appendChild(e);
+                    return;
+                }
+
+                var isFixedComp = d.priceMode === 'FixedComponent';
+                var table = document.createElement('table');
+                table.className = 'ikh-table';
+                var thead = document.createElement('thead');
+                var htr = document.createElement('tr');
+                var headers = ['Stok Kodu', 'Stok Adı', 'Kombinasyon', 'Miktar', 'Birim'];
+                if (isFixedComp) headers.push('Birim Fiyat');
+                headers.push('Açıklama');
+                headers.forEach(function (h) {
+                    var th = document.createElement('th'); th.textContent = h; htr.appendChild(th);
+                });
+                thead.appendChild(htr); table.appendChild(thead);
+
+                var tbody = document.createElement('tbody');
+                linesArr.forEach(function (l) {
+                    var tr = document.createElement('tr');
+                    function td(text, cls) {
+                        var c = document.createElement('td');
+                        if (cls) c.className = cls;
+                        c.textContent = text;
+                        tr.appendChild(c);
+                    }
+                    td(l.componentMaterialCode || '—', 'ikh-code');
+                    td(l.componentMaterialName || '—');
+                    td(l.componentConfigCode || '—');
+                    td(fmtNum(l.quantity), 'ikh-num');
+                    td(l.unit || '—');
+                    if (isFixedComp) td(fmtNum(l.unitPrice), 'ikh-num');
+                    td(l.note || '—');
+                    tbody.appendChild(tr);
+                });
+                table.appendChild(tbody);
+                pane.appendChild(table);
+            })
+            .catch(function () {
+                pane.innerHTML = '';
+                var err = document.createElement('div');
+                err.className = 'ikh-empty'; err.textContent = 'Revizyon detayı yüklenemedi.';
+                pane.appendChild(err);
+            });
+    }
+
+    function closeRevisions() {
+        $('keRevBackdrop').style.display = 'none';
+        document.removeEventListener('keydown', revEscHandler);
+    }
+    function revEscHandler(e) { if (e.key === 'Escape') { e.preventDefault(); closeRevisions(); } }
+
+    $('keHeaderVer').addEventListener('click', openRevisions);
+    $('keHeaderVer').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRevisions(); }
+    });
+    $('keRevClose').addEventListener('click', closeRevisions);
+    $('keRevBackdrop').addEventListener('click', function (e) {
+        if (e.target === $('keRevBackdrop')) closeRevisions();
+    });
 
     // ── Dışa açılan API (MaterialCardEdit kullanır) ──
     window.mceKitEditorInit = function (itemId, code, name) {

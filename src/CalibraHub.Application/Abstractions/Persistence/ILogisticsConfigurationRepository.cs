@@ -191,6 +191,12 @@ public interface ILogisticsConfigurationRepository
     /// gecmis belgeler snapshot tasir.</summary>
     Task DeleteKitAsync(int itemId, int? userId, CancellationToken cancellationToken);
 
+    /// <summary>Kit kartinin (Items.id) revizyon gecmisi ozeti — RevisionNo azalan.</summary>
+    Task<IReadOnlyList<ItemKitRevisionSummaryDto>> GetKitRevisionsAsync(int itemId, CancellationToken cancellationToken);
+
+    /// <summary>Tek bir revizyonun detayi (JSON snapshot'tan cozulmus bilesen listesiyle). Yoksa null.</summary>
+    Task<ItemKitRevisionDetailDto?> GetKitRevisionDetailAsync(int revisionId, CancellationToken cancellationToken);
+
     /// <summary>
     /// Where-used (ters arama): bir bileseni DOĞRUDAN kullanan parent BOM'lari doner.
     /// 1-seviye (transitive degil). Liste ekraninda "bu malzeme hangi recetelerde

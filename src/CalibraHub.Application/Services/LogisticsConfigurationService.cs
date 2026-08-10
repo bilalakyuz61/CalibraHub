@@ -3637,6 +3637,20 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         await _repository.DeleteKitAsync(itemId, userId, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<ItemKitRevisionSummaryDto>> GetKitRevisionsAsync(
+        int itemId, CancellationToken cancellationToken)
+    {
+        if (itemId <= 0) return Array.Empty<ItemKitRevisionSummaryDto>();
+        return await _repository.GetKitRevisionsAsync(itemId, cancellationToken);
+    }
+
+    public async Task<ItemKitRevisionDetailDto?> GetKitRevisionDetailAsync(
+        int revisionId, CancellationToken cancellationToken)
+    {
+        if (revisionId <= 0) return null;
+        return await _repository.GetKitRevisionDetailAsync(revisionId, cancellationToken);
+    }
+
     /// <summary>
     /// 2026-05-20: BOM.RoutingId cozumleyici. Standart rehber UI'sinde frontend
     /// hidden Id'yi her zaman doldurmayabilir (kullanici input'a elle kod yazip blur

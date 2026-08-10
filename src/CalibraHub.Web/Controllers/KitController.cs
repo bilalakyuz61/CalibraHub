@@ -96,6 +96,65 @@ public sealed class KitController : Controller
         }
     }
 
+    /// <summary>
+    /// Kit revizyon gecmisi ozeti (salt-okunur). Kit kartinin TUM gecmisi — kit silinip
+    /// yeniden kurulmus olsa bile kesintisiz doner.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> KitRevisions(int itemId, CancellationToken ct)
+    {
+        if (itemId <= 0) return Ok(new { items = Array.Empty<object>() });
+
+        var revisions = await _logistics.GetKitRevisionsAsync(itemId, ct);
+        return Ok(new
+        {
+            items = revisions.Select(r => new
+            {
+                id         = r.Id,
+                itemKitId  = r.ItemKitId,
+                revisionNo = r.RevisionNo,
+                priceMode  = r.PriceMode,
+                fixedPrice = r.FixedPrice,
+                lineCount  = r.LineCount,
+                createdBy  = r.CreatedBy,
+                createdAt  = r.CreatedAt,
+            }),
+        });
+    }
+
+    /// <summary>Tek revizyonun bilesen dokumu (JSON snapshot'tan cozulur).</summary>
+    [HttpGet]
+    public async Task<IActionResult> KitRevisionDetail(int id, CancellationToken ct)
+    {
+        var detail = await _logistics.GetKitRevisionDetailAsync(id, ct);
+        if (detail is null) return Ok(new { found = false });
+
+        return Ok(new
+        {
+            found       = true,
+            id          = detail.Id,
+            revisionNo  = detail.RevisionNo,
+            priceMode   = detail.PriceMode,
+            fixedPrice  = detail.FixedPrice,
+            description = detail.Description,
+            createdBy   = detail.CreatedBy,
+            createdAt   = detail.CreatedAt,
+            lines       = detail.Lines.Select(l => new
+            {
+                itemId                = l.ItemId,
+                componentMaterialCode = l.ItemCode,
+                componentMaterialName = l.ItemName,
+                configId              = l.ConfigId,
+                componentConfigCode   = l.ConfigCode,
+                quantity              = l.Quantity,
+                unitId                = l.UnitId,
+                unit                  = l.UnitCode,
+                unitPrice             = l.UnitPrice,
+                note                  = l.Note,
+            }),
+        });
+    }
+
     private int? CurrentUserId()
     {
         var raw = User.FindFirstValue(ClaimTypes.NameIdentifier);
