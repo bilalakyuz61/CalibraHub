@@ -749,14 +749,24 @@
     }
 
     // ── Kaydet — malzeme kartının Kaydet'i tarafından çağrılır ──
-    // Ekleme çubuğu açıkken kullanıcı bir kod yazıp Ekle'ye basmadan Kaydet'e geçebilir;
-    // yarım kalan girişi sessizce kaybetmemek için önce onu eklemeyi dene (bkz. addComponent).
+    // Yarım kalan satır (kodu girilmemiş) SESSİZCE ATILMAZ; kullanıcıya hangi satır
+    // olduğu söylenir (CLAUDE.md sessiz-kırık kuralı 3).
     function save() {
-        var pendingCode = ($('keCompCode').value || '').trim();
-        if (pendingCode) {
-            return addComponent().then(function (res) {
-                if (!res.ok) return { ok: false, message: 'Ekleme çubuğunda tamamlanmamış bir bileşen var: ' + (res.message || '') };
-                return doSave();
+        var emptyIdx = -1, priceIdx = -1;
+        lines.forEach(function (l, i) {
+            if (emptyIdx < 0 && !String(l.code || '').trim()) emptyIdx = i;
+            if (priceIdx < 0 && priceMode === 'FixedComponent' && !(l.unitPrice >= 0)) priceIdx = i;
+        });
+        if (emptyIdx >= 0) {
+            return Promise.resolve({
+                ok: false,
+                message: (emptyIdx + 1) + '. kalem satırında stok kodu boş — kodu girin veya satırı silin.'
+            });
+        }
+        if (priceIdx >= 0) {
+            return Promise.resolve({
+                ok: false,
+                message: (priceIdx + 1) + '. kalem satırında birim fiyat girin (Sabit Bileşen Fiyatı modu).'
             });
         }
         return doSave();
