@@ -417,8 +417,67 @@
         .catch(function () { /* liste yoksa/erisilemezse sessiz — elle giris serbest */ });
     }
 
-    // ── Bileşen listesi render — giriş satırıyla AYNI kolon düzeni (ke-field--*),
-    //    her satır yerinde düzenlenir (miktar/fiyat/açıklama), kombinasyon rozetten değişir. ──
+    /* ── Satır bazlı yardımcılar (2026-08-06) ────────────────────────────────
+       Ayrı "giriş çubuğu" kalktı: her satır kendi rehberi, birim listesi ve
+       kombinasyon seçiciyle YERİNDE düzenlenir; yeni kalem "Kalem Ekle" ile
+       açılan boş satırdır. */
+    function keMountLookupOn(input, retriesLeft) {
+        if (retriesLeft === undefined) retriesLeft = 25;
+        if (!window.CalibraHub || typeof window.CalibraHub.mountLookupForInput !== 'function') {
+            if (retriesLeft > 0) setTimeout(function () { keMountLookupOn(input, retriesLeft - 1); }, 200);
+            return;
+        }
+        if (!input.isConnected) return;   // satır bu arada silinmiş
+        window.CalibraHub.mountLookupForInput({
+            inputElement: input,
+            formCode: 'MATERIAL_CARD_EDIT',
+            fieldKey: 'itemKitLine.itemCode',
+            guideCode: 'ITEMS',            // varsayılan; admin Alan Ayarları'ndan değiştirebilir
+            isRequired: true
+        });
+    }
+
+    // Malzemenin ana birimi + tanımlı çevrim birimleri (belge kalem grid'iyle aynı endpoint).
+    function keFillUnitSelect(sel, code, selectedUnitId, onDone) {
+        sel.innerHTML = ''; sel.disabled = true;
+        if (!code) { if (onDone) onDone([]); return; }
+        fetch('/Warehouse/GetMaterialUnitsJson?materialCode=' + encodeURIComponent(code), { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (list) {
+                var opts = Array.isArray(list) ? list : [];
+                opts.forEach(function (u) {
+                    var opt = document.createElement('option');
+                    opt.value = String(u.id);
+                    opt.textContent = (u.name && u.name !== u.code) ? (u.code + ' — ' + u.name) : u.code;
+                    sel.appendChild(opt);
+                });
+                if (opts.length) {
+                    sel.disabled = false;
+                    if (selectedUnitId) sel.value = String(selectedUnitId);
+                }
+                if (onDone) onDone(opts);
+            })
+            .catch(function () { if (onDone) onDone([]); });
+    }
+
+    function keSyncComboBtn(btn, l) {
+        var trackable = !!l._hasConfig;
+        btn.disabled = !trackable;
+        btn.classList.toggle('is-set', trackable && !!l.configCode);
+        if (!trackable) {
+            btn.textContent = 'Seç...';
+            btn.title = l.code ? 'Bu malzemede kombinasyon takibi yok' : 'Önce stok kodu seçin';
+        } else if (l.configCode) {
+            btn.textContent = l.configCode;
+            btn.title = 'Seçili kombinasyon: ' + l.configCode + ' — değiştirmek için tıklayın';
+        } else {
+            btn.textContent = 'Kombinasyon Seç...';
+            btn.title = 'Kombinasyon seçmek için tıklayın';
+        }
+    }
+
+    // ── Bileşen listesi render — başlık satırıyla AYNI kolon düzeni (ke-field--*);
+    //    satırın TÜM alanları (kod dahil) yerinde düzenlenir. ──
     function renderLines() {
         var body = $('keLinesBody');
         body.innerHTML = '';
@@ -428,38 +487,100 @@
 
             function cell(cls) { var d = document.createElement('div'); d.className = 'ke-field ' + cls; row.appendChild(d); return d; }
 
+            // ── Stok Kodu — Tip-1 standart rehber (her satırda ayrı mount) ──
             var cCode = cell('ke-field--code');
-            var codeEl = document.createElement('div'); codeEl.className = 'ke-ro';
-            codeEl.innerHTML = '<span class="ke-code"></span>';
-            codeEl.querySelector('.ke-code').textContent = l.code;
-            cCode.appendChild(codeEl);
+            var codeWrap = document.createElement('div'); codeWrap.className = 'ke-lookup';
+            var codeInput = document.createElement('input');
+            codeInput.type = 'text'; codeInput.className = 'ke-input';
+            codeInput.value = l.code || '';
+            codeInput.placeholder = 'Kod veya ad ile ara...';
+            codeInput.autocomplete = 'off';
+            codeWrap.appendChild(codeInput);
+            cCode.appendChild(codeWrap);
+            keMountLookupOn(codeInput);
 
             var cName = cell('ke-field--name');
-            var nameEl = document.createElement('div'); nameEl.className = 'ke-ro';
-            nameEl.textContent = l.name || ''; nameEl.title = l.name || '';
+            var nameEl = document.createElement('input');
+            nameEl.type = 'text'; nameEl.className = 'ke-input'; nameEl.readOnly = true;
+            nameEl.placeholder = 'Otomatik gelir...';
+            nameEl.value = l.name || ''; nameEl.title = l.name || '';
             cName.appendChild(nameEl);
 
             var cCombo = cell('ke-field--combo');
-            if (l.configCode) {
-                var badge = document.createElement('span');
-                badge.className = 'ke-comb-badge';
-                badge.textContent = l.configCode;
-                badge.title = 'Kombinasyon: ' + l.configCode + ' — değiştirmek için tıklayın';
-                badge.style.cursor = 'pointer';
-                badge.addEventListener('click', function () {
-                    keOpenComboPicker(l.code, {
-                        materialName: l.name || '',
-                        currentCode: l.configCode,
-                        onApply: function (configId, code) {
-                            l.configId = configId; l.configCode = code;
-                            markDirty(); renderLines();
-                        }
-                    });
+            var comboBtn = document.createElement('button');
+            comboBtn.type = 'button'; comboBtn.className = 'ke-btn ke-btn--sm ke-combo-btn';
+            comboBtn.addEventListener('click', function () {
+                if (!l._hasConfig || !l.code) return;
+                keOpenComboPicker(l.code, {
+                    materialName: l.name || '',
+                    currentCode: l.configCode || null,
+                    onApply: function (configId, code) {
+                        l.configId = configId; l.configCode = code;
+                        keSyncComboBtn(comboBtn, l);
+                        markDirty();
+                    }
                 });
-                cCombo.appendChild(badge);
-            } else {
-                var dash = document.createElement('div'); dash.className = 'ke-ro ke-ro--muted'; dash.textContent = '—';
-                cCombo.appendChild(dash);
+            });
+            cCombo.appendChild(comboBtn);
+            keSyncComboBtn(comboBtn, l);
+
+            /* Kod degisiminde: malzeme cozumlenir, ad/birim/kombinasyon TAZELENIR.
+               Satir yeniden CIZILMEZ (rehber mount'u ve odak korunur). */
+            codeInput.addEventListener('change', function () {
+                var code = (codeInput.value || '').trim();
+                if (!code) {
+                    l.code = ''; l.name = ''; l._hasConfig = false;
+                    l.configId = null; l.configCode = null;
+                    l.unitId = null; l.unitCode = null;
+                    nameEl.value = ''; keSyncComboBtn(comboBtn, l);
+                    keFillUnitSelect(unitSel, null, null);
+                    markDirty();
+                    return;
+                }
+                if (KIT_CODE && code.toLowerCase() === KIT_CODE.toLowerCase()) {
+                    showMsg('Kit kendi bileşeni olamaz.', true);
+                    codeInput.value = l.code || '';
+                    return;
+                }
+                var dup = lines.some(function (o) { return o !== l && (o.code || '').toLowerCase() === code.toLowerCase(); });
+                if (dup) {
+                    showMsg('Bu bileşen zaten eklenmiş.', true);
+                    codeInput.value = l.code || '';
+                    return;
+                }
+                resolveComp(code, function (m) {
+                    if (!m) {
+                        showMsg('"' + code + '" kodlu stok bulunamadı.', true);
+                        l.code = code; l.name = ''; l._hasConfig = false;
+                        nameEl.value = ''; keSyncComboBtn(comboBtn, l);
+                        markDirty();
+                        return;
+                    }
+                    l.code = m.code || code;
+                    l.name = m.name || '';
+                    l._hasConfig = !!m.hasConfig;
+                    // Kod degisti → onceki kombinasyon/birim gecersiz
+                    l.configId = null; l.configCode = null;
+                    l.unitId = null; l.unitCode = null;
+                    codeInput.value = l.code;
+                    nameEl.value = l.name; nameEl.title = l.name;
+                    keSyncComboBtn(comboBtn, l);
+                    keFillUnitSelect(unitSel, l.code, null, function (opts) {
+                        if (opts.length) { l.unitId = opts[0].id; l.unitCode = opts[0].code; }
+                    });
+                    markDirty();
+                    if (l._hasConfig) comboBtn.click();   // kombinasyon takipliyse seçici açılır
+                    else { qtyInput.focus(); try { qtyInput.select(); } catch (e) {} }
+                });
+            });
+
+            // Kayitli satirlarda kombinasyon takibi bilinmiyorsa bir kez cozumle
+            if (l.code && l._hasConfig === undefined) {
+                l._hasConfig = !!l.configCode;   // gecici varsayim
+                resolveComp(l.code, function (m) {
+                    l._hasConfig = !!(m && m.hasConfig);
+                    if (comboBtn.isConnected) keSyncComboBtn(comboBtn, l);
+                });
             }
 
             var cQty = cell('ke-field--qty');
@@ -474,10 +595,24 @@
             });
             cQty.appendChild(qtyInput);
 
+            // ── Ölçü Birimi — malzemenin ana birimi + çevrim birimleri (seçim saklanır) ──
             var cUnit = cell('ke-field--unit');
-            var unitEl = document.createElement('div'); unitEl.className = 'ke-ro ke-ro--muted';
-            unitEl.textContent = l.unitCode || '—';
-            cUnit.appendChild(unitEl);
+            var unitSel = document.createElement('select');
+            unitSel.className = 'ke-input'; unitSel.disabled = true;
+            unitSel.addEventListener('change', function () {
+                var opt = (l._units || []).find(function (u) { return String(u.id) === unitSel.value; });
+                l.unitId = opt ? opt.id : null;
+                l.unitCode = opt ? opt.code : null;
+                markDirty();
+            });
+            cUnit.appendChild(unitSel);
+            if (l.code) {
+                keFillUnitSelect(unitSel, l.code, l.unitId, function (opts) {
+                    l._units = opts;
+                    if (!opts.length) return;
+                    if (!l.unitId) { l.unitId = opts[0].id; l.unitCode = opts[0].code; }
+                });
+            }
 
             // Yalnız FixedComponent modda görünür (.ke-lines.ke-mode-fixedcomponent)
             var cPrice = cell('ke-field--price');
@@ -506,10 +641,48 @@
             x.addEventListener('click', function () { lines.splice(i, 1); markDirty(); renderLines(); });
             cX.appendChild(x);
 
+            // ── Enter zinciri: kod → miktar → (fiyat) → açıklama → yeni satır ──
+            qtyInput.addEventListener('keydown', function (e) {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                var next = (priceMode === 'FixedComponent') ? priceInput : noteInput;
+                next.focus(); try { next.select(); } catch (err) {}
+            });
+            priceInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') { e.preventDefault(); noteInput.focus(); try { noteInput.select(); } catch (err) {} }
+            });
+            noteInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') { e.preventDefault(); if (i === lines.length - 1) addEmptyLine(); }
+            });
+
             body.appendChild(row);
         });
         $('keCount').textContent = lines.length + ' bileşen';
+        var emptyEl = $('keEmpty');
+        if (emptyEl) emptyEl.style.display = lines.length ? 'none' : '';
     }
+
+    /* "Kalem Ekle" — listeye BOŞ bir satır açar ve kod alanına odaklanır.
+       (Eski sabit giriş çubuğunun yerini alır; satır sonradan da düzenlenebilir.) */
+    function addEmptyLine() {
+        lines.push({
+            code: '', name: '', quantity: 1, note: '',
+            configId: null, configCode: null, unitPrice: null,
+            unitId: null, unitCode: null, _hasConfig: false, _units: []
+        });
+        markDirty();
+        renderLines();
+        // Yeni satırın rehber input'una odaklan (LookupCard mount'u asenkron — kısa gecikme)
+        var rows = $('keLinesBody').children;
+        var last = rows[rows.length - 1];
+        if (!last) return;
+        setTimeout(function () {
+            var wrap = last.querySelector('.ke-lookup');
+            var visible = wrap ? wrap.querySelector('input') : null;
+            if (visible) visible.focus();
+        }, 120);
+    }
+    $('keAddLine').addEventListener('click', addEmptyLine);
 
     // ── Stok kodu çözümleme (StockLookup) ──
     function resolveComp(code, cb) {
