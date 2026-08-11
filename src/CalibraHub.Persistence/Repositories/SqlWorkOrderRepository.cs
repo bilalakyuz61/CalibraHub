@@ -290,6 +290,36 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    // ── Recete versiyonlama (2026-08-06): is emrinin recete secimi ──
+
+    public async Task<int?> GetBomIdAsync(int workOrderId, CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT [BomId] FROM {_woTable} WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
+        cmd.Parameters.AddWithValue("@Id", workOrderId);
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+        var v = await cmd.ExecuteScalarAsync(ct);
+        return v is int i ? i : null;
+    }
+
+    public async Task SetBomAsync(int workOrderId, int? bomId, int? userId, CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+            UPDATE {_woTable}
+            SET [BomId]=@BomId, [UpdatedById]=@UpdatedById, [Updated]=SYSUTCDATETIME()
+            WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
+        cmd.Parameters.AddWithValue("@Id", workOrderId);
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+        cmd.Parameters.AddWithValue("@BomId", (object?)bomId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@UpdatedById", (object?)userId ?? DBNull.Value);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task<int> CreateRevisionAsync(int existingId, int newDocumentId, int? userId, CancellationToken ct)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();

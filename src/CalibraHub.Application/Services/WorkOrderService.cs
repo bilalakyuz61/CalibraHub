@@ -607,16 +607,43 @@ public sealed class WorkOrderService : IWorkOrderService
         if (wo.PlannedQuantity <= 0)
             throw new InvalidOperationException("Planlanan miktar 0'dan büyük olmalı — patlatma yapılamaz.");
 
-        var bom = await _logisticsConfig.GetBOMByItemAsync(wo.ItemId, wo.ConfigId, ct)
-            ?? throw new InvalidOperationException(
-                $"Bu mamul için tanımlı bir reçete (BOM) bulunamadı: {wo.ItemCode ?? "#" + wo.ItemId}"
-                + (wo.ConfigId.HasValue ? $" / Konfig {wo.ConfigId}" : "")
-                + ". Önce Lojistik → Ürün Ağacı'nda reçete tanımlayın.");
+        // Üretimi başlamış emirde reçete düzeltme kilidi (2026-08-06 — ALLOW_STARTED_WO_RECIPE_EDIT).
+        await EnsureRecipeEditableAsync(wo.Status, ct);
+
+        // 2026-08-06 versiyonlama: iş emrinin reçete seçimi. NULL = BAZ reçeteyi CANLI takip et
+        // (kullanıcı kararı: baz değişirse baz-seçili emirler güncel bazdan üretilmeye devam eder).
+        // Dolu = seçili versiyonun güncel hali. Versiyon silinmişse/başka mamule aitse net hata.
+        var selectedBomId = await _workOrders.GetBomIdAsync(workOrderId, ct);
+        BOMWithNames? bom;
+        if (selectedBomId is > 0)
+        {
+            bom = await _logisticsConfig.GetBOMByIdWithNamesAsync(selectedBomId.Value, ct);
+            if (bom is null || bom.ItemId != wo.ItemId)
+                throw new InvalidOperationException(
+                    "İş emrinde seçili reçete versiyonu artık mevcut değil (silinmiş/pasif olabilir). "
+                    + "Reçete sekmesinden baz reçeteyi veya başka bir versiyonu seçip tekrar deneyin.");
+        }
+        else
+        {
+            bom = await _logisticsConfig.GetBOMByItemAsync(wo.ItemId, wo.ConfigId, ct)
+                ?? throw new InvalidOperationException(
+                    $"Bu mamul için tanımlı bir reçete (BOM) bulunamadı: {wo.ItemCode ?? "#" + wo.ItemId}"
+                    + (wo.ConfigId.HasValue ? $" / Konfig {wo.ConfigId}" : "")
+                    + ". Önce Lojistik → Ürün Ağacı'nda reçete tanımlayın.");
+        }
 
         // Re-explode koruması (2026-07-31, CLAUDE.md kural-3 — sessiz veri kaybı): ReplaceForWorkOrderAsync
         // DELETE+INSERT olduğu için "Patlat"a tekrar basınca kullanıcının elle seçtiği FromLocationId
         // sessizce silinirdi. Eski bileşenleri (ItemId,ConfigId) anahtarıyla önceden okuyup override'ı koru.
         var existing = await _workOrderComponents.GetByWorkOrderAsync(workOrderId, ct);
+
+        // Sarf başlamış emirde yeniden patlatma ENGELLENİR (2026-08-06 kullanıcı kararı):
+        // DELETE+INSERT IssuedQuantity'yi sıfırlar → çıkış geçmişi ile mutabakat kopar.
+        // Bu guard parametreden BAĞIMSIZDIR (ALLOW_STARTED_WO_RECIPE_EDIT açık olsa bile).
+        if (existing.Any(e => e.IssuedQuantity > 0))
+            throw new InvalidOperationException(
+                "Bu iş emrinde bileşen sarfı başlamış — yeniden patlatma yapılamaz "
+                + "(çıkış geçmişi kaybolur). Gerekli düzeltmeleri bileşen listesi üzerinde yapın.");
         var previousLocationByKey = existing
             .Where(e => e.FromLocationId.HasValue)
             .GroupBy(e => (e.ItemId, e.ConfigId))
@@ -676,6 +703,136 @@ public sealed class WorkOrderService : IWorkOrderService
 
     public Task<IReadOnlyCollection<WorkOrderComponentDto>> GetComponentsAsync(int workOrderId, CancellationToken ct)
         => _workOrderComponents.GetByWorkOrderAsync(workOrderId, ct);
+
+    // ── Reçete versiyonlama + iş emri bazında bileşen özelleştirme (2026-08-06) ──
+
+    /// <summary>
+    /// Üretimi başlamış (InProgress ve sonrası) emirde reçete düzeltme kilidi —
+    /// ALLOW_STARTED_WO_RECIPE_EDIT üretim parametresi açık değilse reddedilir.
+    /// Planned/Released serbesttir; Completed/Closed/Cancelled HER ZAMAN kilitli.
+    /// </summary>
+    private async Task EnsureRecipeEditableAsync(WorkOrderStatus status, CancellationToken ct)
+    {
+        if (status is WorkOrderStatus.Completed or WorkOrderStatus.Closed or WorkOrderStatus.Cancelled)
+            throw new InvalidOperationException("Tamamlanmış/kapatılmış/iptal edilmiş iş emrinin reçetesi düzeltilemez.");
+        if (status != WorkOrderStatus.InProgress) return;
+
+        var allowed = await _parameters.GetBoolAsync(
+            ProductionParameters.FormCode, ProductionParameters.AllowStartedWoRecipeEditKey, ct) ?? false;
+        if (!allowed)
+            throw new InvalidOperationException(
+                "Üretimi başlamış iş emrinin reçetesi düzeltilemez. "
+                + "(Şirket Parametreleri → Üretim → 'Başlamış iş emrinde reçete düzeltme' açılırsa serbest bırakılır.)");
+    }
+
+    /// <summary>İş emrinin reçete seçenekleri: baz + versiyonlar + mevcut seçim.</summary>
+    public async Task<(int? SelectedBomId, IReadOnlyCollection<BomVersionSummaryDto> Options)> GetBomOptionsAsync(
+        int workOrderId, CancellationToken ct)
+    {
+        var wo = await _workOrders.GetAsync(workOrderId, ct)
+            ?? throw new InvalidOperationException("Iş emri bulunamadi.");
+        var options = await _logisticsConfig.GetBomVersionsAsync(wo.ItemId, wo.ConfigId, ct);
+        var selected = await _workOrders.GetBomIdAsync(workOrderId, ct);
+        return (selected, options);
+    }
+
+    /// <summary>
+    /// İş emrinin reçete seçimini değiştirir. NULL = baz reçete (canlı takip).
+    /// Patlatılmış bileşenler DEĞİŞMEZ — yeni seçim bir sonraki "Patlat"ta uygulanır.
+    /// </summary>
+    public async Task SetBomAsync(int workOrderId, int? bomId, int? userId, CancellationToken ct)
+    {
+        var wo = await _workOrders.GetAsync(workOrderId, ct)
+            ?? throw new InvalidOperationException("Iş emri bulunamadi.");
+        await EnsureRecipeEditableAsync(wo.Status, ct);
+
+        if (bomId is > 0)
+        {
+            var bom = await _logisticsConfig.GetBOMByIdWithNamesAsync(bomId.Value, ct);
+            if (bom is null || bom.ItemId != wo.ItemId)
+                throw new InvalidOperationException("Seçilen reçete bu iş emrinin mamulüne ait değil veya artık mevcut değil.");
+        }
+        await _workOrders.SetBomAsync(workOrderId, bomId is > 0 ? bomId : null, userId, ct);
+        _audit?.LogChanges("WorkOrder", workOrderId, wo.OrderNumber,
+            new[] { new CalibraHub.Application.Auditing.AuditFieldChange(
+                "BomId", "Reçete Seçimi", null, bomId is > 0 ? $"#{bomId}" : "Baz reçete") });
+    }
+
+    /// <summary>İş emrine tekil bileşen ekler (reçeteden bağımsız özelleştirme).</summary>
+    public async Task<int> AddComponentAsync(int workOrderId, int itemId, int? configId,
+        decimal quantity, decimal scrapRate, string? notes, CancellationToken ct)
+    {
+        var wo = await _workOrders.GetAsync(workOrderId, ct)
+            ?? throw new InvalidOperationException("Iş emri bulunamadi.");
+        await EnsureRecipeEditableAsync(wo.Status, ct);
+        if (itemId <= 0) throw new InvalidOperationException("Bileşen malzemesi seçilmelidir.");
+        if (quantity <= 0) throw new InvalidOperationException("Miktar sıfırdan büyük olmalıdır.");
+        if (scrapRate < 0) throw new InvalidOperationException("Fire oranı negatif olamaz.");
+        if (itemId == wo.ItemId)
+            throw new InvalidOperationException("İş emrinin mamulü kendi bileşeni olamaz.");
+
+        var existing = await _workOrderComponents.GetByWorkOrderAsync(workOrderId, ct);
+        if (existing.Any(e => e.ItemId == itemId && (e.ConfigId ?? 0) == (configId ?? 0)))
+            throw new InvalidOperationException("Bu bileşen iş emrinde zaten var — mevcut satırın miktarını düzenleyin.");
+
+        var newId = await _workOrderComponents.AddAsync(new WorkOrderComponent
+        {
+            WorkOrderId      = workOrderId,
+            ItemId           = itemId,
+            ConfigId         = configId,
+            RequiredQuantity = quantity,
+            IssuedQuantity   = 0m,
+            ScrapRate        = scrapRate,
+            Notes            = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
+        }, ct);
+        _audit?.LogChanges("WorkOrder", workOrderId, wo.OrderNumber,
+            new[] { new CalibraHub.Application.Auditing.AuditFieldChange(
+                $"Component[{itemId}]", "Bileşen Eklendi", null, $"#{itemId} x{quantity}") });
+        return newId;
+    }
+
+    /// <summary>Bileşen miktar/fire/not günceller. Sarf edilenin altına düşürülemez (parametreden bağımsız).</summary>
+    public async Task UpdateComponentAsync(int componentId, decimal quantity, decimal scrapRate, string? notes, CancellationToken ct)
+    {
+        var comp = await _workOrderComponents.GetByIdAsync(componentId, ct)
+            ?? throw new InvalidOperationException("Bileşen bulunamadı.");
+        var wo = await _workOrders.GetAsync(comp.WorkOrderId, ct)
+            ?? throw new InvalidOperationException("Iş emri bulunamadi.");
+        await EnsureRecipeEditableAsync(wo.Status, ct);
+        if (quantity <= 0) throw new InvalidOperationException("Miktar sıfırdan büyük olmalıdır.");
+        if (scrapRate < 0) throw new InvalidOperationException("Fire oranı negatif olamaz.");
+        if (quantity < comp.IssuedQuantity)
+            throw new InvalidOperationException(
+                $"Miktar, sarf edilmiş miktarın ({comp.IssuedQuantity}) altına düşürülemez.");
+
+        await _workOrderComponents.UpdateAsync(componentId, quantity, scrapRate,
+            string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(), ct);
+        if (comp.RequiredQuantity != quantity || comp.ScrapRate != scrapRate)
+            _audit?.LogChanges("WorkOrder", comp.WorkOrderId, wo.OrderNumber,
+                new[] { new CalibraHub.Application.Auditing.AuditFieldChange(
+                    $"Component[{comp.ItemId}]", $"Bileşen — {comp.ItemCode ?? ("#" + comp.ItemId)}",
+                    $"x{comp.RequiredQuantity}" + (comp.ScrapRate > 0 ? $" (fire {comp.ScrapRate})" : ""),
+                    $"x{quantity}" + (scrapRate > 0 ? $" (fire {scrapRate})" : "")) });
+    }
+
+    /// <summary>Bileşen siler. Sarf yapılmış satır SİLİNEMEZ (parametreden bağımsız — mutabakat korunur).</summary>
+    public async Task DeleteComponentAsync(int componentId, CancellationToken ct)
+    {
+        var comp = await _workOrderComponents.GetByIdAsync(componentId, ct)
+            ?? throw new InvalidOperationException("Bileşen bulunamadı.");
+        var wo = await _workOrders.GetAsync(comp.WorkOrderId, ct)
+            ?? throw new InvalidOperationException("Iş emri bulunamadi.");
+        await EnsureRecipeEditableAsync(wo.Status, ct);
+        if (comp.IssuedQuantity > 0)
+            throw new InvalidOperationException(
+                "Sarf yapılmış bileşen silinemez — önce sarf hareketleri değerlendirilmelidir.");
+
+        await _workOrderComponents.DeleteAsync(componentId, ct);
+        _audit?.LogChanges("WorkOrder", comp.WorkOrderId, wo.OrderNumber,
+            new[] { new CalibraHub.Application.Auditing.AuditFieldChange(
+                $"Component[{comp.ItemId}]", $"Bileşen — {comp.ItemCode ?? ("#" + comp.ItemId)}",
+                $"x{comp.RequiredQuantity}", null) });
+    }
 
     public async Task IssueComponentAsync(IssueWorkOrderComponentRequest request, CancellationToken ct)
     {

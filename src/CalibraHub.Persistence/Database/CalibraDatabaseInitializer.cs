@@ -5705,6 +5705,54 @@ END;";
                         ON [{s}].[BOM]([ItemId], [ConfigId])
                         WHERE [IsActive] = 1;
                 ';
+
+            -- ══ Recete versiyonlama (2026-08-06, kullanici karari — Netsis "alternatif +
+            --    versiyon" TEK ortak yapida) ═══════════════════════════════════════════
+            -- VersionCode NULL  = BAZ recete (mamul+kombinasyon basina TAM 1 aktif baz).
+            -- VersionCode dolu  = kullanicinin turettigi, DUZENLENEBILIR paralel versiyon
+            --                     (her kayitta otomatik versiyon YOK; kullanici "Versiyon
+            --                     Turet" dediginde olusur, kodu kullanici verir).
+            -- ParentBomId       = hangi receteden turedigi (izlenebilirlik; FK yok —
+            --                     kaynak silinse de turev yasar, dangling Id kabul).
+            IF COL_LENGTH(N'[{s}].[BOM]', N'VersionCode') IS NULL
+                ALTER TABLE [{s}].[BOM] ADD [VersionCode] NVARCHAR(30) NULL;
+            IF COL_LENGTH(N'[{s}].[BOM]', N'ParentBomId') IS NULL
+                ALTER TABLE [{s}].[BOM] ADD [ParentBomId] INT NULL;
+
+            -- BOMLine.ComponentBomId — bilesen yari mamulse hangi recete/versiyonuna
+            -- sabitlendigi. NULL = o yari mamulun BAZ recetesi (canli takip).
+            IF COL_LENGTH(N'[{s}].[BOMLine]', N'ComponentBomId') IS NULL
+                ALTER TABLE [{s}].[BOMLine] ADD [ComponentBomId] INT NULL;
+
+            EXEC sp_executesql N'
+                -- Tekillik indexlerinden ONCE mevcut mukerrer aktif baz kayitlarini
+                -- temizle: ayni (ItemId, ConfigId) icin yalniz MAX(Id) aktif kalir
+                -- (bugunku MAX(Id) runtime konvansiyonunun kalici hali — gorunur
+                -- davranis DEGISMEZ, gorunmeyen olu satirlar pasiflenir).
+                -- Kaynak: ArgeProjectService.AddBOMAsync dogrudan cagrisi mukerrer
+                -- satir uretebiliyordu (kesif 2026-08-06).
+                UPDATE b SET b.[IsActive] = 0
+                FROM [{s}].[BOM] b
+                WHERE b.[IsActive] = 1 AND b.[VersionCode] IS NULL
+                  AND b.[Id] < (SELECT MAX(b2.[Id]) FROM [{s}].[BOM] b2
+                                WHERE b2.[ItemId] = b.[ItemId] AND b2.[IsActive] = 1
+                                  AND b2.[VersionCode] IS NULL
+                                  AND ISNULL(b2.[ConfigId], -1) = ISNULL(b.[ConfigId], -1));
+
+                -- TEK AKTIF BAZ garantisi — artik kod konvansiyonu degil DB kisiti.
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                               WHERE object_id = OBJECT_ID(N''[{s}].[BOM]'') AND name = N''UX_BOM_Base'')
+                    CREATE UNIQUE INDEX [UX_BOM_Base]
+                        ON [{s}].[BOM]([ItemId], [ConfigId])
+                        WHERE [IsActive] = 1 AND [VersionCode] IS NULL;
+
+                -- Versiyon kodu mamul+kombinasyon icinde tekil.
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                               WHERE object_id = OBJECT_ID(N''[{s}].[BOM]'') AND name = N''UX_BOM_Version'')
+                    CREATE UNIQUE INDEX [UX_BOM_Version]
+                        ON [{s}].[BOM]([ItemId], [ConfigId], [VersionCode])
+                        WHERE [IsActive] = 1 AND [VersionCode] IS NOT NULL;
+            ';
             """;
 
         await using var cmd = connection.CreateCommand();
@@ -16726,6 +16774,29 @@ END;";
                         ON [{schemaForSql}].[WorkOrder]([RoutingId])
                         WHERE [RoutingId] IS NOT NULL;
                 ');
+            END;
+
+            -- ===== Recete versiyonlama: WorkOrder.BomId (2026-08-06) =====
+            -- Is emrinin hangi receteyi (baz/versiyon) kullanacagi. NULL = BAZ receteyi
+            -- CANLI takip et (baz degisirse sonraki patlatma guncel bazdan olur —
+            -- kullanici karari). Dolu = secili versiyon sabit. FK BOM'a.
+            IF OBJECT_ID(N'[{schemaForSql}].[WorkOrder]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[WorkOrder]', N'BomId') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[WorkOrder] ADD [BomId] INT NULL;
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[WorkOrder]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[WorkOrder]', N'BomId') IS NOT NULL
+               AND OBJECT_ID(N'[{schemaForSql}].[BOM]', N'U') IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM sys.foreign_keys
+                   WHERE [name] = N'FK_WorkOrder_BOM'
+                     AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[WorkOrder]'))
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[WorkOrder]
+                    ADD CONSTRAINT [FK_WorkOrder_BOM]
+                    FOREIGN KEY ([BomId])
+                    REFERENCES [{schemaForSql}].[BOM]([Id]);
             END;
 
             -- ===== Faz 3: WorkOrder.AssignedPersonnelId (User'dan bagimsiz Personnel atamasi) =====

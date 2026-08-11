@@ -113,6 +113,14 @@ public interface ILogisticsConfigurationService
     Task<IReadOnlyCollection<BOMDto>> GetBOMsAsync(CancellationToken cancellationToken);
     Task<BOMWithNames?> GetBOMByCodeAsync(string materialCode, string? configCode, CancellationToken cancellationToken);
     Task<BOMWithNames?> GetBOMByIdAsync(int id, CancellationToken cancellationToken);
+
+    // ── Recete versiyonlama (2026-08-06) ──
+    /// <summary>Mamul+kombinasyonun recete versiyon listesi (baz + kullanici-turetimli versiyonlar).</summary>
+    Task<IReadOnlyCollection<BomVersionSummaryDto>> GetBomVersionsAsync(
+        int itemId, int? configId, CancellationToken cancellationToken);
+    /// <summary>Kaynak receteden kullanicinin verdigi kodla yeni DUZENLENEBILIR versiyon turetir.
+    /// Otomatik versiyonlama yoktur — versiyon yalniz bu metotla olusur.</summary>
+    Task<int> DeriveBomVersionAsync(int sourceBomId, string versionCode, int? userId, CancellationToken cancellationToken);
     /// <summary>
     /// Recete kaydeder. <paramref name="userId"/> CreatedById/UpdatedById audit
     /// alanlarina yazilir (rapor 2026-05-17 madde 3.5). Cycle korumasi (madde 3.1):

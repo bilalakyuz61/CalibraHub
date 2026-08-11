@@ -20,6 +20,12 @@ public interface IWorkOrderRepository
 
     Task ChangeStatusAsync(int id, WorkOrderStatus newStatus, int? userId, CancellationToken ct);
 
+    // ── Recete versiyonlama (2026-08-06) ──
+    /// <summary>Is emrinin sectigi recete (BOM.Id). NULL = baz receteyi canli takip eder.</summary>
+    Task<int?> GetBomIdAsync(int workOrderId, CancellationToken ct);
+    /// <summary>Is emrinin recete secimini gunceller (NULL = baz recete).</summary>
+    Task SetBomAsync(int workOrderId, int? bomId, int? userId, CancellationToken ct);
+
     /// <summary>
     /// Released sonrasi revize: yeni WorkOrder satiri kopyalanir (newDocumentId ile — Document
     /// tarafindaki yeni revizyon satirini SERVICE onceden olusturur ve buraya parametre gecer),

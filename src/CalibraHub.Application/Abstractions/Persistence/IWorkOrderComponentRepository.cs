@@ -36,4 +36,12 @@ public interface IWorkOrderComponentRepository
     /// WarehouseLocationId, component'in bağlı olduğu WorkOrder'dan JOIN ile çözülür).
     /// </summary>
     Task IssueAsync(int componentId, decimal quantity, int personnelId, CancellationToken ct);
+
+    // ── İş emri bazında bileşen özelleştirme (2026-08-06, kullanıcı kararı: tam düzenleme) ──
+    /// <summary>Tekil bileşen ekler (reçeteden bağımsız iş emri özelleştirmesi). Yeni Id döner.</summary>
+    Task<int> AddAsync(WorkOrderComponent component, CancellationToken ct);
+    /// <summary>Miktar/fire/not günceller. Sarf guard'ları SERVICE katmanında.</summary>
+    Task UpdateAsync(int componentId, decimal requiredQuantity, decimal scrapRate, string? notes, CancellationToken ct);
+    /// <summary>Tekil bileşen siler. Sarflı satır guard'ı SERVICE katmanında.</summary>
+    Task DeleteAsync(int componentId, CancellationToken ct);
 }

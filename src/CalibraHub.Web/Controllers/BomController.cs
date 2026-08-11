@@ -523,6 +523,9 @@ public sealed class BomController : Controller
         routingId     = tree.RoutingId,
         routingCode   = tree.RoutingCode,
         routingName   = tree.RoutingName,
+        // 2026-08-06 versiyonlama: null = baz recete; dolu = kullanici-turetimli versiyon.
+        versionCode   = tree.VersionCode,
+        parentBomId   = tree.ParentBomId,
         lines         = tree.Lines.Select(l => new
         {
             itemId                = l.ItemId,
@@ -533,8 +536,58 @@ public sealed class BomController : Controller
             quantity              = l.Quantity,
             scrapRatio            = l.ScrapRatio,
             note                  = l.Note,
+            // Yari mamul bilesende sabitlenen recete/versiyon (null = bazi takip et)
+            componentBomId          = l.ComponentBomId,
+            componentBomVersionCode = l.ComponentBomVersionCode,
+            componentHasBom         = l.ComponentHasBom,
         }),
     };
+
+    /// <summary>
+    /// 2026-08-06: mamul+kombinasyonun recete versiyon listesi (baz + versiyonlar).
+    /// GET /Logistics/GetBOMVersions?itemId=&amp;configId=
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> GetBOMVersions(int itemId, int? configId, CancellationToken ct)
+    {
+        if (itemId <= 0) return Json(Array.Empty<object>());
+        var versions = await _logisticsConfigurationService.GetBomVersionsAsync(itemId, configId, ct);
+        return Json(versions.Select(v => new
+        {
+            id          = v.Id,
+            versionCode = v.VersionCode,            // null = baz
+            label       = v.VersionCode ?? "Baz Reçete",
+            description = v.Description,
+            lineCount   = v.LineCount,
+            created     = v.Created,
+            updated     = v.Updated,
+            parentBomId = v.ParentBomId,
+        }));
+    }
+
+    public sealed record DeriveBomVersionRequest(int SourceBomId, string? VersionCode);
+
+    /// <summary>
+    /// 2026-08-06: "Versiyon Türet" — kaynak receteden kullanicinin verdigi kodla yeni
+    /// DUZENLENEBILIR versiyon olusturur. Otomatik versiyonlama yok; yalniz bu akis.
+    /// POST /Logistics/DeriveBomVersion  body: { sourceBomId, versionCode }
+    /// </summary>
+    [HttpPost]
+    public async Task<IActionResult> DeriveBomVersion([FromBody] DeriveBomVersionRequest? request, CancellationToken ct)
+    {
+        if (request is null || request.SourceBomId <= 0)
+            return Json(new { success = false, message = "Kaynak reçete seçilmelidir." });
+        try
+        {
+            var id = await _logisticsConfigurationService.DeriveBomVersionAsync(
+                request.SourceBomId, request.VersionCode ?? "", CurrentUserId(), ct);
+            return Json(new { success = true, id });
+        }
+        catch (ArgumentException ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
 
     /// <summary>
     /// 2026-07-05: Excel'den toplu yapıştırma akışı için toplu kod çözümleyici.

@@ -180,6 +180,56 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    // ── İş emri bazında bileşen özelleştirme (2026-08-06) ──
+
+    public async Task<int> AddAsync(WorkOrderComponent c, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+            INSERT INTO {_table}
+                ([WorkOrderId],[ItemId],[ConfigId],[RequiredQuantity],
+                 [IssuedQuantity],[ScrapRate],[UnitId],[FromLocationId],[Notes],[Created])
+            VALUES
+                (@WorkOrderId,@ItemId,@ConfigId,@RequiredQuantity,
+                 0,@ScrapRate,@UnitId,@FromLocationId,@Notes,SYSUTCDATETIME());
+            SELECT CAST(SCOPE_IDENTITY() AS INT);";
+        cmd.Parameters.AddWithValue("@WorkOrderId", c.WorkOrderId);
+        cmd.Parameters.AddWithValue("@ItemId", c.ItemId);
+        cmd.Parameters.AddWithValue("@ConfigId", (object?)c.ConfigId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@RequiredQuantity", c.RequiredQuantity);
+        cmd.Parameters.AddWithValue("@ScrapRate", c.ScrapRate);
+        cmd.Parameters.AddWithValue("@UnitId", (object?)c.UnitId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@FromLocationId", (object?)c.FromLocationId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Notes", (object?)c.Notes ?? DBNull.Value);
+        return (int)(await cmd.ExecuteScalarAsync(ct))!;
+    }
+
+    public async Task UpdateAsync(int componentId, decimal requiredQuantity, decimal scrapRate, string? notes, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+            UPDATE {_table}
+            SET [RequiredQuantity] = @Qty, [ScrapRate] = @Scrap, [Notes] = @Notes,
+                [Updated] = SYSUTCDATETIME()
+            WHERE [Id] = @Id;";
+        cmd.Parameters.AddWithValue("@Id", componentId);
+        cmd.Parameters.AddWithValue("@Qty", requiredQuantity);
+        cmd.Parameters.AddWithValue("@Scrap", scrapRate);
+        cmd.Parameters.AddWithValue("@Notes", (object?)notes ?? DBNull.Value);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task DeleteAsync(int componentId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id;";
+        cmd.Parameters.AddWithValue("@Id", componentId);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     /// <summary>
     /// Bileşenin planlı sarf lokasyonunu (FromLocationId) günceller — İş Emri ekranında
     /// kullanıcının ExplodeBom'un item-default önerisini override etmesi için (2026-07-31).

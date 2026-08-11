@@ -40,6 +40,20 @@ public interface IWorkOrderService
     /// <summary>İş emrinin patlatılmış bileşen listesi.</summary>
     Task<IReadOnlyCollection<WorkOrderComponentDto>> GetComponentsAsync(int workOrderId, CancellationToken ct);
 
+    // ── Reçete versiyonlama + iş emri bazında bileşen özelleştirme (2026-08-06) ──
+    /// <summary>İş emrinin reçete seçenekleri (baz + versiyonlar) ve mevcut seçim.</summary>
+    Task<(int? SelectedBomId, IReadOnlyCollection<BomVersionSummaryDto> Options)> GetBomOptionsAsync(
+        int workOrderId, CancellationToken ct);
+    /// <summary>Reçete seçimini değiştirir (NULL = baz reçete, canlı takip). Bir sonraki patlatmada uygulanır.</summary>
+    Task SetBomAsync(int workOrderId, int? bomId, int? userId, CancellationToken ct);
+    /// <summary>Tekil bileşen ekler. Üretimi başlamış emirde ALLOW_STARTED_WO_RECIPE_EDIT parametresine tabidir.</summary>
+    Task<int> AddComponentAsync(int workOrderId, int itemId, int? configId,
+        decimal quantity, decimal scrapRate, string? notes, CancellationToken ct);
+    /// <summary>Bileşen miktar/fire/not günceller. Sarf edilen miktarın altına düşürülemez.</summary>
+    Task UpdateComponentAsync(int componentId, decimal quantity, decimal scrapRate, string? notes, CancellationToken ct);
+    /// <summary>Bileşen siler. Sarf yapılmış satır silinemez.</summary>
+    Task DeleteComponentAsync(int componentId, CancellationToken ct);
+
     /// <summary>
     /// Malzeme Sarf Et (2026-07-02) — ShopFloor'da manuel bileşen çıkışı. IssuedQuantity
     /// artırılır ve DocumentLine'a Issue satırı atomik yazılır.

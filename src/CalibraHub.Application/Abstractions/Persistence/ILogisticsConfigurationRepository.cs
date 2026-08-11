@@ -141,6 +141,11 @@ public interface ILogisticsConfigurationRepository
     // FK-based lookup: ItemId + opsiyonel ConfigId. Repository, Items + ItemConfiguration JOIN
     // ile enriched BOMWithNames doner (frontend display icin ItemCode/ItemName/ConfigCode tasir).
     Task<BOMWithNames?> GetBOMByItemAsync(int itemId, int? configId, CancellationToken cancellationToken);
+    // 2026-08-06 versiyonlama: GetBOMByItemAsync BAZ receteyi doner; belirli versiyon Id ile okunur.
+    Task<BOMWithNames?> GetBOMByIdWithNamesAsync(int bomId, CancellationToken cancellationToken);
+    /// <summary>Mamul+kombinasyonun tum aktif recete satirlari (baz + versiyonlar), baz once.</summary>
+    Task<IReadOnlyCollection<BomVersionSummaryDto>> GetBomVersionsAsync(
+        int itemId, int? configId, CancellationToken cancellationToken);
     Task<int> AddBOMAsync(BOM tree, CancellationToken cancellationToken);
     Task UpdateBOMAsync(BOM tree, CancellationToken cancellationToken);
 
@@ -175,6 +180,11 @@ public interface ILogisticsConfigurationRepository
     /// </summary>
     Task<IReadOnlyCollection<BOMComponentLineRow>> GetBOMComponentLinesAsync(
         int parentItemId, CancellationToken cancellationToken);
+
+    /// <summary>2026-08-06: belirli bir recete/versiyonun (BOM.Id) bilesen satirlari —
+    /// satirda sabitlenen alt versiyon (ComponentBomId) cozumlemesi icin.</summary>
+    Task<IReadOnlyCollection<BOMComponentLineRow>> GetBOMComponentLinesByBomIdAsync(
+        int bomId, CancellationToken cancellationToken);
 
     // ── Kit / Paket Urun ─────────────────────────────────────────────
     /// <summary>Kit malzeme kartinin AKTIF icerigini (MAX VersionNo, IsActive=1)

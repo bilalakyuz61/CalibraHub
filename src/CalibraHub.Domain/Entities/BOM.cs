@@ -36,6 +36,17 @@ public class BOM
     /// <summary>Rota adı — display amaçlı, repository JOIN ile doldurulur. Persist edilmez.</summary>
     public string? RoutingName { get; set; }
 
+    /// <summary>
+    /// Reçete versiyonlama (2026-08-06): NULL = BAZ reçete (mamul+kombinasyon başına
+    /// tam 1 aktif baz — DB'de UX_BOM_Base garanti eder). Dolu = kullanıcının türettiği,
+    /// DÜZENLENEBİLİR paralel versiyon (Netsis "alternatif reçete" karşılığı; kodu
+    /// kullanıcı verir, otomatik artan versiyon YOK).
+    /// </summary>
+    public string? VersionCode { get; init; }
+
+    /// <summary>Hangi reçeteden türedi (izlenebilirlik; FK yok — kaynak silinse de türev yaşar).</summary>
+    public int? ParentBomId { get; init; }
+
     // Lines mutable referans degil — collection init, ama icindeki List
     // mutate edilebilir (AddLine/RemoveLine domain davranisi yerinde duzeltir).
     public ICollection<BOMLine> Lines { get; init; } = new List<BOMLine>();

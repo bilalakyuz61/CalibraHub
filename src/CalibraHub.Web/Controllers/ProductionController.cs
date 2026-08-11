@@ -1422,6 +1422,13 @@ public sealed class ProductionController : Controller
             var result = await _service.ExplodeBomAsync(workOrderId, ct);
             return Json(new { ok = true, result });
         }
+        catch (InvalidOperationException iex)
+        {
+            // Guard mesajları (reçete yok / sarf başladı / üretim kilidi) KULLANICIYA GÖRE
+            // yazılmıştır — jenerik mesajla gizlenirse kullanıcı neden patlatamadığını
+            // anlayamaz (2026-08-06; iç detay sızdırmaz, sessiz-kırık kural #2 ile uyumlu).
+            return Json(new { ok = false, error = iex.Message });
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[WorkOrder.ExplodeBom] workOrderId={WorkOrderId} reçete patlatılamadı.", workOrderId);
@@ -1457,6 +1464,134 @@ public sealed class ProductionController : Controller
         catch (Exception ex)
         {
             _logger.LogError(ex, "[WorkOrder.UpdateComponentLocation] componentId={ComponentId} lokasyon güncellenemedi.", req?.ComponentId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    // ─── Reçete versiyonlama + iş emri bileşen özelleştirme (2026-08-06) ────────
+    // GET  /Production/WorkOrder/BomOptions?workOrderId=   → baz + versiyonlar + seçim
+    // POST /Production/WorkOrder/SetBomJson                → reçete seçimini değiştir
+    // POST /Production/WorkOrder/AddComponentJson          → bileşen ekle
+    // POST /Production/WorkOrder/UpdateComponentJson       → miktar/fire/not güncelle
+    // POST /Production/WorkOrder/DeleteComponentJson       → bileşen sil
+    // Guard'lar service'te: üretim başladıysa ALLOW_STARTED_WO_RECIPE_EDIT parametresi,
+    // sarflı satırda silme/azaltma yasağı (parametreden bağımsız).
+
+    [HttpGet("Production/WorkOrder/BomOptions")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
+    public async Task<IActionResult> WorkOrderBomOptions(int workOrderId, CancellationToken ct)
+    {
+        try
+        {
+            var (selectedBomId, options) = await _service.GetBomOptionsAsync(workOrderId, ct);
+            return Json(new
+            {
+                ok = true,
+                selectedBomId,
+                options = options.Select(o => new
+                {
+                    id = o.Id,
+                    versionCode = o.VersionCode,           // null = baz
+                    label = o.VersionCode ?? "Baz Reçete",
+                    lineCount = o.LineCount,
+                    description = o.Description,
+                }),
+            });
+        }
+        catch (InvalidOperationException iex) { return Json(new { ok = false, error = iex.Message }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[WorkOrder.BomOptions] workOrderId={WorkOrderId} okunamadı.", workOrderId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    public sealed record SetWorkOrderBomRequest(int WorkOrderId, int? BomId);
+
+    [HttpPost("Production/WorkOrder/SetBomJson")]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
+    public async Task<IActionResult> SetWorkOrderBomJson([FromBody] SetWorkOrderBomRequest req, CancellationToken ct)
+    {
+        if (req is null || req.WorkOrderId <= 0)
+            return Json(new { ok = false, error = "İş emri zorunlu." });
+        try
+        {
+            await _service.SetBomAsync(req.WorkOrderId, req.BomId, CurrentUserId(), ct);
+            return Json(new { ok = true });
+        }
+        catch (InvalidOperationException iex) { return Json(new { ok = false, error = iex.Message }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[WorkOrder.SetBom] workOrderId={WorkOrderId} reçete seçimi kaydedilemedi.", req?.WorkOrderId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    public sealed record AddWorkOrderComponentRequest(
+        int WorkOrderId, int ItemId, int? ConfigId, decimal Quantity, decimal ScrapRate, string? Notes);
+
+    [HttpPost("Production/WorkOrder/AddComponentJson")]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
+    public async Task<IActionResult> AddWorkOrderComponentJson([FromBody] AddWorkOrderComponentRequest req, CancellationToken ct)
+    {
+        if (req is null || req.WorkOrderId <= 0)
+            return Json(new { ok = false, error = "İş emri zorunlu." });
+        try
+        {
+            var id = await _service.AddComponentAsync(
+                req.WorkOrderId, req.ItemId, req.ConfigId, req.Quantity, req.ScrapRate, req.Notes, ct);
+            return Json(new { ok = true, id });
+        }
+        catch (InvalidOperationException iex) { return Json(new { ok = false, error = iex.Message }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[WorkOrder.AddComponent] workOrderId={WorkOrderId} bileşen eklenemedi.", req?.WorkOrderId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    public sealed record UpdateWorkOrderComponentRequest(int ComponentId, decimal Quantity, decimal ScrapRate, string? Notes);
+
+    [HttpPost("Production/WorkOrder/UpdateComponentJson")]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
+    public async Task<IActionResult> UpdateWorkOrderComponentJson([FromBody] UpdateWorkOrderComponentRequest req, CancellationToken ct)
+    {
+        if (req is null || req.ComponentId <= 0)
+            return Json(new { ok = false, error = "Bileşen kaydı zorunlu." });
+        try
+        {
+            await _service.UpdateComponentAsync(req.ComponentId, req.Quantity, req.ScrapRate, req.Notes, ct);
+            return Json(new { ok = true });
+        }
+        catch (InvalidOperationException iex) { return Json(new { ok = false, error = iex.Message }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[WorkOrder.UpdateComponent] componentId={ComponentId} güncellenemedi.", req?.ComponentId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    public sealed record DeleteWorkOrderComponentRequest(int ComponentId);
+
+    [HttpPost("Production/WorkOrder/DeleteComponentJson")]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
+    public async Task<IActionResult> DeleteWorkOrderComponentJson([FromBody] DeleteWorkOrderComponentRequest req, CancellationToken ct)
+    {
+        if (req is null || req.ComponentId <= 0)
+            return Json(new { ok = false, error = "Bileşen kaydı zorunlu." });
+        try
+        {
+            await _service.DeleteComponentAsync(req.ComponentId, ct);
+            return Json(new { ok = true });
+        }
+        catch (InvalidOperationException iex) { return Json(new { ok = false, error = iex.Message }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[WorkOrder.DeleteComponent] componentId={ComponentId} silinemedi.", req?.ComponentId);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }

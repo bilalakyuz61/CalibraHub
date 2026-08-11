@@ -3140,10 +3140,64 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
     public async Task<BOMWithNames?> GetBOMByIdAsync(int id, CancellationToken cancellationToken)
     {
         if (id <= 0) return null;
-        var trees = await _repository.GetBOMsAsync(cancellationToken);
-        var match = trees.FirstOrDefault(t => t.Id == id);
-        if (match is null) return null;
-        return await _repository.GetBOMByItemAsync(match.ItemId, match.ConfigId, cancellationToken);
+        // 2026-08-06 versiyonlama: Id dogrudan okunur. Eski yol (listeyi cek → Item'a
+        // cozup GetBOMByItemAsync) versiyon kaydini acarken BAZ receteye dusuyordu
+        // (ayrica tum BOM listesini bellege cekiyordu).
+        return await _repository.GetBOMByIdWithNamesAsync(id, cancellationToken);
+    }
+
+    /// <summary>2026-08-06: mamul+kombinasyonun recete versiyon listesi (baz + versiyonlar).</summary>
+    public async Task<IReadOnlyCollection<BomVersionSummaryDto>> GetBomVersionsAsync(
+        int itemId, int? configId, CancellationToken cancellationToken)
+    {
+        if (itemId <= 0) return Array.Empty<BomVersionSummaryDto>();
+        return await _repository.GetBomVersionsAsync(itemId, configId, cancellationToken);
+    }
+
+    /// <summary>
+    /// 2026-08-06: kaynak receteden (baz veya baska versiyon) yeni bir DUZENLENEBILIR
+    /// versiyon turetir. Kod kullanicidan gelir; ayni mamul+kombinasyonda tekil olmalidir
+    /// (DB UX_BOM_Version da garanti eder — burasi kullanici dostu on-kontrol).
+    /// Otomatik versiyonlama YOKTUR: her kayitta degil, yalniz bu metotla versiyon olusur.
+    /// </summary>
+    public async Task<int> DeriveBomVersionAsync(int sourceBomId, string versionCode, int? userId, CancellationToken cancellationToken)
+    {
+        versionCode = (versionCode ?? "").Trim();
+        if (sourceBomId <= 0) throw new ArgumentException("Kaynak recete secilmelidir.");
+        if (versionCode.Length == 0) throw new ArgumentException("Versiyon kodu bos olamaz.");
+        if (versionCode.Length > 30) throw new ArgumentException("Versiyon kodu en fazla 30 karakter olabilir.");
+
+        var source = await _repository.GetBOMByIdWithNamesAsync(sourceBomId, cancellationToken)
+            ?? throw new ArgumentException("Kaynak recete bulunamadi veya pasif.");
+
+        var versions = await _repository.GetBomVersionsAsync(source.ItemId, source.ConfigId, cancellationToken);
+        if (versions.Any(v => string.Equals(v.VersionCode, versionCode, StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException($"'{versionCode}' kodlu versiyon bu mamulde zaten var. Farkli bir kod veriniz.");
+
+        var entity = new BOM
+        {
+            ItemId        = source.ItemId,
+            ConfigId      = source.ConfigId,
+            Description   = source.Description,
+            ImageData     = source.ImageData,
+            ImageMimeType = source.ImageMimeType,
+            ImageFitMode  = source.ImageFitMode,
+            ImageRotation = source.ImageRotation,
+            RoutingId     = source.RoutingId,
+            VersionCode   = versionCode,
+            ParentBomId   = sourceBomId,
+            CreatedById   = userId,
+            UpdatedById   = userId,
+        };
+        foreach (var l in source.Lines)
+            entity.AddLine(BOMLine.Create(l.ItemId, l.ConfigId, l.Quantity, l.ScrapRatio, userId, l.Note, l.ComponentBomId),
+                allowDuplicate: true); // kaynak zaten kayitli — kendi kural setinden gecmisti
+
+        var newId = await _repository.AddBOMAsync(entity, cancellationToken);
+        _audit?.LogInsert("Bom",newId,
+            $"{source.ItemCode} [{versionCode}]",
+            detail: $"Recete versiyonu turetildi (kaynak: {(source.VersionCode is null ? "baz recete" : source.VersionCode)}, {source.Lines.Count} bilesen)");
+        return newId;
     }
 
     public async Task<int> SaveBOMAsync(SaveBOMRequest request, int? userId, CancellationToken cancellationToken,
@@ -3232,7 +3286,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         // Numerik invariant'lar (Quantity>0, ScrapRatio>=0) Domain'de
         // BOMLine.EnsureValid icinde + validator katmaninda — ayni kontrol burada
         // tekrar edilmez.
-        var resolvedLines = new List<(int ItemId, int? ConfigId, decimal Qty, decimal Scrap, string? Note)>(lines.Count);
+        var resolvedLines = new List<(int ItemId, int? ConfigId, decimal Qty, decimal Scrap, string? Note, int? ComponentBomId)>(lines.Count);
         foreach (var line in lines)
         {
             int lineItemId = line.ItemId;
@@ -3269,8 +3323,20 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 lineConfigId = match.ConfigId;
             }
 
+            // 2026-08-06: yari mamul bilesende sabitlenen recete/versiyon dogrulamasi —
+            // verilen BOM Id gercekten O bilesene ait olmali (yanlis mamulun recetesi
+            // sabitlenemez; UI hatasi/istemci beyani burada kesilir).
+            int? componentBomId = line.ComponentBomId is > 0 ? line.ComponentBomId : null;
+            if (componentBomId is not null)
+            {
+                var pinned = await _repository.GetBOMByIdWithNamesAsync(componentBomId.Value, cancellationToken);
+                if (pinned is null || pinned.ItemId != lineItemId)
+                    throw new ArgumentException(
+                        "Bilesende secilen recete versiyonu bulunamadi veya bu bilesene ait degil. Versiyon secimini yenileyiniz.");
+            }
+
             resolvedLines.Add((lineItemId, lineConfigId, line.Quantity, line.ScrapRatio,
-                string.IsNullOrWhiteSpace(line.Note) ? null : line.Note.Trim()));
+                string.IsNullOrWhiteSpace(line.Note) ? null : line.Note.Trim(), componentBomId));
         }
 
         // Malzeme Belge Kilitleri ("recete") — BOMEdit.cshtml malzeme araması paylaşımlı
@@ -3309,14 +3375,36 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var rotation = request.ImageRotation;
         if (rotation != 0 && rotation != 90 && rotation != 180 && rotation != 270) rotation = 0;
 
-        // UPSERT: Id verilmemisse mevcut kaydi ItemId+ConfigId ile bul
+        // UPSERT (2026-08-06 versiyonlama): kimlik artik (ItemId, ConfigId, VersionCode)
+        // uclusudur. VersionCode NULL = baz recete (eski davranisla ayni hedef);
+        // dolu = o kodlu versiyon guncellenir (yeni versiyon yalniz DeriveBomVersionAsync
+        // ile acilir — Id'siz + eslesmeyen kod kaydi versiyonu SESSIZCE olusturmaz).
+        var versionCode = string.IsNullOrWhiteSpace(request.VersionCode) ? null : request.VersionCode.Trim();
         int resolvedId = request.Id ?? 0;
         if (resolvedId <= 0)
         {
-            var existing = await _repository.GetBOMByItemAsync(parentItemId, parentConfigId, cancellationToken);
-            if (existing is not null)
-                resolvedId = existing.Id;
+            if (versionCode is null)
+            {
+                var existing = await _repository.GetBOMByItemAsync(parentItemId, parentConfigId, cancellationToken);
+                if (existing is not null)
+                    resolvedId = existing.Id;
+            }
+            else
+            {
+                var versions = await _repository.GetBomVersionsAsync(parentItemId, parentConfigId, cancellationToken);
+                var match = versions.FirstOrDefault(v =>
+                    string.Equals(v.VersionCode, versionCode, StringComparison.OrdinalIgnoreCase));
+                if (match is null)
+                    throw new ArgumentException(
+                        $"'{versionCode}' kodlu versiyon bulunamadi. Yeni versiyon 'Versiyon Turet' ile olusturulur.");
+                resolvedId = match.Id;
+            }
         }
+
+        // Audit diff icin eski durumu MUTASYONDAN ONCE oku (CLAUDE.md audit kurali).
+        BOMWithNames? beforeSave = resolvedId > 0
+            ? await _repository.GetBOMByIdWithNamesAsync(resolvedId, cancellationToken)
+            : null;
 
         // ── Cycle (dongusel bagimlilik) korumasi (rapor 2026-05-17 madde 3.1) ──
         // Save'den ONCE dogrulanir; ihlal varsa DB'ye yazilmaz. BFS depth cap 20.
@@ -3365,13 +3453,14 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             //   3) Aksi halde NULL.
             // Bulunamayan kod (kullanici sectigi rota silinmis/pasif) → kullanici dostu hata.
             RoutingId     = await ResolveRoutingIdAsync(request, cancellationToken),
+            VersionCode   = versionCode,
             CreatedById   = userId,
             UpdatedById   = userId,
         };
         try
         {
             foreach (var l in resolvedLines)
-                entity.AddLine(BOMLine.Create(l.ItemId, l.ConfigId, l.Qty, l.Scrap, userId, l.Note), allowDuplicateComponents);
+                entity.AddLine(BOMLine.Create(l.ItemId, l.ConfigId, l.Qty, l.Scrap, userId, l.Note, l.ComponentBomId), allowDuplicateComponents);
             entity.EnsureValid(allowDuplicateComponents);
         }
         catch (CalibraHub.Domain.Common.DomainException dex)
@@ -3379,17 +3468,114 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException(dex.Message, dex);
         }
 
+        // Audit basligi: "MAMULKODU" veya "MAMULKODU [VERSIYON]" — /AuditLog raporlamasi
+        // "kim, ne zaman, hangi receteyi" sorusuna bu etiketle cevap verir.
+        var parentCode = activeById.TryGetValue(parentItemId, out var parentSnap) ? parentSnap.Code : $"#{parentItemId}";
+        var auditTitle = versionCode is null ? parentCode : $"{parentCode} [{versionCode}]";
+
         if (entity.Id <= 0)
-            return await _repository.AddBOMAsync(entity, cancellationToken);
+        {
+            var newId = await _repository.AddBOMAsync(entity, cancellationToken);
+            _audit?.LogInsert("Bom",newId, auditTitle,
+                detail: $"{resolvedLines.Count} bilesen",
+                snapshot: BuildBomAuditSnapshot(entity, activeById));
+            return newId;
+        }
 
         await _repository.UpdateBOMAsync(entity, cancellationToken);
+
+        // Yalnizca degisen alanlar loglanir (audit kural #3) — header + bilesen diff'i.
+        if (_audit is not null)
+        {
+            try
+            {
+                var changes = BuildBomChanges(beforeSave, entity, activeById);
+                if (changes.Count > 0)
+                    _audit.LogChanges("Bom", entity.Id, auditTitle, changes);
+            }
+            catch { /* audit is akisini asla bozamaz */ }
+        }
         return entity.Id;
+    }
+
+    /// <summary>Insert audit dokumu — "bos → deger" olarak yazilacak baslik + bilesen listesi.</summary>
+    private static object BuildBomAuditSnapshot(BOM entity, IReadOnlyDictionary<int, Item> itemsById)
+        => new
+        {
+            entity.Description,
+            Versiyon = entity.VersionCode ?? "(baz)",
+            Bilesenler = string.Join("; ", entity.Lines.Select(l =>
+                $"{(itemsById.TryGetValue(l.ItemId, out var it) ? it.Code : "#" + l.ItemId)} x{l.Quantity}"
+                + (l.ScrapRatio > 0 ? $" (fire {l.ScrapRatio})" : ""))),
+        };
+
+    /// <summary>
+    /// Recete update diff'i — header alanlari + eklenen/cikan/degisen bilesenler.
+    /// DocumentService.BuildLineChanges desenine paralel elle diff (reflection degil,
+    /// satirlar kalem listesi oldugu icin).
+    /// </summary>
+    private static List<CalibraHub.Application.Auditing.AuditFieldChange> BuildBomChanges(
+        BOMWithNames? before, BOM after, IReadOnlyDictionary<int, Item> itemsById)
+    {
+        var changes = new List<CalibraHub.Application.Auditing.AuditFieldChange>();
+        string CodeOf(int itemId) => itemsById.TryGetValue(itemId, out var it) ? it.Code : "#" + itemId;
+
+        if (!string.Equals(before?.Description ?? "", after.Description ?? "", StringComparison.Ordinal))
+            changes.Add(new CalibraHub.Application.Auditing.AuditFieldChange(
+                "Description", "Açıklama", before?.Description, after.Description));
+        if ((before?.RoutingId) != after.RoutingId)
+            changes.Add(new CalibraHub.Application.Auditing.AuditFieldChange(
+                "RoutingId", "Rota", before?.RoutingCode ?? before?.RoutingId?.ToString(), after.RoutingId?.ToString()));
+
+        var oldLines = (before?.Lines ?? Array.Empty<BOMLineWithName>())
+            .ToDictionary(l => (l.ItemId, l.ConfigId ?? 0));
+        var newLines = after.Lines.ToDictionary(l => (l.ItemId, l.ConfigId ?? 0));
+
+        foreach (var (key, nl) in newLines)
+        {
+            if (!oldLines.TryGetValue(key, out var ol))
+            {
+                changes.Add(new CalibraHub.Application.Auditing.AuditFieldChange(
+                    $"Line[{key.Item1}]", $"Bileşen — {CodeOf(key.Item1)}", null,
+                    $"x{nl.Quantity}" + (nl.ScrapRatio > 0 ? $" (fire {nl.ScrapRatio})" : "")));
+            }
+            else if (ol.Quantity != nl.Quantity || ol.ScrapRatio != nl.ScrapRatio
+                     || (ol.ComponentBomId) != nl.ComponentBomId
+                     || !string.Equals(ol.Note ?? "", nl.Note ?? "", StringComparison.Ordinal))
+            {
+                changes.Add(new CalibraHub.Application.Auditing.AuditFieldChange(
+                    $"Line[{key.Item1}]", $"Bileşen — {CodeOf(key.Item1)}",
+                    $"x{ol.Quantity}" + (ol.ScrapRatio > 0 ? $" (fire {ol.ScrapRatio})" : "") + (ol.ComponentBomId is not null ? $" [recete #{ol.ComponentBomId}]" : ""),
+                    $"x{nl.Quantity}" + (nl.ScrapRatio > 0 ? $" (fire {nl.ScrapRatio})" : "") + (nl.ComponentBomId is not null ? $" [recete #{nl.ComponentBomId}]" : "")));
+            }
+        }
+        foreach (var (key, ol) in oldLines)
+        {
+            if (!newLines.ContainsKey(key))
+                changes.Add(new CalibraHub.Application.Auditing.AuditFieldChange(
+                    $"Line[{key.Item1}]", $"Bileşen — {CodeOf(key.Item1)}",
+                    $"x{ol.Quantity}", null));
+        }
+        return changes;
     }
 
     public async Task DeleteBOMAsync(int id, int? userId, CancellationToken cancellationToken)
     {
         if (id <= 0) throw new ArgumentException("Silinecek recete secilmelidir.");
+        // Silinen icerik dokumu icin SILMEDEN ONCE oku (audit kural: "ne kayboldu" izlenebilir).
+        var doomed = _audit is not null
+            ? await _repository.GetBOMByIdWithNamesAsync(id, cancellationToken)
+            : null;
         await _repository.DeleteBOMAsync(id, userId, cancellationToken);
+        if (doomed is not null)
+        {
+            var title = doomed.VersionCode is null ? doomed.ItemCode : $"{doomed.ItemCode} [{doomed.VersionCode}]";
+            _audit?.LogDelete("Bom", id, title,
+                detail: $"{doomed.Lines.Count} bilesen",
+                snapshot: doomed.Lines.Select(l => new CalibraHub.Application.Auditing.AuditFieldChange(
+                    $"Line[{l.ItemId}]", $"Bileşen — {l.ComponentMaterialCode}",
+                    $"x{l.Quantity}" + (l.ScrapRatio > 0 ? $" (fire {l.ScrapRatio})" : ""), null)).ToList());
+        }
     }
 
     /* ── Kit / Paket Urun ─────────────────────────────────────────── */
@@ -3701,22 +3887,27 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         // Cycle koruma: visited set + maxDepth cap. Cycle olmadigi varsayilir
         // (SaveBOMAsync EnsureNoCycle ile zaten engelliyor) ama defansif.
         var aggregate = new Dictionary<int, (decimal Qty, int Depth, bool IsLeaf)>();
-        var componentsCache = new Dictionary<int, IReadOnlyCollection<BOMComponentLineRow>>();
-        async Task<IReadOnlyCollection<BOMComponentLineRow>> ResolveChildrenAsync(int itemId)
+        // 2026-08-06 versiyonlama: cache anahtari (ItemId, PinnedBomId) — satirda
+        // sabitlenmis alt versiyon (ComponentBomId) varsa o recete gezilir, yoksa BAZ.
+        var componentsCache = new Dictionary<(int ItemId, int? BomId), IReadOnlyCollection<BOMComponentLineRow>>();
+        async Task<IReadOnlyCollection<BOMComponentLineRow>> ResolveChildrenAsync(int itemId, int? pinnedBomId)
         {
-            if (componentsCache.TryGetValue(itemId, out var cached)) return cached;
-            var fetched = await _repository.GetBOMComponentLinesAsync(itemId, cancellationToken);
-            componentsCache[itemId] = fetched;
+            var key = (itemId, pinnedBomId);
+            if (componentsCache.TryGetValue(key, out var cached)) return cached;
+            var fetched = pinnedBomId is > 0
+                ? await _repository.GetBOMComponentLinesByBomIdAsync(pinnedBomId.Value, cancellationToken)
+                : await _repository.GetBOMComponentLinesAsync(itemId, cancellationToken);
+            componentsCache[key] = fetched;
             return fetched;
         }
 
-        var rootChildren = await ResolveChildrenAsync(parentItemId);
-        var frontier = new List<(int ItemId, decimal Qty, int Depth)>();
+        var rootChildren = await ResolveChildrenAsync(parentItemId, null);
+        var frontier = new List<(int ItemId, decimal Qty, int Depth, int? BomId)>();
         foreach (var child in rootChildren)
         {
             // 1. seviye quantity = istenen mamul adedi * line qty * (1 + scrap)
             var subQty = quantity * child.Quantity * (1m + child.ScrapRatio);
-            frontier.Add((child.ItemId, subQty, 1));
+            frontier.Add((child.ItemId, subQty, 1, child.ComponentBomId));
         }
 
         var truncated = false;
@@ -3725,19 +3916,19 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         for (var depth = 1; depth <= maxDepth && frontier.Count > 0; depth++)
         {
             maxDepthSeen = Math.Max(maxDepthSeen, depth);
-            var nextFrontier = new List<(int ItemId, decimal Qty, int Depth)>();
+            var nextFrontier = new List<(int ItemId, decimal Qty, int Depth, int? BomId)>();
 
-            // Her seviyede frontier'i ItemId bazli grupla — ayni item farkli
-            // yollardan geldiyse total quantity'sini topla, child lookup'i tek
-            // kez yap. Bu N+1 azaltir ve aggregate kalitesini koruyor.
+            // Her seviyede frontier'i (ItemId, PinnedBomId) bazli grupla — ayni item
+            // AYNI receteyle farkli yollardan geldiyse quantity toplanir, child lookup
+            // tek kez yapilir. Farkli versiyona sabitlenmis yollar ayri gezilir.
             var grouped = frontier
-                .GroupBy(f => f.ItemId)
-                .Select(g => (ItemId: g.Key, Qty: g.Sum(x => x.Qty), Depth: g.Min(x => x.Depth)))
+                .GroupBy(f => (f.ItemId, f.BomId))
+                .Select(g => (g.Key.ItemId, Qty: g.Sum(x => x.Qty), Depth: g.Min(x => x.Depth), g.Key.BomId))
                 .ToList();
 
-            foreach (var (childItemId, childQty, childDepth) in grouped)
+            foreach (var (childItemId, childQty, childDepth, childBomId) in grouped)
             {
-                var children = await ResolveChildrenAsync(childItemId);
+                var children = await ResolveChildrenAsync(childItemId, childBomId);
                 var isLeaf = children.Count == 0;
 
                 // Aggregate ekle (ilk goruldugu depth korunur — daha sig kayit kazanir)
@@ -3757,7 +3948,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 foreach (var grand in children)
                 {
                     var grandQty = childQty * grand.Quantity * (1m + grand.ScrapRatio);
-                    nextFrontier.Add((grand.ItemId, grandQty, childDepth + 1));
+                    nextFrontier.Add((grand.ItemId, grandQty, childDepth + 1, grand.ComponentBomId));
                 }
             }
             frontier = nextFrontier;

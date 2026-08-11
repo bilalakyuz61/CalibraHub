@@ -94,6 +94,12 @@ public sealed class ParametersController : Controller
                 CalibraHub.Application.Constants.ProductionParameters.BomAllowDuplicateComponentsKey)
             ?.ParamValue == "true";
 
+        // Üretim tab'i: başlamış iş emrinde reçete düzeltme izni (default: kapalı)
+        ViewData["AllowStartedWoRecipeEdit"] = productionParams
+            .FirstOrDefault(p => p.ParamKey ==
+                CalibraHub.Application.Constants.ProductionParameters.AllowStartedWoRecipeEditKey)
+            ?.ParamValue == "true";
+
         // Stok tab'i: belge türü bazında "stok bakiyesini etkiler" switch'leri.
         // Parametre tanımsızsa AÇIK (etkiler) kabul edilir.
         var stockParams = await _companyParameters.ListAsync(
@@ -309,6 +315,13 @@ public sealed class ParametersController : Controller
                 input.BomAllowDuplicateComponents ? "true" : "false",
                 CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
 
+            // Başlamış iş emrinde reçete düzeltme izni (2026-08-06)
+            await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                ProductionFormCode,
+                CalibraHub.Application.Constants.ProductionParameters.AllowStartedWoRecipeEditKey,
+                input.AllowStartedWoRecipeEdit ? "true" : "false",
+                CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
+
             return Json(new { ok = true });
         }
         catch (Exception ex)
@@ -417,7 +430,8 @@ public sealed class ParametersController : Controller
     public sealed record ApprovalParametersInput(List<ApprovalKindInput> Kinds);
     public sealed record ApprovalKindInput(string Kind, bool Enabled);
     public sealed record ApprovalKindState(string Code, string Label, bool Enabled);
-    public sealed record ProductionParametersInput(int ShopFloorMaxPinAttempts, bool BomAllowDuplicateComponents = false);
+    public sealed record ProductionParametersInput(int ShopFloorMaxPinAttempts, bool BomAllowDuplicateComponents = false,
+        bool AllowStartedWoRecipeEdit = false);
     public sealed record StockParametersInput(
         bool NegControl,
         // İrsaliye FIFO sipariş bağlama (default açık) + bağlantısız teslimat yasak (default kapalı).

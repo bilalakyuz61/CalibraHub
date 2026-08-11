@@ -391,7 +391,10 @@ public sealed record BOMWithNames(
     IReadOnlyCollection<BOMLineWithName> Lines,
     int? RoutingId = null,         // 2026-05-20: header-level Routing FK
     string? RoutingCode = null,    // display (JOIN with Routing.Code)
-    string? RoutingName = null);   // display (JOIN with Routing.Name)
+    string? RoutingName = null,    // display (JOIN with Routing.Name)
+    // 2026-08-06 reçete versiyonlama: NULL = baz reçete; dolu = kullanıcı-türetimli versiyon.
+    string? VersionCode = null,
+    int? ParentBomId = null);
 
 public sealed record BOMLineWithName(
     int ItemId,
@@ -401,7 +404,11 @@ public sealed record BOMLineWithName(
     string? ComponentConfigCode,
     decimal Quantity,
     decimal ScrapRatio,
-    string? Note = null);          // 2026-07-05: satır açıklaması (uçtan uca eklendi)
+    string? Note = null,           // 2026-07-05: satır açıklaması (uçtan uca eklendi)
+    // 2026-08-06: bileşen yarı mamulse sabitlenen reçete/versiyon (NULL = bazı takip et).
+    int? ComponentBomId = null,
+    string? ComponentBomVersionCode = null,  // display — sabitlenen versiyonun kodu
+    bool ComponentHasBom = false);           // display — bileşenin kendi reçetesi var mı (versiyon seçici göster)
 
 // Frontend submit — backend ItemId/ConfigId ile calisir, ama mevcut UI'lar
 // materialCode/configCode kullaniyor olabilir. ItemId 0 gelirse service
@@ -420,7 +427,10 @@ public sealed record SaveBOMRequest(
     int ImageRotation,
     IReadOnlyCollection<SaveBOMLineRequest> Lines,
     int? RoutingId = null,         // 2026-05-20: opsiyonel rota FK
-    string? RoutingCode = null);   // 2026-05-20: RoutingId yoksa Code uzerinden lookup (standart rehber fallback)
+    string? RoutingCode = null,    // 2026-05-20: RoutingId yoksa Code uzerinden lookup (standart rehber fallback)
+    // 2026-08-06 versiyonlama: kaydedilen reçetenin kimliği. NULL = baz reçete.
+    // Id verilmemişse upsert kimliği artık (ItemId, ConfigId, VersionCode) üçlüsüdür.
+    string? VersionCode = null);
 
 public sealed record SaveBOMLineRequest(
     int ItemId,
@@ -429,7 +439,21 @@ public sealed record SaveBOMLineRequest(
     string? ComponentConfigCode,   // legacy: ConfigId null ise lookup icin
     decimal Quantity,
     decimal ScrapRatio,
-    string? Note = null);          // 2026-07-05: satır açıklaması (opsiyonel, max 1000)
+    string? Note = null,           // 2026-07-05: satır açıklaması (opsiyonel, max 1000)
+    int? ComponentBomId = null);   // 2026-08-06: yarı mamul bileşende sabitlenen reçete/versiyon
+
+/// <summary>
+/// Bir mamul+kombinasyonun reçete versiyon listesi satırı (baz dahil).
+/// BOMEdit versiyon seçici + iş emri reçete dropdown + bileşen versiyon seçici besler.
+/// </summary>
+public sealed record BomVersionSummaryDto(
+    int Id,
+    string? VersionCode,     // NULL = baz reçete
+    string? Description,
+    int LineCount,
+    DateTime Created,
+    DateTime? Updated,
+    int? ParentBomId);
 
 /// <summary>
 /// Repository → service ham satir tasiyici (ExplodeBOMAsync icinde kullanilir).
@@ -441,7 +465,8 @@ public sealed record BOMComponentLineRow(
     int ItemId,
     int? ConfigId,
     decimal Quantity,
-    decimal ScrapRatio);
+    decimal ScrapRatio,
+    int? ComponentBomId = null);   // 2026-08-06: satırda sabitlenen alt reçete/versiyon (NULL = baz)
 
 // ── Kit / Paket Urun (FK-based: ItemId / ConfigId) ─────────────────────────
 // Kit = birden fazla stogu tek kod altinda toplayan phantom bundle. ItemKit (versiyonlu

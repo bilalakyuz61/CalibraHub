@@ -5,6 +5,7 @@
     var isEDocApproval = (ViewData["IsEDocumentApprovalEnabled"] is bool b) && b;
     var shopFloorMaxPinAttempts = ViewData["ShopFloorMaxPinAttempts"] as int? ?? 5;
     var bomAllowDup = ViewData["BomAllowDuplicateComponents"] as bool? ?? false;
+    var allowStartedWoRecipeEdit = ViewData["AllowStartedWoRecipeEdit"] as bool? ?? false;
     var stockEffects = ViewData["StockEffectStates"]
         as List<CalibraHub.Web.Controllers.ParametersController.StockEffectState> ?? new();
     var negControl = ViewData["NegBalanceControl"] as bool? ?? false;
@@ -543,6 +544,28 @@ body.app-theme-dark .ap-tab.is-active::before {
                             </span>
                             <span class="ap-switch-label @(bomAllowDup ? "is-active" : "")"
                                   id="ap-bom-allow-dup-label">@(bomAllowDup ? "Aktif" : "Pasif")</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Başlamış İş Emrinde Reçete Düzeltme</div>
+                        <div class="ap-row-desc">
+                            Açıkken <strong>üretimi başlamış</strong> (Devam Ediyor) iş emrinin bileşen listesi
+                            düzeltilebilir ve yeniden patlatılabilir. Kapalıyken üretim başladıktan sonra
+                            reçete kilitlenir. Her iki modda da <strong>sarf yapılmış</strong> satırın silinmesi /
+                            sarf altına düşürülmesi ve sarflı emirde yeniden patlatma her zaman engellidir.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" id="ap-wo-recipe-edit" @(allowStartedWoRecipeEdit ? "checked" : null) />
+                            <span class="ap-switch-track @(allowStartedWoRecipeEdit ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(allowStartedWoRecipeEdit ? "is-active" : "")"
+                                  id="ap-wo-recipe-edit-label">@(allowStartedWoRecipeEdit ? "Aktif" : "Pasif")</span>
                         </label>
                     </div>
                 </div>
@@ -1141,6 +1164,7 @@ body.app-theme-dark .ap-tab.is-active::before {
     }
     wireSwitch('ap-edoc-approval', 'ap-edoc-approval-label');
     wireSwitch('ap-bom-allow-dup', 'ap-bom-allow-dup-label');
+    wireSwitch('ap-wo-recipe-edit', 'ap-wo-recipe-edit-label');
     wireSwitch('ap-fc-min-stock', 'ap-fc-min-stock-label');
     wireSwitch('ap-fc-consolidate', 'ap-fc-consolidate-label');
     // Belge türü onay switch'leri — dinamik liste (data-kind attribute'lu)
@@ -1183,11 +1207,16 @@ body.app-theme-dark .ap-tab.is-active::before {
                     return;
                 }
                 var dupEl = document.getElementById('ap-bom-allow-dup');
+                var woEditEl = document.getElementById('ap-wo-recipe-edit');
                 var rp = await fetch('/Admin/SaveProductionParametersJson', {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-                    body: JSON.stringify({ shopFloorMaxPinAttempts: raw, bomAllowDuplicateComponents: !!(dupEl && dupEl.checked) })
+                    body: JSON.stringify({
+                        shopFloorMaxPinAttempts: raw,
+                        bomAllowDuplicateComponents: !!(dupEl && dupEl.checked),
+                        allowStartedWoRecipeEdit: !!(woEditEl && woEditEl.checked)
+                    })
                 });
                 var datap = await rp.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
                 ok = !!datap.ok;

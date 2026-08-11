@@ -2717,7 +2717,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 l.[ScrapRatio],
                 l.[LineGuid],
                 t.[RoutingId], r.[Code] AS RoutingCode, r.[Name] AS RoutingName,
-                l.[Note]     AS [LineNote]
+                l.[Note]     AS [LineNote],
+                t.[VersionCode], t.[ParentBomId], l.[ComponentBomId]
             FROM {_productTreesTableName} t
             LEFT JOIN {_productTreeLinesTableName} l ON l.[BOMId] = t.[Id]
             LEFT JOIN [{_schema}].[Routing] r ON r.[Id] = t.[RoutingId]
@@ -2755,6 +2756,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                     RoutingId     = reader.IsDBNull(15) ? null : reader.GetInt32(15),
                     RoutingCode   = reader.IsDBNull(16) ? null : reader.GetString(16),
                     RoutingName   = reader.IsDBNull(17) ? null : reader.GetString(17),
+                    VersionCode   = reader.IsDBNull(19) ? null : reader.GetString(19),
+                    ParentBomId   = reader.IsDBNull(20) ? null : reader.GetInt32(20),
                 };
                 linesByTreeId[treeId] = new List<BOMLine>();
             }
@@ -2772,6 +2775,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                     ScrapRatio = reader.IsDBNull(13) ? 0m : reader.GetDecimal(13),
                     LineGuid   = reader.IsDBNull(14) ? Guid.Empty : reader.GetGuid(14),
                     Note       = reader.IsDBNull(18) ? null : reader.GetString(18),
+                    ComponentBomId = reader.IsDBNull(21) ? null : reader.GetInt32(21),
                 });
             }
         }
@@ -2782,16 +2786,37 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         return treesById.Values.ToList();
     }
 
-    public async Task<BOMWithNames?> GetBOMByItemAsync(int itemId, int? configId, CancellationToken cancellationToken)
+    public Task<BOMWithNames?> GetBOMByItemAsync(int itemId, int? configId, CancellationToken cancellationToken)
+    {
+        // 2026-08-06 versiyonlama: (Item, Config) sorgusu artik BAZ receteyi doner
+        // (VersionCode IS NULL). Eski MAX(Id) konvansiyonu kaldirildi — tek aktif baz
+        // artik UX_BOM_Base unique index'i ile DB garantili. Belirli bir versiyonu okumak
+        // icin GetBOMByIdWithNamesAsync(bomId) kullanilir.
+        var configFilter = configId.HasValue ? "t.[ConfigId] = @ConfigId" : "t.[ConfigId] IS NULL";
+        var where = $"t.[ItemId] = @ItemId AND t.[IsActive] = 1 AND {configFilter} AND t.[VersionCode] IS NULL";
+        return QueryBomWithNamesAsync(where, cmd =>
+        {
+            cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+            if (configId.HasValue)
+                cmd.Parameters.Add(new SqlParameter("@ConfigId", configId.Value));
+        }, cancellationToken);
+    }
+
+    /// <summary>2026-08-06: belirli bir recete/versiyonu Id ile oku (baz veya versiyon farketmez).</summary>
+    public Task<BOMWithNames?> GetBOMByIdWithNamesAsync(int bomId, CancellationToken cancellationToken)
+        => QueryBomWithNamesAsync("t.[Id] = @BomId AND t.[IsActive] = 1",
+            cmd => cmd.Parameters.Add(new SqlParameter("@BomId", bomId)), cancellationToken);
+
+    private async Task<BOMWithNames?> QueryBomWithNamesAsync(
+        string whereClause, Action<Microsoft.Data.SqlClient.SqlCommand> bindParams, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
 
-        var configFilter    = configId.HasValue ? "t.[ConfigId] = @ConfigId" : "t.[ConfigId] IS NULL";
-        var configFilterSub = configId.HasValue ? "[ConfigId] = @ConfigId"   : "[ConfigId] IS NULL";
-
         // Items + ItemConfiguration JOIN ile enriched response — frontend display icin
-        // ItemCode/ItemName/ConfigCode field'lari tasinir.
+        // ItemCode/ItemName/ConfigCode field'lari tasinir. cb = satirin sabitledigi alt
+        // recete (versiyon kodu display); ComponentHasBom = bilesenin kendi baz recetesi
+        // var mi (UI versiyon secicisini yalniz receteli yari mamulde gosterir).
         command.CommandText = $"""
             SELECT
                 t.[Id], t.[ItemId], pi.[code] AS ParentItemCode, ISNULL(pi.[name], pi.[code]) AS ParentItemName,
@@ -2806,7 +2831,12 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 l.[Quantity],
                 l.[ScrapRatio],
                 t.[RoutingId], r.[Code] AS RoutingCode, r.[Name] AS RoutingName,
-                l.[Note]     AS [LineNote]
+                l.[Note]     AS [LineNote],
+                t.[VersionCode], t.[ParentBomId],
+                l.[ComponentBomId], cb.[VersionCode] AS ComponentBomVersionCode,
+                CASE WHEN EXISTS (SELECT 1 FROM {_productTreesTableName} sub
+                                  WHERE sub.[ItemId] = l.[ItemId] AND sub.[IsActive] = 1)
+                     THEN 1 ELSE 0 END AS ComponentHasBom
             FROM {_productTreesTableName} t
             INNER JOIN {_stockCardsTableName} pi ON pi.[id] = t.[ItemId]
             LEFT  JOIN [{_schema}].[ItemConfiguration] pcfg ON pcfg.[Id] = t.[ConfigId]
@@ -2814,19 +2844,12 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             LEFT  JOIN {_stockCardsTableName} ci ON ci.[id] = l.[ItemId]
             LEFT  JOIN [{_schema}].[ItemConfiguration] lcfg ON lcfg.[Id] = l.[ConfigId]
             LEFT  JOIN [{_schema}].[Routing] r ON r.[Id] = t.[RoutingId]
-            WHERE t.[ItemId] = @ItemId
-              AND t.[IsActive] = 1   -- soft-delete uyumu
-              AND {configFilter}
-              AND t.[Id] = (
-                  SELECT MAX([Id]) FROM {_productTreesTableName}
-                  WHERE [ItemId] = @ItemId AND [IsActive] = 1 AND {configFilterSub}
-              )
+            LEFT  JOIN {_productTreesTableName} cb ON cb.[Id] = l.[ComponentBomId]
+            WHERE {whereClause}
             ORDER BY l.[Id];
             """;
 
-        command.Parameters.Add(new SqlParameter("@ItemId", itemId));
-        if (configId.HasValue)
-            command.Parameters.Add(new SqlParameter("@ConfigId", configId.Value));
+        bindParams(command);
 
         BOMWithNames? result = null;
         var lines = new List<BOMLineWithName>();
@@ -2852,7 +2875,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                     // RoutingId/Code/Name reader indices 18/19/20 (after Quantity=16, ScrapRatio=17)
                     RoutingId:     reader.IsDBNull(18) ? null : reader.GetInt32(18),
                     RoutingCode:   reader.IsDBNull(19) ? null : reader.GetString(19),
-                    RoutingName:   reader.IsDBNull(20) ? null : reader.GetString(20));
+                    RoutingName:   reader.IsDBNull(20) ? null : reader.GetString(20),
+                    VersionCode:   reader.IsDBNull(22) ? null : reader.GetString(22),
+                    ParentBomId:   reader.IsDBNull(23) ? null : reader.GetInt32(23));
             }
 
             if (!reader.IsDBNull(11))
@@ -2865,11 +2890,52 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                     ComponentConfigCode:   reader.IsDBNull(15) ? null : reader.GetString(15),
                     Quantity:              reader.GetDecimal(16),
                     ScrapRatio:            reader.GetDecimal(17),
-                    Note:                  reader.IsDBNull(21) ? null : reader.GetString(21)));
+                    Note:                  reader.IsDBNull(21) ? null : reader.GetString(21),
+                    ComponentBomId:        reader.IsDBNull(24) ? null : reader.GetInt32(24),
+                    ComponentBomVersionCode: reader.IsDBNull(25) ? null : reader.GetString(25),
+                    ComponentHasBom:       !reader.IsDBNull(26) && reader.GetInt32(26) == 1));
             }
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// 2026-08-06: bir mamul+kombinasyonun tum aktif recete satirlari (baz + versiyonlar).
+    /// Baz once (VersionCode NULL), sonra versiyon koduna gore sirali.
+    /// </summary>
+    public async Task<IReadOnlyCollection<BomVersionSummaryDto>> GetBomVersionsAsync(
+        int itemId, int? configId, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        var configFilter = configId.HasValue ? "t.[ConfigId] = @ConfigId" : "t.[ConfigId] IS NULL";
+        command.CommandText = $"""
+            SELECT t.[Id], t.[VersionCode], t.[Description],
+                   (SELECT COUNT(*) FROM {_productTreeLinesTableName} l WHERE l.[BOMId] = t.[Id]) AS LineCount,
+                   t.[Created], t.[Updated], t.[ParentBomId]
+            FROM {_productTreesTableName} t
+            WHERE t.[ItemId] = @ItemId AND t.[IsActive] = 1 AND {configFilter}
+            ORDER BY CASE WHEN t.[VersionCode] IS NULL THEN 0 ELSE 1 END, t.[VersionCode];
+            """;
+        command.Parameters.Add(new SqlParameter("@ItemId", itemId));
+        if (configId.HasValue)
+            command.Parameters.Add(new SqlParameter("@ConfigId", configId.Value));
+
+        var list = new List<BomVersionSummaryDto>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            list.Add(new BomVersionSummaryDto(
+                Id:          reader.GetInt32(0),
+                VersionCode: reader.IsDBNull(1) ? null : reader.GetString(1),
+                Description: reader.IsDBNull(2) ? null : reader.GetString(2),
+                LineCount:   reader.GetInt32(3),
+                Created:     reader.GetDateTime(4),
+                Updated:     reader.IsDBNull(5) ? null : reader.GetDateTime(5),
+                ParentBomId: reader.IsDBNull(6) ? null : reader.GetInt32(6)));
+        }
+        return list;
     }
 
     public async Task<int> AddBOMAsync(BOM tree, CancellationToken cancellationToken)
@@ -2886,11 +2952,11 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             cmd.CommandText = $"""
                 INSERT INTO {_productTreesTableName}
                     ([ItemId],[ConfigId],[Description],[ImageData],[ImageMimeType],[ImageFitMode],[ImageRotation],
-                     [RoutingId],
+                     [RoutingId],[VersionCode],[ParentBomId],
                      [IsActive],[CreatedById],[Created],[CreatedAt],[UpdatedAt])
                 VALUES
                     (@ItemId,@ConfigId,@Description,@ImageData,@ImageMimeType,@ImageFitMode,@ImageRotation,
-                     @RoutingId,
+                     @RoutingId,@VersionCode,@ParentBomId,
                      1,@CreatedById,SYSUTCDATETIME(),GETDATE(),GETDATE());
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;
@@ -2902,6 +2968,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             cmd.Parameters.Add(new SqlParameter("@ImageFitMode",      (object?)tree.ImageFitMode  ?? DBNull.Value));
             cmd.Parameters.Add(new SqlParameter("@ImageRotation",     tree.ImageRotation));
             cmd.Parameters.Add(new SqlParameter("@RoutingId",         (object?)tree.RoutingId     ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@VersionCode",       (object?)tree.VersionCode   ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@ParentBomId",       (object?)tree.ParentBomId   ?? DBNull.Value));
             cmd.Parameters.Add(new SqlParameter("@CreatedById",       (object?)tree.CreatedById   ?? DBNull.Value));
             newId = (int)(await cmd.ExecuteScalarAsync(cancellationToken))!;
         }
@@ -2912,9 +2980,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             lineCmd.Transaction = transaction;
             lineCmd.CommandText = $"""
                 INSERT INTO {_productTreeLinesTableName}
-                    ([BOMId],[ItemId],[ConfigId],[Quantity],[ScrapRatio],[LineGuid],[Note],[CreatedById],[Created])
+                    ([BOMId],[ItemId],[ConfigId],[Quantity],[ScrapRatio],[LineGuid],[Note],[ComponentBomId],[CreatedById],[Created])
                 VALUES
-                    (@BOMId,@ItemId,@ConfigId,@Qty,@Scrap,@LineGuid,@Note,@CreatedById,SYSUTCDATETIME());
+                    (@BOMId,@ItemId,@ConfigId,@Qty,@Scrap,@LineGuid,@Note,@ComponentBomId,@CreatedById,SYSUTCDATETIME());
                 """;
             lineCmd.Parameters.Add(new SqlParameter("@BOMId",   newId));
             lineCmd.Parameters.Add(new SqlParameter("@ItemId",  line.ItemId));
@@ -2923,6 +2991,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             lineCmd.Parameters.Add(new SqlParameter("@Scrap",    line.ScrapRatio));
             lineCmd.Parameters.Add(new SqlParameter("@LineGuid", line.LineGuid == Guid.Empty ? Guid.NewGuid() : line.LineGuid));
             lineCmd.Parameters.Add(new SqlParameter("@Note",     (object?)line.Note ?? DBNull.Value));
+            lineCmd.Parameters.Add(new SqlParameter("@ComponentBomId", (object?)line.ComponentBomId ?? DBNull.Value));
             lineCmd.Parameters.Add(new SqlParameter("@CreatedById", (object?)line.CreatedById ?? (object?)tree.CreatedById ?? DBNull.Value));
             await lineCmd.ExecuteNonQueryAsync(cancellationToken);
         }
@@ -2985,9 +3054,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             // kim yaptigini gosterir; satir CreatedById ayni save'i yapan kullanici.
             lineCmd.CommandText = $"""
                 INSERT INTO {_productTreeLinesTableName}
-                    ([BOMId],[ItemId],[ConfigId],[Quantity],[ScrapRatio],[LineGuid],[Note],[CreatedById],[Created])
+                    ([BOMId],[ItemId],[ConfigId],[Quantity],[ScrapRatio],[LineGuid],[Note],[ComponentBomId],[CreatedById],[Created])
                 VALUES
-                    (@BOMId,@ItemId,@ConfigId,@Qty,@Scrap,@LineGuid,@Note,@CreatedById,SYSUTCDATETIME());
+                    (@BOMId,@ItemId,@ConfigId,@Qty,@Scrap,@LineGuid,@Note,@ComponentBomId,@CreatedById,SYSUTCDATETIME());
                 """;
             lineCmd.Parameters.Add(new SqlParameter("@BOMId",   tree.Id));
             lineCmd.Parameters.Add(new SqlParameter("@ItemId",  line.ItemId));
@@ -2996,6 +3065,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             lineCmd.Parameters.Add(new SqlParameter("@Scrap",    line.ScrapRatio));
             lineCmd.Parameters.Add(new SqlParameter("@LineGuid", line.LineGuid == Guid.Empty ? Guid.NewGuid() : line.LineGuid));
             lineCmd.Parameters.Add(new SqlParameter("@Note",     (object?)line.Note ?? DBNull.Value));
+            lineCmd.Parameters.Add(new SqlParameter("@ComponentBomId", (object?)line.ComponentBomId ?? DBNull.Value));
             lineCmd.Parameters.Add(new SqlParameter("@CreatedById", (object?)line.CreatedById ?? (object?)tree.UpdatedById ?? DBNull.Value));
             await lineCmd.ExecuteNonQueryAsync(cancellationToken);
         }
@@ -3474,8 +3544,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     public async Task<IReadOnlyCollection<int>> GetBOMComponentItemIdsAsync(
         int parentItemId, CancellationToken cancellationToken)
     {
-        // En son aktif BOM'un (en yuksek Id) bilesen ItemId'lerini doner.
-        // Cycle detection icin domain BFS bunu lazy cagirir.
+        // Cycle detection icin domain BFS bunu lazy cagirir. 2026-08-06 versiyonlama:
+        // dongusellik HERHANGI bir aktif recete/versiyon uzerinden olusabilir → tum
+        // aktif kayitlarin bilesenleri taranir (eski MAX(Id) tek-recete varsayimindan
+        // daha genis ve daha guvenli).
         if (parentItemId <= 0) return Array.Empty<int>();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
@@ -3485,11 +3557,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             FROM {_productTreeLinesTableName} l
             INNER JOIN {_productTreesTableName} t ON t.[Id] = l.[BOMId]
             WHERE t.[ItemId] = @ParentItemId
-              AND t.[IsActive] = 1
-              AND t.[Id] = (
-                  SELECT MAX([Id]) FROM {_productTreesTableName}
-                  WHERE [ItemId] = @ParentItemId AND [IsActive] = 1
-              );
+              AND t.[IsActive] = 1;
             """;
         command.Parameters.Add(new SqlParameter("@ParentItemId", parentItemId));
 
@@ -3514,21 +3582,48 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
+        // 2026-08-06 versiyonlama: eski MAX(Id) yerine BAZ recete (VersionCode IS NULL) —
+        // cok seviyeli patlatma/maliyet, alt seviyelerde varsayilan olarak bazi izler.
+        // (Satirda ComponentBomId sabitlenmisse service o Id ile GetBOMComponentLinesByBomIdAsync
+        // cagirir — pin baz cozumlemesini ezer.)
         command.CommandText = $"""
-            SELECT l.[ItemId], l.[ConfigId], l.[Quantity], l.[ScrapRatio]
+            SELECT l.[ItemId], l.[ConfigId], l.[Quantity], l.[ScrapRatio], l.[ComponentBomId]
             FROM {_productTreeLinesTableName} l
             INNER JOIN {_productTreesTableName} t ON t.[Id] = l.[BOMId]
             WHERE t.[ItemId] = @ParentItemId
               AND t.[IsActive] = 1
-              AND t.[Id] = (
-                  SELECT MAX([Id]) FROM {_productTreesTableName}
-                  WHERE [ItemId] = @ParentItemId AND [IsActive] = 1
-              )
+              AND t.[VersionCode] IS NULL
               AND l.[ItemId] IS NOT NULL
               AND l.[ItemId] > 0;
             """;
         command.Parameters.Add(new SqlParameter("@ParentItemId", parentItemId));
+        return await ReadComponentLineRowsAsync(command, cancellationToken);
+    }
 
+    /// <summary>
+    /// 2026-08-06: belirli bir recete/versiyonun (BOM.Id) bilesen satirlari — satirda
+    /// sabitlenmis alt versiyon (ComponentBomId) cozumlemesi icin.
+    /// </summary>
+    public async Task<IReadOnlyCollection<BOMComponentLineRow>> GetBOMComponentLinesByBomIdAsync(
+        int bomId, CancellationToken cancellationToken)
+    {
+        if (bomId <= 0) return Array.Empty<BOMComponentLineRow>();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT l.[ItemId], l.[ConfigId], l.[Quantity], l.[ScrapRatio], l.[ComponentBomId]
+            FROM {_productTreeLinesTableName} l
+            INNER JOIN {_productTreesTableName} t ON t.[Id] = l.[BOMId]
+            WHERE t.[Id] = @BomId AND t.[IsActive] = 1
+              AND l.[ItemId] IS NOT NULL AND l.[ItemId] > 0;
+            """;
+        command.Parameters.Add(new SqlParameter("@BomId", bomId));
+        return await ReadComponentLineRowsAsync(command, cancellationToken);
+    }
+
+    private static async Task<IReadOnlyCollection<BOMComponentLineRow>> ReadComponentLineRowsAsync(
+        SqlCommand command, CancellationToken cancellationToken)
+    {
         var rows = new List<BOMComponentLineRow>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -3537,7 +3632,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 ItemId:     reader.GetInt32(0),
                 ConfigId:   reader.IsDBNull(1) ? null : reader.GetInt32(1),
                 Quantity:   reader.IsDBNull(2) ? 0m : reader.GetDecimal(2),
-                ScrapRatio: reader.IsDBNull(3) ? 0m : reader.GetDecimal(3)));
+                ScrapRatio: reader.IsDBNull(3) ? 0m : reader.GetDecimal(3),
+                ComponentBomId: reader.IsDBNull(4) ? null : reader.GetInt32(4)));
         }
         return rows;
     }

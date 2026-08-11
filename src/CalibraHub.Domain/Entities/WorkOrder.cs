@@ -31,6 +31,13 @@ public sealed class WorkOrder
     /// </summary>
     public int? RoutingId { get; init; }
 
+    /// <summary>
+    /// İş emrinin kullanacağı reçete (FK -> BOM.Id). NULL = BAZ reçeteyi CANLI takip et —
+    /// baz değişirse sonraki patlatma güncel bazdan olur (2026-08-06 kullanıcı kararı).
+    /// Dolu = seçili versiyon sabit; o versiyonun güncel halinden patlatılır.
+    /// </summary>
+    public int? BomId { get; init; }
+
     public DateTime? PlannedStartDate { get; init; }
     public DateTime? PlannedEndDate { get; init; }
 
