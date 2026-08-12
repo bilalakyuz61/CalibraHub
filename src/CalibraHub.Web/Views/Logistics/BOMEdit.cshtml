@@ -1120,6 +1120,19 @@
                             <input type="text" id="ptRoutingDesc" class="pte-input" readonly placeholder="Rota açıklaması..." style="flex:1 1 0;min-width:0;display:none;" />
                         </div>
 
+                        <!-- Reçete Versiyonu (2026-08-11 versiyonlama) — mamul çözülünce görünür.
+                             Baz + kullanıcı-türetimli versiyonlar; seçim değişince o kayıt yüklenir.
+                             "Versiyon Türet": mevcut kayıttan kullanıcının verdiği kodla yeni
+                             DÜZENLENEBİLİR versiyon açar (otomatik versiyon YOK). -->
+                        <label class="pte-label" id="ptVersionLabel" style="display:none;">Reçete Versiyonu</label>
+                        <div class="pte-bilesen-vals" id="ptVersionRow" style="display:none;">
+                            <select id="ptVersionSelect" class="pte-input" style="width:300px;flex-shrink:0;"></select>
+                            <button type="button" class="pte-btn pte-btn--secondary pte-btn--sm" id="ptBtnDeriveVersion" title="Bu reçeteden yeni versiyon türet">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2"/></svg>
+                                Versiyon Türet
+                            </button>
+                        </div>
+
                     </div>
                 </div>
             </div><!-- /pteTab-genel -->
@@ -1258,6 +1271,7 @@
                                     <th class="pte-comp-th" style="width:80px;">Miktar</th>
                                     <th class="pte-comp-th" style="width:80px;">Fire</th>
                                     <th class="pte-comp-th" style="width:120px;">Kombinasyon</th>
+                                    <th class="pte-comp-th" style="width:120px;" title="Bileşen reçeteli yarı mamulse: hangi reçete/versiyonu kullanılacağı (baz = canlı takip)">Alt Reçete</th>
                                 </tr>
                             </thead>
                             <tbody id="ptLinesBody"></tbody>
@@ -1307,6 +1321,51 @@
         <div class="pta-actions">
             <button type="button" class="pte-btn pte-btn--secondary" id="ptPasteCancel">Vazgeç</button>
             <button type="button" class="pte-btn pte-btn--primary" id="ptPasteApply" disabled>Ekle</button>
+        </div>
+    </div>
+</div>
+
+<!-- Versiyon Türet Modalı (2026-08-11 reçete versiyonlama) -->
+<div class="pta-overlay" id="ptDeriveOverlay" role="dialog" aria-labelledby="ptDeriveTitle" aria-hidden="true">
+    <div class="pta-panel" role="document" style="width:min(460px,96vw);">
+        <div class="pta-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.6;"><path d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2"/></svg>
+            <h3 id="ptDeriveTitle">Versiyon Türet</h3>
+            <button type="button" class="pta-close" id="ptDeriveClose" aria-label="Kapat">&times;</button>
+        </div>
+        <div class="pta-section">
+            <div class="pta-source" id="ptDeriveSourceInfo">Açık reçetenin kopyasından yeni bir versiyon oluşturulur; versiyon sonradan serbestçe düzenlenebilir.</div>
+            <label class="pte-label" for="ptDeriveCode" style="display:block;margin:10px 0 6px;">Versiyon Kodu *</label>
+            <input type="text" id="ptDeriveCode" class="pte-input" maxlength="30" placeholder="örn. V2, FASON, 2026-B..." style="width:100%;" autocomplete="off" />
+        </div>
+        <div class="pta-actions">
+            <button type="button" class="pte-btn pte-btn--secondary" id="ptDeriveCancel">Vazgeç</button>
+            <button type="button" class="pte-btn pte-btn--primary" id="ptDeriveApply">Türet</button>
+        </div>
+    </div>
+</div>
+
+<!-- Bileşen Alt Reçete Seçim Modalı (2026-08-11) — yarı mamul bileşenin hangi
+     reçete/versiyonunun kullanılacağı; "Aç" ile seçilen reçetenin detayına gidilir. -->
+<div class="pta-overlay" id="ptCompBomOverlay" role="dialog" aria-labelledby="ptCompBomTitle" aria-hidden="true">
+    <div class="pta-panel" role="document" style="width:min(520px,96vw);">
+        <div class="pta-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.6;"><path d="M12 3v18M3 12h18"/></svg>
+            <h3 id="ptCompBomTitle">Bileşen Reçetesi</h3>
+            <button type="button" class="pta-close" id="ptCompBomClose" aria-label="Kapat">&times;</button>
+        </div>
+        <div class="pta-section">
+            <div class="pta-source" id="ptCompBomInfo"></div>
+            <label class="pte-label" for="ptCompBomSelect" style="display:block;margin:10px 0 6px;">Kullanılacak Reçete</label>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <select id="ptCompBomSelect" class="pte-input" style="flex:1 1 0;min-width:0;"></select>
+                <button type="button" class="pte-btn pte-btn--secondary pte-btn--sm" id="ptCompBomOpen" title="Seçili reçetenin detayını yeni sekmede aç">Detayı Aç</button>
+            </div>
+            <div style="font-size:.74rem;opacity:.6;margin-top:8px;">"Baz Reçete (canlı)" seçiliyse yarı mamulün güncel baz reçetesi izlenir; belirli versiyon seçilirse o versiyona sabitlenir.</div>
+        </div>
+        <div class="pta-actions">
+            <button type="button" class="pte-btn pte-btn--secondary" id="ptCompBomCancel">Vazgeç</button>
+            <button type="button" class="pte-btn pte-btn--primary" id="ptCompBomApply">Uygula</button>
         </div>
     </div>
 </div>
@@ -1788,6 +1847,13 @@
             var cfgBadge = c.hasConfig
                 ? '<span class="pte-row-badge">' + escHtml(c.cfgCode || 'Seçilmedi') + '</span>'
                 : '<span style="opacity:0.3;">-</span>';
+            // Alt Reçete hücresi (2026-08-11): yalnız reçeteli yarı mamulde tıklanabilir rozet —
+            // baz = canlı takip, dolu = sabitlenen versiyon kodu. Tıklayınca seçim modalı açılır.
+            var subBomCell = c.componentHasBom
+                ? '<button type="button" class="pte-row-badge pt-compbom-btn" data-idx="' + i + '" ' +
+                  'style="cursor:pointer;border:none;" title="Yarı mamul reçetesi: versiyonları gör / seç / detay aç">' +
+                  escHtml(c.componentBomVersionCode || 'Baz (canlı)') + '</button>'
+                : '<span style="opacity:0.3;">-</span>';
             var noteHtml = c.note
                 ? '<span class="pte-line-note" title="' + escHtml(c.note) + '">' + escHtml(c.note) + '</span>'
                 : '';
@@ -1806,6 +1872,7 @@
                 '<td class="pte-comp-td pte-cell-edit" data-f="qty" data-idx="' + i + '" title="Çift tıklayıp düzenleyin">' + c.qty + '</td>' +
                 '<td class="pte-comp-td pte-cell-edit" data-f="scrap" data-idx="' + i + '" title="Çift tıklayıp düzenleyin">' + c.scrap + '</td>' +
                 '<td class="pte-comp-td">' + cfgBadge + '</td>' +
+                '<td class="pte-comp-td">' + subBomCell + '</td>' +
                 '</tr>';
         }).join('');
         ptFlashIndex = -1;
@@ -1954,6 +2021,12 @@
     document.getElementById('ptLinesBody')?.addEventListener('click', function(e) {
         var delBtn = e.target.closest('.pt-delete-row');
         var editBtn = e.target.closest('.pt-edit-row');
+        // Alt Reçete rozeti (2026-08-11): yarı mamul versiyon seçim modalı
+        var subBomBtn = e.target.closest('.pt-compbom-btn');
+        if (subBomBtn) {
+            ptCompBomOpen(parseInt(subBomBtn.dataset.idx, 10));
+            return;
+        }
         if (delBtn) {
             var idx = parseInt(delBtn.dataset.idx);
             var removed = ptComponents.splice(idx, 1)[0];
@@ -2020,6 +2093,10 @@
 
     /* ===== LOAD EXISTING TREE ===== */
     let ptCurrentId = null;
+    // Reçete versiyonlama durumu (2026-08-11): açık kaydın kimliği.
+    let ptCurrentVersionCode = null;   // null = baz reçete
+    let ptCurrentItemId = null;        // versiyon listesi (GetBOMVersions) için
+    let ptCurrentConfigId = null;
 
     // Kombinasyon row'u her zaman gorunur; konfigurasyon yoksa pasif (gri+disable)
     // pte-cfg-disabled toggle pattern'i bilesen form'undaki ile birebir.
@@ -2037,7 +2114,10 @@
         var el = document.getElementById('pteRecipeStatus');
         if (!el) return;
         if (mode === 'existing') {
-            el.textContent = 'Mevcut reçete yüklendi';
+            // Versiyonlama (2026-08-11): hangi kaydın açık olduğu pill'de görünür.
+            el.textContent = ptCurrentVersionCode
+                ? ('Versiyon yüklendi: ' + ptCurrentVersionCode)
+                : 'Mevcut reçete yüklendi (baz)';
             el.className = 'pte-recipe-status pte-recipe-status--existing';
             el.style.display = '';
         } else if (mode === 'new') {
@@ -2187,16 +2267,26 @@
 
     function ptApplyTreeData(data, switchTab) {
         ptComponents = []; ptCurrentId = null; ptSelIndex = -1; ptEditIndex = -1;
+        ptCurrentVersionCode = null; ptCurrentItemId = null; ptCurrentConfigId = null;
 
         if (data && data.found) {
             ptCurrentId = data.id;
+            // Versiyonlama durumu (2026-08-11): null = baz recete; dolu = versiyon.
+            ptCurrentVersionCode = data.versionCode || null;
+            ptCurrentItemId = data.itemId || null;
+            ptCurrentConfigId = (data.configId != null) ? data.configId : null;
             ptComponents = (data.lines || []).map(function(l) { return {
                 code: l.componentMaterialCode,
                 name: l.componentMaterialName || l.componentMaterialCode,
                 qty: l.quantity, scrap: l.scrapRatio,
                 hasConfig: !!l.componentConfigCode,
                 cfgCode: l.componentConfigCode || null,
-                note: l.note || ''
+                note: l.note || '',
+                // Yari mamul alt recete sabitleme (2026-08-11)
+                itemId: l.itemId || 0,
+                componentBomId: l.componentBomId || null,
+                componentBomVersionCode: l.componentBomVersionCode || null,
+                componentHasBom: !!l.componentHasBom
             }; });
 
             // ID-bazli yuklemede mamul + config alanlarini da doldur (kullanici dogru
@@ -2266,6 +2356,7 @@
             if (switchTab)
                 document.querySelector('.pte-nav-btn[data-tab="bilesen"]')?.click();
             ptSetRecipeStatus('existing');
+            ptRefreshVersionBar();
         } else {
             // Yeni recete modu — kullanici girilen mamul kodu icin recete yok.
             // Form'u temiz duruma getir: aciklama, gorsel, mod/rotation reset.
@@ -2286,6 +2377,7 @@
             var parentCodeNowEl = document.getElementById('ptParentCode');
             var parentCodeNow = parentCodeNowEl ? (parentCodeNowEl.value || '').trim() : '';
             ptSetRecipeStatus(parentCodeNow ? 'new' : null);
+            ptRefreshVersionBar();   // yeni recete modu — versiyon satiri gizlenir
         }
         renderGrid();
         // Sunucudan yuklenen veri = temiz baslangic; kullanici degisiklik yapinca isaretlenir.
@@ -2320,6 +2412,167 @@
             ptApplyTreeData(data, switchTab);
         } catch { /* connection error */ }
     }
+
+    /* ===== REÇETE VERSİYONLAMA (2026-08-11) =====
+       Versiyon çubuğu: baz + versiyon listesi (GetBOMVersions), seçim değişince o kayıt
+       yüklenir (kaydedilmemiş değişiklik varsa geçiş engellenir — önce kaydet).
+       "Versiyon Türet": açık kayıttan kullanıcının verdiği kodla yeni versiyon
+       (DeriveBomVersion) — otomatik versiyonlama YOK. */
+    async function ptRefreshVersionBar() {
+        var label = document.getElementById('ptVersionLabel');
+        var row   = document.getElementById('ptVersionRow');
+        var sel   = document.getElementById('ptVersionSelect');
+        if (!label || !row || !sel) return;
+        if (!ptCurrentItemId || !ptCurrentId) {
+            label.style.display = 'none'; row.style.display = 'none'; sel.innerHTML = '';
+            return;
+        }
+        try {
+            var url = '/Logistics/GetBOMVersions?itemId=' + ptCurrentItemId
+                + (ptCurrentConfigId != null ? '&configId=' + ptCurrentConfigId : '');
+            var resp = await fetch(url, { credentials: 'include' });
+            var list = resp.ok ? await resp.json() : [];
+            if (!Array.isArray(list) || list.length === 0) { label.style.display = 'none'; row.style.display = 'none'; return; }
+            sel.innerHTML = list.map(function(v) {
+                var text = (v.versionCode ? v.versionCode : 'Baz Reçete') + ' — ' + v.lineCount + ' bileşen';
+                return '<option value="' + v.id + '">' + escHtml(text) + '</option>';
+            }).join('');
+            sel.value = String(ptCurrentId);
+            label.style.display = ''; row.style.display = '';
+        } catch { /* sessiz — versiyon çubuğu opsiyonel zenginlik */ }
+    }
+    window.ptRefreshVersionBar = ptRefreshVersionBar;
+
+    document.getElementById('ptVersionSelect')?.addEventListener('change', function() {
+        var sel = this;
+        var targetId = parseInt(sel.value, 10);
+        if (!targetId || targetId === ptCurrentId) return;
+        if (ptDirty) {
+            // Kaydedilmemiş değişiklik varken geçiş = sessiz veri kaybı. Önce kaydet.
+            showMsg('Kaydedilmemiş değişiklik var — versiyon değiştirmeden önce kaydedin veya sayfayı yenileyin.', false);
+            sel.value = String(ptCurrentId);
+            return;
+        }
+        ptLoadExistingTreeById(targetId, false);
+    });
+
+    // ── Versiyon Türet modalı ──
+    var ptDeriveOverlayEl = document.getElementById('ptDeriveOverlay');
+    function ptDeriveOpen() {
+        if (!ptCurrentId) { showMsg('Önce bir reçete yükleyin/kaydedin — versiyon kayıtlı reçeteden türetilir.', false); return; }
+        if (ptDirty) { showMsg('Kaydedilmemiş değişiklik var — önce kaydedin, sonra versiyon türetin.', false); return; }
+        var info = document.getElementById('ptDeriveSourceInfo');
+        if (info) info.textContent = 'Kaynak: ' + (ptCurrentVersionCode ? ('"' + ptCurrentVersionCode + '" versiyonu') : 'baz reçete')
+            + ' (' + ptComponents.length + ' bileşen). Kopyadan yeni bir versiyon oluşturulur; sonradan serbestçe düzenlenebilir.';
+        var inp = document.getElementById('ptDeriveCode');
+        if (inp) inp.value = '';
+        ptDeriveOverlayEl?.classList.add('is-open');
+        ptDeriveOverlayEl?.setAttribute('aria-hidden', 'false');
+        setTimeout(function() { inp?.focus(); }, 60);
+    }
+    function ptDeriveClose() {
+        var ae = document.activeElement;
+        if (ae && ptDeriveOverlayEl && ptDeriveOverlayEl.contains(ae)) { try { ae.blur(); } catch (_) {} }
+        ptDeriveOverlayEl?.classList.remove('is-open');
+        ptDeriveOverlayEl?.setAttribute('aria-hidden', 'true');
+    }
+    async function ptDeriveApply() {
+        var code = (document.getElementById('ptDeriveCode')?.value || '').trim();
+        if (!code) { ptShakeField('ptDeriveCode'); return; }
+        var btn = document.getElementById('ptDeriveApply');
+        if (btn) btn.disabled = true;
+        try {
+            var resp = await fetch('/Logistics/DeriveBomVersion', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'RequestVerificationToken': ptCsrfToken() },
+                body: JSON.stringify({ sourceBomId: ptCurrentId, versionCode: code })
+            });
+            var data = null; try { data = await resp.json(); } catch (_) {}
+            if (data && data.success && data.id) {
+                ptDeriveClose();
+                showMsg('"' + code + '" versiyonu oluşturuldu — düzenleyebilirsiniz.', true);
+                await ptLoadExistingTreeById(data.id, false);
+            } else {
+                showMsg((data && data.message) || 'Versiyon türetilemedi.', false);
+            }
+        } catch {
+            showMsg('İşlem tamamlanamadı. Bağlantı veya sunucu hatası.', false);
+        } finally { if (btn) btn.disabled = false; }
+    }
+    document.getElementById('ptBtnDeriveVersion')?.addEventListener('click', ptDeriveOpen);
+    document.getElementById('ptDeriveClose')?.addEventListener('click', ptDeriveClose);
+    document.getElementById('ptDeriveCancel')?.addEventListener('click', ptDeriveClose);
+    document.getElementById('ptDeriveApply')?.addEventListener('click', ptDeriveApply);
+    document.getElementById('ptDeriveCode')?.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); ptDeriveApply(); }
+        else if (e.key === 'Escape') { e.preventDefault(); ptDeriveClose(); }
+    });
+
+    // ── Bileşen Alt Reçete seçim modalı (yarı mamul versiyonları görme + seçme + detay) ──
+    var ptCompBomOverlayEl = document.getElementById('ptCompBomOverlay');
+    var ptCompBomIdx = -1;   // hangi bileşen satırı için açık
+    async function ptCompBomOpen(idx) {
+        var c = ptComponents[idx];
+        if (!c || !c.componentHasBom || !c.itemId) return;
+        ptCompBomIdx = idx;
+        var info = document.getElementById('ptCompBomInfo');
+        if (info) info.textContent = c.code + ' — ' + (c.name || '');
+        var sel = document.getElementById('ptCompBomSelect');
+        if (sel) sel.innerHTML = '<option value="">Yükleniyor…</option>';
+        ptCompBomOverlayEl?.classList.add('is-open');
+        ptCompBomOverlayEl?.setAttribute('aria-hidden', 'false');
+        try {
+            // NOT: bileşenin kombinasyonuna göre değil, ITEM bazında listelenir —
+            // alt reçete pinlemesi reçete kaydına yapılır (ComponentBomId FK).
+            var resp = await fetch('/Logistics/GetBOMVersions?itemId=' + c.itemId, { credentials: 'include' });
+            var list = resp.ok ? await resp.json() : [];
+            if (sel) {
+                sel.innerHTML = '<option value="">Baz Reçete (canlı takip)</option>' +
+                    (Array.isArray(list) ? list.filter(function(v) { return v.versionCode; }).map(function(v) {
+                        return '<option value="' + v.id + '">' + escHtml(v.versionCode + ' — ' + v.lineCount + ' bileşen') + '</option>';
+                    }).join('') : '');
+                sel.value = c.componentBomId ? String(c.componentBomId) : '';
+                // Sabitlenen versiyon artık listede yoksa (silinmiş) baz'a düş — kullanıcı görür.
+                if (c.componentBomId && sel.value !== String(c.componentBomId)) sel.value = '';
+            }
+        } catch { if (sel) sel.innerHTML = '<option value="">Baz Reçete (canlı takip)</option>'; }
+    }
+    function ptCompBomClose() {
+        var ae = document.activeElement;
+        if (ae && ptCompBomOverlayEl && ptCompBomOverlayEl.contains(ae)) { try { ae.blur(); } catch (_) {} }
+        ptCompBomOverlayEl?.classList.remove('is-open');
+        ptCompBomOverlayEl?.setAttribute('aria-hidden', 'true');
+        ptCompBomIdx = -1;
+    }
+    document.getElementById('ptCompBomClose')?.addEventListener('click', ptCompBomClose);
+    document.getElementById('ptCompBomCancel')?.addEventListener('click', ptCompBomClose);
+    document.getElementById('ptCompBomApply')?.addEventListener('click', function() {
+        var c = ptComponents[ptCompBomIdx];
+        if (!c) { ptCompBomClose(); return; }
+        var sel = document.getElementById('ptCompBomSelect');
+        var v = sel ? sel.value : '';
+        var newId = v ? parseInt(v, 10) : null;
+        var newCode = (v && sel) ? (sel.options[sel.selectedIndex]?.textContent || '').split(' — ')[0] : null;
+        if ((c.componentBomId || null) !== newId) {
+            c.componentBomId = newId;
+            c.componentBomVersionCode = newId ? newCode : null;
+            ptMarkDirty();
+            renderGrid();
+            showMsg('Alt reçete seçimi güncellendi — kaydetmeyi unutmayın.', true);
+        }
+        ptCompBomClose();
+    });
+    document.getElementById('ptCompBomOpen')?.addEventListener('click', function() {
+        var c = ptComponents[ptCompBomIdx];
+        var sel = document.getElementById('ptCompBomSelect');
+        var v = sel ? sel.value : '';
+        var targetId = v ? parseInt(v, 10) : null;
+        // Baz seçiliyse bileşenin baz reçetesini kod ile aç; versiyon seçiliyse id ile.
+        var url = targetId
+            ? ('/Logistics/BOMEdit?id=' + targetId)
+            : (c ? ('/Logistics/BOMEdit?mat=' + encodeURIComponent(c.code)) : null);
+        if (url) window.open(url, '_blank');
+    });
 
     /* ===== RESET FORM ===== */
     function ptResetMainForm() {
@@ -2409,6 +2662,9 @@
                 return (isNaN(n) || n <= 0) ? null : n;
             })(),
             routingCode: (document.getElementById('ptRoutingCode')?.value || '').trim() || null,
+            // Versiyonlama (2026-08-11): açık kaydın kimliği. NULL = baz reçete.
+            // id zaten üstte gidiyor; versionCode Id'siz kayıtlarda upsert kimliğidir.
+            versionCode: ptCurrentVersionCode,
             lines: ptComponents.map(function(c) { return {
                 itemId: 0,
                 configId: null,
@@ -2416,7 +2672,9 @@
                 componentConfigCode: c.cfgCode || null,
                 quantity: c.qty,
                 scrapRatio: c.scrap,
-                note: c.note || null
+                note: c.note || null,
+                // Yarı mamul alt reçete sabitleme (null = bazı takip et)
+                componentBomId: c.componentBomId || null
             }; })
         };
 
@@ -2451,6 +2709,10 @@
                     if (urlParams.get('id') !== String(data.id)) {
                         history.replaceState({}, '', '/Logistics/BOMEdit?id=' + data.id);
                     }
+                    // Versiyonlama (2026-08-11): kaydedilen halini sunucudan tazele —
+                    // yeni eklenen bileşenlerin "Alt Reçete" bayrağı (componentHasBom)
+                    // ve versiyon çubuğu (bileşen sayısı) güncellensin. Tab değişmez.
+                    ptLoadExistingTreeById(data.id, false);
                 }
             } else if (data && data.message) {
                 showMsg('Kayıt hatası: ' + data.message, false);

@@ -1207,6 +1207,20 @@ body.app-theme-dark .ap-tab.is-active::before {
         div.setAttribute('data-page-title', 'Şirket Parametreleri — ' + (t.dataset.label || t.textContent.trim()));
     }
 
+    // "Onay Akış Tanımları" linkleri — shell'de yeni workspace sekmesi olarak açılır;
+    // aynı sekmede navigasyon parametre ekranını kaybettiriyordu.
+    document.querySelectorAll('a[href="/ApprovalFlow"]').forEach(function (a) {
+        a.addEventListener('click', function (e) {
+            var opener = (typeof window.calibraOpenWorkspaceTab === 'function' && window.calibraOpenWorkspaceTab)
+                || (window.parent && window.parent !== window && typeof window.parent.calibraOpenWorkspaceTab === 'function' && window.parent.calibraOpenWorkspaceTab)
+                || null;
+            if (opener) {
+                e.preventDefault();
+                opener('/ApprovalFlow', 'Onay Akış Tanımları');
+            }
+        });
+    });
+
     var tabs = document.querySelectorAll('.ap-tab');
     tabs.forEach(function (t) {
         t.addEventListener('click', function () {
