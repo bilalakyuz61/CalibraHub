@@ -431,7 +431,6 @@ body.app-theme-dark .ap-tab.is-active::before {
             <button type="button" class="ap-tab"           data-pane="ihtiyac"   data-label="İhtiyaç Kayıtları">İhtiyaç Kayıtları</button>
             <button type="button" class="ap-tab"           data-pane="stok"      data-label="Stok">Stok</button>
             <button type="button" class="ap-tab"           data-pane="satissiparis" data-label="Satış Sipariş">Satış Sipariş</button>
-            <button type="button" class="ap-tab"           data-pane="izlenebilirlik" data-label="İzlenebilirlik">İzlenebilirlik</button>
             <button type="button" class="ap-tab"           data-pane="guvenlik"  data-label="Güvenlik">Güvenlik</button>
         </aside>
 
@@ -917,6 +916,35 @@ body.app-theme-dark .ap-tab.is-active::before {
                         </label>
                     </div>
                 </div>
+
+                @* ── İzlenebilirlik (Seq 1100: ayrı sekmeden Stok'a taşındı — izlenebilirlik
+                     stokla ilgili olduğu için). Parametre kodu/kaydetme ucu DEĞİŞMEDİ
+                     (TRACEABILITY / SERIAL_UNIQUE_SCOPE), yalnız gösterildiği sekme değişti. *@
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Seri No Benzersizliği</div>
+                        <div class="ap-row-desc">
+                            <strong>Ürün Bazında:</strong> Aynı seri no farklı malzemelerde kullanılabilir
+                            (yalnızca aynı malzeme içinde tekildir).<br />
+                            <strong>Genel (barkod gibi):</strong> Bir seri no bir kez kullanıldıysa
+                            <strong>başka bir stok kartında kullanılamaz</strong> — tüm malzemeler arasında tekildir.<br />
+                            Lot/seri takibi malzeme bazında açılır (Malzeme Kartı → İzlenebilirlik).
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <select id="ap-trace-serial-scope" class="ap-select"
+                                style="min-width:200px;padding:8px 10px;border-radius:8px;border:1px solid var(--ap-border);background:var(--ap-input-bg);color:var(--ap-text);font-size:.85rem;">
+                            <option value="Item">Ürün Bazında</option>
+                            <option value="Global">Genel (barkod gibi)</option>
+                        </select>
+                        <script>
+                            (function () {
+                                var s = document.getElementById('ap-trace-serial-scope');
+                                if (s) s.value = '@traceSerialScope';
+                            })();
+                        </script>
+                    </div>
+                </div>
             </section>
 
             @* ── Satış Sipariş ───────────────────────────── *@
@@ -1057,37 +1085,8 @@ body.app-theme-dark .ap-tab.is-active::before {
             </section>
 
             @* ── İzlenebilirlik ───────────────────────────── *@
-            <section class="ap-pane" id="ap-pane-izlenebilirlik">
-                <h2>İzlenebilirlik</h2>
-                <div class="ap-hint">
-                    Lot/seri takibi malzeme bazında açılır (Malzeme Kartı → İzlenebilirlik). Buradaki
-                    ayarlar seri girişinde uygulanacak kontrolleri yönetir.
-                </div>
-                <div class="ap-row">
-                    <div class="ap-row-main">
-                        <div class="ap-row-title">Seri No Benzersizliği</div>
-                        <div class="ap-row-desc">
-                            <strong>Ürün Bazında:</strong> Aynı seri no farklı malzemelerde kullanılabilir
-                            (yalnızca aynı malzeme içinde tekildir).<br />
-                            <strong>Genel (barkod gibi):</strong> Bir seri no bir kez kullanıldıysa
-                            <strong>başka bir stok kartında kullanılamaz</strong> — tüm malzemeler arasında tekildir.
-                        </div>
-                    </div>
-                    <div class="ap-row-control">
-                        <select id="ap-trace-serial-scope" class="ap-select"
-                                style="min-width:200px;padding:8px 10px;border-radius:8px;border:1px solid var(--ap-border);background:var(--ap-input-bg);color:var(--ap-text);font-size:.85rem;">
-                            <option value="Item">Ürün Bazında</option>
-                            <option value="Global">Genel (barkod gibi)</option>
-                        </select>
-                        <script>
-                            (function () {
-                                var s = document.getElementById('ap-trace-serial-scope');
-                                if (s) s.value = '@traceSerialScope';
-                            })();
-                        </script>
-                    </div>
-                </div>
-            </section>
+            @* Seq 1100: ayrı "İzlenebilirlik" sekmesi kaldırıldı — tek parametresi
+               (Seri No Benzersizliği) yukarıdaki Stok sekmesine taşındı. *@
 
             @* ── Güvenlik ───────────────────────────────── *@
             <section class="ap-pane" id="ap-pane-guvenlik">
@@ -1192,7 +1191,7 @@ body.app-theme-dark .ap-tab.is-active::before {
     // NOT: Kaydedilebilir parametresi olan HER yeni sekme buraya eklenmeli,
     // yoksa o sekmede Kaydet butonu pasif kalir (bkz. satissiparis regresyonu).
     function syncSaveButton() {
-        var hasParams = (activePane === 'general' || activePane === 'production' || activePane === 'ihtiyac' || activePane === 'stok' || activePane === 'satissiparis' || activePane === 'salesquote' || activePane === 'purchase' || activePane === 'izlenebilirlik' || activePane === 'guvenlik');
+        var hasParams = (activePane === 'general' || activePane === 'production' || activePane === 'ihtiyac' || activePane === 'stok' || activePane === 'satissiparis' || activePane === 'salesquote' || activePane === 'purchase' || activePane === 'guvenlik');
         saveBtn.disabled = !hasParams;
         saveBtn.title = hasParams ? '' : 'Bu sekmede henüz kaydedilebilir parametre yok.';
     }
@@ -1410,9 +1409,20 @@ body.app-theme-dark .ap-tab.is-active::before {
                     })
                 });
                 var datas = await rs.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
-                ok = !!datas.ok;
+                // Seq 1100: Seri No Benzersizligi (izlenebilirlik) artik Stok sekmesinde —
+                // ayni parametre kodu/ucu (TRACEABILITY / SERIAL_UNIQUE_SCOPE), Stok kaydiyla birlikte gider.
+                var scEl = document.getElementById('ap-trace-serial-scope');
+                var scVal = (scEl && scEl.value === 'Global') ? 'Global' : 'Item';
+                var rtr = await fetch('/Admin/SaveParameter', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({ formCode: 'TRACEABILITY', paramKey: 'SERIAL_UNIQUE_SCOPE', paramValue: scVal, dataType: 1 })
+                });
+                var dtr = await rtr.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
+                ok = !!datas.ok && !!dtr.ok;
                 if (ok) flash('Kaydedildi.', true);
-                else    flash(datas.error || 'Kaydetme basarisiz.', false);
+                else    flash(datas.error || dtr.error || 'Kaydetme basarisiz.', false);
             } else if (activePane === 'satissiparis') {
                 var soEl = document.getElementById('ap-so-affects');
                 var soOn = !!(soEl && soEl.checked);
@@ -1473,19 +1483,6 @@ body.app-theme-dark .ap-tab.is-active::before {
                 ok = !!dPur.ok;
                 if (ok) flash('Kaydedildi.', true);
                 else    flash(dPur.error || 'Kaydetme basarisiz.', false);
-            } else if (activePane === 'izlenebilirlik') {
-                var scEl = document.getElementById('ap-trace-serial-scope');
-                var scVal = (scEl && scEl.value === 'Global') ? 'Global' : 'Item';
-                var rtr = await fetch('/Admin/SaveParameter', {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-                    body: JSON.stringify({ formCode: 'TRACEABILITY', paramKey: 'SERIAL_UNIQUE_SCOPE', paramValue: scVal, dataType: 1 })
-                });
-                var dtr = await rtr.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
-                ok = !!dtr.ok;
-                if (ok) flash('Kaydedildi.', true);
-                else    flash(dtr.error || 'Kaydetme basarisiz.', false);
             } else if (activePane === 'guvenlik') {
                 var idleEl = document.getElementById('ap-session-idle');
                 var idleVal = parseInt(idleEl && idleEl.value, 10);
