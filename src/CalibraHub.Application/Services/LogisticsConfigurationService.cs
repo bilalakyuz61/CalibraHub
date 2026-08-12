@@ -3107,7 +3107,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 Quantity:   l.Quantity,
                 ScrapRatio: l.ScrapRatio,
                 LineGuid:   l.LineGuid,
-                Note:       l.Note)).ToList())).ToList();
+                Note:       l.Note)).ToList(),
+            VersionCode:   t.VersionCode)).ToList();
     }
 
     /// <summary>

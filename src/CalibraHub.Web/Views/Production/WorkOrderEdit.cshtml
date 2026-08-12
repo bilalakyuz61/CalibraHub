@@ -2492,23 +2492,95 @@ function _woeFmtQty(v) {
                 var row = document.createElement('div');
                 row.className = 'woe-bom-row';
                 var firePct = (Number(c.scrapRate) || 0) * 100;
+                var issued = Number(c.issuedQuantity) || 0;
+                // 2026-08-11 iş emri bazında özelleştirme: Net İhtiyaç + Fire % artık inline
+                // düzenlenebilir (change → UpdateComponentJson; guard'lar sunucuda — başlamış
+                // emirde parametre, sarf altına düşürme yasağı). Sarflı satırda Sil pasif.
                 row.innerHTML =
                     '<span><strong style="color:var(--woe-accent);">' + escHtml(c.itemCode || ('#' + c.itemId)) + '</strong>' +
                         (c.itemName ? ' · <span style="color:var(--woe-text-muted);">' + escHtml(c.itemName) + '</span>' : '') + '</span>' +
                     '<span style="color:var(--woe-text-muted); font-size:12px;">' + escHtml(c.configCode || '—') + '</span>' +
-                    '<span style="text-align:right; font-weight:600;">' + fmt(c.requiredQuantity, _woeDec.quantity) + '</span>' +
+                    '<span><input type="number" class="woe-bom-qty woe-bom-editqty" data-cid="' + c.id + '" data-prev="' + c.requiredQuantity + '"' +
+                        ' min="0" step="any" value="' + c.requiredQuantity + '" title="Miktarı değiştirip Enter/odak dışına çıkın" /></span>' +
                     '<span style="text-align:right;">' + fmt(c.issuedQuantity, _woeDec.quantity) + '</span>' +
-                    '<span style="text-align:right; color:' + (firePct > 0 ? '#f59e0b' : 'var(--woe-text-muted)') + ';">' +
-                        (firePct > 0 ? firePct.toFixed(2) + ' %' : '—') + '</span>' +
+                    '<span><input type="number" class="woe-bom-qty woe-bom-editscrap" data-cid="' + c.id + '" data-prev="' + firePct + '"' +
+                        ' min="0" step="any" value="' + (firePct > 0 ? firePct.toFixed(2) : '0') + '" title="Fire yüzdesi" /></span>' +
                     '<span style="color:var(--woe-text-muted);">' + escHtml(c.unitCode || '—') + '</span>' +
                     '<span><select class="woe-bom-loc" data-cid="' + c.id + '" data-selected="' +
                         (c.fromLocationId == null ? '' : c.fromLocationId) + '">' +
                         buildLocationOptionsHtml(c.fromLocationId == null ? null : c.fromLocationId) +
                         '</select></span>' +
-                    '<span style="color:var(--woe-text-muted); font-size:12px;">' + escHtml(c.notes || '') + '</span>';
+                    '<span style="color:var(--woe-text-muted); font-size:12px;">' + escHtml(c.notes || '') + '</span>' +
+                    '<span><button type="button" class="woe-bom-del" data-cid="' + c.id + '"' +
+                        (issued > 0 ? ' disabled title="Sarf yapılmış bileşen silinemez"' : ' title="Bileşeni sil"') + '>' +
+                        '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>' +
+                        '</button></span>';
+                // Not: satır datası düzenleme çağrılarında lazım — dataset'e koy
+                row.querySelector('.woe-bom-editqty')._comp = c;
+                row.querySelector('.woe-bom-editscrap')._comp = c;
                 bomList.appendChild(row);
             });
         }
+
+        // ── Bileşen miktar/fire inline düzenleme (2026-08-11) ──
+        async function woUpdateComponent(inp, isScrap) {
+            var c = inp._comp;
+            if (!c) return;
+            var raw = parseFloat(String(inp.value).replace(',', '.'));
+            var prev = parseFloat(inp.getAttribute('data-prev'));
+            if (!isFinite(raw) || raw < 0 || raw === prev) { inp.value = isFinite(prev) ? prev : ''; return; }
+            var qty   = isScrap ? Number(c.requiredQuantity) : raw;
+            var scrap = isScrap ? (raw / 100) : (Number(c.scrapRate) || 0);
+            inp.disabled = true;
+            try {
+                var token = (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value || '';
+                var r = await fetch('/Production/WorkOrder/UpdateComponentJson', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+                    body: JSON.stringify({ componentId: c.id, quantity: qty, scrapRate: scrap, notes: c.notes || null }),
+                });
+                var j = await r.json();
+                if (j && j.ok) {
+                    inp.setAttribute('data-prev', String(raw));
+                    if (isScrap) c.scrapRate = scrap; else c.requiredQuantity = qty;
+                    flash('Bileşen güncellendi.', true);
+                } else {
+                    flash((j && j.error) || 'Bileşen güncellenemedi.', false);
+                    inp.value = isFinite(prev) ? prev : '';
+                }
+            } catch (ex) {
+                flash('Bileşen güncellenemedi: ' + ex.message, false);
+                inp.value = isFinite(prev) ? prev : '';
+            } finally { inp.disabled = false; }
+        }
+        bomList.addEventListener('change', function (e) {
+            var q = e.target.closest('.woe-bom-editqty');
+            if (q) { woUpdateComponent(q, false); return; }
+            var s = e.target.closest('.woe-bom-editscrap');
+            if (s) { woUpdateComponent(s, true); return; }
+        });
+
+        // ── Bileşen sil (2026-08-11) — sarflı satırda buton zaten pasif; asıl guard sunucuda ──
+        bomList.addEventListener('click', async function (e) {
+            var btn = e.target.closest('.woe-bom-del');
+            if (!btn || btn.disabled) return;
+            var cid = parseInt(btn.getAttribute('data-cid'), 10);
+            var ok = await CalibraAlert.confirm('Bileşen iş emrinden çıkarılacak. Devam edilsin mi?',
+                { title: 'Bileşeni Sil', okText: 'Sil', cancelText: 'Vazgeç', danger: true });
+            if (!ok) return;
+            btn.disabled = true;
+            try {
+                var token = (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value || '';
+                var r = await fetch('/Production/WorkOrder/DeleteComponentJson', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+                    body: JSON.stringify({ componentId: cid }),
+                });
+                var j = await r.json();
+                if (j && j.ok) { flash('Bileşen silindi.', true); await loadBom(); }
+                else { flash((j && j.error) || 'Bileşen silinemedi.', false); btn.disabled = false; }
+            } catch (ex) { flash('Bileşen silinemedi: ' + ex.message, false); btn.disabled = false; }
+        });
 
         async function loadBom() {
             try {
@@ -2548,6 +2620,116 @@ function _woeFmtQty(v) {
         }
 
         document.getElementById('btn-bom-explode')?.addEventListener('click', explodeBom);
+
+        // ── Reçete seçimi (2026-08-11 versiyonlama) — baz + versiyonlar dropdown ──
+        // Baz = CANLI takip (option value ""); versiyon = BOM.Id. Seçim anında SetBomJson
+        // ile kaydedilir; bileşen listesi DEĞİŞMEZ (bir sonraki "Patlat"ta uygulanır).
+        async function loadBomOptions() {
+            var bar = document.getElementById('woe-bom-versionbar');
+            var sel = document.getElementById('woBomSelect');
+            if (!bar || !sel) return;
+            try {
+                var r = await fetch('/Production/WorkOrder/BomOptions?workOrderId=' + bomWoId, { credentials: 'same-origin' });
+                var j = await r.json();
+                if (!j || !j.ok || !Array.isArray(j.options) || j.options.length === 0) { bar.style.display = 'none'; return; }
+                sel.innerHTML = j.options.map(function (o) {
+                    var isBase = !o.versionCode;
+                    var text = (isBase ? 'Baz Reçete (canlı takip)' : o.versionCode) + ' — ' + o.lineCount + ' bileşen';
+                    // Baz seçim değeri "" (BomId NULL = bazı takip et); versiyon = BOM.Id
+                    return '<option value="' + (isBase ? '' : o.id) + '">' + escHtml(text) + '</option>';
+                }).join('');
+                // Mevcut seçim: selectedBomId NULL → baz. Dolu ama listede yoksa (silinmiş
+                // versiyon) baz'a düşmüş gösterme — sunucu patlatmada net hata veriyor;
+                // burada kullanıcı yeniden seçebilsin diye baz gösterilir.
+                sel.value = j.selectedBomId ? String(j.selectedBomId) : '';
+                if (j.selectedBomId && sel.value !== String(j.selectedBomId)) sel.value = '';
+                sel.setAttribute('data-prev', sel.value);
+                bar.style.display = '';
+            } catch { bar.style.display = 'none'; }
+        }
+        document.getElementById('woBomSelect')?.addEventListener('change', async function () {
+            var sel = this;
+            var prev = sel.getAttribute('data-prev') || '';
+            var bomId = sel.value ? parseInt(sel.value, 10) : null;
+            sel.disabled = true;
+            try {
+                var token = (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value || '';
+                var r = await fetch('/Production/WorkOrder/SetBomJson', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+                    body: JSON.stringify({ workOrderId: bomWoId, bomId: bomId }),
+                });
+                var j = await r.json();
+                if (j && j.ok) {
+                    sel.setAttribute('data-prev', sel.value);
+                    flash('Reçete seçimi kaydedildi — "Patlat" ile bileşen listesine uygulanır.', true);
+                } else {
+                    flash((j && j.error) || 'Reçete seçimi kaydedilemedi.', false);
+                    sel.value = prev;
+                }
+            } catch (ex) {
+                flash('Reçete seçimi kaydedilemedi: ' + ex.message, false);
+                sel.value = prev;
+            } finally { sel.disabled = false; }
+        });
+        loadBomOptions();
+
+        // ── Bileşen ekleme (2026-08-11) — kod çözümle (StockLookup) + AddComponentJson ──
+        var _woAddItem = null;   // { id, code, name }
+        async function woResolveAddCode() {
+            var codeEl = document.getElementById('woCompAddCode');
+            var nameEl = document.getElementById('woCompAddName');
+            var code = (codeEl?.value || '').trim();
+            _woAddItem = null;
+            if (nameEl) nameEl.textContent = '';
+            if (!code) return null;
+            try {
+                var r = await fetch('/Logistics/StockLookup?q=' + encodeURIComponent(code), { credentials: 'same-origin' });
+                var list = r.ok ? await r.json() : [];
+                var m = (list || []).find(function (s) { return (s.code || '').toLowerCase() === code.toLowerCase(); });
+                if (m) { _woAddItem = m; if (nameEl) nameEl.textContent = m.name || ''; }
+                else if (nameEl) nameEl.textContent = 'Bulunamadı';
+                return _woAddItem;
+            } catch { return null; }
+        }
+        document.getElementById('woCompAddCode')?.addEventListener('change', woResolveAddCode);
+        document.getElementById('woCompAddCode')?.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); woResolveAddCode().then(function () { document.getElementById('woCompAddQty')?.focus(); }); }
+        });
+        document.getElementById('woCompAddBtn')?.addEventListener('click', async function () {
+            var btn = this;
+            var item = _woAddItem || await woResolveAddCode();
+            if (!item) { flash('Geçerli bir stok kodu girin.', false); return; }
+            var qty = parseFloat(String(document.getElementById('woCompAddQty')?.value || '').replace(',', '.'));
+            if (!isFinite(qty) || qty <= 0) { flash('Miktar sıfırdan büyük olmalı.', false); return; }
+            var scrapPct = parseFloat(String(document.getElementById('woCompAddScrap')?.value || '0').replace(',', '.'));
+            if (!isFinite(scrapPct) || scrapPct < 0) scrapPct = 0;
+            btn.disabled = true;
+            try {
+                var token = (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value || '';
+                var r = await fetch('/Production/WorkOrder/AddComponentJson', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+                    body: JSON.stringify({ workOrderId: bomWoId, itemId: item.id, configId: null, quantity: qty, scrapRate: scrapPct / 100, notes: null }),
+                });
+                var j = await r.json();
+                if (j && j.ok) {
+                    flash(item.code + ' bileşeni eklendi.', true);
+                    var codeEl = document.getElementById('woCompAddCode');
+                    if (codeEl) codeEl.value = '';
+                    var nameEl = document.getElementById('woCompAddName');
+                    if (nameEl) nameEl.textContent = '';
+                    var qtyEl = document.getElementById('woCompAddQty'); if (qtyEl) qtyEl.value = '1';
+                    var scEl = document.getElementById('woCompAddScrap'); if (scEl) scEl.value = '0';
+                    _woAddItem = null;
+                    await loadBom();
+                    codeEl?.focus();
+                } else {
+                    flash((j && j.error) || 'Bileşen eklenemedi.', false);
+                }
+            } catch (ex) { flash('Bileşen eklenemedi: ' + ex.message, false); }
+            finally { btn.disabled = false; }
+        });
 
         // ── Üretim Sarfı (2026-07-10) — reçete önerisi + serbest satır + seri/lot seçimi ──
         // Kalem grid'i STOCK_OUT kolon setiyle mount edilir (seri-pick GetSerialsJson'dan,

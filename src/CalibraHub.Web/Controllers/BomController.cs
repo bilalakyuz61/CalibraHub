@@ -108,18 +108,24 @@ public sealed class BomController : Controller
         {
             id          = b.Id,
             title       = string.IsNullOrEmpty(b.ItemName) ? b.ItemCode : b.ItemName,
-            subtitle    = string.IsNullOrWhiteSpace(b.ConfigCode)
+            // 2026-08-11 versiyonlama: ayni mamulun baz + versiyon kartlari listede ayri
+            // gorunur — subtitle'daki versiyon etiketi olmadan ayirt edilemezlerdi.
+            subtitle    = (string.IsNullOrWhiteSpace(b.ConfigCode)
                           ? b.ItemCode
-                          : $"{b.ItemCode} · {b.ConfigCode}",
+                          : $"{b.ItemCode} · {b.ConfigCode}")
+                          + (string.IsNullOrWhiteSpace(b.VersionCode) ? "" : $" · {b.VersionCode}"),
             description = string.IsNullOrEmpty(b.Description)
                           ? $"{b.Lines.Count} bileşen"
                           : b.Description,
             imageUrl    = b.ImageData != null && !string.IsNullOrEmpty(b.ImageMimeType)
                           ? $"data:{b.ImageMimeType};base64,{Convert.ToBase64String(b.ImageData)}"
                           : (string?)null,
-            statusBadge = string.IsNullOrWhiteSpace(b.ConfigCode)
-                          ? (object?)null
-                          : new { label = b.ConfigCode, color = "violet" },
+            // Versiyon rozeti onceliklidir (amber); versiyon yoksa kombinasyon rozeti (violet).
+            statusBadge = !string.IsNullOrWhiteSpace(b.VersionCode)
+                          ? (object?)new { label = b.VersionCode!, color = "amber" }
+                          : (string.IsNullOrWhiteSpace(b.ConfigCode)
+                              ? (object?)null
+                              : new { label = b.ConfigCode!, color = "violet" }),
             widgets     = Array.Empty<object>(),
             primaryAction = new
             {

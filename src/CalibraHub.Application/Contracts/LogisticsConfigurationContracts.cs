@@ -338,7 +338,8 @@ public sealed record BOMDto(
     IReadOnlyCollection<BOMLineDto> Lines,
     int? RoutingId = null,         // 2026-05-20: header-level Routing FK
     string? RoutingCode = null,    // display
-    string? RoutingName = null);   // display
+    string? RoutingName = null,    // display
+    string? VersionCode = null);   // 2026-08-11 versiyonlama: null = baz recete
 
 public sealed record BOMLineDto(
     int Id,
