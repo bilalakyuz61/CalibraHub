@@ -1,0 +1,30 @@
+<div class="calibra-help-doc">
+  <p class="help-lead">
+    The <b>Security</b> tab defines the session timeout and the audit log retention policy.
+  </p>
+
+  <h3>Session Idle Timeout (minutes)</h3>
+  <p>
+    If the user performs no mouse/keyboard action for this period, the session ends. Before closing,
+    a <b>countdown warning</b> is displayed; if the user continues, the timer restarts.
+  </p>
+  <ul>
+    <li><b>0</b> = off (no idle timeout).</li>
+    <li>Recommended: <b>30</b> minutes. Use a shorter value on shared terminals.</li>
+  </ul>
+
+  <h3>Audit Log Retention (days)</h3>
+  <p>
+    Insert/update/delete operations and session events are stored as <b>daily JSON files</b> in the
+    application directory. Daily files older than this period are deleted automatically.
+  </p>
+  <ul>
+    <li><b>0</b> = keep forever (no log file is deleted).</li>
+    <li>Default is 365 days. Align it with your legal retention period if you are subject to audit.</li>
+  </ul>
+
+  <p class="help-note">
+    Note: You can review stored logs on <b>Settings → Audit Logs</b>. Shortening the period causes old
+    files to be <b>permanently</b> deleted at the next cleanup.
+  </p>
+</div>

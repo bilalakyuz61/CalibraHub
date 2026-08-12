@@ -1,0 +1,31 @@
+<div class="calibra-help-doc">
+  <p class="help-lead">
+    The <b>Traceability</b> tab defines the uniqueness rule applied when serial numbers are entered.
+  </p>
+
+  <h3>First: Where Is Tracking Enabled?</h3>
+  <p>
+    Lot/serial tracking is enabled <b>per material</b>: Item Card → Traceability. The parameter here
+    defines the <b>scope of the check</b> for materials that are tracked.
+  </p>
+
+  <h3>Serial Number Uniqueness</h3>
+  <ul>
+    <li><b>Per Item:</b> The same serial number may be used on different materials; it is unique only
+        within one material. Suitable when manufacturer serial schemes can collide.</li>
+    <li><b>Global (barcode-like):</b> A serial number is unique across the whole company; once used it
+        cannot be reused on another item card. This gives the strictest traceability.</li>
+  </ul>
+
+  <h3>Things to Watch</h3>
+  <ul>
+    <li>Moving from Global to Per Item relaxes the rule; moving the other way may reveal conflicting
+        serials in existing data.</li>
+    <li>The rule applies to <b>new entries</b> only; recorded serials are not changed.</li>
+  </ul>
+
+  <p class="help-note">
+    Note: Whether serials are entered at order stage is on the <b>Sales Order</b> tab, and whether they
+    may be swapped at shipment is on the <b>Stock</b> tab.
+  </p>
+</div>

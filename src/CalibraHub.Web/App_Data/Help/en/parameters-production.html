@@ -1,0 +1,36 @@
+<div class="calibra-help-doc">
+  <p class="help-lead">
+    The <b>Production</b> tab controls the security rules of the production terminal (ShopFloor)
+    and recipe/work order behavior.
+  </p>
+
+  <h3>Failed PIN Attempt Limit</h3>
+  <p>
+    On the production terminal, operator identity is verified with a PIN or NFC card. After the
+    specified number of failed PIN attempts the person is <b>automatically blocked</b> and can no
+    longer post transactions.
+  </p>
+  <ul>
+    <li>To unblock: reactivate the person from the Personnel card.</li>
+    <li>Entering <b>0</b> disables locking (not recommended).</li>
+  </ul>
+
+  <h3>Same Component on Multiple Recipe Lines</h3>
+  <p>
+    When enabled, the same material may be used on separate lines of one recipe (for example the
+    same paint at two stages). When disabled, a repeated component cannot be saved — this prevents
+    accidental duplicate lines.
+  </p>
+
+  <h3>Editing the Recipe of a Started Work Order</h3>
+  <p>
+    Allows the component list of a work order that has already started or already consumed material
+    to be modified. Keeping it off is safer for traceability; shops that frequently swap materials
+    mid-production may turn it on.
+  </p>
+
+  <p class="help-note">
+    Note: These parameters affect new transactions. Past production records and completed
+    consumptions remain unchanged.
+  </p>
+</div>

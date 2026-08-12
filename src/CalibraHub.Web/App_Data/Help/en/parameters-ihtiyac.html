@@ -1,0 +1,33 @@
+<div class="calibra-help-doc">
+  <p class="help-lead">
+    The <b>Demand Records</b> tab controls how the <i>"Fulfill from Warehouse"</i> action in the
+    Fulfillment Center behaves.
+  </p>
+
+  <h3>Preserve Minimum Stock During Fulfillment</h3>
+  <p>
+    When enabled, the distribution and the stock balance view <b>respect the minimum stock level</b>:
+    quantities that would drop stock below the minimum are excluded from fulfillment. A warehouse
+    specific minimum takes precedence; otherwise the material's general minimum applies.
+  </p>
+
+  <h3>Consolidate Stock on the Counter Document</h3>
+  <p>
+    When enabled, the <b>Goods Issue</b> and <b>Warehouse Transfer</b> documents created by
+    "Fulfill from Warehouse" merge the same material into a single line. When disabled, each
+    fulfillment produces its own line, so you can trace which demand consumed which quantity.
+  </p>
+
+  <h3>Fulfillment Warehouse Selection</h3>
+  <ul>
+    <li><b>Specific Warehouses:</b> Only the balances of the warehouses selected below are used.
+        If none are selected, fulfillment cannot run.</li>
+    <li><b>Warehouse on the Item Card:</b> Each material's default location is used — suitable when
+        warehouse structure differs from material to material.</li>
+  </ul>
+
+  <p class="help-note">
+    Note: These settings only affect the fulfillment proposal and the shape of the created document;
+    they never change stock balances by themselves.
+  </p>
+</div>

@@ -1,0 +1,32 @@
+<div class="calibra-help-doc">
+  <p class="help-lead">
+    The <b>Stock</b> tab defines how warehouse movements affect balances and the rules for the
+    delivery–order link.
+  </p>
+
+  <h3>Negative Balance Control</h3>
+  <p>
+    When enabled, <b>issues, transfers and production consumption</b> that would drive stock below
+    zero are blocked. When disabled, the system silently allows negative balances.
+  </p>
+  <ul>
+    <li>To grant exceptions for specific warehouses, use the per-warehouse
+        <i>negative balance permission</i> field on the <b>Location Definitions</b> screen.</li>
+  </ul>
+
+  <h3>Delivery / Order Binding</h3>
+  <ul>
+    <li><b>FIFO Order Binding (Purchase / Sales):</b> When enabled, a delivery line is bound
+        automatically to the <b>oldest open order</b> line for the same account and material;
+        when disabled, the link is made manually.</li>
+    <li><b>Delivery Without Order Forbidden (Purchase / Sales):</b> When enabled, a delivery that is
+        not bound to an order cannot be saved — every delivery must originate from an order.</li>
+    <li><b>Order Serial Can Be Changed on Sales Delivery:</b> Allows serial numbers reserved on the
+        order to be swapped at shipment. When disabled, only the reserved serials may be shipped.</li>
+  </ul>
+
+  <p class="help-note">
+    Note: Settings apply to newly saved documents; existing movements and balances are not changed
+    retroactively.
+  </p>
+</div>
