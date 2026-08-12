@@ -21,8 +21,21 @@
         direction if you purchase currency.</li>
   </ul>
 
+  <h3>Sales Quote Approval</h3>
+  <p>
+    When enabled, saving a new sales quote <b>starts the matching approval flow automatically</b>;
+    when disabled, no automatic start happens (users can still choose
+    <b>Send for Approval</b> on the document).
+  </p>
+  <ul>
+    <li>Enabling the parameter is not enough on its own — an active flow matching this document
+        type must exist on the <b>Approval Flow Definitions</b> screen.</li>
+    <li>When approval is required for a type, setting the status to "Approved" by hand is locked.</li>
+  </ul>
+
   <p class="help-note">
     Note: The rate is resolved from the document's rate date. Saved documents are not retroactively
-    re-rated; the setting affects subsequent documents.
+    re-rated; the setting affects subsequent documents. Other approval parameters live on the
+    <b>Purchasing</b>, <b>Sales Order</b> and <b>Demand Records</b> tabs.
   </p>
 </div>
