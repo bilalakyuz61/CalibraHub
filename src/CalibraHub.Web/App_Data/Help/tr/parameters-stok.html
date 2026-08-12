@@ -1,0 +1,33 @@
+<div class="calibra-help-doc">
+  <p class="help-lead">
+    <b>Stok</b> sekmesi, depo hareketlerinin bakiyeyi nasıl etkileyeceğini ve
+    irsaliye–sipariş bağlantısının kurallarını belirler.
+  </p>
+
+  <h3>Eksi Bakiye Kontrolü</h3>
+  <p>
+    Açıkken stok bakiyesini negatife düşürecek <b>çıkış, transfer ve üretim sarfı</b>
+    işlemleri engellenir. Kapalıyken sistem uyarı vermeden eksi bakiyeye izin verir.
+  </p>
+  <ul>
+    <li>Belirli depolara istisna tanımak için <b>Lokasyon Tanımlamaları</b> ekranındaki
+        depo bazlı <i>eksi bakiye izni</i> alanını kullanın.</li>
+  </ul>
+
+  <h3>İrsaliye / Sipariş Bağlama</h3>
+  <ul>
+    <li><b>FIFO Sipariş Bağlama (Alış / Satış):</b> Açıkken irsaliye kalemi, aynı cari ve
+        malzemeye ait <b>en eski açık sipariş</b> satırına otomatik bağlanır; kapatılırsa
+        bağlantı elle kurulur.</li>
+    <li><b>Sipariş Bağlantısız Teslimat Yasak (Alış / Satış):</b> Açıkken siparişe
+        bağlanmamış irsaliye kaydedilemez — her teslimatın bir siparişe dayanmasını zorunlu kılar.</li>
+    <li><b>Satış İrsaliyesinde Sipariş Serisi Değiştirilebilir:</b> Siparişte rezerve edilen
+        seri numaralarının sevkiyat sırasında başka bir seriyle değiştirilmesine izin verir.
+        Kapalıyken yalnızca rezerve seriler sevk edilebilir.</li>
+  </ul>
+
+  <p class="help-note">
+    Not: Ayarlar yeni kaydedilen belgelere uygulanır; mevcut hareketler ve bakiyeler
+    geriye dönük değişmez.
+  </p>
+</div>

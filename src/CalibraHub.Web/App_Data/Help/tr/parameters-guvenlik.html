@@ -1,0 +1,33 @@
+<div class="calibra-help-doc">
+  <p class="help-lead">
+    <b>Güvenlik</b> sekmesi, oturum süresi ve işlem logu saklama politikasını belirler.
+  </p>
+
+  <h3>Oturum Atalet Süresi (dakika)</h3>
+  <p>
+    Kullanıcı bu süre boyunca fare/klavye ile hiçbir işlem yapmazsa oturumu düşer.
+    Oturum kapanmadan önce ekranda <b>geri sayımlı bir uyarı</b> gösterilir; kullanıcı
+    devam ederse süre yeniden başlar.
+  </p>
+  <ul>
+    <li><b>0</b> = kapalı (atalet zaman aşımı uygulanmaz).</li>
+    <li>Önerilen: <b>30</b> dakika. Ortak kullanılan terminallerde daha kısa tutun.</li>
+  </ul>
+
+  <h3>İşlem Logu Saklama Süresi (gün)</h3>
+  <p>
+    Ekleme/güncelleme/silme işlemleri ve oturum olayları, program dizininde
+    <b>günlük JSON dosyaları</b> olarak tutulur. Bu süreden eski günlük dosyalar
+    otomatik silinir.
+  </p>
+  <ul>
+    <li><b>0</b> = süresiz sakla (hiçbir log dosyası silinmez).</li>
+    <li>Varsayılan 365 gün. Denetime tabi şirketlerde yasal saklama süresine göre ayarlayın.</li>
+  </ul>
+
+  <p class="help-note">
+    Not: Kayıtlı logları <b>Ayarlar → İşlem Logları</b> ekranından görüntüleyebilirsiniz.
+    Süreyi kısaltmak, bir sonraki temizlikte eski dosyaların <b>kalıcı olarak</b>
+    silinmesine yol açar.
+  </p>
+</div>

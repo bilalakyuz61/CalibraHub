@@ -1,0 +1,36 @@
+<div class="calibra-help-doc">
+  <p class="help-lead">
+    <b>Üretim</b> sekmesi, üretim panelinin (ShopFloor) güvenlik kurallarını ve
+    reçete/iş emri davranışını belirler.
+  </p>
+
+  <h3>Hatalı PIN Girme Limiti</h3>
+  <p>
+    Üretim terminalinde operatör kimliği PIN veya NFC kart ile doğrulanır. Belirtilen sayıda
+    hatalı PIN denemesinden sonra ilgili personel <b>otomatik olarak bloklanır</b> ve
+    işlem yapamaz.
+  </p>
+  <ul>
+    <li>Blok kaldırma: Personel kartından personeli yeniden aktifleştirin.</li>
+    <li><b>0</b> yazılırsa kilitleme devre dışı kalır (önerilmez).</li>
+  </ul>
+
+  <h3>Reçetede Aynı Bileşen Birden Fazla Satırda</h3>
+  <p>
+    Açıkken bir reçetede aynı malzeme farklı satırlarda tekrar kullanılabilir
+    (ör. aynı boya iki ayrı aşamada). Kapalıyken tekrar eden bileşen kaydedilemez —
+    yanlışlıkla çift satır girilmesini engeller.
+  </p>
+
+  <h3>Başlamış İş Emrinde Reçete Düzeltme</h3>
+  <p>
+    Üretimi başlamış ya da sarfı yapılmış bir iş emrinin bileşen listesinin
+    değiştirilebilmesine izin verir. Kapalı tutulması izlenebilirlik açısından güvenlidir;
+    üretim sırasında sık malzeme değişikliği yapan atölyelerde açılabilir.
+  </p>
+
+  <p class="help-note">
+    Not: Bu parametreler yeni işlemleri etkiler. Geçmiş üretim kayıtları ve tamamlanmış
+    sarflar değişmez.
+  </p>
+</div>

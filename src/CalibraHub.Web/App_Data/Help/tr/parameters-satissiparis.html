@@ -1,0 +1,32 @@
+<div class="calibra-help-doc">
+  <p class="help-lead">
+    <b>Satış Sipariş</b> sekmesi, siparişin stok üzerindeki etkisini ve seri numarası
+    davranışını belirler. Üç parametre <b>hiyerarşiktir</b>: üsttekini kapatırsanız
+    alttakiler fiilen devre dışı kalır.
+  </p>
+
+  <h3>1) Satış Siparişi Stoğu Etkiler (Rezervasyon)</h3>
+  <p>
+    Açıkken sipariş kaydı mantıksal rezervasyon oluşturur: miktar fiziken depodan çıkmaz
+    ama <b>başka belgeye tahsis edilemez</b>. Kapalıyken sipariş yalnızca bir taahhüttür,
+    stoğa dokunmaz.
+  </p>
+
+  <h3>2) Siparişte Seri Takibi</h3>
+  <p>
+    Yalnızca stok rezervasyonu açıkken kullanılabilir. Açıkken sipariş kalemlerinde
+    <b>"Seri"</b> kolonu görünür ve hangi serilerin bu siparişe ait olduğu girilebilir.
+  </p>
+
+  <h3>3) Sipariş Seri Rezervasyonu</h3>
+  <p>
+    Yalnızca siparişte seri takibi açıkken kullanılabilir. Girilen seriler
+    <b>o sipariş adına rezerve</b> edilir; başka bir belgede sevk edilemez.
+  </p>
+
+  <p class="help-note">
+    Not: Üst kademe kapatıldığında alt kademeler ekranda pasif/etkisiz gösterilir —
+    ayarı bulamıyorsanız önce bir üstteki parametrenin açık olduğundan emin olun.
+    Sevkiyat sırasında seri değişimine izin verilip verilmeyeceği <b>Stok</b> sekmesindedir.
+  </p>
+</div>

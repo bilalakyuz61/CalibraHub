@@ -1115,6 +1115,16 @@ body.app-theme-dark .ap-tab.is-active::before {
         saveBtn.title = hasParams ? '' : 'Bu sekmede henüz kaydedilebilir parametre yok.';
     }
 
+    // Aktif sekmenin yardim dokumani — F1 (ve Islemler > Yardim) her cagrilista
+    // #calibra-help'i CANLI okur, bu yuzden sekme degisince attribute'lari guncellemek
+    // yeterli: her sekme kendi yardim sayfasini acar (App_Data/Help/{tr,en}/parameters-<pane>.html).
+    function syncHelpKey(t) {
+        var div = document.getElementById('calibra-help');
+        if (!div || !t) return;
+        div.setAttribute('data-help-key', 'parameters-' + t.dataset.pane);
+        div.setAttribute('data-page-title', 'Şirket Parametreleri — ' + (t.dataset.label || t.textContent.trim()));
+    }
+
     var tabs = document.querySelectorAll('.ap-tab');
     tabs.forEach(function (t) {
         t.addEventListener('click', function () {
@@ -1125,9 +1135,11 @@ body.app-theme-dark .ap-tab.is-active::before {
             });
             metaLabel.textContent = t.dataset.label || t.textContent.trim();
             syncSaveButton();
+            syncHelpKey(t);
         });
     });
     syncSaveButton();
+    syncHelpKey(document.querySelector('.ap-tab.is-active'));
 
     // ── Flash + helpers ────────────────────────────────────
     function flash(msg, ok) {
