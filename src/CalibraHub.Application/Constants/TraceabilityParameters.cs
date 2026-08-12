@@ -20,4 +20,14 @@ public static class TraceabilityParameters
 
     public const string SerialUniqueScopeItem   = "Item";
     public const string SerialUniqueScopeGlobal = "Global";
+
+    /// <summary>
+    /// İzlenebilirlik özelliği şirket genelinde açık mı? (PageComment Seq 1099, 2026-08-12)
+    /// "true"/"false" string; tanımsız/boş → <c>true</c> kabul edilir (geriye dönük uyum —
+    /// mevcut lot/seri takipli malzemeler etkilenmesin). Kapalıyken Malzeme Kartı'nda
+    /// izlenebilirlik seçimi (Lot/Seri) değiştirilemez; sunucu tarafında da aynı kapı
+    /// uygulanır (bkz. MaterialController.SaveMaterialCardJson). Admin UI switch'i
+    /// Parametreler → Stok sekmesine eklenecek (Seq 1100 kapsamında, ayrı iş).
+    /// </summary>
+    public const string EnabledKey = "ENABLED";
 }

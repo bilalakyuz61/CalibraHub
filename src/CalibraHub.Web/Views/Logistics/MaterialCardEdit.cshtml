@@ -6,6 +6,10 @@
     ViewData["BodyClass"] = "page-material-card-edit workspace-frame-body";
     var editId = (int)(ViewData["MaterialCardEditId"] ?? 0);
 
+    // PageComment Seq 1099 (2026-08-12): sirket parametresi kapaliyken izlenebilirlik
+    // secimi (Lot/Seri) pasif gosterilir — tamamen gizlenmez, kisa aciklama eklenir.
+    var _mceTraceabilityEnabled = ViewData["TraceabilityEnabled"] as bool? ?? true;
+
     // Belge Kilitleri özet kartı (Seq 30, 2026-07-25): kod→etiket eşlemesi TEK KAYNAK
     // ItemDocumentLockTypes kataloğundan (CalibraHub.Application.Constants) JS'e taşınır —
     // eski 9 kodluk elle-kopya liste (_mceDocLockTypes) kaldırıldı. Katalogda olmayan kod
@@ -1766,26 +1770,35 @@
                     </div>
                     <div class="mce-row">
                         <label for="mceTraceability">İzlenebilirlik</label>
-                        <label class="mce-switch" for="mceTraceability">
-                            <input type="checkbox" id="mceTraceability" onchange="window.mceSyncTrackingUi && window.mceSyncTrackingUi();" />
+                        <label class="mce-switch@(_mceTraceabilityEnabled ? "" : " is-locked")" for="mceTraceability">
+                            <input type="checkbox" id="mceTraceability" @(_mceTraceabilityEnabled ? "" : "disabled") onchange="window.mceSyncTrackingUi && window.mceSyncTrackingUi();" />
                             <span class="mce-switch-track"></span>
                         </label>
                         <div id="mceTrackingModeWrap" style="display:none;align-items:center;gap:10px;margin-left:22px;">
                             <span class="mce-track-label">Lot</span>
-                            <label class="mce-switch" for="mceTrackingMode">
-                                <input type="checkbox" id="mceTrackingMode" onchange="window.mceSyncTrackingUi && window.mceSyncTrackingUi();" />
+                            <label class="mce-switch@(_mceTraceabilityEnabled ? "" : " is-locked")" for="mceTrackingMode">
+                                <input type="checkbox" id="mceTrackingMode" @(_mceTraceabilityEnabled ? "" : "disabled") onchange="window.mceSyncTrackingUi && window.mceSyncTrackingUi();" />
                                 <span class="mce-switch-track"></span>
                             </label>
                             <span class="mce-track-label">Seri</span>
                         </div>
                         <div id="mceAutoSerialWrap" style="display:none;align-items:center;gap:10px;margin-left:22px;">
                             <span class="mce-track-label">Giriş Serisi Otomatik</span>
-                            <label class="mce-switch" for="mceAutoSerial" title="Açıkken giriş belgesinde seri listesi boş bırakılırsa sunucu otomatik üretir (Kod-Tarih-Sıra).">
-                                <input type="checkbox" id="mceAutoSerial" />
+                            <label class="mce-switch@(_mceTraceabilityEnabled ? "" : " is-locked")" for="mceAutoSerial" title="Açıkken giriş belgesinde seri listesi boş bırakılırsa sunucu otomatik üretir (Kod-Tarih-Sıra).">
+                                <input type="checkbox" id="mceAutoSerial" @(_mceTraceabilityEnabled ? "" : "disabled") />
                                 <span class="mce-switch-track"></span>
                             </label>
                         </div>
                     </div>
+                    @if (!_mceTraceabilityEnabled)
+                    {
+                        <div class="mce-row" style="padding-top:0;">
+                            <span style="width:140px;min-width:140px;flex-shrink:0;"></span>
+                            <div style="font-size:.74rem;color:var(--mce-t60, rgba(255,255,255,.6));">
+                                Bu seçim için <strong>Şirket Parametreleri &gt; Stok</strong> altındaki İzlenebilirlik ayarı açık olmalıdır.
+                            </div>
+                        </div>
+                    }
                 </div>
             </div>
 

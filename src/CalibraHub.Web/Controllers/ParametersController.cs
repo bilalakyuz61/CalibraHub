@@ -142,7 +142,14 @@ public sealed class ParametersController : Controller
         ViewData["SalesDeliverySerialOverride"] = stockParams.FirstOrDefault(p =>
             p.ParamKey == CalibraHub.Application.Constants.StockParameters.SalesDeliverySerialOverrideKey)?.ParamValue != "false";
 
-        // İzlenebilirlik tab: seri no benzersizlik kapsamı ("Item"/"Global"). Tanımsız → "Item".
+        // Seq 1099/1100: İzlenebilirlik ANA anahtarı (Stok sekmesinde). Kapalıyken Malzeme
+        // Kartı'nda lot/seri seçimi yapılamaz (MaterialCardEdit + MaterialController kapısı).
+        // Tanımsız → AÇIK: mevcut şirketlerde davranış birebir korunur (geriye dönük uyum).
+        ViewData["TraceabilityEnabled"] = await _companyParameters.GetBoolAsync(
+            CalibraHub.Application.Constants.TraceabilityParameters.FormCode,
+            CalibraHub.Application.Constants.TraceabilityParameters.EnabledKey, cancellationToken) ?? true;
+
+        // İzlenebilirlik: seri no benzersizlik kapsamı ("Item"/"Global"). Tanımsız → "Item".
         ViewData["TraceSerialScope"] =
             string.Equals(
                 await _companyParameters.GetStringAsync(

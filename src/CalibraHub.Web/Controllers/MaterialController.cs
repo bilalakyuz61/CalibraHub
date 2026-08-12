@@ -3,6 +3,7 @@ using CalibraHub.Application.Contracts;
 using CalibraHub.Web.Models.Logistics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace CalibraHub.Web.Controllers;
 
@@ -28,10 +29,17 @@ namespace CalibraHub.Web.Controllers;
 public sealed class MaterialController : Controller
 {
     private readonly ILogisticsConfigurationService _logisticsConfigurationService;
+    private readonly ICompanyParameterService _companyParameters;
+    private readonly ILogger<MaterialController> _logger;
 
-    public MaterialController(ILogisticsConfigurationService logisticsConfigurationService)
+    public MaterialController(
+        ILogisticsConfigurationService logisticsConfigurationService,
+        ICompanyParameterService companyParameters,
+        ILogger<MaterialController> logger)
     {
         _logisticsConfigurationService = logisticsConfigurationService;
+        _companyParameters = companyParameters;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -113,17 +121,50 @@ public sealed class MaterialController : Controller
 
         try
         {
+            var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(ct);
+
             // Ayni kodla mevcut kart varsa guncellemeye yonlendir
             if (!input.ItemId.HasValue || input.ItemId.Value == 0)
             {
-                var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(ct);
-                var existing = snapshot.Items.FirstOrDefault(x =>
+                var existingByCode = snapshot.Items.FirstOrDefault(x =>
                     string.Equals(x.Code, input.Code.Trim(), StringComparison.OrdinalIgnoreCase));
-                if (existing is not null)
-                    input.ItemId = existing.Id;
+                if (existingByCode is not null)
+                    input.ItemId = existingByCode.Id;
             }
 
             var isUpdate = input.ItemId.HasValue && input.ItemId.Value != 0;
+
+            // PageComment Seq 1099 (2026-08-12): izlenebilirlik sirket parametresi
+            // kapaliyken Lot/Seri secimi (trackingType) DEGISTIRILEMEZ — sunucu tarafi
+            // kapi (istemci tarafinda switch zaten disabled, ama eski sekme/otomasyon/
+            // manuel istek icin server-side de reddedilir). Mevcut deger aynen
+            // gonderiliyorsa (fiili degisiklik yok) engellenmez — parametre kapaliyken
+            // dahi canli sirketlerin rutin kaydi kirilmaz.
+            var traceabilityEnabled = await _companyParameters.GetBoolAsync(
+                CalibraHub.Application.Constants.TraceabilityParameters.FormCode,
+                CalibraHub.Application.Constants.TraceabilityParameters.EnabledKey, ct) ?? true;
+            if (!traceabilityEnabled)
+            {
+                var requestedTracking = string.IsNullOrWhiteSpace(input.TrackingType) ? "None" : input.TrackingType;
+                var currentTracking = "None";
+                if (isUpdate)
+                {
+                    var existingItem = snapshot.Items.FirstOrDefault(x => x.Id == input.ItemId!.Value);
+                    currentTracking = string.IsNullOrWhiteSpace(existingItem?.TrackingType) ? "None" : existingItem.TrackingType;
+                }
+                if (!string.Equals(requestedTracking, currentTracking, StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning(
+                        "MaterialCard izlenebilirlik degisikligi reddedildi (sirket parametresi kapali): ItemId={ItemId}, Kod={Code}, Mevcut={Current}, Istenen={Requested}",
+                        input.ItemId, input.Code, currentTracking, requestedTracking);
+                    return Json(new
+                    {
+                        success = false,
+                        message = "İzlenebilirlik özelliği şirket genelinde kapalı. Şirket Parametreleri > Stok altındaki İzlenebilirlik ayarını açmadan bu seçim değiştirilemez."
+                    });
+                }
+            }
+
             if (isUpdate)
             {
                 await _logisticsConfigurationService.UpdateItemAsync(

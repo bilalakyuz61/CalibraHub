@@ -22,6 +22,8 @@
     var effReservation = effTracking && orderSerialReservation;
     var sessionIdle = ViewData["SessionIdleMinutes"] as int? ?? 30;
     var traceSerialScope = ViewData["TraceSerialScope"] as string ?? "Item";
+    // Seq 1099: İzlenebilirlik ana anahtarı — kapalıyken Malzeme Kartı'nda lot/seri seçilemez.
+    var traceabilityEnabled = (bool)(ViewData["TraceabilityEnabled"] ?? true);
     var salesQuoteRateType = ViewData["SalesQuoteRateType"] as string ?? "Selling";
     // Onay parametreleri artık ayrı bir "Onay İşlemleri" sekmesinde değil, ait olduğu belge/modül
     // sekmesinde gösterilir (PageComment Seq 1098). Kaynak aynı: ApprovalKindState listesi
@@ -920,6 +922,32 @@ body.app-theme-dark .ap-tab.is-active::before {
                 @* ── İzlenebilirlik (Seq 1100: ayrı sekmeden Stok'a taşındı — izlenebilirlik
                      stokla ilgili olduğu için). Parametre kodu/kaydetme ucu DEĞİŞMEDİ
                      (TRACEABILITY / SERIAL_UNIQUE_SCOPE), yalnız gösterildiği sekme değişti. *@
+
+                @* Seq 1099: ANA anahtar — kapalıyken Malzeme Kartı'nda lot/seri seçimi yapılamaz
+                   (ekranda pasif + açıklama; sunucu tarafında da ayrıca reddedilir). *@
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">İzlenebilirlik (Lot / Seri Takibi)</div>
+                        <div class="ap-row-desc">
+                            Açıkken malzeme bazında lot veya seri takibi seçilebilir
+                            (Malzeme Kartı → İzlenebilirlik). <strong>Kapalıyken</strong> malzeme
+                            kartındaki izlenebilirlik seçimi pasif olur ve değiştirilemez;
+                            mevcut kartların ayarı korunur.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" class="ap-neg-switch" id="ap-trace-enabled"
+                                   data-on="Açık" data-off="Kapalı" @(traceabilityEnabled ? "checked" : null) />
+                            <span class="ap-switch-track @(traceabilityEnabled ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(traceabilityEnabled ? "is-active" : "")"
+                                  id="ap-trace-enabled-label">@(traceabilityEnabled ? "Açık" : "Kapalı")</span>
+                        </label>
+                    </div>
+                </div>
+
                 <div class="ap-row">
                     <div class="ap-row-main">
                         <div class="ap-row-title">Seri No Benzersizliği</div>
@@ -1420,9 +1448,18 @@ body.app-theme-dark .ap-tab.is-active::before {
                     body: JSON.stringify({ formCode: 'TRACEABILITY', paramKey: 'SERIAL_UNIQUE_SCOPE', paramValue: scVal, dataType: 1 })
                 });
                 var dtr = await rtr.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
-                ok = !!datas.ok && !!dtr.ok;
+                // Seq 1099: izlenebilirlik ANA anahtari — kapaliyken malzeme kartinda lot/seri secilemez.
+                var teEl = document.getElementById('ap-trace-enabled');
+                var rte = await fetch('/Admin/SaveParameter', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({ formCode: 'TRACEABILITY', paramKey: 'ENABLED', paramValue: (teEl && teEl.checked) ? 'true' : 'false', dataType: 3 })
+                });
+                var dte = await rte.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
+                ok = !!datas.ok && !!dtr.ok && !!dte.ok;
                 if (ok) flash('Kaydedildi.', true);
-                else    flash(datas.error || dtr.error || 'Kaydetme basarisiz.', false);
+                else    flash(datas.error || dtr.error || dte.error || 'Kaydetme basarisiz.', false);
             } else if (activePane === 'satissiparis') {
                 var soEl = document.getElementById('ap-so-affects');
                 var soOn = !!(soEl && soEl.checked);

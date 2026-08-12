@@ -24,6 +24,7 @@ public sealed class LogisticsController : Controller
     private readonly IPriceListService _priceListService;
     private readonly ICurrencyService _currencyService;
     private readonly Application.Abstractions.Persistence.ICardGroupRepository _cardGroupRepo;
+    private readonly ICompanyParameterService _companyParameters;
     private readonly ILogger<LogisticsController> _logger;
 
     public LogisticsController(
@@ -34,6 +35,7 @@ public sealed class LogisticsController : Controller
         IPriceListService priceListService,
         ICurrencyService currencyService,
         Application.Abstractions.Persistence.ICardGroupRepository cardGroupRepo,
+        ICompanyParameterService companyParameters,
         ILogger<LogisticsController> logger)
     {
         _logisticsConfigurationService = logisticsConfigurationService;
@@ -43,6 +45,7 @@ public sealed class LogisticsController : Controller
         _priceListService = priceListService;
         _currencyService = currencyService;
         _cardGroupRepo = cardGroupRepo;
+        _companyParameters = companyParameters;
         _logger = logger;
     }
 
@@ -577,6 +580,12 @@ public sealed class LogisticsController : Controller
         // goruyordu (kullanici raporu). Ayni bayrak JS tarafinda tarayiciyi da hic baslatmaz.
         var widgetSchema = await _widgetService.GetFormSchemaByCodeAsync("MATERIAL_CARD_EDIT", cancellationToken);
         ViewData["HasExtraFields"] = (widgetSchema?.Widgets?.Count ?? 0) > 0;
+
+        // PageComment Seq 1099 (2026-08-12): izlenebilirlik once sirket parametresinden
+        // aktif edilmeli, ancak o zaman malzeme kartinda Lot/Seri secimi yapilabilir.
+        // Tanimsiz -> acik kabul edilir (geriye donuk uyum, mevcut izlenebilir kartlar etkilenmesin).
+        ViewData["TraceabilityEnabled"] = await _companyParameters.GetBoolAsync(
+            TraceabilityParameters.FormCode, TraceabilityParameters.EnabledKey, cancellationToken) ?? true;
 
         return View();
     }
