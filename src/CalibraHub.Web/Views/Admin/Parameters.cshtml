@@ -23,6 +23,13 @@
     var sessionIdle = ViewData["SessionIdleMinutes"] as int? ?? 30;
     var traceSerialScope = ViewData["TraceSerialScope"] as string ?? "Item";
     var salesQuoteRateType = ViewData["SalesQuoteRateType"] as string ?? "Selling";
+    // Onay parametreleri artık ayrı bir "Onay İşlemleri" sekmesinde değil, ait olduğu belge/modül
+    // sekmesinde gösterilir (PageComment Seq 1098). Kaynak aynı: ApprovalKindState listesi
+    // (ParametersController → DocumentEntityTypes.Definitions, Filter != null olan 5 tip).
+    var approvalKinds = ViewData["ApprovalKinds"]
+        as List<CalibraHub.Web.Controllers.ParametersController.ApprovalKindState>
+        ?? new List<CalibraHub.Web.Controllers.ParametersController.ApprovalKindState>();
+    Func<string, bool> approvalEnabled = code => approvalKinds.FirstOrDefault(k => k.Code == code)?.Enabled ?? true;
 }
 
 @section Styles {
@@ -417,10 +424,10 @@ body.app-theme-dark .ap-tab.is-active::before {
         <aside class="ap-tabs">
             <h3>Form / Modül</h3>
             <button type="button" class="ap-tab is-active" data-pane="general"   data-label="Genel">Genel</button>
-            <button type="button" class="ap-tab"           data-pane="approval"  data-label="Onay İşlemleri">Onay İşlemleri</button>
             <button type="button" class="ap-tab"           data-pane="production" data-label="Üretim">Üretim</button>
             <button type="button" class="ap-tab"           data-pane="workorder" data-label="İş Emri">İş Emri</button>
             <button type="button" class="ap-tab"           data-pane="salesquote" data-label="Satış Teklifi">Satış Teklifi</button>
+            <button type="button" class="ap-tab"           data-pane="purchase"  data-label="Satın Alma">Satın Alma</button>
             <button type="button" class="ap-tab"           data-pane="ihtiyac"   data-label="İhtiyaç Kayıtları">İhtiyaç Kayıtları</button>
             <button type="button" class="ap-tab"           data-pane="stok"      data-label="Stok">Stok</button>
             <button type="button" class="ap-tab"           data-pane="satissiparis" data-label="Satış Sipariş">Satış Sipariş</button>
@@ -454,51 +461,6 @@ body.app-theme-dark .ap-tab.is-active::before {
                                   id="ap-edoc-approval-label">@(isEDocApproval ? "Aktif" : "Pasif")</span>
                         </label>
                     </div>
-                </div>
-            </section>
-
-            @* ── Onay İşlemleri ─────────────────────────── *@
-            <section class="ap-pane" id="ap-pane-approval">
-                <h2>Onay İşlemleri</h2>
-                <div class="ap-hint">
-                    Belge türü bazında otomatik onay tetikleme. Açık olan türlerde yeni belge
-                    kaydedildiğinde eşleşen onay akışı otomatik başlar; kapalı türlerde otomatik
-                    başlatma yapılmaz (manuel "Onaya Gönder" her zaman kullanılabilir).
-                    Akış şablonlarını yönetmek için
-                    <a href="/ApprovalFlow" style="color:var(--ap-accent);">Onay Akış Tanımları</a> sayfasını kullanın.
-                </div>
-
-                @{
-                    var approvalKinds = ViewData["ApprovalKinds"]
-                        as List<CalibraHub.Web.Controllers.ParametersController.ApprovalKindState>
-                        ?? new List<CalibraHub.Web.Controllers.ParametersController.ApprovalKindState>();
-                }
-                @foreach (var k in approvalKinds)
-                {
-                    <div class="ap-row">
-                        <div class="ap-row-main">
-                            <div class="ap-row-title">@k.Label</div>
-                            <div class="ap-row-desc">
-                                Yeni @k.Label kaydında eşleşen onay akışı otomatik başlatılır.
-                            </div>
-                        </div>
-                        <div class="ap-row-control">
-                            <label class="ap-switch">
-                                <input type="checkbox" class="ap-kind-switch" data-kind="@k.Code"
-                                       id="ap-kind-@k.Code" @(k.Enabled ? "checked" : null) />
-                                <span class="ap-switch-track @(k.Enabled ? "is-on" : "")">
-                                    <span class="ap-switch-thumb"></span>
-                                </span>
-                                <span class="ap-switch-label @(k.Enabled ? "is-active" : "")"
-                                      id="ap-kind-@(k.Code)-label">@(k.Enabled ? "Aktif" : "Pasif")</span>
-                            </label>
-                        </div>
-                    </div>
-                }
-
-                <div style="margin-top:20px; padding:14px 16px; border-radius:10px; background:var(--ap-surface2); border:1px solid var(--ap-border-light); font-size:.82rem; color:var(--ap-text-muted);">
-                    <strong>Akış şablonu tanımlamak için:</strong>
-                    <a href="/ApprovalFlow" class="btn btn-sm btn-outline-primary ms-2">Onay Akış Tanımları →</a>
                 </div>
             </section>
 
@@ -616,7 +578,81 @@ body.app-theme-dark .ap-tab.is-active::before {
                         </script>
                     </div>
                 </div>
+
+                <div class="ap-group-title">Onay</div>
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Onay Akışı Otomatik Başlatma</div>
+                        <div class="ap-row-desc">
+                            Açıkken yeni Satış Teklifi kaydedildiğinde eşleşen onay akışı otomatik
+                            başlatılır. Kapalıyken otomatik başlatma yapılmaz (manuel "Onaya Gönder"
+                            her zaman kullanılabilir). Akış şablonlarını yönetmek için
+                            <a href="/ApprovalFlow" style="color:var(--ap-accent);">Onay Akış Tanımları</a> sayfasını kullanın.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" id="ap-approval-salesquote" @(approvalEnabled("SalesQuote") ? "checked" : null) />
+                            <span class="ap-switch-track @(approvalEnabled("SalesQuote") ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(approvalEnabled("SalesQuote") ? "is-active" : "")"
+                                  id="ap-approval-salesquote-label">@(approvalEnabled("SalesQuote") ? "Aktif" : "Pasif")</span>
+                        </label>
+                    </div>
+                </div>
             </section>
+
+            @* ── Satın Alma ─────────────────────────────── *@
+            <section class="ap-pane" id="ap-pane-purchase">
+                <h2>Satın Alma</h2>
+                <div class="ap-hint">
+                    Satın alma teklifi ve siparişi belge türü bazında otomatik onay tetikleme. Akış
+                    şablonlarını yönetmek için
+                    <a href="/ApprovalFlow" style="color:var(--ap-accent);">Onay Akış Tanımları</a> sayfasını kullanın.
+                </div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Satın Alma Teklifi — Onay Akışı Otomatik Başlatma</div>
+                        <div class="ap-row-desc">
+                            Açıkken yeni Satın Alma Teklifi kaydedildiğinde eşleşen onay akışı otomatik
+                            başlatılır. Kapalıyken otomatik başlatma yapılmaz.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" id="ap-approval-purchasequote" @(approvalEnabled("PurchaseQuote") ? "checked" : null) />
+                            <span class="ap-switch-track @(approvalEnabled("PurchaseQuote") ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(approvalEnabled("PurchaseQuote") ? "is-active" : "")"
+                                  id="ap-approval-purchasequote-label">@(approvalEnabled("PurchaseQuote") ? "Aktif" : "Pasif")</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Satın Alma Siparişi — Onay Akışı Otomatik Başlatma</div>
+                        <div class="ap-row-desc">
+                            Açıkken yeni Satın Alma Siparişi kaydedildiğinde eşleşen onay akışı otomatik
+                            başlatılır. Kapalıyken otomatik başlatma yapılmaz.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" id="ap-approval-purchaseorder" @(approvalEnabled("PurchaseOrder") ? "checked" : null) />
+                            <span class="ap-switch-track @(approvalEnabled("PurchaseOrder") ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(approvalEnabled("PurchaseOrder") ? "is-active" : "")"
+                                  id="ap-approval-purchaseorder-label">@(approvalEnabled("PurchaseOrder") ? "Aktif" : "Pasif")</span>
+                        </label>
+                    </div>
+                </div>
+            </section>
+
             @* ── İhtiyaç Kayıtları ──────────────────────── *@
             <section class="ap-pane" id="ap-pane-ihtiyac">
                 <h2>İhtiyaç Kayıtları</h2>
@@ -714,6 +750,29 @@ body.app-theme-dark .ap-tab.is-active::before {
                             </svg>
                             Depo Ekle / Gör
                         </button>
+                    </div>
+                </div>
+
+                <div class="ap-group-title">Onay</div>
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Onay Akışı Otomatik Başlatma</div>
+                        <div class="ap-row-desc">
+                            Açıkken yeni İhtiyaç Kaydı kaydedildiğinde eşleşen onay akışı otomatik
+                            başlatılır. Kapalıyken otomatik başlatma yapılmaz (manuel "Onaya Gönder"
+                            her zaman kullanılabilir). Akış şablonlarını yönetmek için
+                            <a href="/ApprovalFlow" style="color:var(--ap-accent);">Onay Akış Tanımları</a> sayfasını kullanın.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" id="ap-approval-purchaserequest" @(approvalEnabled("PurchaseRequest") ? "checked" : null) />
+                            <span class="ap-switch-track @(approvalEnabled("PurchaseRequest") ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(approvalEnabled("PurchaseRequest") ? "is-active" : "")"
+                                  id="ap-approval-purchaserequest-label">@(approvalEnabled("PurchaseRequest") ? "Aktif" : "Pasif")</span>
+                        </label>
                     </div>
                 </div>
             </section>
@@ -972,6 +1031,29 @@ body.app-theme-dark .ap-tab.is-active::before {
                     sync();
                 })();
                 </script>
+
+                <div class="ap-group-title">Onay</div>
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Onay Akışı Otomatik Başlatma</div>
+                        <div class="ap-row-desc">
+                            Açıkken yeni Satış Siparişi kaydedildiğinde eşleşen onay akışı otomatik
+                            başlatılır. Kapalıyken otomatik başlatma yapılmaz (manuel "Onaya Gönder"
+                            her zaman kullanılabilir). Akış şablonlarını yönetmek için
+                            <a href="/ApprovalFlow" style="color:var(--ap-accent);">Onay Akış Tanımları</a> sayfasını kullanın.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" id="ap-approval-salesorder" @(approvalEnabled("SalesOrder") ? "checked" : null) />
+                            <span class="ap-switch-track @(approvalEnabled("SalesOrder") ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(approvalEnabled("SalesOrder") ? "is-active" : "")"
+                                  id="ap-approval-salesorder-label">@(approvalEnabled("SalesOrder") ? "Aktif" : "Pasif")</span>
+                        </label>
+                    </div>
+                </div>
             </section>
 
             @* ── İzlenebilirlik ───────────────────────────── *@
@@ -1110,7 +1192,7 @@ body.app-theme-dark .ap-tab.is-active::before {
     // NOT: Kaydedilebilir parametresi olan HER yeni sekme buraya eklenmeli,
     // yoksa o sekmede Kaydet butonu pasif kalir (bkz. satissiparis regresyonu).
     function syncSaveButton() {
-        var hasParams = (activePane === 'general' || activePane === 'approval' || activePane === 'production' || activePane === 'ihtiyac' || activePane === 'stok' || activePane === 'satissiparis' || activePane === 'salesquote' || activePane === 'izlenebilirlik' || activePane === 'guvenlik');
+        var hasParams = (activePane === 'general' || activePane === 'production' || activePane === 'ihtiyac' || activePane === 'stok' || activePane === 'satissiparis' || activePane === 'salesquote' || activePane === 'purchase' || activePane === 'izlenebilirlik' || activePane === 'guvenlik');
         saveBtn.disabled = !hasParams;
         saveBtn.title = hasParams ? '' : 'Bu sekmede henüz kaydedilebilir parametre yok.';
     }
@@ -1139,7 +1221,13 @@ body.app-theme-dark .ap-tab.is-active::before {
         });
     });
     syncSaveButton();
-    syncHelpKey(document.querySelector('.ap-tab.is-active'));
+    // Ilk senkron DOM hazir olunca: #calibra-help div'i layout'ta bu script'ten SONRA
+    // render ediliyor — burada dogrudan cagrilirsa element henuz yok (sessizce kacirilir).
+    (function initHelpKey() {
+        var apply = function () { syncHelpKey(document.querySelector('.ap-tab.is-active')); };
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
+        else apply();
+    })();
 
     // ── Flash + helpers ────────────────────────────────────
     function flash(msg, ok) {
@@ -1153,6 +1241,18 @@ body.app-theme-dark .ap-tab.is-active::before {
     function token() {
         var el = document.querySelector('input[name="__RequestVerificationToken"]');
         return el ? el.value : '';
+    }
+
+    // Belge türü onay switch'leri artık ait olduğu modül sekmesinde kaydedilir; hepsi aynı
+    // /Admin/SaveApprovalParametersJson uç noktasını (kinds:[{kind, enabled}]) paylaşır.
+    async function saveApprovalKinds(kinds) {
+        var r = await fetch('/Admin/SaveApprovalParametersJson', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+            body: JSON.stringify({ kinds: kinds })
+        });
+        return await r.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
     }
 
     // ── KITT animasyonu — basari aninda aksiyon seridi alti ─
@@ -1179,10 +1279,12 @@ body.app-theme-dark .ap-tab.is-active::before {
     wireSwitch('ap-wo-recipe-edit', 'ap-wo-recipe-edit-label');
     wireSwitch('ap-fc-min-stock', 'ap-fc-min-stock-label');
     wireSwitch('ap-fc-consolidate', 'ap-fc-consolidate-label');
-    // Belge türü onay switch'leri — dinamik liste (data-kind attribute'lu)
-    document.querySelectorAll('.ap-kind-switch').forEach(function (cb) {
-        wireSwitch(cb.id, cb.id + '-label');
-    });
+    // Belge türü onay switch'leri — artık her biri kendi modül sekmesinde (PageComment Seq 1098).
+    wireSwitch('ap-approval-salesquote', 'ap-approval-salesquote-label');
+    wireSwitch('ap-approval-salesorder', 'ap-approval-salesorder-label');
+    wireSwitch('ap-approval-purchaserequest', 'ap-approval-purchaserequest-label');
+    wireSwitch('ap-approval-purchasequote', 'ap-approval-purchasequote-label');
+    wireSwitch('ap-approval-purchaseorder', 'ap-approval-purchaseorder-label');
     // Eksi bakiye switch'leri — etiket data-on / data-off'tan alınır
     document.querySelectorAll('.ap-neg-switch').forEach(function (cb) {
         cb.addEventListener('change', function () {
@@ -1268,9 +1370,11 @@ body.app-theme-dark .ap-tab.is-active::before {
                     body: JSON.stringify({ formCode: 'PURCHASE_FULFILLMENT', paramKey: 'STOCK_DOC_CONSOLIDATE', paramValue: (conEl && conEl.checked) ? 'true' : 'false', dataType: 3 })
                 });
                 var d4 = await r4.json();
-                ok = !!d1.ok && !!d3.ok && !!d4.ok;
+                var apPrEl = document.getElementById('ap-approval-purchaserequest');
+                var d5 = await saveApprovalKinds([{ kind: 'PurchaseRequest', enabled: !!(apPrEl && apPrEl.checked) }]);
+                ok = !!d1.ok && !!d3.ok && !!d4.ok && !!d5.ok;
                 if (ok) { flash('Kaydedildi.', true); fcRenderWarning(null); }  // basarili kayitta gecersiz-id uyarisi artik gecersiz
-                else    flash((d1.error || d3.error || d4.error || 'Kaydetme basarisiz.'), false);
+                else    flash((d1.error || d3.error || d4.error || d5.error || 'Kaydetme basarisiz.'), false);
             } else if (activePane === 'stok') {
                 var negCtrlEl = document.getElementById('ap-neg-control');
                 var pFifoEl = document.getElementById('ap-purchase-fifo');
@@ -1324,24 +1428,11 @@ body.app-theme-dark .ap-tab.is-active::before {
                     body: JSON.stringify({ formCode: 'STOCK', paramKey: 'ORDER_SERIAL_RESERVATION', paramValue: serOn ? 'true' : 'false', dataType: 3 })
                 });
                 var dser = await rser.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
-                ok = !!dso.ok && !!dtrack.ok && !!dser.ok;
+                var apSoEl = document.getElementById('ap-approval-salesorder');
+                var dApSo = await saveApprovalKinds([{ kind: 'SalesOrder', enabled: !!(apSoEl && apSoEl.checked) }]);
+                ok = !!dso.ok && !!dtrack.ok && !!dser.ok && !!dApSo.ok;
                 if (ok) flash('Kaydedildi.', true);
-                else    flash(dso.error || dtrack.error || dser.error || 'Kaydetme basarisiz.', false);
-            } else if (activePane === 'approval') {
-                var kinds = [];
-                document.querySelectorAll('.ap-kind-switch').forEach(function (cb) {
-                    kinds.push({ kind: cb.dataset.kind, enabled: cb.checked });
-                });
-                var r2 = await fetch('/Admin/SaveApprovalParametersJson', {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-                    body: JSON.stringify({ kinds: kinds })
-                });
-                var data2 = await r2.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
-                ok = !!data2.ok;
-                if (ok) flash('Kaydedildi.', true);
-                else    flash(data2.error || 'Kaydetme basarisiz.', false);
+                else    flash(dso.error || dtrack.error || dser.error || dApSo.error || 'Kaydetme basarisiz.', false);
             } else if (activePane === 'salesquote') {
                 var rtEl = document.getElementById('ap-sq-rate-type');
                 var allowed = ['Selling', 'Buying', 'EffectiveSelling', 'EffectiveBuying'];
@@ -1353,9 +1444,21 @@ body.app-theme-dark .ap-tab.is-active::before {
                     body: JSON.stringify({ formCode: 'SALES_QUOTE', paramKey: 'RATE_TYPE', paramValue: rtVal, dataType: 1 })
                 });
                 var drt = await rrt.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
-                ok = !!drt.ok;
+                var apSqEl = document.getElementById('ap-approval-salesquote');
+                var dApSq = await saveApprovalKinds([{ kind: 'SalesQuote', enabled: !!(apSqEl && apSqEl.checked) }]);
+                ok = !!drt.ok && !!dApSq.ok;
                 if (ok) flash('Kaydedildi.', true);
-                else    flash(drt.error || 'Kaydetme basarisiz.', false);
+                else    flash(drt.error || dApSq.error || 'Kaydetme basarisiz.', false);
+            } else if (activePane === 'purchase') {
+                var apPqEl = document.getElementById('ap-approval-purchasequote');
+                var apPoEl = document.getElementById('ap-approval-purchaseorder');
+                var dPur = await saveApprovalKinds([
+                    { kind: 'PurchaseQuote', enabled: !!(apPqEl && apPqEl.checked) },
+                    { kind: 'PurchaseOrder', enabled: !!(apPoEl && apPoEl.checked) }
+                ]);
+                ok = !!dPur.ok;
+                if (ok) flash('Kaydedildi.', true);
+                else    flash(dPur.error || 'Kaydetme basarisiz.', false);
             } else if (activePane === 'izlenebilirlik') {
                 var scEl = document.getElementById('ap-trace-serial-scope');
                 var scVal = (scEl && scEl.value === 'Global') ? 'Global' : 'Item';
