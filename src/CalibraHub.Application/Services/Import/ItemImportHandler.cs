@@ -49,7 +49,8 @@ public sealed class ItemImportHandler : RowImportHandlerBase
         var fields = new List<ImportTargetFieldDto>
         {
             // MaxLength'ler Items tablosu NVARCHAR uzunluklarıyla birebir (Name 200, Code 50).
-            new("Name",    "Stok Adı",  "string",  true,  false, "Malzeme/ürün adı (zorunlu)", MaxLength: 200),
+            // Ad da eşleşme anahtarı olabilir — tek başına ya da bileşik (örn. Kod + Ad).
+            new("Name",    "Stok Adı",  "string",  true,  true,  "Malzeme/ürün adı (zorunlu)", MaxLength: 200),
             new("Code",    "Stok Kodu", "string",  false, true,  "Boşsa addan otomatik üretilir; eşleştirme anahtarı olabilir", MaxLength: 50),
             new("Barcode", "Barkod",    "string",  false, true,  MaxLength: 100),
             new("MaterialType", "Malzeme Tipi", "string", false, false,

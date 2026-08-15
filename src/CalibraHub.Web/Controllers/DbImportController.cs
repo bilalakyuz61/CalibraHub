@@ -77,7 +77,9 @@ public sealed class DbImportController : Controller
             {
                 new { id = "w_entity", type = "data", dataType = "text",    label = "Hedef",   value = (object)Label(j.TargetEntity), color = "indigo", alwaysVisible = true },
                 new { id = "w_cols",   type = "data", dataType = "numeric", label = "Alan",    value = (object)j.Columns.Count,       color = "slate",  alwaysVisible = true },
-                new { id = "w_match",  type = "data", dataType = "text",    label = "Anahtar", value = (object)j.MatchKeyField,       color = "violet", alwaysVisible = true },
+                new { id = "w_match",  type = "data", dataType = "text",    label = "Anahtar",
+                      value = (object)(j.MatchKeyFields.Count > 0 ? string.Join(" + ", j.MatchKeyFields) : "—"),
+                      color = "violet", alwaysVisible = true },
                 new { id = "w_proc",   type = "data", dataType = "text",    label = "Prosedür",
                       value = (object)ProcedureSummary(j), color = "amber" },
             },

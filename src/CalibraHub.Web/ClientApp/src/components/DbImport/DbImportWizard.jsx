@@ -96,7 +96,7 @@ export default function DbImportWizard() {
     targetEntity: '',
     sourceSchema: 'dbo',
     sourceObject: '',
-    matchKeyField: '',
+    matchKeyFields: [],
     maxRows: 50000,
     sourceFilterJson: '',
     errorBehavior: 0,
@@ -205,8 +205,16 @@ export default function DbImportWizard() {
     return m
   }, [job.columns])
 
-  const matchKeyMapped = !!job.matchKeyField && !!mappedByTarget[job.matchKeyField]
+  const matchKeys = job.matchKeyFields || []
+  // Her anahtar bir kaynak kolona eşlenmiş olmalı; biri bile eksikse eşleşme hep başarısız olur.
+  const unmappedKeys = matchKeys.filter((k) => !mappedByTarget[k])
+  const matchKeyMapped = matchKeys.length > 0 && unmappedKeys.length === 0
   const keyCandidates = targetFields.filter((f) => f.canBeMatchKey)
+
+  function toggleMatchKey(key) {
+    const next = matchKeys.includes(key) ? matchKeys.filter((k) => k !== key) : [...matchKeys, key]
+    setJob((prev) => ({ ...prev, matchKeyFields: next }))
+  }
 
   const filters = React.useMemo(() => parseFilters(job.sourceFilterJson), [job.sourceFilterJson])
 
@@ -240,7 +248,7 @@ export default function DbImportWizard() {
   }
 
   const step1Ok = job.connectionId > 0 && !!job.sourceObject && !!job.name.trim()
-  const step2Ok = job.targetEntity && job.columns.length > 0 && !!job.matchKeyField && matchKeyMapped
+  const step2Ok = job.targetEntity && job.columns.length > 0 && matchKeyMapped
 
   async function save() {
     setBusy(true); setError(null)
@@ -401,7 +409,7 @@ export default function DbImportWizard() {
                 <div className="dbi-field">
                   <span className="dbi-label">Hedef Kayıt Türü <span className="dbi-required">*</span></span>
                   <select className="dbi-select" value={job.targetEntity}
-                          onChange={(e) => setJob({ ...job, targetEntity: e.target.value, columns: [], matchKeyField: '' })}>
+                          onChange={(e) => setJob({ ...job, targetEntity: e.target.value, columns: [], matchKeyFields: [] })}>
                     <option value="">— Seçiniz —</option>
                     {entities.map((e) => <option key={e.entity} value={e.entity}>{e.label}</option>)}
                   </select>
@@ -466,16 +474,27 @@ export default function DbImportWizard() {
                 <KeyRound size={13} /> Anahtar Alan <span className="dbi-required">*</span>
               </div>
               <div className="dbi-field">
-                <select className="dbi-select" value={job.matchKeyField}
-                        onChange={(e) => setJob({ ...job, matchKeyField: e.target.value })}>
-                  <option value="">— Seçiniz —</option>
-                  {keyCandidates.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
-                </select>
-                <span className="dbi-hint">Mevcut kaydı bulup güncellemek için kullanılır.</span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {keyCandidates.length === 0 && <span className="dbi-hint">Önce hedef kayıt türünü seçin.</span>}
+                  {keyCandidates.map((f) => {
+                    const on = matchKeys.includes(f.key)
+                    return (
+                      <button key={f.key} type="button"
+                              className={`dbi-btn dbi-btn--xs ${on ? 'dbi-btn--primary' : ''}`}
+                              onClick={() => toggleMatchKey(f.key)}>
+                        {on && <KeyRound size={11} />} {f.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <span className="dbi-hint">
+                  Mevcut kaydı bulmak için kullanılır. Birden fazla seçerseniz <strong>hepsi</strong> eşleşmelidir.
+                </span>
               </div>
-              {job.matchKeyField && !matchKeyMapped && (
+              {unmappedKeys.length > 0 && (
                 <div className="dbi-alert dbi-alert--err" style={{ marginBottom: 0 }}>
-                  <AlertTriangle size={13} /> Anahtar alan bir kaynak kolonuna eşlenmeli.
+                  <AlertTriangle size={13} /> Şu anahtar alan(lar) bir kaynak kolonuna eşlenmeli:{' '}
+                  {unmappedKeys.join(', ')}
                 </div>
               )}
             </div>
@@ -508,7 +527,7 @@ export default function DbImportWizard() {
                           <td>
                             {f.label}
                             {f.isRequired && <span className="dbi-required"> *</span>}
-                            {job.matchKeyField === f.key && <span className="dbi-key-pill" style={{ marginLeft: 6 }}><KeyRound size={10} /> Anahtar</span>}
+                            {matchKeys.includes(f.key) && <span className="dbi-key-pill" style={{ marginLeft: 6 }}><KeyRound size={10} /> Anahtar</span>}
                             {/* Kabul edilen değerler — kaynak view'ı buna göre şekillendirmek için. */}
                             {f.allowedValues && f.allowedValues.length > 0 && (
                               <div className="dbi-hint dbi-mono" style={{ whiteSpace: 'normal', maxWidth: 320 }}

@@ -38,7 +38,7 @@ public sealed class ContactImportHandler : RowImportHandlerBase
         {
         // MaxLength'ler Contact tablosunun NVARCHAR uzunluklarıyla birebir (Excel şablonunda
         // metin-uzunluk doğrulaması üretir; sunucu tarafı doğrulama ayrıca çalışır).
-        new ImportTargetFieldDto("AccountTitle",   "Cari Unvanı",   "string", true,  false, "Kurum veya kişi adı (zorunlu)", MaxLength: 200),
+        new ImportTargetFieldDto("AccountTitle",   "Cari Unvanı",   "string", true,  true,  "Kurum veya kişi adı (zorunlu)", MaxLength: 200),
         new ImportTargetFieldDto("AccountCode",    "Cari Kodu",     "string", true,  true,  "Benzersiz cari kodu (zorunlu); eşleştirme anahtarı olabilir", MaxLength: 20),
         new ImportTargetFieldDto("AccountType",    "Cari Tipi",     "type",   false, false, "Müşteri / Satıcı / Her İkisi (boşsa Müşteri)", new[] { "Müşteri", "Satıcı", "Her İkisi" }),
         new ImportTargetFieldDto("TaxNumber",      "Vergi No",      "string", false, true,  "10 hane; eşleştirme anahtarı olabilir", MaxLength: 10),
@@ -46,7 +46,7 @@ public sealed class ContactImportHandler : RowImportHandlerBase
         new ImportTargetFieldDto("IdentityNumber", "TC Kimlik No",  "string", false, false, "11 hane", MaxLength: 11),
         new ImportTargetFieldDto("Phone",          "Telefon",       "string", false, false, null, MaxLength: 30),
         new ImportTargetFieldDto("Mobile",         "Cep Telefonu",  "string", false, false, null, MaxLength: 30),
-        new ImportTargetFieldDto("Email",          "E-posta",       "string", false, false, null, MaxLength: 200),
+        new ImportTargetFieldDto("Email",          "E-posta",       "string", false, true,  null, MaxLength: 200),
         new ImportTargetFieldDto("Website",        "Web Sitesi",    "string", false, false, null, MaxLength: 200),
         new ImportTargetFieldDto("Address",        "Adres",         "string", false, false, null, MaxLength: 500),
         new ImportTargetFieldDto("City",           "İl",            "string", false, false, null, MaxLength: 100),
