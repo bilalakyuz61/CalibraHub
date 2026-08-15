@@ -441,6 +441,14 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportT
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
                            CalibraHub.Application.Services.Import.RoutingImportHandler>();
 
+// 2026-08-15 Veritabanı üzerinden içe aktarım — harici SQL kaynağı. Yazma katmanı
+// yukarıdaki IImportTargetHandler ailesidir (Excel ile ortak); burada yalnız kaynak
+// bağlantısı + salt-okunur okuyucu kayıtlıdır. Okuyucu stateless → singleton.
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IExternalDbConnectionRepository,
+                           CalibraHub.Persistence.Repositories.SqlExternalDbConnectionRepository>();
+builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IExternalDbReader,
+                           CalibraHub.Persistence.Services.SqlServerExternalDbReader>();
+
 // 2026-06-06 Yetkilendirme (F1) — PermissionDef + UserPermission repository + service.
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IPermissionDefRepository,
                            CalibraHub.Persistence.Repositories.SqlPermissionDefRepository>();

@@ -754,6 +754,8 @@ END;";
             await EnsureAiTablesAsync(connection, cancellationToken);
             // 2026-06-20 Şablon-tabanlı içe aktarım (AI'sız) — ImportTemplate (Cari pilotu).
             await EnsureImportTablesAsync(connection, cancellationToken);
+            // 2026-08-15 Veritabanı üzerinden içe aktarım — harici SQL kaynak bağlantıları.
+            await EnsureDataImportTablesAsync(connection, cancellationToken);
             await EnsureDynamicFieldValuesTableAsync(connection, cancellationToken);
             // 2026-07-10: ItemUnits, EnsureDocumentTablesAsync'ten ONCE gelmeli — DocumentLine
             // BaseQuantity backfill'i ItemUnits'e JOIN yapar. Metod tanimliydi ama zincire hic
@@ -8161,6 +8163,46 @@ END;";
                 -- Aktif şablonlar arasında ad benzersiz (pasif edilince aynı ad tekrar kullanılabilir).
                 CREATE UNIQUE INDEX [UX_ImportTemplate_Name]
                     ON [{s}].[ImportTemplate]([Name])
+                    WHERE [IsActive] = 1;
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // 2026-08-15 — Veritabanı üzerinden içe aktarım. ExternalDbConnection: harici
+    // (ERP/dış sistem) SQL Server kaynağının salt-okunur bağlantı tanımı. Parola
+    // DPAPI ile şifreli (ExternalDbSecretProtector); istemciye asla dönülmez.
+    private async Task EnsureDataImportTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            IF OBJECT_ID(N'[{s}].[ExternalDbConnection]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ExternalDbConnection]
+                (
+                    [Id]                     INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ExternalDbConnection] PRIMARY KEY,
+                    [Name]                   NVARCHAR(200) NOT NULL,
+                    [ServerName]             NVARCHAR(200) NOT NULL,
+                    [DatabaseName]           NVARCHAR(200) NOT NULL,
+                    [AuthMode]               NVARCHAR(20)  NOT NULL CONSTRAINT [DF_ExternalDbConnection_AuthMode]  DEFAULT(N'Sql'),
+                    [Username]               NVARCHAR(200) NULL,
+                    [PasswordEncrypted]      NVARCHAR(MAX) NULL,
+                    [Encrypt]                BIT           NOT NULL CONSTRAINT [DF_ExternalDbConnection_Encrypt]   DEFAULT(1),
+                    [TrustServerCertificate] BIT           NOT NULL CONSTRAINT [DF_ExternalDbConnection_TrustCert]  DEFAULT(1),
+                    [ConnectTimeoutSeconds]  INT           NOT NULL CONSTRAINT [DF_ExternalDbConnection_ConnTo]     DEFAULT(15),
+                    [CommandTimeoutSeconds]  INT           NOT NULL CONSTRAINT [DF_ExternalDbConnection_CmdTo]      DEFAULT(120),
+                    [IsActive]               BIT           NOT NULL CONSTRAINT [DF_ExternalDbConnection_IsActive]   DEFAULT(1),
+                    [Created]                DATETIME      NOT NULL CONSTRAINT [DF_ExternalDbConnection_Created]    DEFAULT(SYSUTCDATETIME()),
+                    [Updated]                DATETIME      NULL,
+                    [CreatedById]            INT           NULL,
+                    [UpdatedById]            INT           NULL
+                );
+                -- Aktif bağlantılar arasında ad benzersiz (pasif edilince aynı ad tekrar kullanılabilir).
+                CREATE UNIQUE INDEX [UX_ExternalDbConnection_Name]
+                    ON [{s}].[ExternalDbConnection]([Name])
                     WHERE [IsActive] = 1;
             END;
             """;
