@@ -40,6 +40,15 @@ public sealed class DataImportJob
     /// <summary>Tek çalıştırmada okunacak azami satır (emniyet tavanı).</summary>
     public int MaxRows { get; set; } = 50_000;
 
+    /// <summary>
+    /// Kaynak kısıt kuralları — dışa aktarımdaki "Kısıt Kuralları" ile AYNI JSON şekli:
+    /// <c>[{ "field": "Durum", "op": "eq", "value": "A" }, ...]</c> (AND zinciri).
+    /// Operatörler: eq, neq, gt, gte, lt, lte, isnull, notnull, contains, startsWith, in, between.
+    /// Kolon adları kaynağın <c>sys.columns</c>'ına doğrulanır, değerler SqlParameter ile bağlanır.
+    /// Boş/null = kısıt yok (tüm satırlar).
+    /// </summary>
+    public string? SourceFilterJson { get; set; }
+
     /// <summary>Prosedür hatalarının aktarımı nasıl etkileyeceği.</summary>
     public DataImportErrorBehavior ErrorBehavior { get; set; } = DataImportErrorBehavior.Lenient;
 

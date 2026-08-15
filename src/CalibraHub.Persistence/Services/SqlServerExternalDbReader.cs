@@ -92,7 +92,8 @@ public sealed class SqlServerExternalDbReader : IExternalDbReader
         string objectName,
         IReadOnlyCollection<string>? columns,
         int maxRows,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? filterJson = null)
     {
         if (maxRows <= 0) maxRows = 100;
         if (maxRows > AbsoluteMaxRows) maxRows = AbsoluteMaxRows;
@@ -120,13 +121,24 @@ public sealed class SqlServerExternalDbReader : IExternalDbReader
                     available, Array.Empty<IReadOnlyDictionary<string, string?>>(), 0);
             }
 
+            // Kısıt kuralları — kolonlar kaynağın TAM kolon listesine doğrulanır
+            // (yalnız seçilenlere değil: kısıt, eşlenmemiş bir kolona da konabilir).
+            var filter = ExternalDbFilterBuilder.Build(filterJson, available);
+            if (filter.Error is not null)
+            {
+                return new ExternalDbSampleDto(false, filter.Error, available,
+                    Array.Empty<IReadOnlyDictionary<string, string?>>(), 0);
+            }
+
             var columnSql = string.Join(", ", selected.Select(c => $"[{Escape(c.Name)}]"));
             var target = $"[{Escape(schemaName)}].[{Escape(objectName)}]";
+            var where = filter.HasWhere ? $" WHERE {filter.WhereClause}" : string.Empty;
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandTimeout = connection.CommandTimeoutSeconds;
-            cmd.CommandText = $"SELECT TOP (@MaxRows) {columnSql} FROM {target};";
+            cmd.CommandText = $"SELECT TOP (@MaxRows) {columnSql} FROM {target}{where};";
             cmd.Parameters.Add(new SqlParameter("@MaxRows", maxRows));
+            foreach (var p in filter.Parameters) cmd.Parameters.Add(p);
 
             var rows = new List<IReadOnlyDictionary<string, string?>>();
             await using var r = await cmd.ExecuteReaderAsync(ct);

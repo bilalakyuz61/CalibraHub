@@ -29,11 +29,17 @@ public interface IExternalDbReader
     /// Değerler <c>ImportParse</c> ile uyumlu biçimde metne çevrilir:
     /// ondalık invariant ("1234.56"), tarih "yyyy-MM-dd[ HH:mm:ss]", bit "1"/"0".
     /// </summary>
+    /// <param name="filterJson">
+    /// Kısıt kuralları (dışa aktarımdaki "Kısıt Kuralları" ile aynı JSON şekli).
+    /// Kolon adları kaynağın kataloğuna doğrulanır; bilinmeyen kolon sessizce atlanmaz,
+    /// hata döner. Boş/null = kısıt yok.
+    /// </param>
     Task<ExternalDbSampleDto> ReadRowsAsync(
         ExternalDbConnection connection,
         string schemaName,
         string objectName,
         IReadOnlyCollection<string>? columns,
         int maxRows,
-        CancellationToken ct);
+        CancellationToken ct,
+        string? filterJson = null);
 }

@@ -1,7 +1,7 @@
 import React from 'react'
 import {
   Database, ArrowLeft, ArrowRight, Save, Play, Loader2, Search,
-  CheckCircle2, XCircle, AlertTriangle, KeyRound, Wand2, Trash2,
+  CheckCircle2, XCircle, AlertTriangle, KeyRound, Wand2, Trash2, Filter, Plus,
 } from 'lucide-react'
 import { apiGet, apiPost } from './dbiApi'
 import './DbImport.css'
@@ -39,6 +39,33 @@ function qs(name) {
   try { return new URLSearchParams(window.location.search).get(name) } catch (_) { return null }
 }
 
+/* Kısıt operatörleri — dışa aktarımdaki "Kısıt Kuralları" ile aynı sözlük. */
+const FILTER_OPS = [
+  { v: 'eq', label: 'eşittir' },
+  { v: 'neq', label: 'eşit değildir' },
+  { v: 'gt', label: 'büyüktür' },
+  { v: 'gte', label: 'büyük veya eşit' },
+  { v: 'lt', label: 'küçüktür' },
+  { v: 'lte', label: 'küçük veya eşit' },
+  { v: 'contains', label: 'içerir' },
+  { v: 'startsWith', label: 'ile başlar' },
+  { v: 'in', label: 'listede (virgülle ayır)' },
+  { v: 'between', label: 'arasında (iki değer)' },
+  { v: 'isnull', label: 'boş' },
+  { v: 'notnull', label: 'dolu' },
+]
+
+/** Değer istemeyen operatörler. */
+const OPS_WITHOUT_VALUE = new Set(['isnull', 'notnull'])
+
+function parseFilters(json) {
+  if (!json) return []
+  try {
+    const a = JSON.parse(json)
+    return Array.isArray(a) ? a.filter((r) => r && r.field) : []
+  } catch (_) { return [] }
+}
+
 /** Kaynak kolon adı ile hedef alanı kabaca eşleştirir (otomatik eşleme önerisi). */
 function normKey(s) {
   return String(s || '')
@@ -71,6 +98,7 @@ export default function DbImportWizard() {
     sourceObject: '',
     matchKeyField: '',
     maxRows: 50000,
+    sourceFilterJson: '',
     errorBehavior: 0,
     preProcedureName: '',
     preProcedureTarget: 0,
@@ -106,6 +134,7 @@ export default function DbImportWizard() {
               errorBehavior: normalizeEnum(j.errorBehavior, ERROR_BEHAVIOR_NUM),
               preProcedureTarget: normalizeEnum(j.preProcedureTarget, PROC_TARGET_NUM),
               postProcedureTarget: normalizeEnum(j.postProcedureTarget, PROC_TARGET_NUM),
+              sourceFilterJson: j.sourceFilterJson || '',
               preProcedureName: j.preProcedureName || '',
               preProcedureParamsJson: j.preProcedureParamsJson || '',
               postProcedureName: j.postProcedureName || '',
@@ -178,6 +207,13 @@ export default function DbImportWizard() {
 
   const matchKeyMapped = !!job.matchKeyField && !!mappedByTarget[job.matchKeyField]
   const keyCandidates = targetFields.filter((f) => f.canBeMatchKey)
+
+  const filters = React.useMemo(() => parseFilters(job.sourceFilterJson), [job.sourceFilterJson])
+
+  function writeFilters(next) {
+    const clean = next.filter((r) => r.field)
+    setJob((prev) => ({ ...prev, sourceFilterJson: clean.length ? JSON.stringify(clean) : '' }))
+  }
 
   function setMapping(targetKey, sourceColumn) {
     setJob((prev) => {
@@ -376,6 +412,45 @@ export default function DbImportWizard() {
                          onChange={(e) => setJob({ ...job, maxRows: Number(e.target.value) || 50000 })} />
                 </div>
               </div>
+            </div>
+
+            <div className="dbi-card">
+              <div className="dbi-card-title" style={{ display: 'flex', alignItems: 'center' }}>
+                <span><Filter size={13} /> Kısıt Kuralları</span>
+                <div className="dbi-header-spacer" />
+                <button type="button" className="dbi-btn dbi-btn--xs"
+                        onClick={() => writeFilters([...filters, { field: '', op: 'eq', value: '' }])}
+                        disabled={!sourceColumns.length}>
+                  <Plus size={13} /> Kural Ekle
+                </button>
+              </div>
+
+              {filters.length === 0 && (
+                <div className="dbi-hint">Kural yoksa kaynaktaki tüm satırlar aktarılır.</div>
+              )}
+
+              {filters.map((r, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                  <select className="dbi-select" style={{ maxWidth: 200 }} value={r.field}
+                          onChange={(e) => { const n = [...filters]; n[i] = { ...r, field: e.target.value }; writeFilters(n) }}>
+                    <option value="">— Kolon —</option>
+                    {sourceColumns.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                  </select>
+                  <select className="dbi-select" style={{ maxWidth: 190 }} value={r.op}
+                          onChange={(e) => { const n = [...filters]; n[i] = { ...r, op: e.target.value }; writeFilters(n) }}>
+                    {FILTER_OPS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+                  </select>
+                  {!OPS_WITHOUT_VALUE.has(r.op) && (
+                    <input className="dbi-input" style={{ maxWidth: 200 }} value={r.value || ''}
+                           onChange={(e) => { const n = [...filters]; n[i] = { ...r, value: e.target.value }; writeFilters(n) }}
+                           placeholder={r.op === 'between' ? '1,100' : (r.op === 'in' ? 'A,B,C' : 'değer')} />
+                  )}
+                  <button type="button" className="dbi-btn dbi-btn--xs dbi-btn--danger"
+                          onClick={() => writeFilters(filters.filter((_, j) => j !== i))}>
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
             </div>
 
             <div className="dbi-card">

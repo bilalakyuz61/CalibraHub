@@ -8251,6 +8251,12 @@ END;";
                     ON [{s}].[DataImportJob]([ConnectionId]);
             END;
 
+            -- 2026-08-15 ek: kaynak kisit kurallari (disa aktarimdaki "Kisit Kurallari" ile ayni JSON).
+            IF COL_LENGTH(N'[{s}].[DataImportJob]', 'SourceFilterJson') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[DataImportJob] ADD [SourceFilterJson] NVARCHAR(MAX) NULL;
+            END;
+
             IF OBJECT_ID(N'[{s}].[DataImportJobColumn]', N'U') IS NULL
             BEGIN
                 CREATE TABLE [{s}].[DataImportJobColumn]

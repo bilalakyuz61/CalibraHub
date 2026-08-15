@@ -206,6 +206,7 @@ public sealed class DataImportService : IDataImportService
             SourceObject = (req.SourceObject ?? string.Empty).Trim(),
             MatchKeyField = (req.MatchKeyField ?? string.Empty).Trim(),
             MaxRows = req.MaxRows <= 0 ? 50_000 : req.MaxRows,
+            SourceFilterJson = Blank(req.SourceFilterJson),
             ErrorBehavior = req.ErrorBehavior,
             PreProcedureName = Blank(req.PreProcedureName),
             PreProcedureTarget = req.PreProcedureTarget,
@@ -393,7 +394,7 @@ public sealed class DataImportService : IDataImportService
         DataImportJob job, ExternalDbConnection conn, int maxRows, CancellationToken ct)
         => _reader.ReadRowsAsync(
             conn, job.SourceSchema, job.SourceObject,
-            job.Columns.Select(c => c.SourceColumn).ToList(), maxRows, ct);
+            job.Columns.Select(c => c.SourceColumn).ToList(), maxRows, ct, job.SourceFilterJson);
 
     /// <summary>
     /// Kaynak satırlarını (kolon adı → değer) hedef alan sözlüğüne çevirir.
@@ -442,7 +443,7 @@ public sealed class DataImportService : IDataImportService
 
     private static DataImportJobDto ToDto(DataImportJob j, string? connectionName) => new(
         j.Id, j.Name, j.ConnectionId, connectionName, j.TargetEntity, null,
-        j.SourceSchema, j.SourceObject, j.MatchKeyField, j.MaxRows, j.ErrorBehavior,
+        j.SourceSchema, j.SourceObject, j.MatchKeyField, j.MaxRows, j.SourceFilterJson, j.ErrorBehavior,
         j.PreProcedureName, j.PreProcedureTarget, j.PreProcedureParamsJson,
         j.PostProcedureName, j.PostProcedureTarget, j.PostProcedureParamsJson,
         j.Columns.OrderBy(c => c.SortOrder)

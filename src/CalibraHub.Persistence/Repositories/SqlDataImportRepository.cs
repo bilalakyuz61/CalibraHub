@@ -17,7 +17,7 @@ public sealed class SqlDataImportRepository : IDataImportRepository
         "[Id],[Name],[ConnectionId],[TargetEntity],[SourceSchema],[SourceObject],[MatchKeyField]," +
         "[MaxRows],[ErrorBehavior],[PreProcedureName],[PreProcedureTarget],[PreProcedureParamsJson]," +
         "[PostProcedureName],[PostProcedureTarget],[PostProcedureParamsJson]," +
-        "[IsActive],[Created],[Updated],[CreatedById],[UpdatedById]";
+        "[IsActive],[Created],[Updated],[CreatedById],[UpdatedById],[SourceFilterJson]";
 
     private const string RunColumns =
         "[Id],[JobId],[TriggerType],[StartedAt],[FinishedAt],[DurationMs],[Status]," +
@@ -131,12 +131,12 @@ public sealed class SqlDataImportRepository : IDataImportRepository
                         INSERT INTO {_jobTable}
                           ([Name],[ConnectionId],[TargetEntity],[SourceSchema],[SourceObject],[MatchKeyField],
                            [MaxRows],[ErrorBehavior],[PreProcedureName],[PreProcedureTarget],[PreProcedureParamsJson],
-                           [PostProcedureName],[PostProcedureTarget],[PostProcedureParamsJson],[IsActive],[CreatedById])
+                           [PostProcedureName],[PostProcedureTarget],[PostProcedureParamsJson],[IsActive],[CreatedById],[SourceFilterJson])
                         OUTPUT INSERTED.[Id]
                         VALUES
                           (@Name,@ConnectionId,@TargetEntity,@SourceSchema,@SourceObject,@MatchKeyField,
                            @MaxRows,@ErrorBehavior,@PreProcedureName,@PreProcedureTarget,@PreProcedureParamsJson,
-                           @PostProcedureName,@PostProcedureTarget,@PostProcedureParamsJson,@IsActive,@CreatedById);
+                           @PostProcedureName,@PostProcedureTarget,@PostProcedureParamsJson,@IsActive,@CreatedById,@SourceFilterJson);
                         """;
                     BindJob(cmd, job);
                     cmd.Parameters.Add(new SqlParameter("@CreatedById", (object?)job.CreatedById ?? DBNull.Value));
@@ -160,6 +160,7 @@ public sealed class SqlDataImportRepository : IDataImportRepository
                             [PostProcedureName] = @PostProcedureName,
                             [PostProcedureTarget] = @PostProcedureTarget,
                             [PostProcedureParamsJson] = @PostProcedureParamsJson,
+                            [SourceFilterJson] = @SourceFilterJson,
                             [IsActive] = @IsActive,
                             [UpdatedById] = @UpdatedById,
                             [Updated] = SYSUTCDATETIME()
@@ -321,6 +322,7 @@ public sealed class SqlDataImportRepository : IDataImportRepository
         cmd.Parameters.Add(new SqlParameter("@PostProcedureTarget", (int)j.PostProcedureTarget));
         cmd.Parameters.Add(new SqlParameter("@PostProcedureParamsJson", (object?)j.PostProcedureParamsJson ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@IsActive", j.IsActive));
+        cmd.Parameters.Add(new SqlParameter("@SourceFilterJson", (object?)j.SourceFilterJson ?? DBNull.Value));
     }
 
     private static DataImportJob MapJob(SqlDataReader r) => new()
@@ -345,6 +347,7 @@ public sealed class SqlDataImportRepository : IDataImportRepository
         Updated                 = r.IsDBNull(17) ? null : r.GetDateTime(17),
         CreatedById             = r.IsDBNull(18) ? null : r.GetInt32(18),
         UpdatedById             = r.IsDBNull(19) ? null : r.GetInt32(19),
+        SourceFilterJson        = r.IsDBNull(20) ? null : r.GetString(20),
     };
 
     private static DataImportRun MapRun(SqlDataReader r) => new()
