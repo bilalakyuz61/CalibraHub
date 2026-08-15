@@ -19,13 +19,15 @@ public sealed class ContactImportHandler : RowImportHandlerBase
     private readonly ICariGroupService _cariGroup;
     private readonly IWidgetService _widget;
     private readonly IWidgetRepository _widgetRepo;
+    private readonly IPriceListService _priceList;
     private List<SalesRepresentativeDto>? _reps;   // run-cache (satış temsilcileri)
     private List<CariGroupDto>? _groups;           // run-cache (cari grupları)
+    private List<PriceGroupDto>? _priceGroups;     // run-cache (fiyat grupları)
     private FormDefinition? _form;                  // CONTACTS form (widget değer kaydı)
     private List<WidgetDefinition>? _widgets;       // Cari özel-alan (widget) tanımları
 
-    public ContactImportHandler(IFinanceService finance, IFinanceRepository financeRepo, ISalesRepresentativeService salesRep, ICariGroupService cariGroup, IWidgetService widget, IWidgetRepository widgetRepo)
-    { _finance = finance; _financeRepo = financeRepo; _salesRep = salesRep; _cariGroup = cariGroup; _widget = widget; _widgetRepo = widgetRepo; }
+    public ContactImportHandler(IFinanceService finance, IFinanceRepository financeRepo, ISalesRepresentativeService salesRep, ICariGroupService cariGroup, IWidgetService widget, IWidgetRepository widgetRepo, IPriceListService priceList)
+    { _finance = finance; _financeRepo = financeRepo; _salesRep = salesRep; _cariGroup = cariGroup; _widget = widget; _widgetRepo = widgetRepo; _priceList = priceList; }
 
     public override string Entity => "CONTACT";
     public override string Label => "Cari Hesap";
@@ -55,6 +57,10 @@ public sealed class ContactImportHandler : RowImportHandlerBase
         new ImportTargetFieldDto("ContactPerson",  "İlgili Kişi",   "string", false, false, null, MaxLength: 150),
         new ImportTargetFieldDto("SalesRepresentative", "Satış Temsilcisi", "string", false, false, "Mevcut satış temsilcisi adı (opsiyonel; verilirse eşleşmeli)"),
         new ImportTargetFieldDto("ContactGroup", "Cari Grubu", "string", false, false, "Cari grup KODU veya adı — Toptan/Perakende/VIP vb. (opsiyonel; verilirse eşleşmeli)"),
+        new ImportTargetFieldDto("PriceGroup", "Fiyat Grubu", "string", false, false, "Fiyat grubu KODU veya adı (opsiyonel; verilirse eşleşmeli)"),
+        new ImportTargetFieldDto("WaPhone", "WhatsApp Telefonu", "string", false, false, null, MaxLength: 30),
+        new ImportTargetFieldDto("WaName", "WhatsApp Adı", "string", false, false, null, MaxLength: 150),
+        new ImportTargetFieldDto("IsActive", "Aktif", "bool", false, false, "Evet / Hayır (boşsa Evet)", new[] { "Evet", "Hayır" }),
         };
         // Cari kartına admin'in eklediği özel (widget) alanlar — PreloadAsync ile yüklenir.
         if (_widgets is not null) fields.AddRange(_widgets.Select(WidgetToField));
@@ -136,11 +142,22 @@ public sealed class ContactImportHandler : RowImportHandlerBase
             if (groupId is null) return (false, $"Cari grubu bulunamadı: '{groupName}'", null);
         }
 
+        // Fiyat grubu: verilmişse kod/addan Id'ye çöz (bulunamazsa satır hata — sessizce
+        // null'a düşerse cari varsayılan listeye bağlı kalır ve yanlış fiyat çalışır).
+        int? priceGroupId = null;
+        var priceGroupName = Get(d, "PriceGroup")?.Trim();
+        if (!string.IsNullOrWhiteSpace(priceGroupName))
+        {
+            priceGroupId = await ResolvePriceGroupIdAsync(priceGroupName, ct);
+            if (priceGroupId is null) return (false, $"Fiyat grubu bulunamadı: '{priceGroupName}'", null);
+        }
+
         var request = action == "update" && existingId is > 0
             ? await BuildUpdateRequestAsync(d, existingId.Value, ct)
             : BuildInsertRequest(d, await DeriveUniqueCodeAsync(d, usedCodes, ct));
         if (repId is > 0) request = request with { SalesRepresentativeId = repId };
         if (groupId is > 0) request = request with { ContactGroupId = groupId };
+        if (priceGroupId is > 0) request = request with { PriceGroupId = priceGroupId };
         var (ok, err, dto) = await _finance.UpsertContactAsync(request, ct);
         if (!ok || dto is null) return (ok, err, dto?.Id);
 
@@ -170,8 +187,11 @@ public sealed class ContactImportHandler : RowImportHandlerBase
         AccountTitle: Get(d, "AccountTitle")!.Trim(),
         TaxNumber: Get(d, "TaxNumber"), IdentityNumber: Get(d, "IdentityNumber"), TaxOffice: Get(d, "TaxOffice"),
         Phone: Get(d, "Phone"), Email: Get(d, "Email"), Address: Get(d, "Address"), City: Get(d, "City"), District: Get(d, "District"),
-        IsActive: true, PriceGroupId: null, CountryCode: Get(d, "CountryCode"), Mobile: Get(d, "Mobile"),
-        Website: Get(d, "Website"), PostalCode: Get(d, "PostalCode"), ContactPerson: Get(d, "ContactPerson"), Neighborhood: Get(d, "Neighborhood"));
+        IsActive: string.IsNullOrWhiteSpace(Get(d, "IsActive")) || ParseBool(Get(d, "IsActive")),
+        PriceGroupId: null, CountryCode: Get(d, "CountryCode"), Mobile: Get(d, "Mobile"),
+        Website: Get(d, "Website"), PostalCode: Get(d, "PostalCode"), ContactPerson: Get(d, "ContactPerson"),
+        Neighborhood: Get(d, "Neighborhood"),
+        WaPhone: Get(d, "WaPhone"), WaName: Get(d, "WaName"));
 
     private async Task<SaveContactRequest> BuildUpdateRequestAsync(IReadOnlyDictionary<string, string?> d, int existingId, CancellationToken ct)
     {
@@ -182,9 +202,13 @@ public sealed class ContactImportHandler : RowImportHandlerBase
             Id: ex.Id, AccountType: at, AccountCode: ex.AccountCode, AccountTitle: Ov("AccountTitle", ex.AccountTitle)!,
             TaxNumber: Ov("TaxNumber", ex.TaxNumber), IdentityNumber: Ov("IdentityNumber", ex.IdentityNumber), TaxOffice: Ov("TaxOffice", ex.TaxOffice),
             Phone: Ov("Phone", ex.Phone), Email: Ov("Email", ex.Email), Address: Ov("Address", ex.Address), City: Ov("City", ex.City), District: Ov("District", ex.District),
-            IsActive: ex.IsActive, PriceGroupId: ex.PriceGroupId, CountryCode: Ov("CountryCode", ex.CountryCode), Mobile: Ov("Mobile", ex.Mobile),
+            IsActive: d.TryGetValue("IsActive", out var act) && !string.IsNullOrWhiteSpace(act) ? ParseBool(act) : ex.IsActive,
+            PriceGroupId: ex.PriceGroupId, CountryCode: Ov("CountryCode", ex.CountryCode), Mobile: Ov("Mobile", ex.Mobile),
             Website: Ov("Website", ex.Website), PostalCode: Ov("PostalCode", ex.PostalCode), ContactPerson: Ov("ContactPerson", ex.ContactPerson),
-            Neighborhood: Ov("Neighborhood", ex.Neighborhood), SalesRepresentativeId: ex.SalesRepresentativeId, ContactGroupId: ex.ContactGroupId);
+            Neighborhood: Ov("Neighborhood", ex.Neighborhood), SalesRepresentativeId: ex.SalesRepresentativeId, ContactGroupId: ex.ContactGroupId,
+            // WhatsApp alanları eşlenmemişse MEVCUT değer korunur — istekte taşınmazsa
+            // varsayılan null gider ve kayıtlı numara sessizce silinirdi.
+            WaPhone: Ov("WaPhone", ex.WaPhone), WaName: Ov("WaName", ex.WaName));
     }
 
     private async Task<string> DeriveUniqueCodeAsync(IReadOnlyDictionary<string, string?> d, HashSet<string> used, CancellationToken ct)
@@ -257,7 +281,22 @@ public sealed class ContactImportHandler : RowImportHandlerBase
             ["SalesRepresentative"] = reps.Where(r => r.IsActive).Select(r => r.RepName).Where(n => !string.IsNullOrWhiteSpace(n)).ToList(),
             // Cari grup: KOD listesi (isim boş olabilir; kullanıcı kodla doldurur) — tamamı + dropdown.
             ["ContactGroup"]        = groups.Where(g => g.IsActive).Select(g => g.Code).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+            ["PriceGroup"]          = (await EnsurePriceGroupsAsync(ct)).Where(g => g.IsActive)
+                                        .Select(g => g.Code).Where(c => !string.IsNullOrWhiteSpace(c))
+                                        .Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
         };
+    }
+
+    private async Task<List<PriceGroupDto>> EnsurePriceGroupsAsync(CancellationToken ct)
+        => _priceGroups ??= (await _priceList.GetAllGroupsAsync(ct)).ToList();
+
+    /// <summary>Fiyat grubunu kod veya adına göre çözer. Bulunamazsa null → satır reddedilir.</summary>
+    private async Task<int?> ResolvePriceGroupIdAsync(string raw, CancellationToken ct)
+    {
+        var list = await EnsurePriceGroupsAsync(ct);
+        var hit = list.FirstOrDefault(g => string.Equals(g.Code?.Trim(), raw, StringComparison.OrdinalIgnoreCase))
+               ?? list.FirstOrDefault(g => string.Equals(g.Name?.Trim(), raw, StringComparison.OrdinalIgnoreCase));
+        return hit?.Id;
     }
 
     // ── Özel alan (widget) yardımcıları ──────────────────────────────
