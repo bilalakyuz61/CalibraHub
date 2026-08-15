@@ -44,6 +44,13 @@ public interface ILogisticsConfigurationService
     Task<IReadOnlyCollection<ItemLocationDto>> GetItemLocationsAsync(int itemId, CancellationToken cancellationToken);
     Task SaveItemLocationsAsync(int itemId, IReadOnlyCollection<SaveItemLocationItem> items, CancellationToken cancellationToken);
     // Planlama: belge bazında malzeme kilidi
+    /// <summary>
+    /// Stok kartını aktif/pasif yapar. Create/UpdateItemRequest bu alanı taşımaz
+    /// (Item.IsActive private setter) — içe aktarımın kaynak "Durum" kolonunu
+    /// yazabilmesi için ayrı metod.
+    /// </summary>
+    Task SetItemActiveAsync(int itemId, bool isActive, CancellationToken cancellationToken);
+
     Task<IReadOnlyCollection<string>> GetItemDocumentLocksAsync(int itemId, CancellationToken cancellationToken);
     Task SaveItemDocumentLocksAsync(int itemId, IReadOnlyCollection<string> docTypes, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<int>> GetLockedItemIdsByDocTypeAsync(string docType, CancellationToken cancellationToken);

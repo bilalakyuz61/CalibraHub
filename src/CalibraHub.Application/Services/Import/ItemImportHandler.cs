@@ -62,6 +62,10 @@ public sealed class ItemImportHandler : RowImportHandlerBase
             new("MinStock",     "Minimum Stok", "decimal", false, false),
             new("AutoSerial",   "Otomatik Seri", "bool", false, false, "Evet / Hayır", new[] { "Evet", "Hayır" }),
             new("Combinations", "Kombinasyonlu", "bool", false, false, "Evet / Hayır", new[] { "Evet", "Hayır" }),
+            // Pasif stok kartı belge malzeme rehberinde (cbv_Guide_Items WHERE IsActive=1)
+            // listelenmez — yani hiçbir belgede seçilemez.
+            new("IsActive", "Aktif", "bool", false, false, "Evet / Hayır (boşsa değişmez)",
+                new[] { "Evet", "Hayır" }),
         };
         // Stok kartına admin'in eklediği özel (widget) alanlar — PreloadAsync ile yüklenir.
         fields.AddRange(_widgetSupport.GetFields());
@@ -195,6 +199,12 @@ public sealed class ItemImportHandler : RowImportHandlerBase
                 string.IsNullOrWhiteSpace(barcode) ? ex?.Barcode : barcode);
             await _logistics.UpdateItemAsync(req, ct);
 
+            // IsActive ayrı metodla yazılır (Update/CreateItemRequest bu alanı taşımaz).
+            // Eşlenmemişse mevcut durum KORUNUR.
+            var activeRaw = Get(d, "IsActive");
+            if (!string.IsNullOrWhiteSpace(activeRaw))
+                await _logistics.SetItemActiveAsync(existingId.Value, ParseBool(activeRaw), ct);
+
             // Özel (widget) alanlar — RecordId = Items.Id (MaterialCardEdit DWR konvansiyonu)
             var wErrU = await _widgetSupport.SaveRowValuesAsync(existingId.Value.ToString(), d, ct);
             if (wErrU != null) return (false, $"Stok güncellendi, {wErrU}", existingId);
@@ -207,6 +217,19 @@ public sealed class ItemImportHandler : RowImportHandlerBase
             ParseBool(combinationsRaw), taxRate, tracking ?? "None",
             minStock ?? 0m, ParseBool(autoSerialRaw),
             string.IsNullOrWhiteSpace(barcode) ? null : barcode), ct);
+
+        // Yeni kayıt varsayılan olarak AKTİF açılır; yalnız kaynak açıkça "pasif" diyorsa
+        // ek sorgu maliyetine girilir (CreateItemAsync yeni Id döndürmüyor).
+        var newActiveRaw = Get(d, "IsActive");
+        if (!string.IsNullOrWhiteSpace(newActiveRaw) && !ParseBool(newActiveRaw))
+        {
+            _items = null;   // yeni kayıt cache'te yok
+            var refreshed = await EnsureItemsAsync(ct);
+            var created = refreshed.FirstOrDefault(i =>
+                string.Equals(i.Code?.Trim(), code, StringComparison.OrdinalIgnoreCase));
+            if (created is not null)
+                await _logistics.SetItemActiveAsync(created.Id, false, ct);
+        }
 
         // Yeni kaydın Id'si CreateItemAsync'ten dönmüyor — yalnizca satirda widget
         // degeri VARSA kod uzerinden geri bulunur (ek sorgu maliyetine o zaman girilir).

@@ -1135,6 +1135,23 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             snapshot: stockCard, snapshotIgnore: ["CompanyId"]);
     }
 
+    public async Task SetItemActiveAsync(int itemId, bool isActive, CancellationToken cancellationToken)
+    {
+        if (itemId <= 0) throw new ArgumentException("Gecersiz malzeme kaydi.");
+
+        var items = await _repository.GetItemsAsync(cancellationToken);
+        var existing = items.FirstOrDefault(x => x.Id == itemId)
+            ?? throw new ArgumentException("Malzeme kaydi bulunamadi.");
+
+        if (existing.IsActive == isActive) return;   // degisiklik yoksa yazma da log da yok
+
+        await _repository.SetItemActiveAsync(itemId, isActive, cancellationToken);
+
+        _audit?.LogUpdate("Item", itemId, existing.Name, detail: existing.Code,
+            oldSnapshot: new { existing.IsActive },
+            newSnapshot: new { IsActive = isActive });
+    }
+
     public async Task UpdateItemAsync(UpdateItemRequest request, CancellationToken cancellationToken)
     {
         if (request.ItemId <= 0)

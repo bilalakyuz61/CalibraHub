@@ -2205,6 +2205,23 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     // ── Planlama: belge bazında malzeme kilidi ───────────────────────
 
+    public async Task SetItemActiveAsync(int itemId, bool isActive, CancellationToken cancellationToken)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            UPDATE {_stockCardsTableName}
+            SET [IsActive] = @IsActive,
+                [Updated]  = SYSUTCDATETIME()
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
+            """;
+        command.Parameters.AddWithValue("@IsActive", isActive);
+        command.Parameters.AddWithValue("@Id", itemId);
+        command.Parameters.AddWithValue("@CompanyId", companyId);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyCollection<string>> GetItemDocumentLocksAsync(int itemId, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
