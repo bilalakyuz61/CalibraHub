@@ -17,12 +17,12 @@ public sealed class SqlDataImportRepository : IDataImportRepository
         "[Id],[Name],[ConnectionId],[TargetEntity],[SourceSchema],[SourceObject],[MatchKeyField]," +
         "[MaxRows],[ErrorBehavior],[PreProcedureName],[PreProcedureTarget],[PreProcedureParamsJson]," +
         "[PostProcedureName],[PostProcedureTarget],[PostProcedureParamsJson]," +
-        "[IsActive],[Created],[Updated],[CreatedById],[UpdatedById],[SourceFilterJson]";
+        "[IsActive],[Created],[Updated],[CreatedById],[UpdatedById],[SourceFilterJson],[DeactivateAbsent]";
 
     private const string RunColumns =
         "[Id],[JobId],[TriggerType],[StartedAt],[FinishedAt],[DurationMs],[Status]," +
         "[RowsRead],[RowsInserted],[RowsUpdated],[RowsFailed],[ErrorMessage]," +
-        "[PreProcedureResult],[PostProcedureResult],[TriggeredBy]";
+        "[PreProcedureResult],[PostProcedureResult],[TriggeredBy],[RowsDeactivated]";
 
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _jobTable;
@@ -131,12 +131,12 @@ public sealed class SqlDataImportRepository : IDataImportRepository
                         INSERT INTO {_jobTable}
                           ([Name],[ConnectionId],[TargetEntity],[SourceSchema],[SourceObject],[MatchKeyField],
                            [MaxRows],[ErrorBehavior],[PreProcedureName],[PreProcedureTarget],[PreProcedureParamsJson],
-                           [PostProcedureName],[PostProcedureTarget],[PostProcedureParamsJson],[IsActive],[CreatedById],[SourceFilterJson])
+                           [PostProcedureName],[PostProcedureTarget],[PostProcedureParamsJson],[IsActive],[CreatedById],[SourceFilterJson],[DeactivateAbsent])
                         OUTPUT INSERTED.[Id]
                         VALUES
                           (@Name,@ConnectionId,@TargetEntity,@SourceSchema,@SourceObject,@MatchKeyField,
                            @MaxRows,@ErrorBehavior,@PreProcedureName,@PreProcedureTarget,@PreProcedureParamsJson,
-                           @PostProcedureName,@PostProcedureTarget,@PostProcedureParamsJson,@IsActive,@CreatedById,@SourceFilterJson);
+                           @PostProcedureName,@PostProcedureTarget,@PostProcedureParamsJson,@IsActive,@CreatedById,@SourceFilterJson,@DeactivateAbsent);
                         """;
                     BindJob(cmd, job);
                     cmd.Parameters.Add(new SqlParameter("@CreatedById", (object?)job.CreatedById ?? DBNull.Value));
@@ -161,6 +161,7 @@ public sealed class SqlDataImportRepository : IDataImportRepository
                             [PostProcedureTarget] = @PostProcedureTarget,
                             [PostProcedureParamsJson] = @PostProcedureParamsJson,
                             [SourceFilterJson] = @SourceFilterJson,
+                            [DeactivateAbsent] = @DeactivateAbsent,
                             [IsActive] = @IsActive,
                             [UpdatedById] = @UpdatedById,
                             [Updated] = SYSUTCDATETIME()
@@ -265,6 +266,7 @@ public sealed class SqlDataImportRepository : IDataImportRepository
                 [RowsInserted] = @RowsInserted,
                 [RowsUpdated] = @RowsUpdated,
                 [RowsFailed] = @RowsFailed,
+                [RowsDeactivated] = @RowsDeactivated,
                 [ErrorMessage] = @ErrorMessage,
                 [PreProcedureResult] = @PreProcedureResult,
                 [PostProcedureResult] = @PostProcedureResult
@@ -278,6 +280,7 @@ public sealed class SqlDataImportRepository : IDataImportRepository
         cmd.Parameters.Add(new SqlParameter("@RowsInserted", run.RowsInserted));
         cmd.Parameters.Add(new SqlParameter("@RowsUpdated", run.RowsUpdated));
         cmd.Parameters.Add(new SqlParameter("@RowsFailed", run.RowsFailed));
+        cmd.Parameters.Add(new SqlParameter("@RowsDeactivated", run.RowsDeactivated));
         cmd.Parameters.Add(new SqlParameter("@ErrorMessage", (object?)run.ErrorMessage ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@PreProcedureResult", (object?)run.PreProcedureResult ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@PostProcedureResult", (object?)run.PostProcedureResult ?? DBNull.Value));
@@ -323,6 +326,7 @@ public sealed class SqlDataImportRepository : IDataImportRepository
         cmd.Parameters.Add(new SqlParameter("@PostProcedureParamsJson", (object?)j.PostProcedureParamsJson ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@IsActive", j.IsActive));
         cmd.Parameters.Add(new SqlParameter("@SourceFilterJson", (object?)j.SourceFilterJson ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@DeactivateAbsent", j.DeactivateAbsent));
     }
 
     private static DataImportJob MapJob(SqlDataReader r) => new()
@@ -351,6 +355,7 @@ public sealed class SqlDataImportRepository : IDataImportRepository
         CreatedById             = r.IsDBNull(18) ? null : r.GetInt32(18),
         UpdatedById             = r.IsDBNull(19) ? null : r.GetInt32(19),
         SourceFilterJson        = r.IsDBNull(20) ? null : r.GetString(20),
+        DeactivateAbsent        = !r.IsDBNull(21) && r.GetBoolean(21),
     };
 
     private static DataImportRun MapRun(SqlDataReader r) => new()
@@ -370,5 +375,6 @@ public sealed class SqlDataImportRepository : IDataImportRepository
         PreProcedureResult  = r.IsDBNull(12) ? null : r.GetString(12),
         PostProcedureResult = r.IsDBNull(13) ? null : r.GetString(13),
         TriggeredBy         = r.IsDBNull(14) ? null : r.GetString(14),
+        RowsDeactivated     = r.IsDBNull(15) ? 0 : r.GetInt32(15),
     };
 }

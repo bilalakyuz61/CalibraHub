@@ -156,6 +156,33 @@ public sealed class ItemImportHandler : RowImportHandlerBase
         return hit is not null ? ("update", hit.Id) : ("insert", null);
     }
 
+    public override bool SupportsDeactivate => true;
+
+    /// <summary>
+    /// Kaynakta olmayan aktif stok kartlarını pasife alır. Anahtar değeri eksik olan
+    /// kayda DOKUNULMAZ (kaynakla karşılaştırılamaz).
+    /// </summary>
+    public override async Task<int> DeactivateAbsentAsync(ImportRowSet set, bool previewOnly, CancellationToken ct)
+    {
+        var sourceKeys = BuildSourceKeySet(set);
+        if (sourceKeys.Count == 0) return 0;
+
+        var all = await EnsureItemsAsync(ct);
+        var absent = all
+            .Where(i => i.IsActive)
+            .Where(i => KeySignature(k => ItemValue(i, k), set.MatchKeyFields) is string sig
+                        && !sourceKeys.Contains(sig))
+            .ToList();
+
+        if (previewOnly) return absent.Count;
+
+        foreach (var i in absent)
+            await _logistics.SetItemActiveAsync(i.Id, false, ct);
+
+        if (absent.Count > 0) _items = null;
+        return absent.Count;
+    }
+
     /// <summary>Mevcut stok kartının hedef alan karşılığı (bileşik anahtar karşılaştırması için).</summary>
     private static string? ItemValue(Item i, string key) => key.ToLowerInvariant() switch
     {

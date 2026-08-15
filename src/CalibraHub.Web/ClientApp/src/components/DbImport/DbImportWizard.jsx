@@ -99,6 +99,7 @@ export default function DbImportWizard() {
     matchKeyFields: [],
     maxRows: 50000,
     sourceFilterJson: '',
+    deactivateAbsent: false,
     errorBehavior: 0,
     preProcedureName: '',
     preProcedureTarget: 0,
@@ -135,6 +136,7 @@ export default function DbImportWizard() {
               preProcedureTarget: normalizeEnum(j.preProcedureTarget, PROC_TARGET_NUM),
               postProcedureTarget: normalizeEnum(j.postProcedureTarget, PROC_TARGET_NUM),
               sourceFilterJson: j.sourceFilterJson || '',
+              deactivateAbsent: !!j.deactivateAbsent,
               preProcedureName: j.preProcedureName || '',
               preProcedureParamsJson: j.preProcedureParamsJson || '',
               postProcedureName: j.postProcedureName || '',
@@ -470,6 +472,23 @@ export default function DbImportWizard() {
             </div>
 
             <div className="dbi-card">
+              <div className="dbi-card-title">Kaynakta Olmayan Kayıtlar</div>
+              <label className="dbi-switch">
+                <input type="checkbox" checked={!!job.deactivateAbsent}
+                       onChange={(e) => setJob({ ...job, deactivateAbsent: e.target.checked })} />
+                <span className="dbi-switch-track"><span className="dbi-switch-thumb" /></span>
+                <span>Kaynakta olmayan kayıtları pasife al</span>
+              </label>
+              {job.deactivateAbsent && (
+                <div className="dbi-alert dbi-alert--warn" style={{ marginTop: 8, marginBottom: 0 }}>
+                  <AlertTriangle size={13} /> Kaynak sorgusu bu kayıt türünün <strong>tamamını</strong>
+                  {' '}döndürmeli. Dar bir sorgu, kapsam dışı kalan kayıtları da pasife alır.
+                  Kayıt kaynağa geri dönerse otomatik aktifleşir.
+                </div>
+              )}
+            </div>
+
+            <div className="dbi-card">
               <div className="dbi-card-title">
                 <KeyRound size={13} /> Anahtar Alan <span className="dbi-required">*</span>
               </div>
@@ -643,7 +662,16 @@ export default function DbImportWizard() {
                   <div className="dbi-stat"><div className="dbi-stat-label">Eklenecek</div><div className="dbi-stat-value">{preview.preview.insertCount}</div></div>
                   <div className="dbi-stat"><div className="dbi-stat-label">Güncellenecek</div><div className="dbi-stat-value">{preview.preview.updateCount}</div></div>
                   <div className="dbi-stat dbi-stat--err"><div className="dbi-stat-label">Hatalı</div><div className="dbi-stat-value">{preview.preview.errorRows}</div></div>
+                  {job.deactivateAbsent && (
+                    <div className="dbi-stat dbi-stat--warn">
+                      <div className="dbi-stat-label">Pasife Alınacak</div>
+                      <div className="dbi-stat-value">{preview.deactivateCount ?? 0}</div>
+                    </div>
+                  )}
                 </div>
+                {preview.deactivateWarning && (
+                  <div className="dbi-alert dbi-alert--warn">{preview.deactivateWarning}</div>
+                )}
 
                 {preview.preview.rows && preview.preview.rows.length > 0 && (
                   <div className="dbi-table-wrap" style={{ maxHeight: 380, overflowY: 'auto' }}>
@@ -702,6 +730,12 @@ export default function DbImportWizard() {
                   <div className="dbi-stat dbi-stat--ok"><div className="dbi-stat-label">Eklenen</div><div className="dbi-stat-value">{runResult.run.rowsInserted}</div></div>
                   <div className="dbi-stat dbi-stat--ok"><div className="dbi-stat-label">Güncellenen</div><div className="dbi-stat-value">{runResult.run.rowsUpdated}</div></div>
                   <div className="dbi-stat dbi-stat--err"><div className="dbi-stat-label">Hatalı</div><div className="dbi-stat-value">{runResult.run.rowsFailed}</div></div>
+                  {runResult.run.rowsDeactivated > 0 && (
+                    <div className="dbi-stat dbi-stat--warn">
+                      <div className="dbi-stat-label">Pasife Alınan</div>
+                      <div className="dbi-stat-value">{runResult.run.rowsDeactivated}</div>
+                    </div>
+                  )}
                   <div className="dbi-stat"><div className="dbi-stat-label">Süre</div><div className="dbi-stat-value">{runResult.run.durationMs ?? 0} ms</div></div>
                 </div>
 

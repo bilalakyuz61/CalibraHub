@@ -132,6 +132,41 @@ public sealed class ContactImportHandler : RowImportHandlerBase
         return hit is not null ? ("update", hit.Id) : ("insert", null);
     }
 
+    public override bool SupportsDeactivate => true;
+
+    /// <summary>Kaynakta olmayan aktif carileri pasife alır.</summary>
+    public override async Task<int> DeactivateAbsentAsync(ImportRowSet set, bool previewOnly, CancellationToken ct)
+    {
+        var sourceKeys = BuildSourceKeySet(set);
+        if (sourceKeys.Count == 0) return 0;
+
+        var all = await EnsureContactsAsync(ct);
+        var absent = all
+            .Where(c => c.IsActive)
+            .Where(c => KeySignature(k => ContactValue(c, k), set.MatchKeyFields) is string sig
+                        && !sourceKeys.Contains(sig))
+            .ToList();
+
+        if (previewOnly) return absent.Count;
+
+        foreach (var c in absent)
+        {
+            // Yalnız IsActive değişir; diğer alanlar mevcut değerleriyle geri yazılır.
+            var ex = await _finance.GetContactByIdAsync(c.Id, ct);
+            if (ex is null) continue;
+            await _finance.UpsertContactAsync(new SaveContactRequest(
+                Id: ex.Id, AccountType: ex.AccountType, AccountCode: ex.AccountCode, AccountTitle: ex.AccountTitle,
+                TaxNumber: ex.TaxNumber, IdentityNumber: ex.IdentityNumber, TaxOffice: ex.TaxOffice,
+                Phone: ex.Phone, Email: ex.Email, Address: ex.Address, City: ex.City, District: ex.District,
+                IsActive: false, PriceGroupId: ex.PriceGroupId, CountryCode: ex.CountryCode, Mobile: ex.Mobile,
+                Website: ex.Website, PostalCode: ex.PostalCode, ContactPerson: ex.ContactPerson,
+                Neighborhood: ex.Neighborhood, SalesRepresentativeId: ex.SalesRepresentativeId,
+                WaPhone: ex.WaPhone, WaName: ex.WaName, ContactGroupId: ex.ContactGroupId), ct);
+        }
+        if (absent.Count > 0) _allContacts = null;
+        return absent.Count;
+    }
+
     private List<Contact>? _allContacts;
     private async Task<List<Contact>> EnsureContactsAsync(CancellationToken ct)
         => _allContacts ??= (await _financeRepo.GetContactsAsync(null, null, ct)).ToList();

@@ -62,6 +62,35 @@ public sealed class PersonnelImportHandler : RowImportHandlerBase
         return hit is not null ? ("update", hit.Id) : ("insert", null);
     }
 
+    public override bool SupportsDeactivate => true;
+
+    /// <summary>Kaynakta olmayan aktif personeli pasife alır (PIN/kart korunur).</summary>
+    public override async Task<int> DeactivateAbsentAsync(ImportRowSet set, bool previewOnly, CancellationToken ct)
+    {
+        var sourceKeys = BuildSourceKeySet(set);
+        if (sourceKeys.Count == 0) return 0;
+
+        var all = await EnsureAsync(ct);
+        var absent = all
+            .Where(p => p.IsActive)
+            .Where(p => KeySignature(k => PersonnelValue(p, k), set.MatchKeyFields) is string sig
+                        && !sourceKeys.Contains(sig))
+            .ToList();
+
+        if (previewOnly) return absent.Count;
+
+        foreach (var p in absent)
+        {
+            await _personnel.SaveAsync(new SavePersonnelRequest(
+                Id: p.Id, Code: p.Code, FullName: p.FullName, Title: p.Title, Department: p.Department,
+                PinCode: p.PinCode, CardNo: p.CardNo, IsProductionOperator: p.IsProductionOperator,
+                IsActive: false, UserId: p.UserId, Phone: p.Phone, Email: p.Email,
+                Notes: p.Notes, BirthDate: p.BirthDate), ct);
+        }
+        if (absent.Count > 0) _cache = null;
+        return absent.Count;
+    }
+
     /// <summary>Mevcut personelin hedef alan karşılığı (bileşik anahtar karşılaştırması için).</summary>
     private static string? PersonnelValue(PersonnelDto p, string key) => key.ToLowerInvariant() switch
     {

@@ -24,6 +24,46 @@ public abstract class RowImportHandlerBase : IImportTargetHandler
     /// </summary>
     public virtual bool SupportsUpsert => true;
 
+    /// <summary>Arayüz slotu bu sınıfta bağlanır (bkz. SupportsUpsert notu) — burada tanımlı olmalı.</summary>
+    public virtual bool SupportsDeactivate => false;
+
+    public virtual Task<int> DeactivateAbsentAsync(ImportRowSet set, bool previewOnly, CancellationToken ct)
+        => Task.FromResult(0);
+
+    /// <summary>
+    /// Kaynak satırlarının anahtar imzaları. İmza = anahtar alanların değerlerinin
+    /// normalize (trim + küçük harf) birleşimi. Anahtarlardan biri boş olan satır
+    /// imza üretmez — o satır kimseyi "var" saymaz.
+    /// </summary>
+    protected static HashSet<string> BuildSourceKeySet(ImportRowSet set)
+    {
+        var result = new HashSet<string>(StringComparer.Ordinal);
+        if (set.MatchKeyFields.Count == 0) return result;
+
+        foreach (var row in set.Rows)
+        {
+            var sig = KeySignature(k => Get(row, k), set.MatchKeyFields);
+            if (sig is not null) result.Add(sig);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Tek kaydın anahtar imzası. Anahtarlardan herhangi biri boşsa null döner —
+    /// böyle bir kayıt kaynakla karşılaştırılamaz, DOKUNULMAZ (pasife alınmaz).
+    /// </summary>
+    protected static string? KeySignature(Func<string, string?> value, IReadOnlyList<string> keys)
+    {
+        var parts = new List<string>(keys.Count);
+        foreach (var k in keys)
+        {
+            var v = value(k)?.Trim();
+            if (string.IsNullOrWhiteSpace(v)) return null;
+            parts.Add(v.ToLowerInvariant());
+        }
+        return string.Join("", parts);   // ayırıcı: veri içinde geçmeyecek kontrol karakteri
+    }
+
     /// <summary>Tek satırın doğrulama hataları (boş = geçerli).</summary>
     protected abstract IReadOnlyList<string> ValidateRow(IReadOnlyDictionary<string, string?> row);
 

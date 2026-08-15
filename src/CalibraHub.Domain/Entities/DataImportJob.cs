@@ -54,6 +54,15 @@ public sealed class DataImportJob
     /// </summary>
     public string? SourceFilterJson { get; set; }
 
+    /// <summary>
+    /// Kaynakta BULUNMAYAN kayıtları pasife alır (ayna modu). Varsayılan KAPALI.
+    /// Açıkken: kaynak listesi o entity'nin TAMAMINI kapsamalıdır — filtreli/dar bir
+    /// sorgu kapsam dışı kalan gerçek kayıtları da pasife alır. Kendini onarır:
+    /// kayıt kaynağa geri dönerse upsert onu yeniden aktifleştirir.
+    /// Okuma MaxRows'a takıldıysa (kesilmiş olabilir) adım ATLANIR.
+    /// </summary>
+    public bool DeactivateAbsent { get; set; }
+
     /// <summary>Prosedür hatalarının aktarımı nasıl etkileyeceği.</summary>
     public DataImportErrorBehavior ErrorBehavior { get; set; } = DataImportErrorBehavior.Lenient;
 

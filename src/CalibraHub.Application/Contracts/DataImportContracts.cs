@@ -47,6 +47,7 @@ public sealed record DataImportJobDto(
     IReadOnlyList<string> MatchKeyFields,
     int MaxRows,
     string? SourceFilterJson,
+    bool DeactivateAbsent,
     DataImportErrorBehavior ErrorBehavior,
     string? PreProcedureName,
     DataImportProcedureTarget PreProcedureTarget,
@@ -69,6 +70,7 @@ public sealed record SaveDataImportJobRequest(
     IReadOnlyList<string> MatchKeyFields,
     int MaxRows,
     string? SourceFilterJson,
+    bool DeactivateAbsent,
     DataImportErrorBehavior ErrorBehavior,
     string? PreProcedureName,
     DataImportProcedureTarget PreProcedureTarget,
@@ -94,6 +96,7 @@ public sealed record DataImportRunDto(
     int RowsInserted,
     int RowsUpdated,
     int RowsFailed,
+    int RowsDeactivated,
     string? ErrorMessage,
     string? PreProcedureResult,
     string? PostProcedureResult,
@@ -116,4 +119,8 @@ public sealed record DataImportPreviewResultDto(
     bool Ok,
     string? Error,
     int RowsRead,
-    ImportPreviewResultDto? Preview);
+    ImportPreviewResultDto? Preview,
+    /// <summary>Politika açıksa: kaynakta bulunmadığı için pasife alınacak kayıt sayısı.</summary>
+    int DeactivateCount = 0,
+    /// <summary>Kesilmiş okuma nedeniyle pasife alma atlanacaksa uyarı.</summary>
+    string? DeactivateWarning = null);

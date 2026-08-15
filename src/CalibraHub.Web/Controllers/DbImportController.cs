@@ -254,7 +254,8 @@ public sealed class DbImportController : Controller
         => await SafeAsync(async () =>
         {
             var result = await _service.PreviewAsync(id, sampleRows, ct);
-            return Json(new { success = result.Ok, error = result.Error, rowsRead = result.RowsRead, preview = result.Preview });
+            return Json(new { success = result.Ok, error = result.Error, rowsRead = result.RowsRead, preview = result.Preview,
+                              deactivateCount = result.DeactivateCount, deactivateWarning = result.DeactivateWarning });
         }, $"Önizleme yapılamadı (JobId={id}).");
 
     [HttpPost("/DbImport/api/jobs/{id:int}/run")]

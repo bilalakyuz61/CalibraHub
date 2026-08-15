@@ -55,6 +55,32 @@ public sealed class MachineImportHandler : RowImportHandlerBase
         return hit is not null ? ("update", hit.Id) : ("insert", null);
     }
 
+    public override bool SupportsDeactivate => true;
+
+    /// <summary>Kaynakta olmayan aktif makineleri pasife alır.</summary>
+    public override async Task<int> DeactivateAbsentAsync(ImportRowSet set, bool previewOnly, CancellationToken ct)
+    {
+        var sourceKeys = BuildSourceKeySet(set);
+        if (sourceKeys.Count == 0) return 0;
+
+        var all = await EnsureMachinesAsync(ct);
+        var absent = all
+            .Where(m => m.IsActive)
+            .Where(m => KeySignature(k => MachineValue(m, k), set.MatchKeyFields) is string sig
+                        && !sourceKeys.Contains(sig))
+            .ToList();
+
+        if (previewOnly) return absent.Count;
+
+        foreach (var m in absent)
+        {
+            await _logistics.UpdateMachineAsync(new UpdateMachineRequest(
+                m.Id, m.LocationId, m.Code, m.Name, m.HourlyCapacity, m.SortOrder, false), ct);
+        }
+        if (absent.Count > 0) _machines = null;
+        return absent.Count;
+    }
+
     /// <summary>Mevcut makinenin hedef alan karşılığı (bileşik anahtar karşılaştırması için).</summary>
     private static string? MachineValue(MachineDto m, string key) => key.ToLowerInvariant() switch
     {

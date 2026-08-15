@@ -238,6 +238,7 @@ public sealed class DataImportService : IDataImportService
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
             MaxRows = req.MaxRows <= 0 ? 50_000 : req.MaxRows,
             SourceFilterJson = Blank(req.SourceFilterJson),
+            DeactivateAbsent = req.DeactivateAbsent,
             ErrorBehavior = req.ErrorBehavior,
             PreProcedureName = Blank(req.PreProcedureName),
             PreProcedureTarget = req.PreProcedureTarget,
@@ -281,6 +282,9 @@ public sealed class DataImportService : IDataImportService
                 return (false, $"'{key}' bu kayıt türü için eşleşme anahtarı olarak kullanılamaz.", 0);
         }
 
+        if (job.DeactivateAbsent && !targetHandler.SupportsDeactivate)
+            return (false, "Bu kayıt türü 'kaynakta olmayanı pasife al' politikasını desteklemiyor.", 0);
+
         if (await _repo.JobNameExistsAsync(name, req.Id > 0 ? req.Id : null, ct))
             return (false, $"Aynı isimde başka bir aktarım işi zaten tanımlı: '{name}'", 0);
 
@@ -307,7 +311,26 @@ public sealed class DataImportService : IDataImportService
         await handler!.PreloadAsync(ct);
         var rowSet = BuildRowSet(job!, sample);
         var preview = await handler.PreviewAsync(rowSet, ct);
-        return new DataImportPreviewResultDto(true, null, sample.Rows.Count, preview);
+
+        // Politika açıksa kaç kaydın pasife alınacağını ÖNCEDEN göster — eşik olmadığı
+        // için kullanıcının bu sayıyı görmesi tek korumadır.
+        var deactivateCount = 0;
+        string? deactivateWarning = null;
+        if (job!.DeactivateAbsent && handler.SupportsDeactivate)
+        {
+            if (sample.Rows.Count >= sampleRows)
+            {
+                deactivateWarning = "Önizleme örneklem üzerinde çalışır; pasife alınacak sayı " +
+                                    "yalnız tam aktarımda kesinleşir.";
+            }
+            else
+            {
+                deactivateCount = await handler.DeactivateAbsentAsync(rowSet, previewOnly: true, ct);
+            }
+        }
+
+        return new DataImportPreviewResultDto(true, null, sample.Rows.Count, preview,
+            deactivateCount, deactivateWarning);
     }
 
     // ── Çalıştırma ───────────────────────────────────────────────────────
@@ -368,6 +391,22 @@ public sealed class DataImportService : IDataImportService
             {
                 run.ErrorMessage = commit.Error;
                 return await FinishAsync(run, sw, DataImportRunStatus.Failed, commit, ct);
+            }
+
+            // 3b) Kaynakta olmayanları pasife al (politika açıksa).
+            if (job.DeactivateAbsent && handler.SupportsDeactivate)
+            {
+                // KESİLMİŞ OKUMA KORUMASI: satır sayısı tavana dayandıysa kaynak veri
+                // eksik olabilir — "yok" ile "okunmadı" ayırt edilemez, adım atlanır.
+                if (sample.Rows.Count >= job.MaxRows)
+                {
+                    run.ErrorMessage = $"Pasife alma atlandı: okunan satır sayısı üst sınıra ({job.MaxRows}) " +
+                                       "dayandı, kaynak veri kesilmiş olabilir.";
+                }
+                else
+                {
+                    run.RowsDeactivated = await handler.DeactivateAbsentAsync(BuildRowSet(job, sample), false, ct);
+                }
             }
 
             // 4) Son prosedür — satır sayıları artık dolu.
@@ -489,7 +528,7 @@ public sealed class DataImportService : IDataImportService
 
     private static DataImportJobDto ToDto(DataImportJob j, string? connectionName) => new(
         j.Id, j.Name, j.ConnectionId, connectionName, j.TargetEntity, null,
-        j.SourceSchema, j.SourceObject, j.MatchKeyFields, j.MaxRows, j.SourceFilterJson, j.ErrorBehavior,
+        j.SourceSchema, j.SourceObject, j.MatchKeyFields, j.MaxRows, j.SourceFilterJson, j.DeactivateAbsent, j.ErrorBehavior,
         j.PreProcedureName, j.PreProcedureTarget, j.PreProcedureParamsJson,
         j.PostProcedureName, j.PostProcedureTarget, j.PostProcedureParamsJson,
         j.Columns.OrderBy(c => c.SortOrder)
@@ -499,6 +538,6 @@ public sealed class DataImportService : IDataImportService
 
     private static DataImportRunDto ToDto(DataImportRun r, string? jobName) => new(
         r.Id, r.JobId, jobName, r.TriggerType, r.StartedAt, r.FinishedAt, r.DurationMs,
-        r.Status, r.RowsRead, r.RowsInserted, r.RowsUpdated, r.RowsFailed,
+        r.Status, r.RowsRead, r.RowsInserted, r.RowsUpdated, r.RowsFailed, r.RowsDeactivated,
         r.ErrorMessage, r.PreProcedureResult, r.PostProcedureResult, r.TriggeredBy);
 }

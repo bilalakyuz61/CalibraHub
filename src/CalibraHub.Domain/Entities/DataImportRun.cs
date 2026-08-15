@@ -29,6 +29,9 @@ public sealed class DataImportRun
     public int RowsUpdated { get; set; }
     public int RowsFailed { get; set; }
 
+    /// <summary>Kaynakta bulunmadığı için pasife alınan kayıt sayısı (politika açıkken).</summary>
+    public int RowsDeactivated { get; set; }
+
     /// <summary>Aktarımı durduran hata (varsa).</summary>
     public string? ErrorMessage { get; set; }
 

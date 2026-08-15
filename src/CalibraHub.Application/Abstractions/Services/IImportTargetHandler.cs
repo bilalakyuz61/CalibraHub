@@ -57,6 +57,24 @@ public interface IImportTargetHandler
     /// </summary>
     bool SupportsUpsert => true;
 
+    /// <summary>
+    /// Handler "kaynakta olmayan kayıtları pasife al" politikasını uygulayabiliyor mu?
+    /// Gerektirdikleri: IsActive kavramı + tüm kayıtları listeleyebilme + pasife alabilme.
+    /// </summary>
+    bool SupportsDeactivate => false;
+
+    /// <summary>
+    /// Kaynakta BULUNMAYAN aktif kayıtları pasife alır ve sayısını döner.
+    /// Karşılaştırma <see cref="ImportRowSet.MatchKeyFields"/> imzası üzerinden yapılır —
+    /// handler kendi kayıtlarının o alanlardaki değerini bildiği için diff'i o hesaplar.
+    ///
+    /// <paramref name="previewOnly"/> true ise HİÇBİR ŞEY YAZILMAZ, yalnız sayı döner
+    /// (kullanıcı aktarımdan önce kaç kaydın etkileneceğini görsün).
+    /// Varsayılan: desteklemeyen handler 0 döner.
+    /// </summary>
+    Task<int> DeactivateAbsentAsync(ImportRowSet set, bool previewOnly, CancellationToken ct)
+        => Task.FromResult(0);
+
     /// <summary>Satırları doğrula (kayıt YAZMAZ) — insert/update/error dağılımı + örnek satırlar.</summary>
     Task<ImportPreviewResultDto> PreviewAsync(ImportRowSet set, CancellationToken ct);
 

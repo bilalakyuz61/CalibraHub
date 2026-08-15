@@ -8266,6 +8266,21 @@ END;";
                 ALTER TABLE [{s}].[DataImportJob] ADD [SourceFilterJson] NVARCHAR(MAX) NULL;
             END;
 
+            -- 2026-08-15 ek: "kaynakta olmayani pasife al" politikasi + calistirma sayaci.
+            IF COL_LENGTH(N'[{s}].[DataImportJob]', 'DeactivateAbsent') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[DataImportJob]
+                    ADD [DeactivateAbsent] BIT NOT NULL
+                        CONSTRAINT [DF_DataImportJob_DeactAbsent] DEFAULT(0);
+            END;
+
+            IF COL_LENGTH(N'[{s}].[DataImportRun]', 'RowsDeactivated') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[DataImportRun]
+                    ADD [RowsDeactivated] INT NOT NULL
+                        CONSTRAINT [DF_DataImportRun_Deact] DEFAULT(0);
+            END;
+
             IF OBJECT_ID(N'[{s}].[DataImportJobColumn]', N'U') IS NULL
             BEGIN
                 CREATE TABLE [{s}].[DataImportJobColumn]

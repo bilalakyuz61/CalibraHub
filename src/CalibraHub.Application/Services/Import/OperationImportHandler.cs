@@ -62,6 +62,33 @@ public sealed class OperationImportHandler : RowImportHandlerBase
         return hit is not null ? ("update", hit.Id) : ("insert", null);
     }
 
+    public override bool SupportsDeactivate => true;
+
+    /// <summary>Kaynakta olmayan aktif operasyonları pasife alır.</summary>
+    public override async Task<int> DeactivateAbsentAsync(ImportRowSet set, bool previewOnly, CancellationToken ct)
+    {
+        var sourceKeys = BuildSourceKeySet(set);
+        if (sourceKeys.Count == 0) return 0;
+
+        var all = await EnsureAsync(ct);
+        var absent = all
+            .Where(o => o.IsActive)
+            .Where(o => KeySignature(k => OperationValue(o, k), set.MatchKeyFields) is string sig
+                        && !sourceKeys.Contains(sig))
+            .ToList();
+
+        if (previewOnly) return absent.Count;
+
+        foreach (var o in absent)
+        {
+            await _operations.SaveAsync(new SaveOperationRequest(
+                o.Id, o.Code, o.Name, o.Description, o.StandardDuration,
+                o.DurationUnit, o.HourlyRate, o.SortOrder, false), ct);
+        }
+        if (absent.Count > 0) _cache = null;
+        return absent.Count;
+    }
+
     /// <summary>Mevcut operasyonun hedef alan karşılığı (bileşik anahtar karşılaştırması için).</summary>
     private static string? OperationValue(OperationDto o, string key) => key.ToLowerInvariant() switch
     {
