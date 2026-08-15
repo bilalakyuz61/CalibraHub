@@ -68,4 +68,11 @@ public interface IWorkOrderRepository
 
     /// <summary>Item için aktif Routing arar (öncelik: ConfigId match → ConfigId NULL fallback). Yoksa NULL.</summary>
     Task<int?> FindRoutingForItemAsync(int itemId, int? configId, CancellationToken ct);
+
+    /// <summary>
+    /// Bu rotayı kullanan ve HENÜZ KAPANMAMIŞ (Planned/Released/InProgress) iş emri sayısı.
+    /// İçe aktarımda rota güncellemesini engellemek için kullanılır: rotanın operasyon
+    /// listesi değiştirilirse devam eden emirlerin adımları altından kayar.
+    /// </summary>
+    Task<int> CountOpenWorkOrdersByRoutingAsync(int routingId, CancellationToken ct);
 }

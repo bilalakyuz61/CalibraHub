@@ -541,6 +541,25 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
         return result != null && result != DBNull.Value ? Convert.ToInt32(result) : null;
     }
 
+    public async Task<int> CountOpenWorkOrdersByRoutingAsync(int routingId, CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        // Kapanmamis durumlar: Planned(0), Released(1), InProgress(2).
+        // Completed(3)/Closed(4)/Cancelled(5) rotanin degismesinden etkilenmez.
+        cmd.CommandText = $@"
+            SELECT COUNT(1)
+            FROM [{_schema}].[WorkOrder]
+            WHERE [CompanyId] = @CompanyId
+              AND [RoutingId] = @RoutingId
+              AND [Status] IN (0, 1, 2);";
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+        cmd.Parameters.AddWithValue("@RoutingId", routingId);
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is null || result is DBNull ? 0 : Convert.ToInt32(result);
+    }
+
     public async Task<IReadOnlyCollection<WorkOrderListItemDto>> ListEligibleForMergeAsync(int itemId, int? configId, CancellationToken ct)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();

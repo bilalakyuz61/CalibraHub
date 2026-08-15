@@ -19,22 +19,19 @@ public sealed class RoutingImportHandler : IImportTargetHandler
     private readonly IRoutingService _routing;
     private readonly IOperationRepository _opRepo;
     private readonly ILogisticsConfigurationRepository _itemRepo;
+    private readonly IWorkOrderRepository _workOrderRepo;
+    private List<RoutingDto>? _routings;
     private List<Operation>? _operations;
     private List<Machine>? _machines;
     private List<Item>? _items;
 
     public RoutingImportHandler(IRoutingService routing, IOperationRepository opRepo,
-        ILogisticsConfigurationRepository itemRepo)
-    { _routing = routing; _opRepo = opRepo; _itemRepo = itemRepo; }
+        ILogisticsConfigurationRepository itemRepo, IWorkOrderRepository workOrderRepo)
+    { _routing = routing; _opRepo = opRepo; _itemRepo = itemRepo; _workOrderRepo = workOrderRepo; }
 
     public string Entity => "ROUTING";
     public string Label => "Rota (Routing)";
 
-    /// <summary>
-    /// Her grup DAİMA yeni rota açar (SaveRoutingRequest.Id = 0).
-    /// Aynı iş tekrar çalıştırılırsa rotalar mükerrer oluşur.
-    /// </summary>
-    public bool SupportsUpsert => false;
     public Task PreloadAsync(CancellationToken ct) => Task.CompletedTask;
 
     public IReadOnlyList<ImportTargetFieldDto> GetFields() => new[]
@@ -142,7 +139,9 @@ public sealed class RoutingImportHandler : IImportTargetHandler
             g.Lines.Add(new RoutingLine((int)seqRaw.Value, op.Id, machineId, dur, durUnit, notes));
         }
 
-        int inserted = 0;
+        int inserted = 0, updated = 0;
+        var existingRoutings = (await _routing.ListAsync(null, ct)).ToList();
+
         foreach (var g in groups.Values)
         {
             try
@@ -151,11 +150,39 @@ public sealed class RoutingImportHandler : IImportTargetHandler
                     .OrderBy(l => l.Sequence)
                     .Select(l => new SaveRoutingOperationLine(l.Sequence, l.OperationId, l.MachineId, l.Duration, l.DurationUnit, l.Notes))
                     .ToList();
+
+                // Mevcut rota: ad (+ ürün) ile eşleşir. Ürün verilmişse ikisi de tutmalı;
+                // verilmemişse yalnız ada bakılır.
+                var existing = existingRoutings.FirstOrDefault(r =>
+                    string.Equals(r.Name?.Trim(), g.Name, StringComparison.OrdinalIgnoreCase)
+                    && (g.ItemId is null || r.ItemId == g.ItemId));
+
+                if (existing is not null)
+                {
+                    // KORUMA: rotanın operasyon listesi tamamen değiştirilir. Devam eden bir
+                    // iş emri bu rotayı kullanıyorsa adımları altından kayar — satır reddedilir.
+                    var openCount = await _workOrderRepo.CountOpenWorkOrdersByRoutingAsync(existing.Id, ct);
+                    if (openCount > 0)
+                    {
+                        failed++;
+                        results.Add(new ImportCommitRowDto(g.FirstRow, false, "error",
+                            $"Rota '{g.Name}' güncellenemedi: {openCount} açık iş emri bu rotayı kullanıyor.", existing.Id));
+                        continue;
+                    }
+
+                    var upd = new SaveRoutingRequest(existing.Id, existing.Code, g.Name, g.ItemId, existing.ConfigId,
+                        existing.Description, existing.IsActive, ops);
+                    await _routing.SaveAsync(upd, ct);
+                    updated++;
+                    results.Add(new ImportCommitRowDto(g.FirstRow, true, "update", null, existing.Id));
+                    continue;
+                }
+
                 var code = g.Name.Length > 50 ? g.Name[..50] : g.Name;
                 var req = new SaveRoutingRequest(0, code, g.Name, g.ItemId, null, null, true, ops);
-                await _routing.SaveAsync(req, ct);
+                var newId = await _routing.SaveAsync(req, ct);
                 inserted++;
-                results.Add(new ImportCommitRowDto(g.FirstRow, true, "insert", null, null));
+                results.Add(new ImportCommitRowDto(g.FirstRow, true, "insert", null, newId));
             }
             catch (Exception ex)
             {
@@ -165,7 +192,7 @@ public sealed class RoutingImportHandler : IImportTargetHandler
         }
 
         results = results.OrderBy(r => r.RowNumber).ToList();
-        return new ImportCommitResultDto(true, null, inserted, 0, failed, results);
+        return new ImportCommitResultDto(true, null, inserted, updated, failed, results);
     }
 
     private IReadOnlyList<string> ValidateRow(IReadOnlyDictionary<string, string?> row)
