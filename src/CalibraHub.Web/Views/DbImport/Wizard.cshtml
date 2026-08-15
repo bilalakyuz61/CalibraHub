@@ -1,0 +1,52 @@
+@{
+    ViewData["Title"] = "Veritabanı Aktarım Sihirbazı";
+    ViewData["FormCode"] = "DB_DATA_IMPORT";
+    ViewData["HelpKey"] = "db-data-import-wizard";
+    ViewData["BodyClass"] = "page-db-import";
+}
+
+@section Styles {
+<style>
+    .workspace-frame-body.page-db-import .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column; overflow: hidden; padding: 0;
+    }
+    #reactDbImportWizard { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; height: 100%; }
+</style>
+}
+
+<div id="reactDbImportWizard"></div>
+
+@section Scripts {
+<script>
+(function () {
+    var BUNDLE_URL = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL    = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
+    var el = document.getElementById('reactDbImportWizard');
+
+    function showError(msg) { if (el) el.innerHTML = '<div style="padding:24px;color:#dc2626;font-size:13px;">' + msg + '</div>'; }
+    function loadCss() {
+        if (document.querySelector('link[data-dbi-wz]')) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL; link.setAttribute('data-dbi-wz', '1');
+        document.head.appendChild(link);
+    }
+    function loadScript(cb) {
+        var prev = document.querySelector('script[data-dbi-wz]');
+        if (prev) { prev.addEventListener('load', cb); return; }
+        var s = document.createElement('script');
+        s.src = BUNDLE_URL; s.setAttribute('data-dbi-wz', '1');
+        s.onload = function () { setTimeout(cb, 0); };
+        s.onerror = function () { showError('React bundle yüklenemedi.'); };
+        document.head.appendChild(s);
+    }
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountDbImportWizard) { showError('mountDbImportWizard bulunamadı.'); return; }
+        window.CalibraHub.mountDbImportWizard(el);
+    }
+
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountDbImportWizard) doMount();
+    else loadScript(doMount);
+})();
+</script>
+}

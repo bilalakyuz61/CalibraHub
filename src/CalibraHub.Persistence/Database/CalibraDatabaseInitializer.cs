@@ -13558,6 +13558,7 @@ END;";
             // ── Genel (yetki kapsamına sonradan alınanlar — 2026-07-06) ─────
             ("CALENDAR",            "Takvim",                           "Genel",                null,                       15,   false),
             ("DATA_IMPORT",         "Veri Aktarımı",                    "Veri Aktarımı",        null,                       790,  false), // Excel/CSV içe aktarım
+            ("DB_DATA_IMPORT",      "Veritabanı Aktarımı",              "Veri Aktarımı",        null,                       791,  false), // Harici SQL kaynağından içe aktarım
         };
 
         foreach (var (code, name, module, subModule, sort, isWidgetForm) in forms)

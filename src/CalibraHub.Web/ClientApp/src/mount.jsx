@@ -41,6 +41,8 @@ import IntegrationWizard from './components/IntegrationWizard/IntegrationWizard'
 import IntegrationEndpointsList from './components/IntegrationWizard/IntegrationEndpointsList'
 import IntegrationsHub from './components/IntegrationWizard/IntegrationsHub'
 import DataImport from './components/DataImport/DataImport'
+import DbImportConnections from './components/DbImport/DbImportConnections'
+import DbImportWizard from './components/DbImport/DbImportWizard'
 import IntegrationQueue from './components/IntegrationWizard/IntegrationQueue'
 import './components/IntegrationWizard/IntegrationWizard.css'
 import RoutingTree from './components/RoutingTree/RoutingTree'
@@ -1604,6 +1606,52 @@ function mountDataImport(element) {
   return { unmount: function() { root.unmount(); mountedRoots.delete(element) } }
 }
 window.CalibraHub.mountDataImport = mountDataImport
+
+/**
+ * DbImport mount'ları — veritabanı üzerinden içe aktarım (2026-08-15).
+ * Kaynak bağlantıları ekranı + iş sihirbazı.
+ * @param {HTMLElement} element
+ */
+function mountDbImportConnections(element) {
+  if (!element || !(element instanceof Element) || !element.isConnected) {
+    return { unmount: function() {} }
+  }
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(DbImportConnections, null)
+    )
+  )
+  return { unmount: function() { root.unmount(); mountedRoots.delete(element) } }
+}
+window.CalibraHub.mountDbImportConnections = mountDbImportConnections
+
+/**
+ * @param {HTMLElement} element
+ */
+function mountDbImportWizard(element) {
+  if (!element || !(element instanceof Element) || !element.isConnected) {
+    return { unmount: function() {} }
+  }
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(DbImportWizard, null)
+    )
+  )
+  return { unmount: function() { root.unmount(); mountedRoots.delete(element) } }
+}
+window.CalibraHub.mountDbImportWizard = mountDbImportWizard
 
 /**
  * IntegrationQueue mount — Aktarım Kuyruğu sayfası.

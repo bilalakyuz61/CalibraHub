@@ -296,6 +296,10 @@ public static class MenuDefinition
             {
                 new("dataimport.run", isEn ? "Import / Templates" : "İçe Aktarım", "FileUp", "/Import", null,
                     MatchPath: "/Import", PermissionFormCode: FormCodes.DataImport),
+                // 2026-08-15: harici SQL kaynağından içe aktarım. Ayrı yetki (DB_DATA_IMPORT) —
+                // harici DB kimlik bilgisi saklar, kaynakta prosedür çalıştırabilir.
+                new("dataimport.db", isEn ? "Database Import" : "Veritabanı Aktarımı", "Database", "/DbImport", null,
+                    MatchPath: "/DbImport", PermissionFormCode: FormCodes.DbDataImport),
             }),
 
             // ────────────── 8. Tasarım / Design ──────────────

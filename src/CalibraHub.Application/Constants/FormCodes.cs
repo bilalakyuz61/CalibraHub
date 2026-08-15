@@ -227,6 +227,13 @@ public static class FormCodes
     public const string Calendar           = "CALENDAR";
     public const string DataImport         = "DATA_IMPORT";
 
+    /// <summary>
+    /// Veritabanı üzerinden içe aktarım (2026-08-15). Excel içe aktarımdan (<see cref="DataImport"/>)
+    /// AYRI bir yetkidir: harici DB kimlik bilgisi saklar ve kaynak DB'de prosedür
+    /// çalıştırabilir — dosya yüklemekten daha geniş bir erişimdir.
+    /// </summary>
+    public const string DbDataImport       = "DB_DATA_IMPORT";
+
     // ═══════════════════════════════════════════════════
     // Tüm sabitler (startup assertion için reflection alternatifi)
     // ═══════════════════════════════════════════════════
