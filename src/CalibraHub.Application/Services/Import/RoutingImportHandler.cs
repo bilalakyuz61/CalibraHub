@@ -36,14 +36,18 @@ public sealed class RoutingImportHandler : IImportTargetHandler
 
     public IReadOnlyList<ImportTargetFieldDto> GetFields() => new[]
     {
-        new ImportTargetFieldDto("RoutingName",   "Rota Adı",         "string",  true,  false, "Rotanın adı — aynı adlı satırlar tek rotada gruplanır (zorunlu)"),
-        new ImportTargetFieldDto("ItemCode",      "Stok Kodu",        "string",  false, false, "Bu rotanın bağlı olduğu stok kodu (opsiyonel)"),
+        new ImportTargetFieldDto("RoutingName",   "Rota Adı",         "string",  true,  true,  "Rotanın adı — aynı adlı satırlar tek rotada gruplanır (zorunlu)"),
+        new ImportTargetFieldDto("ItemCode",      "Stok Kodu",        "string",  false, true,  "Bu rotanın bağlı olduğu stok kodu (opsiyonel)"),
         new ImportTargetFieldDto("Sequence",      "Sıra No",          "decimal", true,  false, "Adımın sırası — aynı rota içinde benzersiz tamsayı (zorunlu)"),
         new ImportTargetFieldDto("OperationCode", "Operasyon Kodu",   "string",  true,  false, "Mevcut operasyon kodu (zorunlu)"),
         new ImportTargetFieldDto("MachineCode",   "Makine Kodu",      "string",  false, false, "Mevcut makine kodu (opsiyonel; verilirse eşleşmeli)"),
         new ImportTargetFieldDto("Duration",      "Süre",             "decimal", false, false, "Operasyon süresi (opsiyonel; operasyon varsayılanını ezer)"),
         new ImportTargetFieldDto("DurationUnit",  "Süre Birimi",      "string",  false, false, "Dk / Saat (boşsa Dk)", new[] { "Dk", "Saat" }),
         new ImportTargetFieldDto("Notes",         "Notlar",           "string",  false, false, "Operasyon adımına ait notlar (opsiyonel)"),
+        // Rota BAŞLIĞI alanları — grubun ilk satırından alınır (her satırda tekrar edilmesine gerek yok).
+        new ImportTargetFieldDto("Description",   "Rota Açıklaması",  "string",  false, false, "Rota başlığına ait açıklama (grubun ilk satırından alınır)"),
+        new ImportTargetFieldDto("Combination",   "Kombinasyon",      "string",  false, false, "Stok kombinasyon kodu (opsiyonel; verilirse eşleşmeli)"),
+        new ImportTargetFieldDto("IsActive",      "Aktif",            "bool",    false, false, "Evet / Hayır (boşsa Evet)", new[] { "Evet", "Hayır" }),
     };
 
     public async Task<ImportPreviewResultDto> PreviewAsync(ImportRowSet set, CancellationToken ct)
@@ -133,7 +137,28 @@ public sealed class RoutingImportHandler : IImportTargetHandler
             var groupKey = name + "||" + (itemCode ?? "");
             if (!groups.TryGetValue(groupKey, out var g))
             {
-                g = new RoutingGroup(rowNo, name, itemId, itemCode);
+                g = new RoutingGroup(rowNo, name, itemId, itemCode)
+                {
+                    Description = ImportParse.Get(row, "Description")?.Trim(),
+                    IsActive = string.IsNullOrWhiteSpace(ImportParse.Get(row, "IsActive"))
+                                   || ImportParse.ParseBool(ImportParse.Get(row, "IsActive")),
+                };
+
+                // Kombinasyon verilmişse Id'ye çözülür; bulunamazsa satır reddedilir
+                // (sessizce null'a düşerse rota yanlış kombinasyona bağlanır).
+                var comboRaw = ImportParse.Get(row, "Combination")?.Trim();
+                if (!string.IsNullOrWhiteSpace(comboRaw))
+                {
+                    if (string.IsNullOrWhiteSpace(itemCode))
+                    { results.Add(Fail(rowNo, "Kombinasyon için stok kodu da gerekli.")); failed++; continue; }
+
+                    var combos = await _itemRepo.GetCombinationsByMaterialCodeAsync(itemCode, ct);
+                    var hit = combos.FirstOrDefault(c => string.Equals(c.Code?.Trim(), comboRaw, StringComparison.OrdinalIgnoreCase));
+                    if (hit is null)
+                    { results.Add(Fail(rowNo, $"Kombinasyon bulunamadı: '{comboRaw}' ({itemCode})")); failed++; continue; }
+                    g.ConfigId = hit.ConfigId;
+                }
+
                 groups[groupKey] = g;
             }
             g.Lines.Add(new RoutingLine((int)seqRaw.Value, op.Id, machineId, dur, durUnit, notes));
@@ -170,8 +195,11 @@ public sealed class RoutingImportHandler : IImportTargetHandler
                         continue;
                     }
 
-                    var upd = new SaveRoutingRequest(existing.Id, existing.Code, g.Name, g.ItemId, existing.ConfigId,
-                        existing.Description, existing.IsActive, ops);
+                    // Eşlenmemiş başlık alanı mevcut değerini korur.
+                    var upd = new SaveRoutingRequest(existing.Id, existing.Code, g.Name, g.ItemId,
+                        g.ConfigId ?? existing.ConfigId,
+                        g.Description ?? existing.Description,
+                        g.IsActive, ops);
                     await _routing.SaveAsync(upd, ct);
                     updated++;
                     results.Add(new ImportCommitRowDto(g.FirstRow, true, "update", null, existing.Id));
@@ -179,7 +207,7 @@ public sealed class RoutingImportHandler : IImportTargetHandler
                 }
 
                 var code = g.Name.Length > 50 ? g.Name[..50] : g.Name;
-                var req = new SaveRoutingRequest(0, code, g.Name, g.ItemId, null, null, true, ops);
+                var req = new SaveRoutingRequest(0, code, g.Name, g.ItemId, g.ConfigId, g.Description, g.IsActive, ops);
                 var newId = await _routing.SaveAsync(req, ct);
                 inserted++;
                 results.Add(new ImportCommitRowDto(g.FirstRow, true, "insert", null, newId));
@@ -244,6 +272,12 @@ public sealed class RoutingImportHandler : IImportTargetHandler
         public int? ItemId { get; } = itemId;
         public string? ItemCode { get; } = itemCode;
         public List<RoutingLine> Lines { get; } = new();
+
+        // Rota başlığı alanları — grubun İLK satırından alınır; sonraki satırlarda
+        // tekrar edilmiş olsalar bile yok sayılır (bir rotanın tek başlığı vardır).
+        public string? Description { get; set; }
+        public int? ConfigId { get; set; }
+        public bool IsActive { get; set; } = true;
     }
 
     private sealed record RoutingLine(int Sequence, int OperationId, int? MachineId, decimal? Duration, DurationUnit DurationUnit, string? Notes);
