@@ -30,6 +30,17 @@ public sealed class StockBalanceImportHandler : IImportTargetHandler
 {
     private const int PreviewDetailLimit = 500;
 
+    /// <summary>
+    /// Bu handler'ın ürettiği sayım fişlerinin <c>RefNo</c>'su. Aktarım öncesi temizlik
+    /// prosedürü otomatik fişleri elle yapılan sayımlardan bununla ayırır.
+    ///
+    /// UYARI: yansıtılmış bir sayımın fark satırları silinirse BAKİYE GERİ DÖNER. Silme
+    /// yalnız aynı turun ön prosedüründe anlamlıdır (aktarım mutlak olduğu için bakiyeyi
+    /// hemen ardından yeniden kurar). Ön prosedür kendi transaction'ındadır — aktarım
+    /// sonradan patlarsa silme GERİ ALINMAZ.
+    /// </summary>
+    public const string AutoBalanceRefNo = "AUTO-BALANCE-SYNC";
+
     private readonly IStockDocRepository _stockDoc;
     private readonly ILogisticsConfigurationRepository _configRepo;
     private readonly IInventoryCountRepository _counts;
@@ -192,7 +203,11 @@ public sealed class StockBalanceImportHandler : IImportTargetHandler
                 var req = new SaveStockDocRequest(
                     Id: null, DocType: "INVENTORY_COUNT", DocNo: null, DocDate: g.Date,
                     FromLocationId: g.LocationId, ToLocationId: null,
-                    RefNo: null, Notes: "Bakiye aktarımı (otomatik)", Lines: lines, ArgeProjectId: null);
+                    // RefNo sabit işaret: temizlik prosedürü otomatik fişleri elle yapılan
+                    // sayımlardan ayırt edip YALNIZ bunları hedefleyebilsin
+                    // (WHERE RefNo = 'AUTO-BALANCE-SYNC'). Not alanı bu iş için zayıf.
+                    RefNo: AutoBalanceRefNo, Notes: "Bakiye aktarımı (otomatik)",
+                    Lines: lines, ArgeProjectId: null);
 
                 var (docId, _) = await _stockDoc.SaveAsync(req, userId, ct);
 
