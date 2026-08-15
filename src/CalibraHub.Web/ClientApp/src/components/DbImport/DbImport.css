@@ -111,7 +111,18 @@ body.app-theme-dark .dbi-root {
 .dbi-btn--xs { padding: 4px 8px; font-size: 11px; }
 
 /* ── Gövde ────────────────────────────────────────────────────────── */
-.dbi-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 16px 18px; }
+/* Flex kolon: son kart kalan yüksekliği DOLDURABİLSİN (.dbi-card--grow).
+   Sabit yükseklikli tablo kutusu yüksek ekranlarda altta ölü boşluk bırakıyordu. */
+.dbi-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+}
+/* Kartlar flex çocuğu olunca içeriğe göre küçülmesin. */
+.dbi-body > .dbi-card { flex: 0 0 auto; }
 
 .dbi-card {
     background: var(--dbi-surface);
@@ -121,6 +132,14 @@ body.app-theme-dark .dbi-root {
     margin-bottom: 12px;
 }
 .dbi-card-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+
+/* Kalan yüksekliği dolduran kart — içindeki tablo kutusu da onunla büyür.
+   min-height:0 ZORUNLU: olmadan flex çocuğu içeriğinden küçülemez ve
+   iç kaydırma yerine gövde taşar. */
+/* Seçici `.dbi-body > .dbi-card` (iki sınıf) ile AYNI özgüllükte olmalı —
+   aksi halde oradaki `flex: 0 0 auto` bunu ezer ve kart büyümez. */
+.dbi-body > .dbi-card--grow { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.dbi-card--grow > .dbi-table-wrap { flex: 1 1 auto; min-height: 0; }
 
 .dbi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 

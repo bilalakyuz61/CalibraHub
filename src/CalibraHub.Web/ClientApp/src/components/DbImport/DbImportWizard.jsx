@@ -374,7 +374,7 @@ export default function DbImportWizard() {
               </div>
             </div>
 
-            <div className="dbi-card">
+            <div className="dbi-card dbi-card--grow">
               <div className="dbi-card-title">Kaynak Tablo / View</div>
               <div className="dbi-search" style={{ marginBottom: 10 }}>
                 <Search size={14} />
@@ -385,7 +385,7 @@ export default function DbImportWizard() {
                 <div className="dbi-hint">Okunabilir tablo/view bulunamadı.</div>
               )}
               {filteredObjects.length > 0 && (
-                <div className="dbi-table-wrap" style={{ maxHeight: 320, overflowY: 'auto' }}>
+                <div className="dbi-table-wrap" style={{ overflowY: 'auto' }}>
                   <table className="dbi-table">
                     <thead>
                       <tr><th>Şema</th><th>Ad</th><th>Tür</th><th /></tr>
@@ -480,7 +480,7 @@ export default function DbImportWizard() {
               )}
             </div>
 
-            <div className="dbi-card">
+            <div className="dbi-card dbi-card--grow">
               <div className="dbi-card-title" style={{ display: 'flex', alignItems: 'center' }}>
                 <span>Kolon Eşleme</span>
                 <div className="dbi-header-spacer" />
@@ -497,7 +497,7 @@ export default function DbImportWizard() {
               {!job.targetEntity && <div className="dbi-hint">Önce hedef kayıt türünü seçin.</div>}
 
               {job.targetEntity && targetFields.length > 0 && (
-                <div className="dbi-table-wrap" style={{ maxHeight: 420, overflowY: 'auto' }}>
+                <div className="dbi-table-wrap" style={{ overflowY: 'auto' }}>
                   <table className="dbi-table">
                     <thead>
                       <tr><th>Hedef Alan</th><th>Kaynak Kolon</th><th style={{ textAlign: 'center' }}>Anahtar</th><th>Tür</th></tr>
@@ -652,7 +652,7 @@ export default function DbImportWizard() {
                 )}
 
                 {preview.preview.rows && preview.preview.rows.length > 0 && (
-                  <div className="dbi-table-wrap" style={{ maxHeight: 380, overflowY: 'auto' }}>
+                  <div className="dbi-table-wrap" style={{ overflowY: 'auto', maxHeight: '48vh' }}>
                     <table className="dbi-table">
                       <thead>
                         <tr>
