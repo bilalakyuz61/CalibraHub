@@ -112,7 +112,7 @@ public abstract class RowImportHandlerBase : IImportTargetHandler
     public async Task<ImportCommitResultDto> CommitAsync(ImportRowSet set, int? userId, CancellationToken ct)
     {
         await PreloadAsync(ct);
-        int inserted = 0, updated = 0, failed = 0, rowNo = 0;
+        int inserted = 0, updated = 0, failed = 0, skipped = 0, rowNo = 0;
         var results = new List<ImportCommitRowDto>();
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -125,13 +125,29 @@ public abstract class RowImportHandlerBase : IImportTargetHandler
             try
             {
                 var (action, existingId) = await ResolveActionAsync(row, set.MatchKeyFields, ct);
+
+                // İş politikası: ekleme/güncelleme kapalıysa satır YAZILMAZ ama
+                // "hata" da değildir — açıkça atlandı olarak raporlanır.
+                if (action == "update" && !set.UpdateExisting)
+                {
+                    skipped++;
+                    results.Add(new ImportCommitRowDto(rowNo, true, "skip", "Mevcut kayıt — güncelleme kapalı.", existingId));
+                    continue;
+                }
+                if (action == "insert" && !set.InsertNew)
+                {
+                    skipped++;
+                    results.Add(new ImportCommitRowDto(rowNo, true, "skip", "Yeni kayıt — ekleme kapalı.", null));
+                    continue;
+                }
+
                 var (ok, err, id) = await CommitRowAsync(row, action, existingId, userId, used, ct);
                 if (ok) { if (action == "update") updated++; else inserted++; results.Add(new ImportCommitRowDto(rowNo, true, action, null, id)); }
                 else { failed++; results.Add(new ImportCommitRowDto(rowNo, false, action, err ?? "Bilinmeyen hata", null)); }
             }
             catch (Exception ex) { failed++; results.Add(new ImportCommitRowDto(rowNo, false, "error", ex.Message, null)); }
         }
-        return new ImportCommitResultDto(true, null, inserted, updated, failed, results);
+        return new ImportCommitResultDto(true, null, inserted, updated, failed, results, skipped);
     }
 
     /// <summary>Varsayılan: dinamik izinli değer yok. Lookup'lu handler (ContactPerson) override eder.</summary>

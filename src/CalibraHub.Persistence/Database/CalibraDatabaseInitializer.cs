@@ -8274,6 +8274,19 @@ END;";
                         CONSTRAINT [DF_DataImportJob_DeactAbsent] DEFAULT(0);
             END;
 
+            IF COL_LENGTH(N'[{s}].[DataImportJob]', 'UpdateExisting') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[DataImportJob]
+                    ADD [UpdateExisting] BIT NOT NULL CONSTRAINT [DF_DataImportJob_UpdExist] DEFAULT(1),
+                        [InsertNew]      BIT NOT NULL CONSTRAINT [DF_DataImportJob_InsNew]   DEFAULT(1);
+            END;
+
+            IF COL_LENGTH(N'[{s}].[DataImportRun]', 'RowsSkipped') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[DataImportRun]
+                    ADD [RowsSkipped] INT NOT NULL CONSTRAINT [DF_DataImportRun_Skipped] DEFAULT(0);
+            END;
+
             IF COL_LENGTH(N'[{s}].[DataImportRun]', 'RowsDeactivated') IS NULL
             BEGIN
                 ALTER TABLE [{s}].[DataImportRun]

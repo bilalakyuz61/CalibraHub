@@ -99,4 +99,6 @@ public sealed record ImportCommitResultDto(
     int Inserted,
     int Updated,
     int Failed,
-    IReadOnlyList<ImportCommitRowDto> Rows);
+    IReadOnlyList<ImportCommitRowDto> Rows,
+    /// <summary>İş politikası gereği atlanan satır (ekleme/güncelleme kapalı).</summary>
+    int Skipped = 0);

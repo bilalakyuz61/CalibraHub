@@ -100,6 +100,8 @@ export default function DbImportWizard() {
     maxRows: 50000,
     sourceFilterJson: '',
     deactivateAbsent: false,
+    updateExisting: true,
+    insertNew: true,
     errorBehavior: 0,
     preProcedureName: '',
     preProcedureTarget: 0,
@@ -139,6 +141,8 @@ export default function DbImportWizard() {
               postProcedureTarget: normalizeEnum(j.postProcedureTarget, PROC_TARGET_NUM),
               sourceFilterJson: j.sourceFilterJson || '',
               deactivateAbsent: !!j.deactivateAbsent,
+              updateExisting: j.updateExisting !== false,
+              insertNew: j.insertNew !== false,
               preProcedureName: j.preProcedureName || '',
               preProcedureParamsJson: j.preProcedureParamsJson || '',
               postProcedureName: j.postProcedureName || '',
@@ -257,7 +261,9 @@ export default function DbImportWizard() {
   }
 
   const step1Ok = job.connectionId > 0 && !!job.sourceObject && !!job.name.trim()
+  // Ekleme ve güncelleme birlikte kapalıysa aktarım hiçbir şey yazmaz — ilerlemeyi engelle.
   const step2Ok = job.targetEntity && job.columns.length > 0 && matchKeyMapped
+    && (job.insertNew !== false || job.updateExisting !== false)
 
   async function save() {
     setBusy(true); setError(null)
@@ -430,6 +436,20 @@ export default function DbImportWizard() {
                   <span className="dbi-switch-track"><span className="dbi-switch-thumb" /></span>
                   <span>Kaynakta olmayanı pasife al</span>
                 </label>
+                {/* Yazma politikası: hangi satırın yazılacağını iş tanımı belirler. */}
+                <label className="dbi-switch" style={{ paddingBottom: 6 }}>
+                  <input type="checkbox" checked={job.insertNew !== false}
+                         onChange={(e) => setJob({ ...job, insertNew: e.target.checked })} />
+                  <span className="dbi-switch-track"><span className="dbi-switch-thumb" /></span>
+                  <span>Yeni kayıt ekle</span>
+                </label>
+                <label className="dbi-switch" style={{ paddingBottom: 6 }}>
+                  <input type="checkbox" checked={job.updateExisting !== false}
+                         onChange={(e) => setJob({ ...job, updateExisting: e.target.checked })} />
+                  <span className="dbi-switch-track"><span className="dbi-switch-thumb" /></span>
+                  <span>Mevcudu güncelle</span>
+                </label>
+
                 {/* Kısıt kuralları modalda — kural yokken ekranda yer kaplamasın. */}
                 <button type="button" className="dbi-btn" style={{ marginBottom: 2 }}
                         onClick={() => setFilterModal(true)} disabled={!sourceColumns.length}>
@@ -444,6 +464,11 @@ export default function DbImportWizard() {
                 <div className="dbi-alert dbi-alert--warn" style={{ marginTop: 10, marginBottom: 0 }}>
                   <AlertTriangle size={13} /> Bu kayıt türü güncelleme desteklemiyor — her çalıştırma yeni
                   kayıt açar, anahtar alan mükerrer oluşmasını engellemez. Zamanlanmış göreve bağlamayın.
+                </div>
+              )}
+              {job.insertNew === false && job.updateExisting === false && (
+                <div className="dbi-alert dbi-alert--err" style={{ marginTop: 10, marginBottom: 0 }}>
+                  <AlertTriangle size={13} /> Ekleme ve güncelleme birlikte kapalı — aktarım hiçbir şey yazmaz.
                 </div>
               )}
               {job.deactivateAbsent && (
@@ -682,6 +707,12 @@ export default function DbImportWizard() {
                   <div className="dbi-stat dbi-stat--ok"><div className="dbi-stat-label">Eklenen</div><div className="dbi-stat-value">{runResult.run.rowsInserted}</div></div>
                   <div className="dbi-stat dbi-stat--ok"><div className="dbi-stat-label">Güncellenen</div><div className="dbi-stat-value">{runResult.run.rowsUpdated}</div></div>
                   <div className="dbi-stat dbi-stat--err"><div className="dbi-stat-label">Hatalı</div><div className="dbi-stat-value">{runResult.run.rowsFailed}</div></div>
+                  {runResult.run.rowsSkipped > 0 && (
+                    <div className="dbi-stat">
+                      <div className="dbi-stat-label">Atlanan</div>
+                      <div className="dbi-stat-value">{runResult.run.rowsSkipped}</div>
+                    </div>
+                  )}
                   {runResult.run.rowsDeactivated > 0 && (
                     <div className="dbi-stat dbi-stat--warn">
                       <div className="dbi-stat-label">Pasife Alınan</div>
@@ -768,14 +799,38 @@ export default function DbImportWizard() {
               </button>
             </div>
             <div className="dbi-modal-body">
-              <div className="dbi-hint" style={{ marginBottom: 10 }}>
-                Kaynak view bu değerlerden birini üretmeli.
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {(valuesField.allowedValues || []).map((v) => (
-                  <span key={v} className="dbi-key-pill dbi-mono">{v}</span>
-                ))}
-              </div>
+              {valuesField.dataType === 'bool' ? (
+                <>
+                  {/* Evet/Hayır listesi Excel şablonu içindir. DB aktarımında kaynaktaki
+                      BIT kolon okuyucudan "1"/"0" olarak gelir ve doğrudan çalışır —
+                      burada parser'ın gerçekte kabul ettiği küme gösterilir. */}
+                  <div className="dbi-hint" style={{ marginBottom: 8 }}>
+                    Kaynaktaki <strong>BIT</strong> kolon doğrudan çalışır — dönüştürmeye gerek yok.
+                  </div>
+                  <div className="dbi-label" style={{ marginBottom: 6 }}>EVET sayılan değerler</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                    {['1', 'true', 'evet', 'e', 'x', 'var', 'yes', '✓'].map((v) => (
+                      <span key={v} className="dbi-key-pill dbi-mono">{v}</span>
+                    ))}
+                  </div>
+                  <div className="dbi-alert dbi-alert--warn" style={{ marginBottom: 0 }}>
+                    <AlertTriangle size={13} /> Bunların dışındaki <strong>her değer</strong>
+                    {' '}(0, false, hayır, boş, tanınmayan metin) <strong>HAYIR</strong> sayılır — hata verilmez.
+                    Kaynak farklı bir gösterim kullanıyorsa view'da dönüştürün.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="dbi-hint" style={{ marginBottom: 10 }}>
+                    Kaynak view bu değerlerden birini üretmeli.
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {(valuesField.allowedValues || []).map((v) => (
+                      <span key={v} className="dbi-key-pill dbi-mono">{v}</span>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
             <div className="dbi-modal-foot">
               <button type="button" className="dbi-btn dbi-btn--primary" onClick={() => setValuesField(null)}>

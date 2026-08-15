@@ -42,6 +42,18 @@ public sealed class DataImportJob
     /// <summary>Hata mesajları/gösterim için ilk anahtar.</summary>
     public string? MatchKeyField => MatchKeyFields.Count > 0 ? MatchKeyFields[0] : null;
 
+    /// <summary>
+    /// Eşleşen MEVCUT kayıt güncellensin mi? Kapatılırsa aktarım yalnız yeni kayıt açar —
+    /// CalibraHub'da elle yapılan düzeltmeler kaynak tarafından ezilmez.
+    /// </summary>
+    public bool UpdateExisting { get; set; } = true;
+
+    /// <summary>
+    /// Eşleşmeyen satır için YENİ kayıt açılsın mı? Kapatılırsa aktarım yalnız mevcutları
+    /// günceller — kaynakta olup CalibraHub'da olmayan kayıtlar oluşturulmaz.
+    /// </summary>
+    public bool InsertNew { get; set; } = true;
+
     /// <summary>Tek çalıştırmada okunacak azami satır (emniyet tavanı).</summary>
     public int MaxRows { get; set; } = 50_000;
 
@@ -100,6 +112,8 @@ public sealed class DataImportJob
         if (string.IsNullOrWhiteSpace(SourceObject)) return "Kaynak tablo/view seçilmelidir.";
         if (MatchKeyFields.Count == 0) return "Anahtar alan zorunludur — anahtarsız aktarım her çalıştırmada kayıtları çoğaltır.";
         if (Columns.Count == 0) return "En az bir kolon eşlemesi tanımlanmalıdır.";
+        if (!UpdateExisting && !InsertNew)
+            return "Ekleme ve güncelleme birlikte kapatılamaz — aktarım hiçbir şey yazmaz.";
 
         // Her anahtar alan eşlenmiş olmalı — aksi halde o anahtar satırlarda hiç bulunmaz
         // ve bileşik eşleşme sessizce hep başarısız olur (her satır insert'e döner).

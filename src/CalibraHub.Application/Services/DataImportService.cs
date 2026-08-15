@@ -239,6 +239,8 @@ public sealed class DataImportService : IDataImportService
             MaxRows = req.MaxRows <= 0 ? 50_000 : req.MaxRows,
             SourceFilterJson = Blank(req.SourceFilterJson),
             DeactivateAbsent = req.DeactivateAbsent,
+            UpdateExisting = req.UpdateExisting,
+            InsertNew = req.InsertNew,
             ErrorBehavior = req.ErrorBehavior,
             PreProcedureName = Blank(req.PreProcedureName),
             PreProcedureTarget = req.PreProcedureTarget,
@@ -387,6 +389,7 @@ public sealed class DataImportService : IDataImportService
             run.RowsInserted = commit.Inserted;
             run.RowsUpdated = commit.Updated;
             run.RowsFailed = commit.Failed;
+            run.RowsSkipped = commit.Skipped;
             if (!commit.Success)
             {
                 run.ErrorMessage = commit.Error;
@@ -502,7 +505,7 @@ public sealed class DataImportService : IDataImportService
         }
 
         var mappedKeys = columns.Select(c => c.TargetKey).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        return new ImportRowSet(rows, mappedKeys, job.MatchKeyFields);
+        return new ImportRowSet(rows, mappedKeys, job.MatchKeyFields, job.UpdateExisting, job.InsertNew);
     }
 
     private async Task<DataImportRunResultDto> FinishAsync(
@@ -528,7 +531,7 @@ public sealed class DataImportService : IDataImportService
 
     private static DataImportJobDto ToDto(DataImportJob j, string? connectionName) => new(
         j.Id, j.Name, j.ConnectionId, connectionName, j.TargetEntity, null,
-        j.SourceSchema, j.SourceObject, j.MatchKeyFields, j.MaxRows, j.SourceFilterJson, j.DeactivateAbsent, j.ErrorBehavior,
+        j.SourceSchema, j.SourceObject, j.MatchKeyFields, j.MaxRows, j.SourceFilterJson, j.DeactivateAbsent, j.UpdateExisting, j.InsertNew, j.ErrorBehavior,
         j.PreProcedureName, j.PreProcedureTarget, j.PreProcedureParamsJson,
         j.PostProcedureName, j.PostProcedureTarget, j.PostProcedureParamsJson,
         j.Columns.OrderBy(c => c.SortOrder)
@@ -538,6 +541,6 @@ public sealed class DataImportService : IDataImportService
 
     private static DataImportRunDto ToDto(DataImportRun r, string? jobName) => new(
         r.Id, r.JobId, jobName, r.TriggerType, r.StartedAt, r.FinishedAt, r.DurationMs,
-        r.Status, r.RowsRead, r.RowsInserted, r.RowsUpdated, r.RowsFailed, r.RowsDeactivated,
+        r.Status, r.RowsRead, r.RowsInserted, r.RowsUpdated, r.RowsFailed, r.RowsDeactivated, r.RowsSkipped,
         r.ErrorMessage, r.PreProcedureResult, r.PostProcedureResult, r.TriggeredBy);
 }

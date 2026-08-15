@@ -11,7 +11,11 @@ namespace CalibraHub.Application.Abstractions.Services;
 public sealed record ImportRowSet(
     IReadOnlyList<IReadOnlyDictionary<string, string?>> Rows,
     IReadOnlyList<string> MappedKeys,
-    IReadOnlyList<string> MatchKeyFields)
+    IReadOnlyList<string> MatchKeyFields,
+    /// <summary>Eşleşen mevcut kayıt GÜNCELLENSİN mi? false ise satır atlanır.</summary>
+    bool UpdateExisting = true,
+    /// <summary>Eşleşmeyen satır için YENİ kayıt açılsın mı? false ise satır atlanır.</summary>
+    bool InsertNew = true)
 {
     /// <summary>Tek anahtarlı çağrı kolaylığı (Excel şablonları ve eski kod yolu).</summary>
     public ImportRowSet(

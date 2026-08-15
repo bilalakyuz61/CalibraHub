@@ -32,6 +32,9 @@ public sealed class DataImportRun
     /// <summary>Kaynakta bulunmadığı için pasife alınan kayıt sayısı (politika açıkken).</summary>
     public int RowsDeactivated { get; set; }
 
+    /// <summary>İş politikası gereği atlanan satır (ekleme/güncelleme kapalı).</summary>
+    public int RowsSkipped { get; set; }
+
     /// <summary>Aktarımı durduran hata (varsa).</summary>
     public string? ErrorMessage { get; set; }
 
