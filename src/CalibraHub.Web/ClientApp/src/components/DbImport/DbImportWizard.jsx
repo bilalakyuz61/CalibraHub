@@ -405,6 +405,14 @@ export default function DbImportWizard() {
                     <option value="">— Seçiniz —</option>
                     {entities.map((e) => <option key={e.entity} value={e.entity}>{e.label}</option>)}
                   </select>
+                  {/* Insert-only handler: anahtar alan yok sayılır, tekrar çalıştırma mükerrer üretir. */}
+                  {job.targetEntity && entities.find((e) => e.entity === job.targetEntity)?.supportsUpsert === false && (
+                    <div className="dbi-alert dbi-alert--warn" style={{ marginTop: 8, marginBottom: 0 }}>
+                      <AlertTriangle size={13} /> Bu kayıt türü güncelleme desteklemiyor — her çalıştırma
+                      yeni kayıt açar. Anahtar alan mükerrer oluşmasını <strong>engellemez</strong>.
+                      Tek seferlik aktarım için kullanın, zamanlanmış göreve bağlamayın.
+                    </div>
+                  )}
                 </div>
                 <div className="dbi-field">
                   <span className="dbi-label">Azami Satır</span>

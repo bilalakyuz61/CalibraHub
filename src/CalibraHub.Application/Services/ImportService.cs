@@ -34,7 +34,7 @@ public sealed class ImportService : IImportService
 
     // ── Entity + alan kataloğu ───────────────────────────────────────────
     public IReadOnlyList<ImportEntityDto> GetEntities()
-        => _handlerList.Select(h => new ImportEntityDto(h.Entity, h.Label)).ToList();
+        => _handlerList.Select(h => new ImportEntityDto(h.Entity, h.Label, h.SupportsUpsert)).ToList();
 
     public IReadOnlyList<ImportTargetFieldDto> GetTargetFields(string targetEntity)
         => ResolveHandler(targetEntity)?.GetFields() ?? Array.Empty<ImportTargetFieldDto>();

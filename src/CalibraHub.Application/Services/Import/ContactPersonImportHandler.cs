@@ -23,6 +23,12 @@ public sealed class ContactPersonImportHandler : RowImportHandlerBase
     public override string Entity => "CONTACT_PERSON";
     public override string Label => "Cari İletişim Kişisi";
 
+    /// <summary>
+    /// Her satır DAİMA yeni kişi açar — ResolveActionAsync sabit "insert" döner.
+    /// Aynı iş tekrar çalıştırılırsa kişiler mükerrer oluşur.
+    /// </summary>
+    public override bool SupportsUpsert => false;
+
     public override IReadOnlyList<ImportTargetFieldDto> GetFields() => new[]
     {
         // MaxLength'ler ContactPerson tablosu NVARCHAR uzunluklarıyla birebir.

@@ -27,6 +27,19 @@ public interface IImportTargetHandler
     /// <summary>Bu entity için eşlenebilir hedef alan kataloğu.</summary>
     IReadOnlyList<ImportTargetFieldDto> GetFields();
 
+    /// <summary>
+    /// Handler eşleşme anahtarına göre GÜNCELLEME yapabiliyor mu? false ise her satır
+    /// DAİMA yeni kayıt açar — <c>MatchKeyField</c> yok sayılır.
+    ///
+    /// Excel'de (tek seferlik, elle tetiklenen) bu kabul edilebilir; veritabanı aktarımı
+    /// cron ile tekrar tekrar çalıştığı için aynı iş her turda MÜKERRER kayıt üretir.
+    /// Bu bayrak yanlış olursa kullanıcı zorunlu-anahtar kuralının koruduğunu sanır ama
+    /// korumaz — bu yüzden varsayılan true DEĞİL, her handler bilinçli belirtmelidir.
+    /// Varsayılan true bırakıldı ki mevcut upsert'li handler'lar davranış değiştirmesin;
+    /// insert-only olanlar açıkça false döner.
+    /// </summary>
+    bool SupportsUpsert => true;
+
     /// <summary>Satırları doğrula (kayıt YAZMAZ) — insert/update/error dağılımı + örnek satırlar.</summary>
     Task<ImportPreviewResultDto> PreviewAsync(ImportRowSet set, CancellationToken ct);
 

@@ -23,6 +23,12 @@ public sealed class InventoryCountImportHandler : IImportTargetHandler
     public string Entity => "INVENTORY_COUNT";
     public string Label => "Sayım (Envanter)";
 
+    /// <summary>
+    /// Her çalıştırma yeni SAYIM FİŞİ üretir — sayımın doğası gereği böyledir
+    /// (bir sayım geçmiş sayımı güncellemez), ama tekrar çalıştırma fiş çoğaltır.
+    /// </summary>
+    public bool SupportsUpsert => false;
+
     public IReadOnlyList<ImportTargetFieldDto> GetFields() => new[]
     {
         new ImportTargetFieldDto("LocationCode", "Lokasyon Kodu",  "string",  true,  false, "Sayımın yapıldığı depo/raf kodu (zorunlu) — her lokasyon ayrı sayım belgesi"),

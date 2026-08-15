@@ -17,6 +17,13 @@ public abstract class RowImportHandlerBase : IImportTargetHandler
     public abstract string Label { get; }
     public abstract IReadOnlyList<ImportTargetFieldDto> GetFields();
 
+    /// <summary>
+    /// Arayüz eşleşmesi BU sınıfta kurulduğu için burada tanımlı olmalı — türetilmiş
+    /// sınıfta `public bool SupportsUpsert` yazmak arayüz slotunu DEĞİŞTİRMEZ, arayüzün
+    /// varsayılanı (true) kullanılmaya devam eder. Insert-only handler'lar override eder.
+    /// </summary>
+    public virtual bool SupportsUpsert => true;
+
     /// <summary>Tek satırın doğrulama hataları (boş = geçerli).</summary>
     protected abstract IReadOnlyList<string> ValidateRow(IReadOnlyDictionary<string, string?> row);
 

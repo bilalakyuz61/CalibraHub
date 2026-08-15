@@ -6,7 +6,11 @@ namespace CalibraHub.Application.Contracts;
 // ════════════════════════════════════════════════════════════════════════
 
 // ── İçe aktarım yapılabilen hedef entity'ler (handler başına) ─────────────
-public sealed record ImportEntityDto(string Entity, string Label);
+/// <param name="SupportsUpsert">
+/// false ise handler her satırda YENİ kayıt açar (eşleşme anahtarı yok sayılır) —
+/// tekrar çalıştırılan veritabanı aktarımında mükerrer üretir.
+/// </param>
+public sealed record ImportEntityDto(string Entity, string Label, bool SupportsUpsert = true);
 
 // ── Hedef alan kataloğu (handler başına) ──────────────────────────────────
 public sealed record ImportTargetFieldDto(

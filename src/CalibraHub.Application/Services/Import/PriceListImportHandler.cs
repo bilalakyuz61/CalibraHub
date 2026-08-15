@@ -28,6 +28,12 @@ public sealed class PriceListImportHandler : RowImportHandlerBase
     public override string Entity => "PRICELIST";
     public override string Label => "Fiyat Listesi";
 
+    /// <summary>
+    /// Her satır DAİMA yeni fiyat kaydı açar (SavePriceListRequest.Id = null).
+    /// Aynı iş tekrar çalıştırılırsa fiyat satırları mükerrer oluşur.
+    /// </summary>
+    public override bool SupportsUpsert => false;
+
     public override IReadOnlyList<ImportTargetFieldDto> GetFields() => new[]
     {
         new ImportTargetFieldDto("ItemCode",  "Stok Kodu",            "string",  true,  false, "Fiyatı girilecek stok kartının kodu (zorunlu)"),

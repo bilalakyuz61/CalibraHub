@@ -29,6 +29,12 @@ public sealed class RoutingImportHandler : IImportTargetHandler
 
     public string Entity => "ROUTING";
     public string Label => "Rota (Routing)";
+
+    /// <summary>
+    /// Her grup DAİMA yeni rota açar (SaveRoutingRequest.Id = 0).
+    /// Aynı iş tekrar çalıştırılırsa rotalar mükerrer oluşur.
+    /// </summary>
+    public bool SupportsUpsert => false;
     public Task PreloadAsync(CancellationToken ct) => Task.CompletedTask;
 
     public IReadOnlyList<ImportTargetFieldDto> GetFields() => new[]
