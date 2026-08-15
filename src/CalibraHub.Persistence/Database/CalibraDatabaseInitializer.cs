@@ -8205,6 +8205,83 @@ END;";
                     ON [{s}].[ExternalDbConnection]([Name])
                     WHERE [IsActive] = 1;
             END;
+
+            IF OBJECT_ID(N'[{s}].[DataImportJob]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[DataImportJob]
+                (
+                    [Id]                      INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_DataImportJob] PRIMARY KEY,
+                    [Name]                    NVARCHAR(200) NOT NULL,
+                    [ConnectionId]            INT           NOT NULL,
+                    [TargetEntity]            NVARCHAR(50)  NOT NULL,
+                    [SourceSchema]            NVARCHAR(128) NOT NULL CONSTRAINT [DF_DataImportJob_Schema]    DEFAULT(N'dbo'),
+                    [SourceObject]            NVARCHAR(200) NOT NULL,
+                    -- Anahtar alan ZORUNLU: bu is elle/cron ile tekrar calisir, anahtarsiz
+                    -- aktarim her turda kayitlari cogaltir.
+                    [MatchKeyField]           NVARCHAR(100) NOT NULL,
+                    [MaxRows]                 INT           NOT NULL CONSTRAINT [DF_DataImportJob_MaxRows]   DEFAULT(50000),
+                    [ErrorBehavior]           INT           NOT NULL CONSTRAINT [DF_DataImportJob_ErrBeh]    DEFAULT(0),
+                    [PreProcedureName]        NVARCHAR(200) NULL,
+                    [PreProcedureTarget]      INT           NOT NULL CONSTRAINT [DF_DataImportJob_PreTgt]    DEFAULT(0),
+                    [PreProcedureParamsJson]  NVARCHAR(MAX) NULL,
+                    [PostProcedureName]       NVARCHAR(200) NULL,
+                    [PostProcedureTarget]     INT           NOT NULL CONSTRAINT [DF_DataImportJob_PostTgt]   DEFAULT(0),
+                    [PostProcedureParamsJson] NVARCHAR(MAX) NULL,
+                    [IsActive]                BIT           NOT NULL CONSTRAINT [DF_DataImportJob_IsActive]  DEFAULT(1),
+                    [Created]                 DATETIME      NOT NULL CONSTRAINT [DF_DataImportJob_Created]   DEFAULT(SYSUTCDATETIME()),
+                    [Updated]                 DATETIME      NULL,
+                    [CreatedById]             INT           NULL,
+                    [UpdatedById]             INT           NULL,
+                    CONSTRAINT [FK_DataImportJob_ExternalDbConnection]
+                        FOREIGN KEY ([ConnectionId]) REFERENCES [{s}].[ExternalDbConnection]([Id])
+                );
+                CREATE UNIQUE INDEX [UX_DataImportJob_Name]
+                    ON [{s}].[DataImportJob]([Name])
+                    WHERE [IsActive] = 1;
+                CREATE INDEX [IX_DataImportJob_Connection]
+                    ON [{s}].[DataImportJob]([ConnectionId]);
+            END;
+
+            IF OBJECT_ID(N'[{s}].[DataImportJobColumn]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[DataImportJobColumn]
+                (
+                    [Id]           INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_DataImportJobColumn] PRIMARY KEY,
+                    [JobId]        INT           NOT NULL,
+                    [SourceColumn] NVARCHAR(200) NOT NULL,
+                    [TargetKey]    NVARCHAR(100) NOT NULL,
+                    [SortOrder]    INT           NOT NULL CONSTRAINT [DF_DataImportJobColumn_Sort] DEFAULT(0),
+                    CONSTRAINT [FK_DataImportJobColumn_DataImportJob]
+                        FOREIGN KEY ([JobId]) REFERENCES [{s}].[DataImportJob]([Id]) ON DELETE CASCADE
+                );
+                CREATE INDEX [IX_DataImportJobColumn_Job]
+                    ON [{s}].[DataImportJobColumn]([JobId]);
+            END;
+
+            IF OBJECT_ID(N'[{s}].[DataImportRun]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[DataImportRun]
+                (
+                    [Id]                  BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_DataImportRun] PRIMARY KEY,
+                    [JobId]               INT           NOT NULL,
+                    [TriggerType]         INT           NOT NULL CONSTRAINT [DF_DataImportRun_Trigger]  DEFAULT(0),
+                    [StartedAt]           DATETIME      NOT NULL CONSTRAINT [DF_DataImportRun_Started]  DEFAULT(SYSUTCDATETIME()),
+                    [FinishedAt]          DATETIME      NULL,
+                    [DurationMs]          INT           NULL,
+                    [Status]              INT           NOT NULL CONSTRAINT [DF_DataImportRun_Status]   DEFAULT(1),
+                    [RowsRead]            INT           NOT NULL CONSTRAINT [DF_DataImportRun_Read]     DEFAULT(0),
+                    [RowsInserted]        INT           NOT NULL CONSTRAINT [DF_DataImportRun_Ins]      DEFAULT(0),
+                    [RowsUpdated]         INT           NOT NULL CONSTRAINT [DF_DataImportRun_Upd]      DEFAULT(0),
+                    [RowsFailed]          INT           NOT NULL CONSTRAINT [DF_DataImportRun_Fail]     DEFAULT(0),
+                    [ErrorMessage]        NVARCHAR(MAX) NULL,
+                    [PreProcedureResult]  NVARCHAR(MAX) NULL,
+                    [PostProcedureResult] NVARCHAR(MAX) NULL,
+                    [TriggeredBy]         NVARCHAR(200) NULL
+                );
+                -- Is silinse bile calistirma tarihcesi KALIR (FK yok, bilincli).
+                CREATE INDEX [IX_DataImportRun_Job_Started]
+                    ON [{s}].[DataImportRun]([JobId], [StartedAt] DESC);
+            END;
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;

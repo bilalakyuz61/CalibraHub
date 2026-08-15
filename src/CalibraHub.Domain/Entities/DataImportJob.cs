@@ -1,0 +1,87 @@
+using System.ComponentModel;
+using CalibraHub.Domain.Enums;
+
+namespace CalibraHub.Domain.Entities;
+
+/// <summary>
+/// Veritabanı üzerinden içe aktarım işi: harici bir SQL kaynağındaki tablo/view'ın
+/// kolonlarını bir hedef entity'nin alanlarına eşleyen, tekrar çalıştırılabilir tanım.
+/// Yazma <c>IImportTargetHandler</c> ailesine devredilir (Excel içe aktarımıyla ortak).
+///
+/// <see cref="MatchKeyField"/> ZORUNLUDUR — bu iş elle veya cron ile tekrar tekrar
+/// çalışır; anahtarsız bir aktarım her turda veriyi çoğaltır.
+/// </summary>
+[Description("Veritabanı üzerinden içe aktarım işi: harici SQL tablo/view kolonlarının hedef entity alanlarına eşlenmesi. Anahtar alan zorunludur (upsert).")]
+public sealed class DataImportJob
+{
+    public int Id { get; set; }
+
+    /// <summary>İş adı — benzersiz (kullanıcı kod girmez kuralı: ad üzerinden uniqueness).</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Kaynak bağlantı — <see cref="ExternalDbConnection"/> FK.</summary>
+    public int ConnectionId { get; set; }
+
+    /// <summary>Hedef entity kodu — <c>IImportTargetHandler.Entity</c> ("CONTACT", "ITEM", "MACHINE"...).</summary>
+    public string TargetEntity { get; set; } = string.Empty;
+
+    /// <summary>Kaynak nesnenin şeması ("dbo").</summary>
+    public string SourceSchema { get; set; } = "dbo";
+
+    /// <summary>Kaynak tablo/view adı.</summary>
+    public string SourceObject { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Upsert anahtarı — mevcut kaydı bulmak için kullanılan HEDEF alan anahtarı.
+    /// Zorunludur; boş bırakılamaz (bkz. sınıf özeti).
+    /// </summary>
+    public string MatchKeyField { get; set; } = string.Empty;
+
+    /// <summary>Tek çalıştırmada okunacak azami satır (emniyet tavanı).</summary>
+    public int MaxRows { get; set; } = 50_000;
+
+    /// <summary>Prosedür hatalarının aktarımı nasıl etkileyeceği.</summary>
+    public DataImportErrorBehavior ErrorBehavior { get; set; } = DataImportErrorBehavior.Lenient;
+
+    // ── Aktarım öncesi prosedür ──────────────────────────────────────────
+    public string? PreProcedureName { get; set; }
+    public DataImportProcedureTarget PreProcedureTarget { get; set; } = DataImportProcedureTarget.Calibra;
+    public string? PreProcedureParamsJson { get; set; }
+
+    // ── Aktarım sonrası prosedür ─────────────────────────────────────────
+    public string? PostProcedureName { get; set; }
+    public DataImportProcedureTarget PostProcedureTarget { get; set; } = DataImportProcedureTarget.Calibra;
+    public string? PostProcedureParamsJson { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    public DateTime Created { get; set; }
+    public DateTime? Updated { get; set; }
+    public int? CreatedById { get; set; }
+    public int? UpdatedById { get; set; }
+
+    /// <summary>Kolon eşlemeleri — transient; repository ayrı yükler/yazar.</summary>
+    public List<DataImportJobColumn> Columns { get; set; } = new();
+
+    /// <summary>"dbo.Cari" biçiminde tam kaynak nesne adı.</summary>
+    public string SourceFullName => $"{SourceSchema}.{SourceObject}";
+
+    /// <summary>
+    /// Kaydetme/çalıştırma öncesi zorunlu doğrulama. Hata mesajı döner, geçerliyse null.
+    /// </summary>
+    public string? Validate()
+    {
+        if (string.IsNullOrWhiteSpace(Name)) return "İş adı zorunludur.";
+        if (ConnectionId <= 0) return "Kaynak bağlantı seçilmelidir.";
+        if (string.IsNullOrWhiteSpace(TargetEntity)) return "Hedef entity seçilmelidir.";
+        if (string.IsNullOrWhiteSpace(SourceObject)) return "Kaynak tablo/view seçilmelidir.";
+        if (string.IsNullOrWhiteSpace(MatchKeyField)) return "Anahtar alan zorunludur — anahtarsız aktarım her çalıştırmada kayıtları çoğaltır.";
+        if (Columns.Count == 0) return "En az bir kolon eşlemesi tanımlanmalıdır.";
+
+        // Anahtar alan eşlenmiş olmalı — aksi halde upsert anahtarı satırlarda hiç bulunmaz.
+        if (!Columns.Any(c => string.Equals(c.TargetKey, MatchKeyField, StringComparison.OrdinalIgnoreCase)))
+            return $"Anahtar alan '{MatchKeyField}' kolon eşlemelerinde yer almalıdır.";
+
+        return null;
+    }
+}

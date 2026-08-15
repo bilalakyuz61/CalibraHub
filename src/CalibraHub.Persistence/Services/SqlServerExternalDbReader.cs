@@ -3,7 +3,6 @@ using System.Globalization;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
-using CalibraHub.Persistence.Security;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 
@@ -221,47 +220,8 @@ public sealed class SqlServerExternalDbReader : IExternalDbReader
         _              => value.ToString() ?? string.Empty,
     };
 
-    private static async Task<SqlConnection> OpenAsync(ExternalDbConnection settings, CancellationToken ct)
-    {
-        var conn = new SqlConnection(BuildConnectionString(settings));
-        try
-        {
-            await conn.OpenAsync(ct);
-            return conn;
-        }
-        catch
-        {
-            await conn.DisposeAsync();
-            throw;
-        }
-    }
-
-    private static string BuildConnectionString(ExternalDbConnection s)
-    {
-        var b = new SqlConnectionStringBuilder
-        {
-            DataSource = s.ServerName?.Trim() ?? string.Empty,
-            InitialCatalog = s.DatabaseName?.Trim() ?? string.Empty,
-            Encrypt = s.Encrypt,
-            TrustServerCertificate = s.TrustServerCertificate,
-            ConnectTimeout = s.ConnectTimeoutSeconds <= 0 ? 15 : s.ConnectTimeoutSeconds,
-            ApplicationName = "CalibraHub.DataImport",
-            Pooling = true,
-        };
-
-        if (s.IsIntegratedSecurity)
-        {
-            b.IntegratedSecurity = true;
-        }
-        else
-        {
-            b.IntegratedSecurity = false;
-            b.UserID = s.Username?.Trim() ?? string.Empty;
-            b.Password = ExternalDbSecretProtector.Unprotect(s.PasswordEncrypted ?? string.Empty);
-        }
-
-        return b.ConnectionString;
-    }
+    private static Task<SqlConnection> OpenAsync(ExternalDbConnection settings, CancellationToken ct)
+        => ExternalDbConnectionStringBuilder.OpenAsync(settings, "CalibraHub.DataImport.Read", ct);
 
     private static string Escape(string identifier) => identifier.Replace("]", "]]");
 

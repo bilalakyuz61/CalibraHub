@@ -448,6 +448,12 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IExte
                            CalibraHub.Persistence.Repositories.SqlExternalDbConnectionRepository>();
 builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IExternalDbReader,
                            CalibraHub.Persistence.Services.SqlServerExternalDbReader>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IDataImportRepository,
+                           CalibraHub.Persistence.Repositories.SqlDataImportRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IDataImportProcedureExecutor,
+                           CalibraHub.Persistence.Services.SqlDataImportProcedureExecutor>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IDataImportService,
+                           CalibraHub.Application.Services.DataImportService>();
 
 // 2026-06-06 Yetkilendirme (F1) — PermissionDef + UserPermission repository + service.
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IPermissionDefRepository,
