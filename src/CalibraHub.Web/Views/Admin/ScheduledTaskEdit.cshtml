@@ -228,6 +228,7 @@ body.app-theme-dark .ste-err { color: #f87171; }
                   (4, "💱", "Kur Güncelleme",  "TCMB'den döviz kurlarını çeker"),
                   (5, "📊", "Rapor",           "View'dan Excel/CSV raporu gönderir"),
                   (7, "📸", "Rapor Snapshot",  "Rapor kaynağı snapshot tablosunu yeniler"),
+                  (8, "📥", "Veritabanı Aktarımı", "Harici SQL kaynağından içe aktarım işini çalıştırır"),
                 };
               }
               @foreach (var (val, icon, label, desc) in types)
@@ -316,6 +317,17 @@ body.app-theme-dark .ste-err { color: #f87171; }
                 </select>
               </div>
               <div class="ste-hint" style="margin-top:8px;">Seçilen kaynağın snapshot tablosu (<code>dbo.ReportSnapshot_{id}</code>) bu görev çalıştığında yeniden oluşturulur.</div>
+            </div>
+
+            <!-- Veritabanı Aktarımı params -->
+            <div id="tp-dbimport" style="display:@(Model.TaskType == 8 ? "block" : "none")">
+              <div class="ste-field">
+                <label class="ste-label" for="ste-dbimport-job">Aktarım İşi *</label>
+                <select id="ste-dbimport-job" class="ste-select" style="max-width:320px;">
+                  <option value="">— Yükleniyor… —</option>
+                </select>
+              </div>
+              <div class="ste-hint" style="margin-top:8px;">İşin ön/son prosedürleri ve anahtar alan kuralları elle çalıştırmayla aynıdır.</div>
             </div>
           </div>
         }
@@ -461,14 +473,15 @@ body.app-theme-dark .ste-err { color: #f87171; }
     });
 
     function showTypePanel(val) {
-        ['tp-sql','tp-http','tp-currency','tp-report','tp-snapshot'].forEach(function (id) {
+        ['tp-sql','tp-http','tp-currency','tp-report','tp-snapshot','tp-dbimport'].forEach(function (id) {
             var el = document.getElementById(id); if (el) el.style.display = 'none';
         });
-        var map = {'1':'tp-sql','2':'tp-http','4':'tp-currency','5':'tp-report','7':'tp-snapshot'};
+        var map = {'1':'tp-sql','2':'tp-http','4':'tp-currency','5':'tp-report','7':'tp-snapshot','8':'tp-dbimport'};
         var target = document.getElementById(map[val]);
         if (target) target.style.display = 'block';
         if (val === '5') loadDbViews();
         if (val === '7') loadSnapSources();
+        if (val === '8') loadDbImportJobs();
     }
     showTypePanel(String(initType));
 
@@ -578,6 +591,25 @@ body.app-theme-dark .ste-err { color: #f87171; }
         }).catch(function () {});
     }
 
+    /* ── Load import jobs for DataImport ── */
+    var dbImportJobsLoaded = false;
+    function loadDbImportJobs() {
+        if (dbImportJobsLoaded) return; dbImportJobsLoaded = true;
+        fetch('/DbImport/api/jobs?includeInactive=false', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                var sel = document.getElementById('ste-dbimport-job'); if (!sel) return;
+                sel.innerHTML = '<option value="">— Seçiniz —</option>';
+                (res && res.items ? res.items : []).forEach(function (j) {
+                    var opt = document.createElement('option');
+                    opt.value = j.id;
+                    opt.textContent = j.name + ' (' + (j.sourceSchema || 'dbo') + '.' + j.sourceObject + ')';
+                    sel.appendChild(opt);
+                });
+                if (initParams && initParams.jobId) sel.value = String(initParams.jobId);
+            }).catch(function () {});
+    }
+
     /* ── Kaynak seçilince Görev Adı'nı otomatik doldur (boş ya da otomatik-isimse) ── */
     (function () {
         var snapSel = document.getElementById('ste-snap-source');
@@ -679,6 +711,8 @@ body.app-theme-dark .ste-err { color: #f87171; }
             return JSON.stringify({ viewName: document.getElementById('ste-view-name')?.value || '', format: document.getElementById('ste-report-format')?.value || 'xlsx', subject: (document.getElementById('ste-report-subject')?.value || '').trim(), recipients: kvGetList('kv-recipients') });
         } else if (taskType === 7) {
             return JSON.stringify({ sourceId: parseInt(document.getElementById('ste-snap-source')?.value) || 0 });
+        } else if (taskType === 8) {
+            return JSON.stringify({ jobId: parseInt(document.getElementById('ste-dbimport-job')?.value) || 0 });
         }
         return null;
     }

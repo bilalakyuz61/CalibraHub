@@ -1,0 +1,143 @@
+using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Contracts;
+
+namespace CalibraHub.Application.Services.Import;
+
+/// <summary>
+/// Personel içe-aktarım handler'ı. Yazma <see cref="IPersonnelService.SaveAsync"/>'e
+/// delege edilir — ad benzersizliği ve kod auto-türetme orada uygulanır
+/// (kullanıcı kod girmez kuralı).
+///
+/// PIN ve kart numarası BİLİNÇLİ olarak içe aktarılamaz: kimlik doğrulama sırrıdır,
+/// toplu dosya/DB üzerinden taşınmamalıdır. Güncellemede mevcut değerleri korunur.
+/// </summary>
+public sealed class PersonnelImportHandler : RowImportHandlerBase
+{
+    private readonly IPersonnelService _personnel;
+    private List<PersonnelDto>? _cache;   // run-cache (scoped, satırlar sıralı işlenir)
+
+    public PersonnelImportHandler(IPersonnelService personnel) => _personnel = personnel;
+
+    public override string Entity => "PERSONNEL";
+    public override string Label => "Personel";
+
+    public override IReadOnlyList<ImportTargetFieldDto> GetFields() => new List<ImportTargetFieldDto>
+    {
+        new("FullName", "Ad Soyad", "string", true, true, "Personelin adı soyadı (zorunlu)", MaxLength: 200),
+        new("Code", "Sicil No", "string", false, true, "Boşsa addan otomatik üretilir", MaxLength: 50),
+        new("Title", "Görev", "string", false, false, MaxLength: 100),
+        new("Department", "Departman", "string", false, false, MaxLength: 100),
+        new("Phone", "Telefon", "string", false, false, MaxLength: 50),
+        new("Email", "E-Posta", "string", false, false, MaxLength: 200),
+        new("BirthDate", "Doğum Tarihi", "date", false, false),
+        new("IsProductionOperator", "Üretim Operatörü", "bool", false, false, "Evet / Hayır",
+            new[] { "Evet", "Hayır" }),
+        new("IsActive", "Aktif", "bool", false, false, "Evet / Hayır", new[] { "Evet", "Hayır" }),
+        new("Notes", "Notlar", "string", false, false),
+    };
+
+    protected override IReadOnlyList<string> ValidateRow(IReadOnlyDictionary<string, string?> d)
+    {
+        var errs = new List<string>();
+        if (string.IsNullOrWhiteSpace(Get(d, "FullName"))) errs.Add("Ad soyad boş.");
+
+        var birth = Get(d, "BirthDate");
+        if (!string.IsNullOrWhiteSpace(birth) && ImportParse.ParseDate(birth) is null)
+            errs.Add($"Doğum tarihi okunamadı: '{birth}'.");
+
+        var email = Get(d, "Email");
+        if (!string.IsNullOrWhiteSpace(email) && !email.Contains('@'))
+            errs.Add($"E-posta geçersiz: '{email}'.");
+
+        return errs;
+    }
+
+    protected override async Task<(string Action, int? ExistingId)> ResolveActionAsync(
+        IReadOnlyDictionary<string, string?> d, string? matchKeyField, CancellationToken ct)
+    {
+        var list = await EnsureAsync(ct);
+
+        if (string.Equals(matchKeyField, "Code", StringComparison.OrdinalIgnoreCase))
+        {
+            var code = Get(d, "Code");
+            if (!string.IsNullOrWhiteSpace(code))
+            {
+                var hit = list.FirstOrDefault(p => Same(p.Code, code));
+                if (hit is not null) return ("update", hit.Id);
+            }
+            return ("insert", null);
+        }
+
+        // Varsayılan ve "FullName" anahtarı: ad üzerinden eşleşme (uniqueness scope'u ad).
+        var name = Get(d, "FullName");
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            var hit = list.FirstOrDefault(p => Same(p.FullName, name));
+            if (hit is not null) return ("update", hit.Id);
+        }
+        return ("insert", null);
+    }
+
+    protected override async Task<(bool Ok, string? Error, int? RecordId)> CommitRowAsync(
+        IReadOnlyDictionary<string, string?> d, string action, int? existingId,
+        int? userId, HashSet<string> usedCodes, CancellationToken ct)
+    {
+        PersonnelDto? existing = null;
+        if (action == "update" && existingId is > 0)
+        {
+            var list = await EnsureAsync(ct);
+            existing = list.FirstOrDefault(p => p.Id == existingId.Value);
+        }
+
+        var req = new SavePersonnelRequest(
+            Id: existing?.Id ?? 0,
+            // Kod güncellemede korunur (eski referanslar bozulmasın); yeni kayıtta
+            // boşsa servis addan türetir.
+            Code: existing?.Code ?? (Get(d, "Code")?.Trim() ?? string.Empty),
+            FullName: Pick(d, "FullName", existing?.FullName) ?? string.Empty,
+            Title: Pick(d, "Title", existing?.Title),
+            Department: Pick(d, "Department", existing?.Department),
+            // PIN / kart içe aktarılmaz — mevcut değer korunur.
+            PinCode: existing?.PinCode,
+            CardNo: existing?.CardNo,
+            IsProductionOperator: PickBool(d, "IsProductionOperator", existing?.IsProductionOperator ?? false),
+            IsActive: PickBool(d, "IsActive", existing?.IsActive ?? true),
+            UserId: existing?.UserId,
+            Phone: Pick(d, "Phone", existing?.Phone),
+            Email: Pick(d, "Email", existing?.Email),
+            Notes: Pick(d, "Notes", existing?.Notes),
+            BirthDate: PickDate(d, "BirthDate", existing?.BirthDate));
+
+        var id = await _personnel.SaveAsync(req, ct);
+        _cache = null;   // ad benzersizliği sonraki satırlarda güncel listeyi görmeli
+        return (true, null, id);
+    }
+
+    private async Task<List<PersonnelDto>> EnsureAsync(CancellationToken ct)
+        => _cache ??= (await _personnel.ListAsync(true, false, ct)).ToList();
+
+    private static bool Same(string? a, string? b)
+        => string.Equals(a?.Trim(), b?.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Eşlenmemiş (veya boş bırakılmış) alan mevcut değerini KORUR — aksi halde
+    /// içe aktarım eşlenmeyen alanları sessizce siler.
+    /// </summary>
+    private static string? Pick(IReadOnlyDictionary<string, string?> d, string key, string? existing)
+    {
+        var v = Get(d, key);
+        return string.IsNullOrWhiteSpace(v) ? existing : v.Trim();
+    }
+
+    private static bool PickBool(IReadOnlyDictionary<string, string?> d, string key, bool existing)
+    {
+        var v = Get(d, key);
+        return string.IsNullOrWhiteSpace(v) ? existing : ParseBool(v);
+    }
+
+    private static DateTime? PickDate(IReadOnlyDictionary<string, string?> d, string key, DateTime? existing)
+    {
+        var v = Get(d, key);
+        return string.IsNullOrWhiteSpace(v) ? existing : ImportParse.ParseDate(v);
+    }
+}

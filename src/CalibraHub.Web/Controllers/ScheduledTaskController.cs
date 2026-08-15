@@ -303,6 +303,7 @@ public sealed class ScheduledTaskController : Controller
         CalibraHub.Domain.Enums.ScheduledTaskType.ViewReport      => "Rapor",
         CalibraHub.Domain.Enums.ScheduledTaskType.Integration     => "Entegrasyon",
         CalibraHub.Domain.Enums.ScheduledTaskType.ReportSnapshotRefresh => "Rapor Snapshot Yenileme",
+        CalibraHub.Domain.Enums.ScheduledTaskType.DataImport            => "Veritabanı Aktarımı",
         _                                                          => type.ToString(),
     };
 

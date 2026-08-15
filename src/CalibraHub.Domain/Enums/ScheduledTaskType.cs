@@ -58,4 +58,11 @@ public enum ScheduledTaskType
     /// Parameters: {"sourceId": N}. CompanyId task uzerinden cozulur (snapshot sirket DB'sinde).
     /// </summary>
     ReportSnapshotRefresh = 7,
+
+    /// <summary>
+    /// Veritabani uzerinden ice aktarim isini (DataImportJob) zamanli calistirir.
+    /// Parameters: {"jobId": N}. Is tanimindaki on/son prosedurler ve anahtar alan
+    /// kurallari elle calistirmayla birebir aynidir.
+    /// </summary>
+    DataImport = 8,
 }

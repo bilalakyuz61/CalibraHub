@@ -170,6 +170,9 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.ISchedul
                            CalibraHub.Application.Services.Scheduling.ReportSnapshotRefreshTaskExecutor>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
                            CalibraHub.Application.Services.Scheduling.CurrencyRefreshTaskExecutor>();
+// 2026-08-15 — Veritabanı üzerinden içe aktarım işini cron ile çalıştırır ({"jobId": N}).
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
+                           CalibraHub.Application.Services.Scheduling.DataImportTaskExecutor>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IEmailSender,
                            CalibraHub.Infrastructure.Notifications.SmtpEmailSender>();
 // Mail sablonu HTML render — DocLayout (OutputFormat='email') -> HTML mail govdesi.
@@ -440,6 +443,17 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportT
                            CalibraHub.Application.Services.Import.InventoryCountImportHandler>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
                            CalibraHub.Application.Services.Import.RoutingImportHandler>();
+// 2026-08-15 — Üretim sabit tanımlamaları. Excel VE veritabanı aktarımında ortak çalışır.
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
+                           CalibraHub.Application.Services.Import.PersonnelImportHandler>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
+                           CalibraHub.Application.Services.Import.MachineImportHandler>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
+                           CalibraHub.Application.Services.Import.OperationImportHandler>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
+                           CalibraHub.Application.Services.Import.WorkOrderImportHandler>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
+                           CalibraHub.Application.Services.Import.StockMovementImportHandler>();
 
 // 2026-08-15 Veritabanı üzerinden içe aktarım — harici SQL kaynağı. Yazma katmanı
 // yukarıdaki IImportTargetHandler ailesidir (Excel ile ortak); burada yalnız kaynak
