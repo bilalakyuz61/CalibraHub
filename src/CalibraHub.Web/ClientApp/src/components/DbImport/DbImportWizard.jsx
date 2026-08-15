@@ -405,36 +405,48 @@ export default function DbImportWizard() {
         {/* ── 2. Eşleme ── */}
         {step === 2 && (
           <>
+            {/* Hedef + politika tek satırda. Azami satır UI'dan kaldırıldı
+                (varsayılan 50.000, iş tanımında saklanmaya devam ediyor). */}
             <div className="dbi-card">
-              <div className="dbi-card-title">Hedef</div>
-              <div className="dbi-grid">
-                <div className="dbi-field">
+              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <div className="dbi-field" style={{ margin: 0, minWidth: 260 }}>
                   <span className="dbi-label">Hedef Kayıt Türü <span className="dbi-required">*</span></span>
                   <select className="dbi-select" value={job.targetEntity}
                           onChange={(e) => setJob({ ...job, targetEntity: e.target.value, columns: [], matchKeyFields: [] })}>
                     <option value="">— Seçiniz —</option>
                     {entities.map((e) => <option key={e.entity} value={e.entity}>{e.label}</option>)}
                   </select>
-                  {/* Insert-only handler: anahtar alan yok sayılır, tekrar çalıştırma mükerrer üretir. */}
-                  {job.targetEntity && entities.find((e) => e.entity === job.targetEntity)?.supportsUpsert === false && (
-                    <div className="dbi-alert dbi-alert--warn" style={{ marginTop: 8, marginBottom: 0 }}>
-                      <AlertTriangle size={13} /> Bu kayıt türü güncelleme desteklemiyor — her çalıştırma
-                      yeni kayıt açar. Anahtar alan mükerrer oluşmasını <strong>engellemez</strong>.
-                      Tek seferlik aktarım için kullanın, zamanlanmış göreve bağlamayın.
-                    </div>
-                  )}
                 </div>
-                <div className="dbi-field">
-                  <span className="dbi-label">Azami Satır</span>
-                  <input className="dbi-input" type="number" min="1" value={job.maxRows}
-                         onChange={(e) => setJob({ ...job, maxRows: Number(e.target.value) || 50000 })} />
-                </div>
+                <label className="dbi-switch" style={{ paddingBottom: 6 }}>
+                  <input type="checkbox" checked={!!job.deactivateAbsent}
+                         onChange={(e) => setJob({ ...job, deactivateAbsent: e.target.checked })} />
+                  <span className="dbi-switch-track"><span className="dbi-switch-thumb" /></span>
+                  <span>Kaynakta olmayanı pasife al</span>
+                </label>
               </div>
+
+              {job.targetEntity && entities.find((e) => e.entity === job.targetEntity)?.supportsUpsert === false && (
+                <div className="dbi-alert dbi-alert--warn" style={{ marginTop: 10, marginBottom: 0 }}>
+                  <AlertTriangle size={13} /> Bu kayıt türü güncelleme desteklemiyor — her çalıştırma yeni
+                  kayıt açar, anahtar alan mükerrer oluşmasını engellemez. Zamanlanmış göreve bağlamayın.
+                </div>
+              )}
+              {job.deactivateAbsent && (
+                <div className="dbi-alert dbi-alert--warn" style={{ marginTop: 10, marginBottom: 0 }}>
+                  <AlertTriangle size={13} /> Kaynak sorgusu bu kayıt türünün <strong>tamamını</strong> döndürmeli;
+                  dar bir sorgu kapsam dışı kayıtları da pasife alır. Kayıt kaynağa dönerse otomatik aktifleşir.
+                </div>
+              )}
             </div>
 
             <div className="dbi-card">
-              <div className="dbi-card-title" style={{ display: 'flex', alignItems: 'center' }}>
+              <div className="dbi-card-title" style={{ display: 'flex', alignItems: 'center', marginBottom: filters.length ? 10 : 0 }}>
                 <span><Filter size={13} /> Kısıt Kuralları</span>
+                {filters.length === 0 && (
+                  <span className="dbi-hint" style={{ marginLeft: 10, fontWeight: 400 }}>
+                    Kural yoksa tüm satırlar aktarılır.
+                  </span>
+                )}
                 <div className="dbi-header-spacer" />
                 <button type="button" className="dbi-btn dbi-btn--xs"
                         onClick={() => writeFilters([...filters, { field: '', op: 'eq', value: '' }])}
@@ -442,10 +454,6 @@ export default function DbImportWizard() {
                   <Plus size={13} /> Kural Ekle
                 </button>
               </div>
-
-              {filters.length === 0 && (
-                <div className="dbi-hint">Kural yoksa kaynaktaki tüm satırlar aktarılır.</div>
-              )}
 
               {filters.map((r, i) => (
                 <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
@@ -472,53 +480,6 @@ export default function DbImportWizard() {
             </div>
 
             <div className="dbi-card">
-              <div className="dbi-card-title">Kaynakta Olmayan Kayıtlar</div>
-              <label className="dbi-switch">
-                <input type="checkbox" checked={!!job.deactivateAbsent}
-                       onChange={(e) => setJob({ ...job, deactivateAbsent: e.target.checked })} />
-                <span className="dbi-switch-track"><span className="dbi-switch-thumb" /></span>
-                <span>Kaynakta olmayan kayıtları pasife al</span>
-              </label>
-              {job.deactivateAbsent && (
-                <div className="dbi-alert dbi-alert--warn" style={{ marginTop: 8, marginBottom: 0 }}>
-                  <AlertTriangle size={13} /> Kaynak sorgusu bu kayıt türünün <strong>tamamını</strong>
-                  {' '}döndürmeli. Dar bir sorgu, kapsam dışı kalan kayıtları da pasife alır.
-                  Kayıt kaynağa geri dönerse otomatik aktifleşir.
-                </div>
-              )}
-            </div>
-
-            <div className="dbi-card">
-              <div className="dbi-card-title">
-                <KeyRound size={13} /> Anahtar Alan <span className="dbi-required">*</span>
-              </div>
-              <div className="dbi-field">
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {keyCandidates.length === 0 && <span className="dbi-hint">Önce hedef kayıt türünü seçin.</span>}
-                  {keyCandidates.map((f) => {
-                    const on = matchKeys.includes(f.key)
-                    return (
-                      <button key={f.key} type="button"
-                              className={`dbi-btn dbi-btn--xs ${on ? 'dbi-btn--primary' : ''}`}
-                              onClick={() => toggleMatchKey(f.key)}>
-                        {on && <KeyRound size={11} />} {f.label}
-                      </button>
-                    )
-                  })}
-                </div>
-                <span className="dbi-hint">
-                  Mevcut kaydı bulmak için kullanılır. Birden fazla seçerseniz <strong>hepsi</strong> eşleşmelidir.
-                </span>
-              </div>
-              {unmappedKeys.length > 0 && (
-                <div className="dbi-alert dbi-alert--err" style={{ marginBottom: 0 }}>
-                  <AlertTriangle size={13} /> Şu anahtar alan(lar) bir kaynak kolonuna eşlenmeli:{' '}
-                  {unmappedKeys.join(', ')}
-                </div>
-              )}
-            </div>
-
-            <div className="dbi-card">
               <div className="dbi-card-title" style={{ display: 'flex', alignItems: 'center' }}>
                 <span>Kolon Eşleme</span>
                 <div className="dbi-header-spacer" />
@@ -538,7 +499,7 @@ export default function DbImportWizard() {
                 <div className="dbi-table-wrap" style={{ maxHeight: 420, overflowY: 'auto' }}>
                   <table className="dbi-table">
                     <thead>
-                      <tr><th>Hedef Alan</th><th>Kaynak Kolon</th><th>Tür</th></tr>
+                      <tr><th>Hedef Alan</th><th>Kaynak Kolon</th><th style={{ textAlign: 'center' }}>Anahtar</th><th>Tür</th></tr>
                     </thead>
                     <tbody>
                       {targetFields.map((f) => (
@@ -546,7 +507,6 @@ export default function DbImportWizard() {
                           <td>
                             {f.label}
                             {f.isRequired && <span className="dbi-required"> *</span>}
-                            {matchKeys.includes(f.key) && <span className="dbi-key-pill" style={{ marginLeft: 6 }}><KeyRound size={10} /> Anahtar</span>}
                             {/* Kabul edilen değerler — kaynak view'ı buna göre şekillendirmek için. */}
                             {f.allowedValues && f.allowedValues.length > 0 && (
                               <div className="dbi-hint dbi-mono" style={{ whiteSpace: 'normal', maxWidth: 320 }}
@@ -562,6 +522,21 @@ export default function DbImportWizard() {
                               <option value="">— Eşlenmedi —</option>
                               {sourceColumns.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
                             </select>
+                          </td>
+                          {/* Anahtar seçimi eşleme satırında: "anahtar seçtim ama eşlemedim"
+                              durumu aynı satırda görünür. */}
+                          <td style={{ textAlign: 'center' }}>
+                            {f.canBeMatchKey ? (
+                              <label className="dbi-switch" style={{ justifyContent: 'center' }}
+                                     title="Mevcut kaydı bulmak için kullanılır; birden fazla seçerseniz hepsi eşleşmelidir">
+                                <input type="checkbox" checked={matchKeys.includes(f.key)}
+                                       onChange={() => toggleMatchKey(f.key)} />
+                                <span className="dbi-switch-track"><span className="dbi-switch-thumb" /></span>
+                              </label>
+                            ) : <span className="dbi-hint">-</span>}
+                            {matchKeys.includes(f.key) && !mappedByTarget[f.key] && (
+                              <div className="dbi-hint" style={{ color: 'var(--dbi-danger)' }}>eşlenmeli</div>
+                            )}
                           </td>
                           <td className="dbi-mono">{f.dataType}</td>
                         </tr>
