@@ -632,6 +632,19 @@ export default function DbImportWizard() {
               </button>
             </div>
 
+            {/* Sonuç yokken kalan alanı boş-durum doldurur; aksi halde tek butonun
+                altında yüzlerce piksel boşluk kalıyor ve bozukmuş gibi duruyor. */}
+            {!preview && (
+              <div className="dbi-card dbi-card--grow"
+                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="dbi-empty">
+                  <Search size={22} style={{ opacity: 0.5 }} />
+                  <div style={{ marginTop: 8 }}>Önizleme henüz çalıştırılmadı.</div>
+                  <div className="dbi-hint">Kaynaktan örnek satırlar okunup doğrulanır; kayıt yazılmaz.</div>
+                </div>
+              </div>
+            )}
+
             {preview && preview.preview && (
               <>
                 <div className="dbi-stats">
@@ -652,7 +665,7 @@ export default function DbImportWizard() {
                 )}
 
                 {preview.preview.rows && preview.preview.rows.length > 0 && (
-                  <div className="dbi-table-wrap" style={{ overflowY: 'auto', maxHeight: '48vh' }}>
+                  <div className="dbi-table-wrap dbi-table-wrap--grow" style={{ overflowY: 'auto' }}>
                     <table className="dbi-table">
                       <thead>
                         <tr>
@@ -712,6 +725,17 @@ export default function DbImportWizard() {
                 <span className="dbi-hint">Zamanlama için iş önce kaydedilir.</span>
               )}
             </div>
+
+            {!runResult && (
+              <div className="dbi-card dbi-card--grow"
+                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="dbi-empty">
+                  <Play size={22} style={{ opacity: 0.5 }} />
+                  <div style={{ marginTop: 8 }}>Aktarım henüz çalıştırılmadı.</div>
+                  <div className="dbi-hint">Ön prosedür → okuma → yazma → son prosedür sırasıyla işler.</div>
+                </div>
+              </div>
+            )}
 
             {runResult && runResult.run && (
               <>

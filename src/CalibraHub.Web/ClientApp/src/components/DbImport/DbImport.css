@@ -141,6 +141,10 @@ body.app-theme-dark .dbi-root {
 .dbi-body > .dbi-card--grow { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .dbi-card--grow > .dbi-table-wrap { flex: 1 1 auto; min-height: 0; }
 
+/* Kart içinde DEĞİL, doğrudan gövdenin çocuğu olan tablo (önizleme sonucu) —
+   kalan yüksekliği o doldurur, altta ölü boşluk kalmasın. */
+.dbi-body > .dbi-table-wrap--grow { flex: 1 1 auto; min-height: 0; }
+
 .dbi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 
 .dbi-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
