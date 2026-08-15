@@ -1,7 +1,7 @@
 import React from 'react'
 import {
   Database, ArrowLeft, ArrowRight, Save, Play, Loader2, Search,
-  CheckCircle2, XCircle, AlertTriangle, KeyRound, Wand2, Trash2, Filter, Plus,
+  CheckCircle2, XCircle, AlertTriangle, KeyRound, Wand2, Trash2, Filter, Plus, ListChecks, X,
 } from 'lucide-react'
 import { apiGet, apiPost } from './dbiApi'
 import './DbImport.css'
@@ -111,6 +111,8 @@ export default function DbImportWizard() {
     isActive: true,
   })
 
+  const [filterModal, setFilterModal] = React.useState(false)
+  const [valuesField, setValuesField] = React.useState(null)   // izinli değerler modalı
   const [preview, setPreview] = React.useState(null)
   const [runResult, setRunResult] = React.useState(null)
 
@@ -143,6 +145,7 @@ export default function DbImportWizard() {
               postProcedureParamsJson: j.postProcedureParamsJson || '',
               columns: j.columns || [],
             })
+            setFilters(parseFilters(j.sourceFilterJson))
           } else {
             setError((res && res.error) || 'Aktarım işi yüklenemedi.')
           }
@@ -218,10 +221,14 @@ export default function DbImportWizard() {
     setJob((prev) => ({ ...prev, matchKeyFields: next }))
   }
 
-  const filters = React.useMemo(() => parseFilters(job.sourceFilterJson), [job.sourceFilterJson])
+  // Kurallar YEREL state'te tutulur. Türetilmiş (job.sourceFilterJson'dan hesaplanan)
+  // olsaydı yeni eklenen boş kural anında elenir ve ekranda hiç görünmezdi —
+  // "Kural Ekle" çalışmıyor gibi olurdu. İşe yazarken eksik kurallar temizlenir.
+  const [filters, setFilters] = React.useState(() => parseFilters(job.sourceFilterJson))
 
   function writeFilters(next) {
-    const clean = next.filter((r) => r.field)
+    setFilters(next)
+    const clean = next.filter((r) => r.field && r.op)
     setJob((prev) => ({ ...prev, sourceFilterJson: clean.length ? JSON.stringify(clean) : '' }))
   }
 
@@ -423,6 +430,14 @@ export default function DbImportWizard() {
                   <span className="dbi-switch-track"><span className="dbi-switch-thumb" /></span>
                   <span>Kaynakta olmayanı pasife al</span>
                 </label>
+                {/* Kısıt kuralları modalda — kural yokken ekranda yer kaplamasın. */}
+                <button type="button" className="dbi-btn" style={{ marginBottom: 2 }}
+                        onClick={() => setFilterModal(true)} disabled={!sourceColumns.length}>
+                  <Filter size={14} /> Kısıt Kuralları
+                  {filters.length > 0 && (
+                    <span className="dbi-key-pill" style={{ marginLeft: 4 }}>{filters.length}</span>
+                  )}
+                </button>
               </div>
 
               {job.targetEntity && entities.find((e) => e.entity === job.targetEntity)?.supportsUpsert === false && (
@@ -437,46 +452,6 @@ export default function DbImportWizard() {
                   dar bir sorgu kapsam dışı kayıtları da pasife alır. Kayıt kaynağa dönerse otomatik aktifleşir.
                 </div>
               )}
-            </div>
-
-            <div className="dbi-card">
-              <div className="dbi-card-title" style={{ display: 'flex', alignItems: 'center', marginBottom: filters.length ? 10 : 0 }}>
-                <span><Filter size={13} /> Kısıt Kuralları</span>
-                {filters.length === 0 && (
-                  <span className="dbi-hint" style={{ marginLeft: 10, fontWeight: 400 }}>
-                    Kural yoksa tüm satırlar aktarılır.
-                  </span>
-                )}
-                <div className="dbi-header-spacer" />
-                <button type="button" className="dbi-btn dbi-btn--xs"
-                        onClick={() => writeFilters([...filters, { field: '', op: 'eq', value: '' }])}
-                        disabled={!sourceColumns.length}>
-                  <Plus size={13} /> Kural Ekle
-                </button>
-              </div>
-
-              {filters.map((r, i) => (
-                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-                  <select className="dbi-select" style={{ maxWidth: 200 }} value={r.field}
-                          onChange={(e) => { const n = [...filters]; n[i] = { ...r, field: e.target.value }; writeFilters(n) }}>
-                    <option value="">— Kolon —</option>
-                    {sourceColumns.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
-                  </select>
-                  <select className="dbi-select" style={{ maxWidth: 190 }} value={r.op}
-                          onChange={(e) => { const n = [...filters]; n[i] = { ...r, op: e.target.value }; writeFilters(n) }}>
-                    {FILTER_OPS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
-                  </select>
-                  {!OPS_WITHOUT_VALUE.has(r.op) && (
-                    <input className="dbi-input" style={{ maxWidth: 200 }} value={r.value || ''}
-                           onChange={(e) => { const n = [...filters]; n[i] = { ...r, value: e.target.value }; writeFilters(n) }}
-                           placeholder={r.op === 'between' ? '1,100' : (r.op === 'in' ? 'A,B,C' : 'değer')} />
-                  )}
-                  <button type="button" className="dbi-btn dbi-btn--xs dbi-btn--danger"
-                          onClick={() => writeFilters(filters.filter((_, j) => j !== i))}>
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))}
             </div>
 
             <div className="dbi-card">
@@ -507,13 +482,15 @@ export default function DbImportWizard() {
                           <td>
                             {f.label}
                             {f.isRequired && <span className="dbi-required"> *</span>}
-                            {/* Kabul edilen değerler — kaynak view'ı buna göre şekillendirmek için. */}
+                            {/* Kabul edilen değerler modalda — her satıra yayılmış liste
+                                tabloyu şişiriyordu; ihtiyaç anında açılır. */}
                             {f.allowedValues && f.allowedValues.length > 0 && (
-                              <div className="dbi-hint dbi-mono" style={{ whiteSpace: 'normal', maxWidth: 320 }}
-                                   title={f.allowedValues.join(' · ')}>
-                                {f.allowedValues.slice(0, 8).join(' · ')}
-                                {f.allowedValues.length > 8 ? ` · +${f.allowedValues.length - 8}` : ''}
-                              </div>
+                              <button type="button" className="dbi-btn dbi-btn--xs dbi-btn--ghost"
+                                      style={{ marginLeft: 6, padding: '2px 6px' }}
+                                      title="Kabul edilen değerler"
+                                      onClick={() => setValuesField(f)}>
+                                <ListChecks size={12} /> {f.allowedValues.length}
+                              </button>
                             )}
                           </td>
                           <td>
@@ -728,6 +705,86 @@ export default function DbImportWizard() {
           </>
         )}
       </div>
+
+      {/* ── Kısıt kuralları modalı ── */}
+      {filterModal && (
+        <div className="dbi-modal-backdrop"
+             onMouseDown={(e) => { if (e.target === e.currentTarget) setFilterModal(false) }}>
+          <div className="dbi-modal" role="dialog" aria-modal="true">
+            <div className="dbi-modal-head" style={{ display: 'flex', alignItems: 'center' }}>
+              <span><Filter size={14} /> Kısıt Kuralları</span>
+              <div className="dbi-header-spacer" />
+              <button type="button" className="dbi-btn dbi-btn--xs"
+                      onClick={() => writeFilters([...filters, { field: '', op: 'eq', value: '' }])}>
+                <Plus size={13} /> Kural Ekle
+              </button>
+            </div>
+            <div className="dbi-modal-body">
+              {filters.length === 0 && (
+                <div className="dbi-hint">Kural yoksa kaynaktaki tüm satırlar aktarılır.</div>
+              )}
+              {filters.map((r, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                  <select className="dbi-select" style={{ maxWidth: 170 }} value={r.field}
+                          onChange={(e) => { const n = [...filters]; n[i] = { ...r, field: e.target.value }; writeFilters(n) }}>
+                    <option value="">— Kolon —</option>
+                    {sourceColumns.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                  </select>
+                  <select className="dbi-select" style={{ maxWidth: 160 }} value={r.op}
+                          onChange={(e) => { const n = [...filters]; n[i] = { ...r, op: e.target.value }; writeFilters(n) }}>
+                    {FILTER_OPS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+                  </select>
+                  {!OPS_WITHOUT_VALUE.has(r.op) && (
+                    <input className="dbi-input" style={{ maxWidth: 150 }} value={r.value || ''}
+                           onChange={(e) => { const n = [...filters]; n[i] = { ...r, value: e.target.value }; writeFilters(n) }}
+                           placeholder={r.op === 'between' ? '1,100' : (r.op === 'in' ? 'A,B,C' : 'değer')} />
+                  )}
+                  <button type="button" className="dbi-btn dbi-btn--xs dbi-btn--danger"
+                          onClick={() => writeFilters(filters.filter((_, j) => j !== i))}>
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="dbi-modal-foot">
+              <button type="button" className="dbi-btn dbi-btn--primary" onClick={() => setFilterModal(false)}>
+                Tamam
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Kabul edilen değerler modalı ── */}
+      {valuesField && (
+        <div className="dbi-modal-backdrop"
+             onMouseDown={(e) => { if (e.target === e.currentTarget) setValuesField(null) }}>
+          <div className="dbi-modal dbi-modal--sm" role="dialog" aria-modal="true">
+            <div className="dbi-modal-head" style={{ display: 'flex', alignItems: 'center' }}>
+              <span>{valuesField.label} — Kabul Edilen Değerler</span>
+              <div className="dbi-header-spacer" />
+              <button type="button" className="dbi-btn dbi-btn--xs dbi-btn--ghost" onClick={() => setValuesField(null)}>
+                <X size={14} />
+              </button>
+            </div>
+            <div className="dbi-modal-body">
+              <div className="dbi-hint" style={{ marginBottom: 10 }}>
+                Kaynak view bu değerlerden birini üretmeli.
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {(valuesField.allowedValues || []).map((v) => (
+                  <span key={v} className="dbi-key-pill dbi-mono">{v}</span>
+                ))}
+              </div>
+            </div>
+            <div className="dbi-modal-foot">
+              <button type="button" className="dbi-btn dbi-btn--primary" onClick={() => setValuesField(null)}>
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Alt aksiyon şeridi ── */}
       <div className="dbi-modal-foot" style={{ borderTop: '1px solid var(--dbi-border)', background: 'var(--dbi-surface)' }}>
