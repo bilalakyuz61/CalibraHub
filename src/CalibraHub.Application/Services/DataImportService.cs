@@ -30,6 +30,7 @@ public sealed class DataImportService : IDataImportService
     private readonly IExternalDbReader _reader;
     private readonly IDataImportProcedureExecutor _procedures;
     private readonly IImportService _importCatalog;
+    private readonly IScheduledTaskRepository _scheduledTasks;
     private readonly IReadOnlyDictionary<string, IImportTargetHandler> _handlers;
     private readonly ILogger<DataImportService> _logger;
 
@@ -39,6 +40,7 @@ public sealed class DataImportService : IDataImportService
         IExternalDbReader reader,
         IDataImportProcedureExecutor procedures,
         IImportService importCatalog,
+        IScheduledTaskRepository scheduledTasks,
         IEnumerable<IImportTargetHandler> handlers,
         ILogger<DataImportService> logger)
     {
@@ -47,6 +49,7 @@ public sealed class DataImportService : IDataImportService
         _reader = reader;
         _procedures = procedures;
         _importCatalog = importCatalog;
+        _scheduledTasks = scheduledTasks;
         _handlers = handlers.ToDictionary(h => h.Entity, StringComparer.OrdinalIgnoreCase);
         _logger = logger;
     }
@@ -294,7 +297,53 @@ public sealed class DataImportService : IDataImportService
         return (true, null, id);
     }
 
-    public Task DeleteJobAsync(int id, CancellationToken ct) => _repo.DeleteJobAsync(id, ct);
+    /// <summary>
+    /// İşi siler ve ona bağlı zamanlanmış görevleri DEVRE DIŞI bırakır.
+    /// Bırakılmazsa görev her turda "Aktarım işi bulunamadı" ile hata verir —
+    /// silinmez, kullanıcı görsün ve isterse başka işe bağlasın diye pasifleştirilir.
+    /// </summary>
+    public async Task DeleteJobAsync(int id, CancellationToken ct)
+    {
+        await _repo.DeleteJobAsync(id, ct);
+
+        try
+        {
+            var tasks = await _scheduledTasks.GetAllAsync(ct);
+            foreach (var t in tasks)
+            {
+                if (t.TaskType != ScheduledTaskType.DataImport || !t.IsEnabled) continue;
+                if (ExtractJobId(t.ParametersJson) != id) continue;
+
+                // Description init-only — yalnız IsEnabled kapatılır; sebep loga yazılır.
+                t.IsEnabled = false;
+                await _scheduledTasks.SaveAsync(t, ct);
+
+                _logger.LogWarning(
+                    "Aktarım işi silindi, bağlı zamanlanmış görev devre dışı bırakıldı. JobId={JobId} TaskId={TaskId} Görev={TaskName}",
+                    id, t.Id, t.Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            // İş zaten silindi; görev temizliği başarısız olsa da silme geri alınmaz.
+            _logger.LogError(ex, "Silinen aktarım işinin zamanlanmış görevleri kapatılamadı. JobId={JobId}", id);
+        }
+    }
+
+    /// <summary>ParametersJson içinden jobId okur; okunamazsa null.</summary>
+    private static int? ExtractJobId(string? parametersJson)
+    {
+        if (string.IsNullOrWhiteSpace(parametersJson)) return null;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(parametersJson);
+            return doc.RootElement.TryGetProperty("jobId", out var el)
+                   && el.ValueKind == System.Text.Json.JsonValueKind.Number
+                ? el.GetInt32()
+                : null;
+        }
+        catch { return null; }
+    }
 
     public Task<bool> ToggleJobActiveAsync(int id, CancellationToken ct) => _repo.ToggleJobActiveAsync(id, ct);
 

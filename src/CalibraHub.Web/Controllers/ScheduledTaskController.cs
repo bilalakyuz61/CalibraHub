@@ -44,8 +44,15 @@ public sealed class ScheduledTaskController : Controller
         return View("~/Views/Admin/ScheduledTasks.cshtml", new ScheduledTasksSmartBoardViewModel { BoardConfig = boardConfig });
     }
 
+    /// <summary>
+    /// <paramref name="taskType"/> + <paramref name="jobId"/>: YENİ görev formunu önceden
+    /// doldurur. Veritabanı Aktarımı sihirbazı bu ekranı gömülü modalda açar
+    /// (<c>?taskType=8&amp;jobId=N&amp;workspace=1</c>) — zamanlama arayüzü tek yerde kalsın,
+    /// sihirbaza ikinci kez yazılmasın diye.
+    /// </summary>
     [HttpGet("/Admin/ScheduledTaskEdit")]
-    public async Task<IActionResult> ScheduledTaskEdit(int? id, CancellationToken ct)
+    public async Task<IActionResult> ScheduledTaskEdit(int? id, CancellationToken ct,
+        int? taskType = null, int? jobId = null)
     {
         if (id.HasValue)
         {
@@ -72,9 +79,22 @@ public sealed class ScheduledTaskController : Controller
         }
 
         var allTasks = await _scheduledTaskRepo.GetAllAsync(ct);
+
+        // Ön-doldurma: yalnız tanınan tip + geçerli jobId. Parametre JSON'unu burada
+        // üretiyoruz çünkü view zaten initParams.jobId'yi okuyup seçiciyi dolduruyor
+        // (loadDbImportJobs) — ikinci bir yol yazmaya gerek yok.
+        var prefillType = taskType is > 0 && Enum.IsDefined(typeof(CalibraHub.Domain.Enums.ScheduledTaskType), taskType.Value)
+            ? taskType.Value
+            : 0;
+        string? prefillParams = null;
+        if (prefillType == (int)CalibraHub.Domain.Enums.ScheduledTaskType.DataImport && jobId is > 0)
+            prefillParams = $"{{\"jobId\": {jobId.Value}}}";
+
         return View("~/Views/Admin/ScheduledTaskEdit.cshtml", new ScheduledTaskEditViewModel
         {
-            AllTasks = allTasks.Select(t => (t.Id, t.Name)).ToList(),
+            TaskType       = prefillType,
+            ParametersJson = prefillParams,
+            AllTasks       = allTasks.Select(t => (t.Id, t.Name)).ToList(),
         });
     }
 

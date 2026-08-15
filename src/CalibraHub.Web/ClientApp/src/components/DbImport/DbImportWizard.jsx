@@ -1,7 +1,7 @@
 import React from 'react'
 import {
   Database, ArrowLeft, ArrowRight, Save, Play, Loader2, Search,
-  CheckCircle2, XCircle, AlertTriangle, KeyRound, Wand2, Trash2, Filter, Plus, ListChecks, X,
+  CheckCircle2, XCircle, AlertTriangle, KeyRound, Wand2, Trash2, Filter, Plus, ListChecks, X, CalendarClock,
 } from 'lucide-react'
 import { apiGet, apiPost } from './dbiApi'
 import './DbImport.css'
@@ -114,6 +114,7 @@ export default function DbImportWizard() {
   })
 
   const [filterModal, setFilterModal] = React.useState(false)
+  const [scheduleModal, setScheduleModal] = React.useState(false)
   const [valuesField, setValuesField] = React.useState(null)   // izinli değerler modalı
   const [preview, setPreview] = React.useState(null)
   const [runResult, setRunResult] = React.useState(null)
@@ -695,9 +696,21 @@ export default function DbImportWizard() {
           <>
             <div className="dbi-card">
               <div className="dbi-card-title">Aktarımı Çalıştır</div>
-              <button type="button" className="dbi-btn dbi-btn--primary" onClick={doRun} disabled={busy}>
-                <Play size={14} /> Aktarımı Başlat
-              </button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <button type="button" className="dbi-btn dbi-btn--primary" onClick={doRun} disabled={busy}>
+                  <Play size={14} /> Aktarımı Başlat
+                </button>
+                {/* Zamanlama, mevcut görev ekranını gömülü açar — arayüz TEK yerde kalır,
+                    7 zamanlama tipinin ifade üretimi buraya kopyalanmaz. */}
+                <button type="button" className="dbi-btn"
+                        onClick={async () => { const id = job.id || await save(); if (id) setScheduleModal(true) }}
+                        disabled={busy}>
+                  <CalendarClock size={14} /> Zamanla
+                </button>
+              </div>
+              {!job.id && (
+                <span className="dbi-hint">Zamanlama için iş önce kaydedilir.</span>
+              )}
             </div>
 
             {runResult && runResult.run && (
@@ -781,6 +794,35 @@ export default function DbImportWizard() {
               <button type="button" className="dbi-btn dbi-btn--primary" onClick={() => setFilterModal(false)}>
                 Tamam
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Zamanlama modalı — mevcut Zamanlanmış Görev ekranı gömülü ── */}
+      {scheduleModal && job.id > 0 && (
+        <div className="dbi-modal-backdrop"
+             onMouseDown={(e) => { if (e.target === e.currentTarget) setScheduleModal(false) }}>
+          <div className="dbi-modal" style={{ maxWidth: 'min(1100px, calc(100vw - 48px))', height: 'min(760px, calc(100vh - 64px))' }}
+               role="dialog" aria-modal="true">
+            <div className="dbi-modal-head" style={{ display: 'flex', alignItems: 'center' }}>
+              <span><CalendarClock size={14} /> Zamanlanmış Görev — {job.name}</span>
+              <div className="dbi-header-spacer" />
+              <button type="button" className="dbi-btn dbi-btn--xs dbi-btn--ghost" onClick={() => setScheduleModal(false)}>
+                <X size={14} />
+              </button>
+            </div>
+            <div className="dbi-modal-body" style={{ padding: 0 }}>
+              <iframe
+                title="Zamanlanmış Görev"
+                src={`/Admin/ScheduledTaskEdit?taskType=8&jobId=${job.id}&workspace=1`}
+                style={{ width: '100%', height: '100%', border: 0, display: 'block' }} />
+            </div>
+            <div className="dbi-modal-foot">
+              <span className="dbi-hint" style={{ marginRight: 'auto' }}>
+                Görev burada kaydedilir; ayrıntı ve geçmiş için Zamanlanmış Görevler ekranı.
+              </span>
+              <button type="button" className="dbi-btn" onClick={() => setScheduleModal(false)}>Kapat</button>
             </div>
           </div>
         </div>
