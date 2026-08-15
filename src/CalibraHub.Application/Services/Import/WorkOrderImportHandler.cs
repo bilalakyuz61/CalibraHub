@@ -76,17 +76,22 @@ public sealed class WorkOrderImportHandler : RowImportHandlerBase
     }
 
     protected override async Task<(string Action, int? ExistingId)> ResolveActionAsync(
-        IReadOnlyDictionary<string, string?> d, string? matchKeyField, CancellationToken ct)
+        IReadOnlyDictionary<string, string?> d, IReadOnlyList<string> matchKeys, CancellationToken ct)
     {
-        var number = Get(d, "OrderNumber");
-        if (!string.IsNullOrWhiteSpace(number))
-        {
-            var orders = await EnsureOrdersAsync(ct);
-            var hit = orders.FirstOrDefault(o => Same(o.OrderNumber, number));
-            if (hit is not null) return ("update", hit.Id);
-        }
-        return ("insert", null);
+        if (matchKeys.Count == 0) return ("insert", null);
+
+        var orders = await EnsureOrdersAsync(ct);
+        var hit = orders.FirstOrDefault(o => KeysMatch(d, matchKeys, k => WorkOrderValue(o, k)));
+        return hit is not null ? ("update", hit.Id) : ("insert", null);
     }
+
+    /// <summary>Mevcut iş emrinin hedef alan karşılığı (bileşik anahtar karşılaştırması için).</summary>
+    private static string? WorkOrderValue(WorkOrderListItemDto o, string key) => key.ToLowerInvariant() switch
+    {
+        "ordernumber" => o.OrderNumber,
+        "itemcode"    => o.ItemCode,
+        _             => null,
+    };
 
     protected override async Task<(bool Ok, string? Error, int? RecordId)> CommitRowAsync(
         IReadOnlyDictionary<string, string?> d, string action, int? existingId,

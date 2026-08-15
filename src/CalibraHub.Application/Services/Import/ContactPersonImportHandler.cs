@@ -23,11 +23,6 @@ public sealed class ContactPersonImportHandler : RowImportHandlerBase
     public override string Entity => "CONTACT_PERSON";
     public override string Label => "Cari İletişim Kişisi";
 
-    /// <summary>
-    /// Her satır DAİMA yeni kişi açar — ResolveActionAsync sabit "insert" döner.
-    /// Aynı iş tekrar çalıştırılırsa kişiler mükerrer oluşur.
-    /// </summary>
-    public override bool SupportsUpsert => false;
 
     public override IReadOnlyList<ImportTargetFieldDto> GetFields() => new[]
     {
@@ -52,9 +47,33 @@ public sealed class ContactPersonImportHandler : RowImportHandlerBase
     }
 
     // İletişim kişisi: her satır yeni kayıt (v1 — upsert yok).
-    protected override Task<(string Action, int? ExistingId)> ResolveActionAsync(
-        IReadOnlyDictionary<string, string?> d, string? matchKeyField, CancellationToken ct)
-        => Task.FromResult(("insert", (int?)null));
+    protected override async Task<(string Action, int? ExistingId)> ResolveActionAsync(
+        IReadOnlyDictionary<string, string?> d, IReadOnlyList<string> matchKeys, CancellationToken ct)
+    {
+        if (matchKeys.Count == 0) return ("insert", null);
+
+        // Kişi her zaman bir cariye bağlıdır — önce o cariye daralt, sonra bileşik
+        // anahtarı yalnız o carinin kişileri içinde ara.
+        var parentCode = Get(d, "ParentCode")?.Trim();
+        if (string.IsNullOrWhiteSpace(parentCode)) return ("insert", null);
+
+        var parent = await _finance.GetContactByCodeAsync(parentCode, ct);
+        if (parent is null) return ("insert", null);   // CommitRow net hata verecek
+
+        var persons = await _personRepo.GetByContactIdAsync(parent.Id, ct);
+        var hit = persons.FirstOrDefault(p => KeysMatch(d, matchKeys, k => PersonValue(p, parentCode, k)));
+        return hit is not null ? ("update", hit.Id) : ("insert", null);
+    }
+
+    /// <summary>Mevcut kişinin hedef alan karşılığı (bileşik anahtar karşılaştırması için).</summary>
+    private static string? PersonValue(ContactPerson p, string parentCode, string key) => key.ToLowerInvariant() switch
+    {
+        "parentcode" => parentCode,   // zaten bu cariye daraltıldı
+        "fullname"   => p.FullName,
+        "email"      => p.Email,
+        "phone"      => p.Phone,
+        _            => null,
+    };
 
     protected override async Task<(bool Ok, string? Error, int? RecordId)> CommitRowAsync(
         IReadOnlyDictionary<string, string?> d, string action, int? existingId,
@@ -70,6 +89,37 @@ public sealed class ContactPersonImportHandler : RowImportHandlerBase
         {
             var t = await _titleRepo.GetByNameAsync(title.Trim(), ct);
             titleId = t?.Id;   // bulunamazsa boş — v1'de otomatik unvan oluşturulmaz
+        }
+
+        // Güncelleme: eşlenmemiş alan mevcut değerini KORUR (aktarım eşlenmeyen alanı silmemeli).
+        if (action == "update" && existingId is > 0)
+        {
+            var ex = await _personRepo.GetByIdAsync(existingId.Value, ct);
+            if (ex is null) return (false, "Güncellenecek iletişim kişisi bulunamadı.", null);
+
+            string? Ov(string key, string? cur)
+                => d.TryGetValue(key, out var v) && !string.IsNullOrWhiteSpace(v) ? v.Trim() : cur;
+
+            // ContactPerson init-only — mutasyon yerine güncellenmiş kopya kurulur.
+            var updated = new ContactPerson
+            {
+                Id          = ex.Id,
+                ContactId   = ex.ContactId,
+                TitleId     = titleId ?? ex.TitleId,
+                FullName    = Ov("FullName", ex.FullName)!,
+                Phone       = Ov("Phone", ex.Phone),
+                Email       = Ov("Email", ex.Email),
+                Notes       = Ov("Notes", ex.Notes),
+                IsPrimary   = d.TryGetValue("IsPrimary", out var pr) && !string.IsNullOrWhiteSpace(pr)
+                                  ? ParseBool(pr) : ex.IsPrimary,
+                IsActive    = ex.IsActive,
+                Created     = ex.Created,
+                CreatedById = ex.CreatedById,
+                UpdatedById = userId,
+            };
+
+            await _personRepo.UpdateAsync(updated, ct);
+            return (true, null, updated.Id);
         }
 
         var person = new ContactPerson

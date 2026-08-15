@@ -312,7 +312,7 @@ public sealed class SqlDataImportRepository : IDataImportRepository
         cmd.Parameters.Add(new SqlParameter("@TargetEntity", j.TargetEntity));
         cmd.Parameters.Add(new SqlParameter("@SourceSchema", j.SourceSchema));
         cmd.Parameters.Add(new SqlParameter("@SourceObject", j.SourceObject));
-        cmd.Parameters.Add(new SqlParameter("@MatchKeyField", j.MatchKeyField));
+        cmd.Parameters.Add(new SqlParameter("@MatchKeyField", string.Join(",", j.MatchKeyFields)));
         cmd.Parameters.Add(new SqlParameter("@MaxRows", j.MaxRows));
         cmd.Parameters.Add(new SqlParameter("@ErrorBehavior", (int)j.ErrorBehavior));
         cmd.Parameters.Add(new SqlParameter("@PreProcedureName", (object?)j.PreProcedureName ?? DBNull.Value));
@@ -333,7 +333,10 @@ public sealed class SqlDataImportRepository : IDataImportRepository
         TargetEntity            = r.GetString(3),
         SourceSchema            = r.GetString(4),
         SourceObject            = r.GetString(5),
-        MatchKeyField           = r.GetString(6),
+        MatchKeyFields          = r.IsDBNull(6)
+                                      ? new List<string>()
+                                      : r.GetString(6).Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                          .Select(x => x.Trim()).Where(x => x.Length > 0).ToList(),
         MaxRows                 = r.GetInt32(7),
         ErrorBehavior           = (DataImportErrorBehavior)r.GetInt32(8),
         PreProcedureName        = r.IsDBNull(9) ? null : r.GetString(9),

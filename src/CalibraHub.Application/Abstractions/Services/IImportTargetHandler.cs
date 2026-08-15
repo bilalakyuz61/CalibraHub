@@ -3,13 +3,30 @@ using CalibraHub.Application.Contracts;
 namespace CalibraHub.Application.Abstractions.Services;
 
 /// <summary>
-/// İçe aktarım motoruna Excel'den eşlenmiş satırlar (her satır targetKey→değer sözlüğü).
-/// MatchKeyField upsert anahtarı; MappedKeys gösterim sırası içindir.
+/// İçe aktarım motoruna eşlenmiş satırlar (her satır targetKey→değer sözlüğü).
+/// <paramref name="MatchKeyFields"/> upsert anahtarıdır — BİRDEN FAZLA alan verilebilir
+/// (bileşik anahtar, örn. Cari Kodu + Ad Soyad). Boş liste = eşleşme yok, hep insert.
+/// MappedKeys gösterim sırası içindir.
 /// </summary>
 public sealed record ImportRowSet(
     IReadOnlyList<IReadOnlyDictionary<string, string?>> Rows,
     IReadOnlyList<string> MappedKeys,
-    string? MatchKeyField);
+    IReadOnlyList<string> MatchKeyFields)
+{
+    /// <summary>Tek anahtarlı çağrı kolaylığı (Excel şablonları ve eski kod yolu).</summary>
+    public ImportRowSet(
+        IReadOnlyList<IReadOnlyDictionary<string, string?>> rows,
+        IReadOnlyList<string> mappedKeys,
+        string? matchKeyField)
+        : this(rows, mappedKeys,
+               string.IsNullOrWhiteSpace(matchKeyField)
+                   ? Array.Empty<string>()
+                   : new[] { matchKeyField.Trim() })
+    { }
+
+    /// <summary>Geriye uyum — ilk anahtar. Yeni kod <see cref="MatchKeyFields"/> kullanmalı.</summary>
+    public string? MatchKeyField => MatchKeyFields.Count > 0 ? MatchKeyFields[0] : null;
+}
 
 /// <summary>
 /// Bir hedef entity için içe-aktarım handler'ı. Her entity (Cari, Stok, Fiyat, Reçete,

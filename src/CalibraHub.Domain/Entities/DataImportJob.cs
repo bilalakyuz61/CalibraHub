@@ -32,10 +32,15 @@ public sealed class DataImportJob
     public string SourceObject { get; set; } = string.Empty;
 
     /// <summary>
-    /// Upsert anahtarı — mevcut kaydı bulmak için kullanılan HEDEF alan anahtarı.
-    /// Zorunludur; boş bırakılamaz (bkz. sınıf özeti).
+    /// Upsert anahtarı — mevcut kaydı bulmak için kullanılan HEDEF alan anahtar(lar)ı.
+    /// BİRDEN FAZLA alan verilebilir (bileşik anahtar, örn. Cari Kodu + Ad Soyad);
+    /// eşleşme için hepsinin tutması gerekir. En az bir tane ZORUNLUDUR (bkz. sınıf özeti).
+    /// DB'de virgülle ayrılmış tek kolonda saklanır.
     /// </summary>
-    public string MatchKeyField { get; set; } = string.Empty;
+    public List<string> MatchKeyFields { get; set; } = new();
+
+    /// <summary>Hata mesajları/gösterim için ilk anahtar.</summary>
+    public string? MatchKeyField => MatchKeyFields.Count > 0 ? MatchKeyFields[0] : null;
 
     /// <summary>Tek çalıştırmada okunacak azami satır (emniyet tavanı).</summary>
     public int MaxRows { get; set; } = 50_000;
@@ -84,12 +89,16 @@ public sealed class DataImportJob
         if (ConnectionId <= 0) return "Kaynak bağlantı seçilmelidir.";
         if (string.IsNullOrWhiteSpace(TargetEntity)) return "Hedef entity seçilmelidir.";
         if (string.IsNullOrWhiteSpace(SourceObject)) return "Kaynak tablo/view seçilmelidir.";
-        if (string.IsNullOrWhiteSpace(MatchKeyField)) return "Anahtar alan zorunludur — anahtarsız aktarım her çalıştırmada kayıtları çoğaltır.";
+        if (MatchKeyFields.Count == 0) return "Anahtar alan zorunludur — anahtarsız aktarım her çalıştırmada kayıtları çoğaltır.";
         if (Columns.Count == 0) return "En az bir kolon eşlemesi tanımlanmalıdır.";
 
-        // Anahtar alan eşlenmiş olmalı — aksi halde upsert anahtarı satırlarda hiç bulunmaz.
-        if (!Columns.Any(c => string.Equals(c.TargetKey, MatchKeyField, StringComparison.OrdinalIgnoreCase)))
-            return $"Anahtar alan '{MatchKeyField}' kolon eşlemelerinde yer almalıdır.";
+        // Her anahtar alan eşlenmiş olmalı — aksi halde o anahtar satırlarda hiç bulunmaz
+        // ve bileşik eşleşme sessizce hep başarısız olur (her satır insert'e döner).
+        foreach (var key in MatchKeyFields)
+        {
+            if (!Columns.Any(c => string.Equals(c.TargetKey, key, StringComparison.OrdinalIgnoreCase)))
+                return $"Anahtar alan '{key}' kolon eşlemelerinde yer almalıdır.";
+        }
 
         return null;
     }

@@ -233,7 +233,9 @@ public sealed class DataImportService : IDataImportService
             TargetEntity = (req.TargetEntity ?? string.Empty).Trim().ToUpperInvariant(),
             SourceSchema = string.IsNullOrWhiteSpace(req.SourceSchema) ? "dbo" : req.SourceSchema.Trim(),
             SourceObject = (req.SourceObject ?? string.Empty).Trim(),
-            MatchKeyField = (req.MatchKeyField ?? string.Empty).Trim(),
+            MatchKeyFields = (req.MatchKeyFields ?? Array.Empty<string>())
+                .Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
             MaxRows = req.MaxRows <= 0 ? 50_000 : req.MaxRows,
             SourceFilterJson = Blank(req.SourceFilterJson),
             ErrorBehavior = req.ErrorBehavior,
@@ -261,8 +263,23 @@ public sealed class DataImportService : IDataImportService
         var error = job.Validate();
         if (error is not null) return (false, error, 0);
 
-        if (!_handlers.ContainsKey(job.TargetEntity))
+        if (!_handlers.TryGetValue(job.TargetEntity, out var targetHandler))
             return (false, $"Bilinmeyen hedef entity: {job.TargetEntity}", 0);
+
+        // Seçilen anahtarlar bu entity'de gerçekten eşleşme anahtarı olabilmeli.
+        // Olmazsa handler o alanı tanımaz, karşılaştırma daima başarısız olur ve
+        // her satır SESSİZCE insert'e döner — anahtar zorunluluğu hiçbir şey korumaz.
+        await targetHandler.PreloadAsync(ct);
+        var eligible = targetHandler.GetFields()
+            .Where(f => f.CanBeMatchKey)
+            .Select(f => f.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var key in job.MatchKeyFields)
+        {
+            if (!eligible.Contains(key))
+                return (false, $"'{key}' bu kayıt türü için eşleşme anahtarı olarak kullanılamaz.", 0);
+        }
 
         if (await _repo.JobNameExistsAsync(name, req.Id > 0 ? req.Id : null, ct))
             return (false, $"Aynı isimde başka bir aktarım işi zaten tanımlı: '{name}'", 0);
@@ -446,7 +463,7 @@ public sealed class DataImportService : IDataImportService
         }
 
         var mappedKeys = columns.Select(c => c.TargetKey).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        return new ImportRowSet(rows, mappedKeys, job.MatchKeyField);
+        return new ImportRowSet(rows, mappedKeys, job.MatchKeyFields);
     }
 
     private async Task<DataImportRunResultDto> FinishAsync(
@@ -472,7 +489,7 @@ public sealed class DataImportService : IDataImportService
 
     private static DataImportJobDto ToDto(DataImportJob j, string? connectionName) => new(
         j.Id, j.Name, j.ConnectionId, connectionName, j.TargetEntity, null,
-        j.SourceSchema, j.SourceObject, j.MatchKeyField, j.MaxRows, j.SourceFilterJson, j.ErrorBehavior,
+        j.SourceSchema, j.SourceObject, j.MatchKeyFields, j.MaxRows, j.SourceFilterJson, j.ErrorBehavior,
         j.PreProcedureName, j.PreProcedureTarget, j.PreProcedureParamsJson,
         j.PostProcedureName, j.PostProcedureTarget, j.PostProcedureParamsJson,
         j.Columns.OrderBy(c => c.SortOrder)

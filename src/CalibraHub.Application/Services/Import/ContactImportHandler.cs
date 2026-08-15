@@ -98,28 +98,57 @@ public sealed class ContactImportHandler : RowImportHandlerBase
     }
 
     protected override async Task<(string Action, int? ExistingId)> ResolveActionAsync(
-        IReadOnlyDictionary<string, string?> d, string? matchKeyField, CancellationToken ct)
+        IReadOnlyDictionary<string, string?> d, IReadOnlyList<string> matchKeys, CancellationToken ct)
     {
-        if (string.Equals(matchKeyField, "AccountCode", StringComparison.OrdinalIgnoreCase))
+        if (matchKeys.Count == 0) return ("insert", null);
+
+        bool Has(string k) => matchKeys.Any(x => string.Equals(x, k, StringComparison.OrdinalIgnoreCase));
+
+        // Kod ve VKN indeksli tekil sorgulardır — önce onlarla DARALT, sonra kalan
+        // anahtarları bulunan kayda karşı doğrula (bileşik anahtarın tamamı tutmalı).
+        Contact? candidate = null;
+
+        if (Has("AccountCode"))
         {
-            var code = Get(d, "AccountCode");
+            var code = Get(d, "AccountCode")?.Trim();
             if (!string.IsNullOrWhiteSpace(code))
-            {
-                var existing = await _financeRepo.GetContactByCodeAsync(code.Trim(), ct);
-                if (existing is not null) return ("update", existing.Id);
-            }
+                candidate = await _financeRepo.GetContactByCodeAsync(code, ct);
         }
-        else if (string.Equals(matchKeyField, "TaxNumber", StringComparison.OrdinalIgnoreCase))
+        if (candidate is null && Has("TaxNumber"))
         {
             var tax = DigitsOnly(Get(d, "TaxNumber") ?? "");
             if (tax.Length == 10)
-            {
-                var existing = await _financeRepo.GetContactByTaxNumberAsync(tax, ct);
-                if (existing is not null) return ("update", existing.Id);
-            }
+                candidate = await _financeRepo.GetContactByTaxNumberAsync(tax, ct);
         }
-        return ("insert", null);
+
+        if (candidate is not null)
+            return KeysMatch(d, matchKeys, k => ContactValue(candidate, k))
+                ? ("update", candidate.Id)
+                : ("insert", null);
+
+        // Daraltacak indeksli anahtar yoksa (örn. yalnız Unvan + İl) tam listeyi tara.
+        var all = await EnsureContactsAsync(ct);
+        var hit = all.FirstOrDefault(c => KeysMatch(d, matchKeys, k => ContactValue(c, k)));
+        return hit is not null ? ("update", hit.Id) : ("insert", null);
     }
+
+    private List<Contact>? _allContacts;
+    private async Task<List<Contact>> EnsureContactsAsync(CancellationToken ct)
+        => _allContacts ??= (await _financeRepo.GetContactsAsync(null, null, ct)).ToList();
+
+    /// <summary>Mevcut carinin hedef alan karşılığı (bileşik anahtar karşılaştırması için).</summary>
+    private static string? ContactValue(Contact c, string key) => key.ToLowerInvariant() switch
+    {
+        "accountcode"    => c.AccountCode,
+        "accounttitle"   => c.AccountTitle,
+        "taxnumber"      => c.TaxNumber,
+        "identitynumber" => c.IdentityNumber,
+        "email"          => c.Email,
+        "phone"          => c.Phone,
+        "mobile"         => c.Mobile,
+        "city"           => c.City,
+        _                => null,
+    };
 
     protected override async Task<(bool Ok, string? Error, int? RecordId)> CommitRowAsync(
         IReadOnlyDictionary<string, string?> d, string action, int? existingId,

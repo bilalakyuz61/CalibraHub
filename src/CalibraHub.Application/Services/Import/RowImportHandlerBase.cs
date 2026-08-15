@@ -27,9 +27,13 @@ public abstract class RowImportHandlerBase : IImportTargetHandler
     /// <summary>Tek satırın doğrulama hataları (boş = geçerli).</summary>
     protected abstract IReadOnlyList<string> ValidateRow(IReadOnlyDictionary<string, string?> row);
 
-    /// <summary>Upsert anahtarına göre insert/update kararı + mevcut kayıt Id'si.</summary>
+    /// <summary>
+    /// Upsert anahtar(lar)ına göre insert/update kararı + mevcut kayıt Id'si.
+    /// <paramref name="matchKeys"/> birden fazla alan içerebilir (bileşik anahtar);
+    /// hepsi eşleşmelidir. Boşsa eşleşme aranmaz.
+    /// </summary>
     protected abstract Task<(string Action, int? ExistingId)> ResolveActionAsync(
-        IReadOnlyDictionary<string, string?> row, string? matchKeyField, CancellationToken ct);
+        IReadOnlyDictionary<string, string?> row, IReadOnlyList<string> matchKeys, CancellationToken ct);
 
     /// <summary>Tek satırı kaydet. usedCodes aynı dosya içinde kod çakışmasını önlemek içindir.</summary>
     protected abstract Task<(bool Ok, string? Error, int? RecordId)> CommitRowAsync(
@@ -52,7 +56,7 @@ public abstract class RowImportHandlerBase : IImportTargetHandler
             if (errs.Count > 0) { action = "error"; error++; }
             else
             {
-                var (a, _) = await ResolveActionAsync(row, set.MatchKeyField, ct);
+                var (a, _) = await ResolveActionAsync(row, set.MatchKeyFields, ct);
                 action = a; valid++;
                 if (a == "update") upd++; else ins++;
             }
@@ -80,7 +84,7 @@ public abstract class RowImportHandlerBase : IImportTargetHandler
             if (errs.Count > 0) { results.Add(new ImportCommitRowDto(rowNo, false, "error", string.Join("; ", errs), null)); failed++; continue; }
             try
             {
-                var (action, existingId) = await ResolveActionAsync(row, set.MatchKeyField, ct);
+                var (action, existingId) = await ResolveActionAsync(row, set.MatchKeyFields, ct);
                 var (ok, err, id) = await CommitRowAsync(row, action, existingId, userId, used, ct);
                 if (ok) { if (action == "update") updated++; else inserted++; results.Add(new ImportCommitRowDto(rowNo, true, action, null, id)); }
                 else { failed++; results.Add(new ImportCommitRowDto(rowNo, false, action, err ?? "Bilinmeyen hata", null)); }
@@ -97,6 +101,38 @@ public abstract class RowImportHandlerBase : IImportTargetHandler
 
     /// <summary>Dinamik durum yükleme (varsayılan no-op). Widget'lı handler override eder.</summary>
     public virtual Task PreloadAsync(CancellationToken ct) => Task.CompletedTask;
+
+
+    /// <summary>
+    /// Bileşik anahtar karşılaştırması: <paramref name="matchKeys"/>'in TAMAMI eşleşmeli.
+    /// <paramref name="existingValue"/> mevcut kaydın o hedef alandaki değerini döner.
+    ///
+    /// Kurallar (tüm handler'lar için TEK yerde — her biri kendi trim/case mantığını
+    /// yazarsa davranış sessizce ayrışır):
+    ///   • Satırda değeri boş olan anahtar → eşleşme YOK (boş anahtarla eşleşmek,
+    ///     rastgele bir kayda çarpmak demektir).
+    ///   • Karşılaştırma trim + büyük/küçük harf duyarsız.
+    ///   • Anahtar listesi boşsa eşleşme aranmaz (false).
+    /// </summary>
+    protected static bool KeysMatch(
+        IReadOnlyDictionary<string, string?> row,
+        IReadOnlyList<string> matchKeys,
+        Func<string, string?> existingValue)
+    {
+        if (matchKeys is null || matchKeys.Count == 0) return false;
+
+        foreach (var key in matchKeys)
+        {
+            var rowVal = Get(row, key)?.Trim();
+            if (string.IsNullOrWhiteSpace(rowVal)) return false;
+
+            var exVal = existingValue(key)?.Trim();
+            if (string.IsNullOrWhiteSpace(exVal)) return false;
+
+            if (!string.Equals(rowVal, exVal, StringComparison.OrdinalIgnoreCase)) return false;
+        }
+        return true;
+    }
 
     // ── Ortak yardımcılar ────────────────────────────────────────────────
     protected (IReadOnlyList<string> Keys, IReadOnlyList<string> Labels) DisplayCols(IReadOnlyList<string> mappedKeys)

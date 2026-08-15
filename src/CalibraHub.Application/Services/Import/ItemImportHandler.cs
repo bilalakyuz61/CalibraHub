@@ -142,20 +142,23 @@ public sealed class ItemImportHandler : RowImportHandlerBase
     }
 
     protected override async Task<(string Action, int? ExistingId)> ResolveActionAsync(
-        IReadOnlyDictionary<string, string?> d, string? matchKeyField, CancellationToken ct)
+        IReadOnlyDictionary<string, string?> d, IReadOnlyList<string> matchKeys, CancellationToken ct)
     {
-        if (string.Equals(matchKeyField, "Code", StringComparison.OrdinalIgnoreCase))
-        {
-            var code = Get(d, "Code");
-            if (!string.IsNullOrWhiteSpace(code))
-            {
-                var items = await EnsureItemsAsync(ct);
-                var hit = items.FirstOrDefault(i => string.Equals(i.Code?.Trim(), code.Trim(), StringComparison.OrdinalIgnoreCase));
-                if (hit is not null) return ("update", hit.Id);
-            }
-        }
-        return ("insert", null);
+        if (matchKeys.Count == 0) return ("insert", null);
+
+        var items = await EnsureItemsAsync(ct);
+        var hit = items.FirstOrDefault(i => KeysMatch(d, matchKeys, k => ItemValue(i, k)));
+        return hit is not null ? ("update", hit.Id) : ("insert", null);
     }
+
+    /// <summary>Mevcut stok kartının hedef alan karşılığı (bileşik anahtar karşılaştırması için).</summary>
+    private static string? ItemValue(Item i, string key) => key.ToLowerInvariant() switch
+    {
+        "code"    => i.Code,
+        "name"    => i.Name,
+        "barcode" => i.Barcode,
+        _         => null,
+    };
 
     protected override async Task<(bool Ok, string? Error, int? RecordId)> CommitRowAsync(
         IReadOnlyDictionary<string, string?> d, string action, int? existingId,

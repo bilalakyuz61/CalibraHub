@@ -8251,6 +8251,15 @@ END;";
                     ON [{s}].[DataImportJob]([ConnectionId]);
             END;
 
+            -- 2026-08-15 ek: bilesik anahtar (virgullu liste) 100 karaktere sigmayabilir.
+            IF COL_LENGTH(N'[{s}].[DataImportJob]', 'MatchKeyField') IS NOT NULL
+               AND EXISTS (SELECT 1 FROM sys.columns
+                           WHERE [object_id] = OBJECT_ID(N'[{s}].[DataImportJob]')
+                             AND [name] = 'MatchKeyField' AND [max_length] < 1000)
+            BEGIN
+                ALTER TABLE [{s}].[DataImportJob] ALTER COLUMN [MatchKeyField] NVARCHAR(500) NOT NULL;
+            END;
+
             -- 2026-08-15 ek: kaynak kisit kurallari (disa aktarimdaki "Kisit Kurallari" ile ayni JSON).
             IF COL_LENGTH(N'[{s}].[DataImportJob]', 'SourceFilterJson') IS NULL
             BEGIN

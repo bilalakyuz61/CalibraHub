@@ -46,29 +46,22 @@ public sealed class MachineImportHandler : RowImportHandlerBase
     }
 
     protected override async Task<(string Action, int? ExistingId)> ResolveActionAsync(
-        IReadOnlyDictionary<string, string?> d, string? matchKeyField, CancellationToken ct)
+        IReadOnlyDictionary<string, string?> d, IReadOnlyList<string> matchKeys, CancellationToken ct)
     {
+        if (matchKeys.Count == 0) return ("insert", null);
+
         var list = await EnsureMachinesAsync(ct);
-
-        if (string.Equals(matchKeyField, "Code", StringComparison.OrdinalIgnoreCase))
-        {
-            var code = Get(d, "Code");
-            if (!string.IsNullOrWhiteSpace(code))
-            {
-                var hit = list.FirstOrDefault(m => Same(m.Code, code));
-                if (hit is not null) return ("update", hit.Id);
-            }
-            return ("insert", null);
-        }
-
-        var name = Get(d, "Name");
-        if (!string.IsNullOrWhiteSpace(name))
-        {
-            var hit = list.FirstOrDefault(m => Same(m.Name, name));
-            if (hit is not null) return ("update", hit.Id);
-        }
-        return ("insert", null);
+        var hit = list.FirstOrDefault(m => KeysMatch(d, matchKeys, k => MachineValue(m, k)));
+        return hit is not null ? ("update", hit.Id) : ("insert", null);
     }
+
+    /// <summary>Mevcut makinenin hedef alan karşılığı (bileşik anahtar karşılaştırması için).</summary>
+    private static string? MachineValue(MachineDto m, string key) => key.ToLowerInvariant() switch
+    {
+        "code" => m.Code,
+        "name" => m.Name,
+        _      => null,
+    };
 
     protected override async Task<(bool Ok, string? Error, int? RecordId)> CommitRowAsync(
         IReadOnlyDictionary<string, string?> d, string action, int? existingId,

@@ -28,11 +28,6 @@ public sealed class PriceListImportHandler : RowImportHandlerBase
     public override string Entity => "PRICELIST";
     public override string Label => "Fiyat Listesi";
 
-    /// <summary>
-    /// Her satır DAİMA yeni fiyat kaydı açar (SavePriceListRequest.Id = null).
-    /// Aynı iş tekrar çalıştırılırsa fiyat satırları mükerrer oluşur.
-    /// </summary>
-    public override bool SupportsUpsert => false;
 
     public override IReadOnlyList<ImportTargetFieldDto> GetFields() => new[]
     {
@@ -88,9 +83,68 @@ public sealed class PriceListImportHandler : RowImportHandlerBase
         return errs;
     }
 
-    protected override Task<(string Action, int? ExistingId)> ResolveActionAsync(
-        IReadOnlyDictionary<string, string?> d, string? matchKeyField, CancellationToken ct)
-        => Task.FromResult(("insert", (int?)null));
+    /// <summary>
+    /// Fiyat kaydının doğal anahtarı DOMAIN'de tanımlıdır:
+    /// (Grup + Stok + Kombinasyon + Döviz + Fiyat Tipi + Geçerlilik Başlangıcı).
+    /// Kullanıcının seçtiği anahtar alanlar burada kullanılmaz — mevcut
+    /// <c>FindActiveDuplicateAsync</c> bu bileşimi zaten uygular; ayrı bir anahtar
+    /// tanımlamak iki farklı "aynı kayıt" kuralı doğururdu.
+    ///
+    /// Tarih anahtara DAHİL olduğu için yeni geçerlilik tarihi yeni kayıt açar
+    /// (fiyat geçmişi korunur), aynı tarihli kayıt güncellenir.
+    /// </summary>
+    protected override async Task<(string Action, int? ExistingId)> ResolveActionAsync(
+        IReadOnlyDictionary<string, string?> d, IReadOnlyList<string> matchKeys, CancellationToken ct)
+    {
+        var resolved = await ResolveKeyPartsAsync(d, ct);
+        if (resolved is null) return ("insert", null);   // çözülemeyen satırı CommitRow reddeder
+
+        var (groupId, itemId, configId, currencyId, priceType, validFrom) = resolved.Value;
+        var dup = await _priceRepo.FindActiveDuplicateAsync(
+            groupId, itemId, configId, currencyId, priceType, validFrom, 0, ct);
+
+        return dup is not null ? ("update", dup.Id) : ("insert", null);
+    }
+
+    /// <summary>
+    /// Satırdaki kod/ad değerlerini doğal anahtarın Id bileşenlerine çözer.
+    /// Herhangi biri çözülemezse null (CommitRow net hata mesajı verir).
+    /// </summary>
+    private async Task<(int GroupId, int ItemId, int? ConfigId, int CurrencyId, string PriceType, DateTime ValidFrom)?>
+        ResolveKeyPartsAsync(IReadOnlyDictionary<string, string?> d, CancellationToken ct)
+    {
+        var items = await EnsureItemsAsync(ct);
+        var itemCode = Get(d, "ItemCode")?.Trim();
+        if (string.IsNullOrWhiteSpace(itemCode)) return null;
+        var item = items.FirstOrDefault(i => string.Equals(i.Code?.Trim(), itemCode, StringComparison.OrdinalIgnoreCase));
+        if (item is null) return null;
+
+        int? configId = null;
+        var combo = Get(d, "Combination")?.Trim();
+        if (!string.IsNullOrWhiteSpace(combo))
+        {
+            configId = await ResolveConfigIdAsync(itemCode, combo, ct);
+            if (configId is null) return null;
+        }
+
+        var groups = await EnsureGroupsAsync(ct);
+        var gKey = Get(d, "GroupCode")?.Trim();
+        if (string.IsNullOrWhiteSpace(gKey)) return null;
+        var group = groups.FirstOrDefault(g => string.Equals(g.Code?.Trim(), gKey, StringComparison.OrdinalIgnoreCase)
+                                            || string.Equals(g.Name?.Trim(), gKey, StringComparison.OrdinalIgnoreCase));
+        if (group is null) return null;
+
+        var currencies = await EnsureCurrenciesAsync(ct);
+        var cKey = Get(d, "Currency")?.Trim();
+        if (string.IsNullOrWhiteSpace(cKey)) return null;
+        var currency = currencies.FirstOrDefault(c => string.Equals(c.Code?.Trim(), cKey, StringComparison.OrdinalIgnoreCase)
+                                                   || string.Equals(c.Name?.Trim(), cKey, StringComparison.OrdinalIgnoreCase));
+        if (currency is null) return null;
+
+        var priceType = ResolvePriceType(Get(d, "PriceType"));
+        var validFrom = ImportParse.ParseDate(Get(d, "ValidFrom")) ?? DateTime.Today;
+        return (group.Id, item.Id, configId, currency.Id, priceType, validFrom);
+    }
 
     protected override async Task<(bool Ok, string? Error, int? RecordId)> CommitRowAsync(
         IReadOnlyDictionary<string, string?> d, string action, int? existingId,
@@ -129,8 +183,10 @@ public sealed class PriceListImportHandler : RowImportHandlerBase
         var validFrom = ImportParse.ParseDate(Get(d, "ValidFrom")) ?? DateTime.Today;
         var validTo = ImportParse.ParseDate(Get(d, "ValidTo"));
 
+        // action=update ise mevcut kaydın Id'si geçirilir → servis günceller (mükerrer açmaz).
+        var entryId = action == "update" && existingId is > 0 ? existingId : null;
         var (ok, err, id) = await _priceService.SaveEntryAsync(
-            new SavePriceListRequest(null, group.Id, item.Id, configId, currency.Id, priceType, price, validFrom, validTo, true), ct);
+            new SavePriceListRequest(entryId, group.Id, item.Id, configId, currency.Id, priceType, price, validFrom, validTo, true), ct);
         return (ok, err, id);
     }
 
