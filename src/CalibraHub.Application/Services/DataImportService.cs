@@ -169,8 +169,37 @@ public sealed class DataImportService : IDataImportService
     public Task<IReadOnlyList<ImportEntityDto>> ListTargetEntitiesAsync(CancellationToken ct)
         => Task.FromResult(_importCatalog.GetEntities());
 
-    public Task<IReadOnlyList<ImportTargetFieldDto>> ListTargetFieldsAsync(string entity, CancellationToken ct)
-        => _importCatalog.GetTargetFieldsAsync(entity, ct);
+    /// <summary>
+    /// Statik + DİNAMİK izinli değerleri birleştirir. Dinamik olanlar (birim, rehber
+    /// değerleri gibi DB'den gelenler) `GetFields()` içinde yoktur; eşleme ekranında
+    /// gösterilmezse uyarlamacı kaynak view'ı hangi değerleri üreteceğini bilemez.
+    /// </summary>
+    public async Task<IReadOnlyList<ImportTargetFieldDto>> ListTargetFieldsAsync(string entity, CancellationToken ct)
+    {
+        var fields = await _importCatalog.GetTargetFieldsAsync(entity, ct);
+        if (fields.Count == 0) return fields;
+
+        if (!_handlers.TryGetValue((entity ?? string.Empty).Trim(), out var handler)) return fields;
+
+        IReadOnlyDictionary<string, IReadOnlyList<string>> dynamic;
+        try
+        {
+            dynamic = await handler.GetDynamicAllowedValuesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            // Dinamik değer listesi ekranı zenginleştirir; alınamazsa eşleme yine çalışmalı.
+            _logger.LogError(ex, "Dinamik izinli değerler okunamadı. Entity={Entity}", entity);
+            return fields;
+        }
+        if (dynamic.Count == 0) return fields;
+
+        return fields.Select(f =>
+            f.AllowedValues is null or { Count: 0 }
+            && dynamic.TryGetValue(f.Key, out var vals) && vals.Count > 0
+                ? f with { AllowedValues = vals }
+                : f).ToList();
+    }
 
     // ── İş tanımı ────────────────────────────────────────────────────────
 

@@ -501,6 +501,14 @@ export default function DbImportWizard() {
                             {f.label}
                             {f.isRequired && <span className="dbi-required"> *</span>}
                             {job.matchKeyField === f.key && <span className="dbi-key-pill" style={{ marginLeft: 6 }}><KeyRound size={10} /> Anahtar</span>}
+                            {/* Kabul edilen değerler — kaynak view'ı buna göre şekillendirmek için. */}
+                            {f.allowedValues && f.allowedValues.length > 0 && (
+                              <div className="dbi-hint dbi-mono" style={{ whiteSpace: 'normal', maxWidth: 320 }}
+                                   title={f.allowedValues.join(' · ')}>
+                                {f.allowedValues.slice(0, 8).join(' · ')}
+                                {f.allowedValues.length > 8 ? ` · +${f.allowedValues.length - 8}` : ''}
+                              </div>
+                            )}
                           </td>
                           <td>
                             <select className="dbi-select" value={mappedByTarget[f.key] || ''}
