@@ -454,6 +454,9 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportT
                            CalibraHub.Application.Services.Import.WorkOrderImportHandler>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
                            CalibraHub.Application.Services.Import.StockMovementImportHandler>();
+// Bakiye aynası — hareketleri değil bakiyeyi alır, farkı sayım (Yansıt) mekanizması yazar.
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
+                           CalibraHub.Application.Services.Import.StockBalanceImportHandler>();
 
 // 2026-08-15 Veritabanı üzerinden içe aktarım — harici SQL kaynağı. Yazma katmanı
 // yukarıdaki IImportTargetHandler ailesidir (Excel ile ortak); burada yalnız kaynak
