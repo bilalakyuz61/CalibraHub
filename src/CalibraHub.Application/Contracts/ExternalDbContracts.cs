@@ -4,6 +4,7 @@ namespace CalibraHub.Application.Contracts;
 public sealed record ExternalDbConnectionDto(
     int Id,
     string Name,
+    bool UseHostServer,
     string ServerName,
     string DatabaseName,
     string AuthMode,
@@ -24,6 +25,7 @@ public sealed record ExternalDbConnectionDto(
 public sealed record SaveExternalDbConnectionRequest(
     int Id,
     string Name,
+    bool UseHostServer,
     string ServerName,
     string DatabaseName,
     string AuthMode,

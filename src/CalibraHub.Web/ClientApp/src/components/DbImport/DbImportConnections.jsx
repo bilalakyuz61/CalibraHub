@@ -15,6 +15,7 @@ import './DbImport.css'
 const EMPTY = {
   id: 0,
   name: '',
+  useHostServer: false,
   serverName: '',
   databaseName: '',
   authMode: 'Sql',
@@ -129,12 +130,13 @@ export default function DbImportConnections() {
   }
 
   const isIntegrated = editing && editing.authMode === 'Integrated'
+  const useHost = editing && editing.useHostServer
   const canSave = editing
     && editing.name.trim()
-    && editing.serverName.trim()
     && editing.databaseName.trim()
-    && (isIntegrated || editing.username.trim())
-    && (isIntegrated || editing.id > 0 || editing.password.trim())
+    && (useHost || editing.serverName.trim())
+    && (useHost || isIntegrated || editing.username.trim())
+    && (useHost || isIntegrated || editing.id > 0 || editing.password.trim())
 
   return (
     <div className="dbi-root">
@@ -186,9 +188,9 @@ export default function DbImportConnections() {
                     </span>
                   </div>
                   <div className="dbi-row-sub dbi-mono">
-                    {c.serverName} · {c.databaseName} ·{' '}
-                    {c.authMode === 'Integrated' ? 'Windows kimlik doğrulama' : `SQL · ${c.username || ''}`}
-                    {c.encrypt ? ' · TLS' : ''}
+                    {c.useHostServer
+                      ? `CalibraHub sunucusu · ${c.databaseName}`
+                      : `${c.serverName} · ${c.databaseName} · ${c.authMode === 'Integrated' ? 'Windows kimlik doğrulama' : `SQL · ${c.username || ''}`}${c.encrypt ? ' · TLS' : ''}`}
                   </div>
                 </div>
                 <div className="dbi-row-actions">
@@ -215,13 +217,23 @@ export default function DbImportConnections() {
                        placeholder="Örn. Netsis Canlı" />
               </div>
 
+              <div className="dbi-field">
+                <Switch checked={editing.useHostServer} label="CalibraHub Sunucusunu Kullan"
+                        onChange={(v) => setEditing({ ...editing, useHostServer: v })} />
+                <span className="dbi-hint">
+                  Kaynak aynı SQL Server'da başka bir veritabanıysa açın — yalnız veritabanı adı yeter.
+                </span>
+              </div>
+
               <div className="dbi-grid">
-                <div className="dbi-field">
-                  <span className="dbi-label">Sunucu <span className="dbi-required">*</span></span>
-                  <input className="dbi-input dbi-mono" value={editing.serverName}
-                         onChange={(e) => setEditing({ ...editing, serverName: e.target.value })}
-                         placeholder="SRV01\SQLEXPRESS" />
-                </div>
+                {!editing.useHostServer && (
+                  <div className="dbi-field">
+                    <span className="dbi-label">Sunucu <span className="dbi-required">*</span></span>
+                    <input className="dbi-input dbi-mono" value={editing.serverName}
+                           onChange={(e) => setEditing({ ...editing, serverName: e.target.value })}
+                           placeholder="SRV01\SQLEXPRESS" />
+                  </div>
+                )}
                 <div className="dbi-field">
                   <span className="dbi-label">Veritabanı <span className="dbi-required">*</span></span>
                   <input className="dbi-input dbi-mono" value={editing.databaseName}
@@ -229,16 +241,18 @@ export default function DbImportConnections() {
                 </div>
               </div>
 
-              <div className="dbi-field">
-                <span className="dbi-label">Kimlik Doğrulama</span>
-                <select className="dbi-select" value={editing.authMode}
-                        onChange={(e) => setEditing({ ...editing, authMode: e.target.value })}>
-                  <option value="Sql">SQL Server (kullanıcı adı + parola)</option>
-                  <option value="Integrated">Windows (uygulama servis hesabı)</option>
-                </select>
-              </div>
+              {!editing.useHostServer && (
+                <div className="dbi-field">
+                  <span className="dbi-label">Kimlik Doğrulama</span>
+                  <select className="dbi-select" value={editing.authMode}
+                          onChange={(e) => setEditing({ ...editing, authMode: e.target.value })}>
+                    <option value="Sql">SQL Server (kullanıcı adı + parola)</option>
+                    <option value="Integrated">Windows (uygulama servis hesabı)</option>
+                  </select>
+                </div>
+              )}
 
-              {!isIntegrated && (
+              {!editing.useHostServer && !isIntegrated && (
                 <div className="dbi-grid">
                   <div className="dbi-field">
                     <span className="dbi-label">Kullanıcı Adı <span className="dbi-required">*</span></span>

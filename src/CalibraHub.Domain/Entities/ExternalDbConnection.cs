@@ -17,7 +17,19 @@ public sealed class ExternalDbConnection
     /// <summary>Bağlantı adı — benzersiz (kullanıcı kod girmez kuralı: ad üzerinden uniqueness).</summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>Sunucu adı / adresi — "SRV01", "10.0.0.5\SQLEXPRESS", "srv:1433".</summary>
+    /// <summary>
+    /// Kaynak, CalibraHub'ın kendi SQL Server örneğinde başka bir veritabanı ise true.
+    /// Bu durumda sunucu ve kimlik bilgileri CalibraHub'ın bağlantısından DEVRALINIR;
+    /// yalnız <see cref="DatabaseName"/> gerekir. Yetki yükseltmesi değildir — zaten
+    /// o sunucuda kullanılan hesabın erişebildiği veritabanları okunur ve okuma yolu
+    /// her koşulda SELECT-only kalır.
+    /// </summary>
+    public bool UseHostServer { get; set; }
+
+    /// <summary>
+    /// Sunucu adı / adresi — "SRV01", "10.0.0.5\SQLEXPRESS", "srv:1433".
+    /// <see cref="UseHostServer"/> true ise yok sayılır.
+    /// </summary>
     public string ServerName { get; set; } = string.Empty;
 
     /// <summary>Kaynak veritabanı adı.</summary>

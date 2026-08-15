@@ -61,16 +61,21 @@ public sealed class DataImportService : IDataImportService
     {
         var name = (req.Name ?? string.Empty).Trim();
         if (name.Length == 0) return (false, "Bağlantı adı zorunludur.", 0);
-        if (string.IsNullOrWhiteSpace(req.ServerName)) return (false, "Sunucu adı zorunludur.", 0);
         if (string.IsNullOrWhiteSpace(req.DatabaseName)) return (false, "Veritabanı adı zorunludur.", 0);
 
+        // CalibraHub sunucusu devralınıyorsa sunucu/kimlik bilgisi hiç istenmez.
         var isIntegrated = string.Equals(req.AuthMode, "Integrated", StringComparison.OrdinalIgnoreCase);
-        if (!isIntegrated && string.IsNullOrWhiteSpace(req.Username))
-            return (false, "SQL kimlik doğrulamada kullanıcı adı zorunludur.", 0);
+        if (!req.UseHostServer)
+        {
+            if (string.IsNullOrWhiteSpace(req.ServerName)) return (false, "Sunucu adı zorunludur.", 0);
 
-        // Yeni kayıtta parola zorunlu; güncellemede boş = "değiştirme".
-        if (!isIntegrated && req.Id <= 0 && string.IsNullOrWhiteSpace(req.Password))
-            return (false, "SQL kimlik doğrulamada parola zorunludur.", 0);
+            if (!isIntegrated && string.IsNullOrWhiteSpace(req.Username))
+                return (false, "SQL kimlik doğrulamada kullanıcı adı zorunludur.", 0);
+
+            // Yeni kayıtta parola zorunlu; güncellemede boş = "değiştirme".
+            if (!isIntegrated && req.Id <= 0 && string.IsNullOrWhiteSpace(req.Password))
+                return (false, "SQL kimlik doğrulamada parola zorunludur.", 0);
+        }
 
         if (await _connections.NameExistsAsync(name, req.Id > 0 ? req.Id : null, ct))
             return (false, $"Aynı isimde başka bir bağlantı zaten tanımlı: '{name}'", 0);
@@ -79,10 +84,11 @@ public sealed class DataImportService : IDataImportService
         {
             Id = req.Id,
             Name = name,
-            ServerName = req.ServerName.Trim(),
+            UseHostServer = req.UseHostServer,
+            ServerName = req.UseHostServer ? string.Empty : req.ServerName.Trim(),
             DatabaseName = req.DatabaseName.Trim(),
             AuthMode = isIntegrated ? "Integrated" : "Sql",
-            Username = isIntegrated ? null : req.Username?.Trim(),
+            Username = isIntegrated || req.UseHostServer ? null : req.Username?.Trim(),
             Encrypt = req.Encrypt,
             TrustServerCertificate = req.TrustServerCertificate,
             ConnectTimeoutSeconds = req.ConnectTimeoutSeconds <= 0 ? 15 : req.ConnectTimeoutSeconds,
@@ -92,7 +98,7 @@ public sealed class DataImportService : IDataImportService
             UpdatedById = userId is > 0 ? userId : null,
         };
 
-        var id = await _connections.SaveAsync(entity, isIntegrated ? null : req.Password, ct);
+        var id = await _connections.SaveAsync(entity, isIntegrated || req.UseHostServer ? null : req.Password, ct);
         return (true, null, id);
     }
 
@@ -121,6 +127,7 @@ public sealed class DataImportService : IDataImportService
         var draft = new ExternalDbConnection
         {
             Name = req.Name ?? "(taslak)",
+            UseHostServer = req.UseHostServer,
             ServerName = req.ServerName?.Trim() ?? string.Empty,
             DatabaseName = req.DatabaseName?.Trim() ?? string.Empty,
             AuthMode = isIntegrated ? "Integrated" : "Sql",
@@ -428,7 +435,7 @@ public sealed class DataImportService : IDataImportService
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static ExternalDbConnectionDto ToDto(ExternalDbConnection c) => new(
-        c.Id, c.Name, c.ServerName, c.DatabaseName, c.AuthMode, c.Username,
+        c.Id, c.Name, c.UseHostServer, c.ServerName, c.DatabaseName, c.AuthMode, c.Username,
         !string.IsNullOrWhiteSpace(c.PasswordEncrypted),
         c.Encrypt, c.TrustServerCertificate, c.ConnectTimeoutSeconds, c.CommandTimeoutSeconds,
         c.IsActive, c.Created, c.Updated);

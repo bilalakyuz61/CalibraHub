@@ -60,8 +60,6 @@ public static class MenuDefinition
             new("settings.parameters",     isEn ? "Company Parameters"     : "Şirket Parametreleri",    "SlidersHorizontal",  "/Admin/Parameters",         null, AdminOnly: true),
             new("settings.decimals",       isEn ? "Decimal Settings"       : "Ondalık Ayarları",        "Ruler",              "/Admin/DecimalSettings",    null,
                 PermissionFormCode: FormCodes.DecimalSettings),
-            new("settings.integrations",   isEn ? "Integration Wizard"     : "Entegrasyon Wizard",      "Plug",               "/Integrations",             null,
-                MatchPath: "/Integrations", PermissionFormCode: FormCodes.Integrations),
             new("settings.viewsettings",   isEn ? "Field Guide"            : "Alan Rehberi",            "LayoutGrid",         "/Admin/ViewSettings",       null,
                 PermissionFormCode: FormCodes.ViewSettings),
             new("settings.companyusers",   isEn ? "User Definitions"       : "Kullanıcı Tanımlamaları", "Users",              "/CompanyUser",              null,
@@ -289,17 +287,21 @@ public static class MenuDefinition
                     PermissionFormCode: FormCodes.PriceList),
             }),
 
-            // ────────────── Veri Aktarımı / Data Import ──────────────
-            // Şablon-tabanlı içe aktarım (AI'sız). 2026-07-06: DATA_IMPORT form kodu ile
-            // yetki kapsamına alındı — toplu veri yazma yetkisiz kullanıcıya açık kalmamalı.
-            new("dataimport", isEn ? "Data Import" : "Veri Aktarımı", "Upload", null, new List<MenuNode>
+            // ────────────── Veri Aktarımı / Data Transfer ──────────────
+            // 2026-08-15: her iki YÖN de bu grupta toplandı — içe aktarım (dosya + harici DB)
+            // ve dışa aktarım (entegrasyonlar, eskiden Ayarlar altındaydı). Yetkiler ayrı
+            // kalır: DATA_IMPORT / DB_DATA_IMPORT / INTEGRATIONS.
+            new("dataimport", isEn ? "Data Transfer" : "Veri Aktarımı", "ArrowLeftRight", null, new List<MenuNode>
             {
-                new("dataimport.run", isEn ? "Import / Templates" : "İçe Aktarım", "FileUp", "/Import", null,
+                new("dataimport.run", isEn ? "Import from File" : "İçe Aktarım (Dosya)", "FileUp", "/Import", null,
                     MatchPath: "/Import", PermissionFormCode: FormCodes.DataImport),
-                // 2026-08-15: harici SQL kaynağından içe aktarım. Ayrı yetki (DB_DATA_IMPORT) —
+                // Harici SQL kaynağından içe aktarım. Ayrı yetki (DB_DATA_IMPORT) —
                 // harici DB kimlik bilgisi saklar, kaynakta prosedür çalıştırabilir.
-                new("dataimport.db", isEn ? "Database Import" : "Veritabanı Aktarımı", "Database", "/DbImport", null,
+                new("dataimport.db", isEn ? "Import from Database" : "İçe Aktarım (Veritabanı)", "Database", "/DbImport", null,
                     MatchPath: "/DbImport", PermissionFormCode: FormCodes.DbDataImport),
+                // Dışa aktarım — CalibraHub formundan dış REST API'ye gönderim.
+                new("dataimport.export", isEn ? "Export / Integrations" : "Dışa Aktarım (Entegrasyon)", "Plug", "/Integrations", null,
+                    MatchPath: "/Integrations", PermissionFormCode: FormCodes.Integrations),
             }),
 
             // ────────────── 8. Tasarım / Design ──────────────

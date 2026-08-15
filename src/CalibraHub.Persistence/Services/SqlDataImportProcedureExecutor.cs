@@ -69,7 +69,10 @@ public sealed class SqlDataImportProcedureExecutor : IDataImportProcedureExecuto
         {
             await using var conn = target == DataImportProcedureTarget.Source
                 ? await ExternalDbConnectionStringBuilder.OpenAsync(
-                      sourceConnection!, "CalibraHub.DataImport.Procedure", ct)
+                      sourceConnection!, "CalibraHub.DataImport.Procedure", ct,
+                      sourceConnection!.UseHostServer
+                          ? _connectionFactory.ResolveConnectionStringForCompany(_connectionFactory.ResolveCurrentCompanyId())
+                          : null)
                 : await _connectionFactory.OpenConnectionAsync(ct);
 
             await using var cmd = conn.CreateCommand();

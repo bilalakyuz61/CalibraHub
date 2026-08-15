@@ -23,8 +23,15 @@ public sealed class SqlServerExternalDbReader : IExternalDbReader
     public const int AbsoluteMaxRows = 200_000;
 
     private readonly ILogger<SqlServerExternalDbReader> _logger;
+    private readonly Database.SqlServerConnectionFactory _hostFactory;
 
-    public SqlServerExternalDbReader(ILogger<SqlServerExternalDbReader> logger) => _logger = logger;
+    public SqlServerExternalDbReader(
+        ILogger<SqlServerExternalDbReader> logger,
+        Database.SqlServerConnectionFactory hostFactory)
+    {
+        _logger = logger;
+        _hostFactory = hostFactory;
+    }
 
     public async Task<ExternalDbTestResultDto> TestAsync(ExternalDbConnection connection, CancellationToken ct)
     {
@@ -220,8 +227,18 @@ public sealed class SqlServerExternalDbReader : IExternalDbReader
         _              => value.ToString() ?? string.Empty,
     };
 
-    private static Task<SqlConnection> OpenAsync(ExternalDbConnection settings, CancellationToken ct)
-        => ExternalDbConnectionStringBuilder.OpenAsync(settings, "CalibraHub.DataImport.Read", ct);
+    private Task<SqlConnection> OpenAsync(ExternalDbConnection settings, CancellationToken ct)
+        => ExternalDbConnectionStringBuilder.OpenAsync(
+            settings, "CalibraHub.DataImport.Read", ct, ResolveHostConnectionString(settings));
+
+    /// <summary>
+    /// UseHostServer modunda CalibraHub'ın kendi şirket bağlantı dizesini çözer.
+    /// Diğer modda gereksizdir — çözülmeye çalışılmaz.
+    /// </summary>
+    private string? ResolveHostConnectionString(ExternalDbConnection settings)
+        => settings.UseHostServer
+            ? _hostFactory.ResolveConnectionStringForCompany(_hostFactory.ResolveCurrentCompanyId())
+            : null;
 
     private static string Escape(string identifier) => identifier.Replace("]", "]]");
 

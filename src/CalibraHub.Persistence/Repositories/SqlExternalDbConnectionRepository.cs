@@ -18,7 +18,7 @@ public sealed class SqlExternalDbConnectionRepository : IExternalDbConnectionRep
     private const string Columns =
         "[Id],[Name],[ServerName],[DatabaseName],[AuthMode],[Username],[PasswordEncrypted]," +
         "[Encrypt],[TrustServerCertificate],[ConnectTimeoutSeconds],[CommandTimeoutSeconds]," +
-        "[IsActive],[Created],[Updated],[CreatedById],[UpdatedById]";
+        "[IsActive],[Created],[Updated],[CreatedById],[UpdatedById],[UseHostServer]";
 
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _table;
@@ -88,12 +88,12 @@ public sealed class SqlExternalDbConnectionRepository : IExternalDbConnectionRep
                 INSERT INTO {_table}
                   ([Name],[ServerName],[DatabaseName],[AuthMode],[Username],[PasswordEncrypted],
                    [Encrypt],[TrustServerCertificate],[ConnectTimeoutSeconds],[CommandTimeoutSeconds],
-                   [IsActive],[CreatedById])
+                   [IsActive],[CreatedById],[UseHostServer])
                 OUTPUT INSERTED.[Id]
                 VALUES
                   (@Name,@ServerName,@DatabaseName,@AuthMode,@Username,@PasswordEncrypted,
                    @Encrypt,@TrustServerCertificate,@ConnectTimeoutSeconds,@CommandTimeoutSeconds,
-                   @IsActive,@CreatedById);
+                   @IsActive,@CreatedById,@UseHostServer);
                 """;
             Bind(cmd, entity);
             cmd.Parameters.Add(new SqlParameter("@PasswordEncrypted", (object?)encrypted ?? DBNull.Value));
@@ -115,6 +115,7 @@ public sealed class SqlExternalDbConnectionRepository : IExternalDbConnectionRep
                 [TrustServerCertificate] = @TrustServerCertificate,
                 [ConnectTimeoutSeconds] = @ConnectTimeoutSeconds,
                 [CommandTimeoutSeconds] = @CommandTimeoutSeconds,
+                [UseHostServer] = @UseHostServer,
                 [IsActive] = @IsActive,
                 [UpdatedById] = @UpdatedById,
                 [Updated] = SYSUTCDATETIME()
@@ -164,6 +165,7 @@ public sealed class SqlExternalDbConnectionRepository : IExternalDbConnectionRep
         cmd.Parameters.Add(new SqlParameter("@ConnectTimeoutSeconds", e.ConnectTimeoutSeconds));
         cmd.Parameters.Add(new SqlParameter("@CommandTimeoutSeconds", e.CommandTimeoutSeconds));
         cmd.Parameters.Add(new SqlParameter("@IsActive", e.IsActive));
+        cmd.Parameters.Add(new SqlParameter("@UseHostServer", e.UseHostServer));
     }
 
     private static ExternalDbConnection Map(SqlDataReader r) => new()
@@ -184,5 +186,6 @@ public sealed class SqlExternalDbConnectionRepository : IExternalDbConnectionRep
         Updated                = r.IsDBNull(13) ? null : r.GetDateTime(13),
         CreatedById            = r.IsDBNull(14) ? null : r.GetInt32(14),
         UpdatedById            = r.IsDBNull(15) ? null : r.GetInt32(15),
+        UseHostServer          = r.GetBoolean(16),
     };
 }

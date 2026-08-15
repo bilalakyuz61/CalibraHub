@@ -12,8 +12,29 @@ namespace CalibraHub.Persistence.Services;
 /// </summary>
 internal static class ExternalDbConnectionStringBuilder
 {
-    public static string Build(ExternalDbConnection s, string applicationName)
+    /// <param name="hostConnectionString">
+    /// CalibraHub'ın kendi şirket DB bağlantı dizesi. <see cref="ExternalDbConnection.UseHostServer"/>
+    /// true ise sunucu ve kimlik bilgileri BURADAN devralınır, yalnız veritabanı adı değişir.
+    /// </param>
+    public static string Build(ExternalDbConnection s, string applicationName, string? hostConnectionString = null)
     {
+        if (s.UseHostServer)
+        {
+            if (string.IsNullOrWhiteSpace(hostConnectionString))
+                throw new InvalidOperationException(
+                    "CalibraHub sunucusu devralınamadı — host bağlantı dizesi çözülemedi.");
+
+            // Host dizesini aynen al, yalnız hedef veritabanını değiştir. Kimlik bilgisi
+            // (Integrated/SQL) ve TLS ayarları host'tan gelir; tekrar sorulmaz.
+            var host = new SqlConnectionStringBuilder(hostConnectionString)
+            {
+                InitialCatalog = s.DatabaseName?.Trim() ?? string.Empty,
+                ApplicationName = applicationName,
+                ConnectTimeout = s.ConnectTimeoutSeconds <= 0 ? 15 : s.ConnectTimeoutSeconds,
+            };
+            return host.ConnectionString;
+        }
+
         var b = new SqlConnectionStringBuilder
         {
             DataSource = s.ServerName?.Trim() ?? string.Empty,
@@ -40,9 +61,10 @@ internal static class ExternalDbConnectionStringBuilder
     }
 
     public static async Task<SqlConnection> OpenAsync(
-        ExternalDbConnection settings, string applicationName, CancellationToken ct)
+        ExternalDbConnection settings, string applicationName, CancellationToken ct,
+        string? hostConnectionString = null)
     {
-        var conn = new SqlConnection(Build(settings, applicationName));
+        var conn = new SqlConnection(Build(settings, applicationName, hostConnectionString));
         try
         {
             await conn.OpenAsync(ct);

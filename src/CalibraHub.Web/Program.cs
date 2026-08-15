@@ -463,7 +463,9 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportT
 // bağlantısı + salt-okunur okuyucu kayıtlıdır. Okuyucu stateless → singleton.
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IExternalDbConnectionRepository,
                            CalibraHub.Persistence.Repositories.SqlExternalDbConnectionRepository>();
-builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IExternalDbReader,
+// Scoped — per-request şirket bağlantısını çözen SqlServerConnectionFactory'ye bağımlı
+// (singleton olsaydı captive dependency olurdu).
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IExternalDbReader,
                            CalibraHub.Persistence.Services.SqlServerExternalDbReader>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IDataImportRepository,
                            CalibraHub.Persistence.Repositories.SqlDataImportRepository>();

@@ -8206,6 +8206,15 @@ END;";
                     WHERE [IsActive] = 1;
             END;
 
+            -- 2026-08-15 ek: kaynak CalibraHub'in kendi sunucusunda baska bir DB ise
+            -- sunucu/kimlik bilgisi devralinir, yalniz DatabaseName gerekir.
+            IF COL_LENGTH(N'[{s}].[ExternalDbConnection]', 'UseHostServer') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[ExternalDbConnection]
+                    ADD [UseHostServer] BIT NOT NULL
+                        CONSTRAINT [DF_ExternalDbConnection_UseHost] DEFAULT(0);
+            END;
+
             IF OBJECT_ID(N'[{s}].[DataImportJob]', N'U') IS NULL
             BEGIN
                 CREATE TABLE [{s}].[DataImportJob]
