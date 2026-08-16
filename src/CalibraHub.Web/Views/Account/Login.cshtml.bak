@@ -1,0 +1,2371 @@
+@using System.Text.Json
+@model CalibraHub.Web.Models.Account.LoginInputModel
+@inject CalibraHub.Web.Infrastructure.Ui.IUiTextService UiText
+@{
+    Layout = null;
+    var runtime = await UiText.GetRuntimeAsync();
+    var ui = await UiText.GetFormAsync("account.login");
+}
+<!DOCTYPE html>
+<html lang="@runtime.LanguageCode">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ui.Text("title") - CalibraHub</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <style>
+        /* ── Login sayfasi tema toggle butonu (sag ust) ─────────────── */
+        .login-theme-toggle {
+            position: fixed; top: 16px; right: 18px; z-index: 1050;
+            width: 38px; height: 38px;
+            border: 1px solid rgba(148, 163, 184, 0.32);
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.85);
+            color: #475569;
+            cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center;
+            transition: background-color .18s, color .18s, border-color .18s, transform .18s;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        .login-theme-toggle:hover { transform: scale(1.08); background: rgba(241, 245, 249, 0.95); }
+        .login-theme-toggle .icon-sun  { display: none;  }
+        .login-theme-toggle .icon-moon { display: block; }
+        body.app-theme-dark .login-theme-toggle {
+            background: rgba(15, 23, 42, 0.72);
+            border-color: rgba(148, 163, 184, 0.30);
+            color: #e2e8f0;
+        }
+        body.app-theme-dark .login-theme-toggle:hover { background: rgba(30, 41, 59, 0.95); }
+        body.app-theme-dark .login-theme-toggle .icon-sun  { display: block; }
+        body.app-theme-dark .login-theme-toggle .icon-moon { display: none;  }
+
+        /* ── Dark tema overrides — login sayfasi icin ───────────────── */
+        body.app-theme-dark.login-page {
+            background: #0a0d17 !important;
+        }
+        body.app-theme-dark .login-panel {
+            background: linear-gradient(145deg, #0f172a, #0a0d17) !important;
+        }
+        body.app-theme-dark .login-hero {
+            background: #0a0d17;
+        }
+        body.app-theme-dark .login-hero img {
+            filter: saturate(1.05) brightness(0.92);
+        }
+        body.app-theme-dark .login-card {
+            background: rgba(15, 23, 42, 0.88) !important;
+            border: 1px solid rgba(148, 163, 184, 0.14) !important;
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55) !important;
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            color: #e2e8f0 !important;
+        }
+        body.app-theme-dark .login-card h1 { color: #f1f5f9 !important; }
+        body.app-theme-dark .login-card .form-label,
+        body.app-theme-dark .login-card label,
+        body.app-theme-dark .login-field > label {
+            color: #94a3b8 !important;
+        }
+        body.app-theme-dark .login-card .form-control,
+        body.app-theme-dark .login-card .form-select,
+        body.app-theme-dark .login-field .form-control,
+        body.app-theme-dark .login-field .form-select {
+            background-color: rgba(30, 41, 59, 0.65) !important;
+            border-color: rgba(148, 163, 184, 0.22) !important;
+            color: #e2e8f0 !important;
+        }
+        body.app-theme-dark .login-card .form-control:focus,
+        body.app-theme-dark .login-card .form-select:focus {
+            border-color: #6366f1 !important;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18) !important;
+        }
+        body.app-theme-dark .login-card .form-select option {
+            background: #0c0f1a; color: #e2e8f0;
+        }
+        body.app-theme-dark .login-card .btn-primary {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
+            border: none !important;
+        }
+        body.app-theme-dark .login-remember-label { color: #cbd5e1 !important; }
+        body.app-theme-dark .login-card .text-muted { color: #94a3b8 !important; }
+        body.app-theme-dark .login-card .border-top { border-color: rgba(148, 163, 184, 0.18) !important; }
+
+        .login-error-msg {
+            min-height: 46px;
+            margin-bottom: 12px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: .875rem;
+            font-weight: 500;
+            background: rgba(239,68,68,.10);
+            border: 1px solid rgba(239,68,68,.35);
+            color: #dc2626;
+            display: flex;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .18s;
+        }
+        .login-error-msg.is-visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        body.app-theme-dark .login-error-msg {
+            background: rgba(239,68,68,.14);
+            border-color: rgba(248,113,113,.35);
+            color: #f87171;
+        }
+
+        @@keyframes loginShake {
+            0%, 100% { transform: translateX(0); }
+            15%  { transform: translateX(-7px); }
+            30%  { transform: translateX(7px); }
+            45%  { transform: translateX(-5px); }
+            60%  { transform: translateX(5px); }
+            75%  { transform: translateX(-2px); }
+        }
+        .login-pw-error .form-control {
+            border-color: #ef4444 !important;
+            box-shadow: 0 0 0 3px rgba(239,68,68,.18) !important;
+        }
+        body.app-theme-dark .login-pw-error .form-control {
+            border-color: #f87171 !important;
+            box-shadow: 0 0 0 3px rgba(248,113,113,.18) !important;
+        }
+        .login-pw-shake {
+            animation: loginShake .42s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        /* ── Kimlik kalibrasyon kadranı v3 — 3 iğneli (yelkovan) analog gösterge ──
+           Harf-bulmacalı kilit kadranı (v2) yerine dönüldü: merkezden çıkan 3 iğne
+           (indigo #6366f1 / cyan #06b6d4 / violet #8b5cf6), farklı uzunluk + kalınlıkta
+           (n1 en uzun/kalın = "ana" şifre iğnesi, n3 en kısa/ince). İdle'da üç iğne 12
+           çentikli (30°'lik) kadranda birbirinden 120° ayrık, SABİT dinlenme açılarındadır
+           (çok ince bir "nabız" dışında hareket YOK). Şifre her karakterinde SADECE bir
+           iğne bir çentik ilerler — round-robin (n. tuş → n%3. iğne), sonra oturur; TÜM
+           iğneler DEĞİL, SÜREKLİ DEĞİL (2026-07-16 kullanıcı geri bildirimi: "tüm
+           yelkovanlar sürekli hareket ediyor" şikayeti — bir daha tekrarlanmaz, bkz.
+           sayfa sonundaki script yorumu). Çözülme YALNIZ sunucu login onayında
+           (server-truth) tetiklenir — client parola doğrulamaz. Glass-stage mimarisi +
+           is-solved/is-fail durum CSS'i v2'den bilinçli olarak korundu; mobil (Compose
+           Canvas) ile birebir aynı kanonik tasarım/renk paleti.
+
+           Görsel zenginleştirme eki (2026-07-17, kullanıcı "çok sade" geri bildirimi —
+           SOLVE MANTIĞI DEĞİŞMEDİ, yalnız çizim/animasyon): (a) ana kadranın içine 2
+           eş-merkezli İÇ KADRAN eklendi — r=60/8-çentik cyan + r=34/6-çentik violet,
+           salt dekoratif katman (bkz. .cald-inner-* kuralları + script buildInnerTicks/
+           spinInnerRandom). (b) büyük iğnelerin tuş-başı 30°'lik hareketi artık tek parça
+           glide değil, N=4 mini-adımlı "dura-dura" (detent/stepped) hareket — bkz. script
+           animateNeedleStepped. (c) iç kadranlar her tuş vuruşunda büyük iğnelerin
+           hedefli/round-robin hareketinden BAĞIMSIZ, rastgele yön+açı ile döner — bkz.
+           script spinInnerRandom. */
+        .cald-wrap {
+            width: 148px; margin: 2px auto 20px; position: relative;
+            color-scheme: light;
+            --cald-glass-a: rgba(255,255,255,.95);
+            --cald-glass-b: rgba(148,163,184,.18);
+            --cald-ring: rgba(148,163,184,.30);
+            --cald-n1: #6366f1;   /* indigo — ana (şifre) iğnesi, en uzun/kalın */
+            --cald-n2: #06b6d4;   /* cyan   — ikincil iğne */
+            --cald-n3: #8b5cf6;   /* violet — üçüncül iğne */
+            --cald-tick: rgba(100,116,139,.45);
+            --cald-tick-major: rgba(71,85,105,.65);
+            --cald-inner1: rgba(6,182,212,.42);        /* iç kadran 1 (r=60) çentik rengi — cyan ton */
+            --cald-inner1-mark: rgba(6,182,212,.95);   /* iç kadran 1 işaret noktası */
+            --cald-inner2: rgba(139,92,246,.40);       /* iç kadran 2 (r=34) çentik rengi — violet ton */
+            --cald-inner2-mark: rgba(139,92,246,.95);  /* iç kadran 2 işaret noktası */
+            --cald-hub: #6366f1;
+            --cald-success: #059669;
+            --cald-danger: #e11d48;
+            --cald-status: #64748b;
+        }
+        body.app-theme-dark .cald-wrap {
+            color-scheme: dark;
+            --cald-glass-a: rgba(148,163,184,.16);
+            --cald-glass-b: rgba(2,6,23,.35);
+            --cald-ring: rgba(148,163,184,.22);
+            --cald-n1: #818cf8;
+            --cald-n2: #22d3ee;
+            --cald-n3: #a78bfa;
+            --cald-tick: rgba(148,163,184,.4);
+            --cald-tick-major: rgba(203,213,225,.55);
+            --cald-inner1: rgba(34,211,238,.42);
+            --cald-inner1-mark: rgba(34,211,238,.95);
+            --cald-inner2: rgba(167,139,250,.40);
+            --cald-inner2-mark: rgba(167,139,250,.95);
+            --cald-hub: #818cf8;
+            --cald-success: #34d399;
+            --cald-danger: #fb7185;
+            --cald-status: #94a3b8;
+        }
+        .cald-stage {
+            position: relative; width: 148px; height: 148px; margin: 0 auto; border-radius: 50%; overflow: hidden;
+            background:
+                radial-gradient(118% 118% at 30% 22%, var(--cald-glass-a), rgba(226,232,240,.06) 56%, var(--cald-glass-b) 100%),
+                radial-gradient(90% 90% at 50% 128%, rgba(99,102,241,.14), transparent 62%);
+            box-shadow:
+                inset 0 2px 6px rgba(255,255,255,.9),
+                inset 0 -12px 24px rgba(79,70,229,.12),
+                inset 0 0 0 1px var(--cald-ring),
+                0 14px 28px -12px rgba(30,41,59,.36),
+                0 4px 12px -6px rgba(99,102,241,.3);
+            transition: box-shadow .5s ease;
+            animation: caldIdleBreathe 4.4s ease-in-out infinite;
+        }
+        body.app-theme-dark .cald-stage {
+            box-shadow:
+                inset 0 2px 6px rgba(226,232,240,.24),
+                inset 0 -12px 26px rgba(2,6,23,.58),
+                inset 0 0 0 1px var(--cald-ring),
+                0 18px 34px -14px rgba(0,0,0,.66),
+                0 4px 14px -6px rgba(139,92,246,.36);
+        }
+        .cald-wrap.is-solved .cald-stage {
+            box-shadow:
+                inset 0 2px 6px rgba(255,255,255,.9), inset 0 -12px 24px rgba(16,185,129,.16),
+                inset 0 0 0 1px rgba(52,211,153,.5),
+                0 14px 28px -12px rgba(30,41,59,.36), 0 0 0 4px rgba(52,211,153,.16), 0 0 22px rgba(52,211,153,.42);
+        }
+        body.app-theme-dark .cald-wrap.is-solved .cald-stage {
+            box-shadow:
+                inset 0 2px 6px rgba(226,232,240,.24), inset 0 -12px 26px rgba(2,6,23,.58),
+                inset 0 0 0 1px rgba(52,211,153,.5),
+                0 18px 34px -14px rgba(0,0,0,.66), 0 0 0 4px rgba(16,185,129,.2), 0 0 24px rgba(16,185,129,.5);
+        }
+        .cald-wrap.is-fail .cald-stage {
+            box-shadow:
+                inset 0 2px 6px rgba(255,255,255,.9), inset 0 -12px 24px rgba(244,63,94,.16),
+                inset 0 0 0 1px rgba(251,113,133,.5),
+                0 14px 28px -12px rgba(30,41,59,.36), 0 0 0 4px rgba(251,113,133,.16), 0 0 22px rgba(244,63,94,.42);
+        }
+        body.app-theme-dark .cald-wrap.is-fail .cald-stage {
+            box-shadow:
+                inset 0 2px 6px rgba(226,232,240,.24), inset 0 -12px 26px rgba(2,6,23,.58),
+                inset 0 0 0 1px rgba(251,113,133,.5),
+                0 18px 34px -14px rgba(0,0,0,.66), 0 0 0 4px rgba(244,63,94,.2), 0 0 24px rgba(244,63,94,.5);
+        }
+        .cald-wrap.is-solved .cald-stage,
+        .cald-wrap.is-fail .cald-stage { animation: none; }
+        .cald-wrap.is-measuring .cald-stage { animation: caldPulse 1.1s ease-in-out infinite; }
+        .cald-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; display: block; }
+        .cald-track { fill: none; stroke: var(--cald-ring); stroke-width: 1.4; }
+        /* Çentik (tick) halkası — 12 çentik / 30°'lik adım; her 3.'sü (0/90/180/270,
+           kadranın kuzey/doğu/güney/batısı) belirgin (maj) çizilir. */
+        .cald-tick { stroke: var(--cald-tick); stroke-width: 1.4; }
+        .cald-tick.maj { stroke: var(--cald-tick-major); stroke-width: 2.2; }
+        /* İç kadranlar (2 adet, iç içe: r=60 cyan + r=34 violet) — büyük iğnelerden
+           bağımsız, her tuş vuruşunda rastgele yön/açıyla dönen dekoratif katman (bkz.
+           script spinInnerRandom). Sınır halkası ince/sabit görünür; asıl "dönüyor"
+           hissini rotasyona giren çentik grubu + işaret noktası verir. */
+        .cald-inner-track { fill: none; stroke: var(--cald-ring); stroke-width: 1; opacity: .65; }
+        .cald-inner-grp { transition: none; }
+        .cald-inner-tick { stroke-linecap: round; stroke-width: 1.15; }
+        .cald-inner-tick.i1 { stroke: var(--cald-inner1); }
+        .cald-inner-tick.i2 { stroke: var(--cald-inner2); stroke-width: 1.05; }
+        .cald-inner-mark-1 { fill: var(--cald-inner1-mark); filter: drop-shadow(0 0 2px var(--cald-inner1-mark)); }
+        .cald-inner-mark-2 { fill: var(--cald-inner2-mark); filter: drop-shadow(0 0 1.6px var(--cald-inner2-mark)); }
+        /* 3 iğne — hub'dan (merkez) çıkar, farklı uzunluk/kalınlık/renkte (saat ibresi
+           hiyerarşisi: n1 en uzun+kalın=ana/şifre iğnesi, n3 en kısa+ince). Açı doğrudan
+           <g> sarmalayıcısının SVG rotate() transform'uyla sürülür (bkz. script placeNeedle). */
+        .cald-needle-grp { transition: filter .3s ease; }
+        .cald-needle {
+            stroke-linecap: round;
+            transition: stroke .3s ease, filter .3s ease, opacity .3s ease;
+        }
+        .cald-needle.n1 { stroke: var(--cald-n1); stroke-width: 3.2; filter: drop-shadow(0 0 2.5px rgba(99,102,241,.45)); }
+        .cald-needle.n2 { stroke: var(--cald-n2); stroke-width: 2.4; }
+        .cald-needle.n3 { stroke: var(--cald-n3); stroke-width: 1.9; opacity: .92; }
+        .cald-tail { fill: var(--cald-n1); transition: fill .3s ease; }
+        .cald-wrap.is-solved .cald-needle,
+        .cald-wrap.is-solved .cald-tail {
+            stroke: var(--cald-success) !important; fill: var(--cald-success) !important;
+            opacity: 1; filter: drop-shadow(0 0 3px rgba(16,185,129,.5));
+        }
+        .cald-wrap.is-fail .cald-needle,
+        .cald-wrap.is-fail .cald-tail {
+            stroke: var(--cald-danger) !important; fill: var(--cald-danger) !important;
+            filter: drop-shadow(0 0 3px rgba(244,63,94,.45));
+        }
+        .cald-hub-ring { fill: none; stroke: var(--cald-ring); stroke-width: 1.6; }
+        .cald-hub { fill: var(--cald-hub); transition: fill .3s ease; }
+        .cald-wrap.is-solved .cald-hub { fill: var(--cald-success); }
+        .cald-wrap.is-fail .cald-hub { fill: var(--cald-danger); }
+        /* 2026-07-23 kullanıcı geri bildirimi: kadran içinde beliren onay tiki (.cald-check
+           path'i) yelkovanlarla üst üste binip kötü görünüyordu — kaldırıldı. Başarı hissi
+           kadranın kalan öğeleriyle veriliyor: iğneler+hub yeşile döner (yukarıdaki
+           .cald-wrap.is-solved kuralları), stage glow'u (.cald-wrap.is-solved .cald-stage,
+           bkz. yukarı) ve durum metni rengi (.cald-wrap.is-solved .cald-status, aşağıda). */
+        .cald-status {
+            margin-top: 16px; text-align: center; font-size: .86rem; font-weight: 600;
+            min-height: 1.2em; white-space: nowrap; color: var(--cald-status); transition: color .3s;
+        }
+        .cald-wrap.is-measuring .cald-status { color: var(--cald-n1); }
+        .cald-wrap.is-solved .cald-status { color: var(--cald-success); }
+        .cald-wrap.is-fail .cald-status { color: var(--cald-danger); }
+        @@keyframes caldIdleBreathe { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.035); } }
+        @@keyframes caldPulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.14); } }
+        @@keyframes caldShake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-7px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(3px)} }
+        .cald-wrap.cald-shake .cald-stage { animation: caldShake .5s ease; }
+
+        /* ── Kalibrasyon okuma katmanı — "havalı mühendislik hesabı" hissi (2026-08-03) ──
+           SOLVE MANTIĞI DEĞİŞMEDİ (round-robin iğne + server-truth çözülme aynen geçerli).
+           Yalnız dekoratif iki katman: (a) dış kadranda 4 ana çentikte BASILI ölçek rakamları
+           (.cald-scale-num) — idle'da çok soluk, şifre girişinde/doğrulamada belirginleşir
+           (iğnelerin "gösterdiği" skala hissi). (b) alt-orta dijital okuma penceresi
+           (.cald-readout*) — monospace, her tuşta hesaplanıp oturan ölçüm değeri; doğrulama
+           fazında kanal-kanal hızlı hesap sekansı. Kullanıcının 2026-07-16 "iğneler sürekli
+           hareket etmesin" geri bildirimine dokunulmaz — bu katman sayısal, iğne değil. */
+        .cald-scale-num {
+            fill: var(--cald-status);
+            font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 11px; font-weight: 600;
+            text-anchor: middle; dominant-baseline: middle;
+            opacity: .22; transition: opacity .35s ease, fill .3s ease;
+        }
+        .cald-wrap.is-typing .cald-scale-num { opacity: .60; }
+        .cald-wrap.is-measuring .cald-scale-num { opacity: .78; }
+        .cald-wrap.is-solved .cald-scale-num { fill: var(--cald-success); opacity: .55; }
+        .cald-wrap.is-fail .cald-scale-num { fill: var(--cald-danger); opacity: .55; }
+
+        .cald-readout-box {
+            fill: var(--cald-glass-b); stroke: var(--cald-ring); stroke-width: 1;
+            opacity: 0; transition: opacity .35s ease;
+        }
+        .cald-readout-text {
+            fill: var(--cald-n1);
+            font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 11px; font-weight: 600; letter-spacing: .2px;
+            text-anchor: middle; dominant-baseline: middle;
+            opacity: 0; transition: opacity .35s ease, fill .3s ease;
+        }
+        .cald-wrap.is-typing .cald-readout-box,
+        .cald-wrap.is-measuring .cald-readout-box,
+        .cald-wrap.is-solved .cald-readout-box,
+        .cald-wrap.is-fail .cald-readout-box { opacity: .92; }
+        .cald-wrap.is-typing .cald-readout-text,
+        .cald-wrap.is-measuring .cald-readout-text,
+        .cald-wrap.is-solved .cald-readout-text,
+        .cald-wrap.is-fail .cald-readout-text { opacity: 1; }
+        .cald-wrap.is-measuring .cald-readout-text { fill: var(--cald-n2); }
+        .cald-wrap.is-solved .cald-readout-text { fill: var(--cald-success); }
+        .cald-wrap.is-fail .cald-readout-text { fill: var(--cald-danger); }
+
+        @@media (prefers-reduced-motion: reduce) {
+            .cald-needle, .cald-stage { transition: none; }
+            .cald-stage,
+            .cald-wrap.is-measuring .cald-stage { animation: none; }
+            .cald-wrap.cald-shake .cald-stage { animation: none; }
+        }
+
+        /* ── Sol hero: canlı kalibrasyon düzeneği (komparatör + salgı ölçümü) ──────
+           Hero görseli her iki temada da koyu (#0a0d17 zemin) olduğundan düzenek
+           doğrudan koyu zemine göre renklendirilir — body tema sınıfından bağımsız.
+           .login-hero-blur: arka plan görselinin SOL bölgesini backdrop-filter ile
+           flulaştırır + hafif koyulaştırır (maske sağa doğru şeffaflaşır, logo net
+           kalır). .login-rig: düzeneği panelin SOL kısmına yaslar. Tüm hareket
+           sayfa sonundaki rig script'inden (tek rAF) sürülür — CSS keyframe yok. */
+        .login-hero-blur {
+            position: absolute; inset: 0;
+            /* 2026-08-05 kullanıcı geri bildirimi: "CALIBRAHUB"un C'si flu bölgede
+               kalıyordu — blur şeridi 62%→52%'ye daraltıldı, maske daha erken söner,
+               koyulaştırma hafifletildi → marka yazısı tamamen net bölgede. */
+            width: 52%;
+            backdrop-filter: blur(14px) brightness(.78) saturate(1.05);
+            -webkit-backdrop-filter: blur(14px) brightness(.78) saturate(1.05);
+            background: linear-gradient(90deg, rgba(7,10,20,.40), rgba(7,10,20,.14) 62%, transparent);
+            -webkit-mask-image: linear-gradient(90deg, #000 48%, transparent);
+            mask-image: linear-gradient(90deg, #000 48%, transparent);
+            pointer-events: none;
+            z-index: 1;
+        }
+        .login-rig {
+            position: absolute;
+            left: clamp(16px, 4%, 56px);
+            top: 50%;
+            transform: translateY(-50%);
+            width: min(464px, 50%);
+            z-index: 2;
+            display: flex; align-items: center; gap: 10px;
+            /* Kap pointer-events:none kalır (login formunu asla engellemesin);
+               yalnız etkileşimli öğeler (cihaz rayı + hit alanları + hız barı) auto ile açılır. */
+            pointer-events: none;
+            filter: drop-shadow(0 22px 40px rgba(2, 6, 23, .55));
+        }
+        .rig-main { flex: 1; min-width: 0; }
+        .login-rig-svg { display: block; width: 100%; height: auto; }
+        .rig-scene { display: none; }
+        .rig-scene.is-active { display: block; }
+
+        /* ── Cihaz seçici ray (sol) — üç kalibrasyon düzeneği arasında geçiş ── */
+        .rig-devices {
+            display: flex; flex-direction: column; gap: 8px;
+            flex-shrink: 0;
+            pointer-events: auto;
+        }
+        .rig-dev-btn {
+            width: 60px; padding: 8px 4px 6px;
+            border-radius: 12px;
+            background: rgba(15, 23, 42, .62);
+            border: 1px solid rgba(148, 163, 184, .3);
+            color: #94a3b8;
+            cursor: pointer;
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            transition: border-color .18s, color .18s, background-color .18s, transform .18s, box-shadow .18s;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .rig-dev-btn svg { width: 22px; height: 22px; }
+        .rig-dev-btn span {
+            font-size: .58rem; font-weight: 600; letter-spacing: .2px;
+            line-height: 1.1; text-align: center;
+        }
+        .rig-dev-btn:hover { color: #e2e8f0; transform: translateX(2px); }
+        .rig-dev-btn.is-active {
+            color: #e0e7ff;
+            border-color: rgba(99, 102, 241, .65);
+            background: rgba(49, 46, 129, .45);
+            box-shadow: 0 0 12px rgba(99, 102, 241, .35);
+        }
+
+        /* Mikrometre sahnesine özgü çentik stilleri */
+        .rig-mik-thticks line { stroke: rgba(15, 23, 42, .45); stroke-width: 1.4; }
+        .rig-mik-sltick { stroke: #1e293b; stroke-width: 1; }
+        .rig-mik-slnum {
+            fill: #1e293b; font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 6px; font-weight: 600; text-anchor: middle;
+        }
+        .rig-mik-thnum {
+            fill: rgba(15, 23, 42, .62); font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 6.5px; font-weight: 600;
+        }
+
+        /* Ortak: ekipman etiketleri, LCD, HUD alt notu */
+        .rig-tag {
+            fill: rgba(148, 163, 184, .7); font-size: 8px; font-weight: 600;
+            text-anchor: middle; letter-spacing: .3px;
+        }
+        .rig-lcd {
+            fill: #7dd3fc; font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 18px; font-weight: 700; text-anchor: end; letter-spacing: .5px;
+        }
+        .rig-lcd-unit {
+            fill: rgba(125, 211, 252, .62); font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 7px; font-weight: 600;
+        }
+        .rig-hud-note { fill: rgba(148, 163, 184, .6); font-size: 8px; font-weight: 500; }
+        .rig-hud-note.ok  { fill: #34d399; }
+        .rig-hud-note.bad { fill: #fbbf24; }
+
+        /* Mikrometre: tolerans barı + geçmiş noktalar */
+        .rig-tol-track  { fill: rgba(148, 163, 184, .18); }
+        .rig-tol-zone   { fill: rgba(16, 185, 129, .28); }
+        .rig-tol-center { stroke: rgba(226, 232, 240, .45); stroke-width: 1; }
+        .rig-tol-mark   { fill: #22d3ee; }
+        .rig-tol-dot    { fill: rgba(165, 180, 252, .5); }
+
+        /* Manometre: kalibrasyon nokta işaretleri, sürüklenen (max) ibre, hata grafiği */
+        .rig-calmark { fill: rgba(99, 102, 241, .4); transition: fill .25s; }
+        .rig-calmark.is-active { fill: #e11d48; }
+        .rig-drag-needle { stroke: #334155; stroke-width: 1.5; stroke-linecap: round; opacity: .5; }
+        .rig-ref-needle  { stroke: #6366f1; stroke-width: 1.8; stroke-linecap: round; }
+        .rig-err-slot { fill: rgba(148, 163, 184, .07); }
+        .rig-err-slot.is-active { fill: rgba(99, 102, 241, .2); }
+        .rig-err-zero { stroke: rgba(148, 163, 184, .32); stroke-width: 1; stroke-dasharray: 2 2; }
+        .rig-errbar { fill: #34d399; }
+        .rig-errbar.warn { fill: #fbbf24; }
+
+        /* ── Etkileşim: parçayı fareyle çevirme + devir barı ── */
+        .rig-part-hit { pointer-events: auto; cursor: grab; }
+        .rig-part-hit:active { cursor: grabbing; }
+        .login-rig-controls {
+            margin-top: 10px;
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 14px; border-radius: 10px;
+            background: rgba(15, 23, 42, .62);
+            border: 1px solid rgba(148, 163, 184, .3);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            pointer-events: auto;
+        }
+        .rig-ctl-label {
+            color: #94a3b8; font-size: .72rem; font-weight: 600; letter-spacing: .4px;
+            flex-shrink: 0;
+        }
+        .rig-ctl-value {
+            color: #7dd3fc; font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: .74rem; font-weight: 600; min-width: 66px; text-align: right;
+            flex-shrink: 0;
+        }
+        #rigSpeed {
+            flex: 1; min-width: 0;
+            -webkit-appearance: none; appearance: none;
+            height: 4px; border-radius: 2px;
+            background: linear-gradient(90deg, #6366f1, #22d3ee);
+            outline: none; cursor: pointer;
+        }
+        #rigSpeed::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 14px; height: 14px; border-radius: 50%;
+            background: #e2e8f0; border: 2px solid #6366f1;
+            box-shadow: 0 0 6px rgba(99, 102, 241, .6);
+            cursor: grab;
+        }
+        #rigSpeed::-webkit-slider-thumb:active { cursor: grabbing; }
+        #rigSpeed::-moz-range-thumb {
+            width: 14px; height: 14px; border-radius: 50%;
+            background: #e2e8f0; border: 2px solid #6366f1;
+            box-shadow: 0 0 6px rgba(99, 102, 241, .6);
+            cursor: grab;
+        }
+        .rig-ctl-hint {
+            margin-top: 6px; text-align: center;
+            color: rgba(148, 163, 184, .65);
+            font-size: .68rem; letter-spacing: .3px;
+        }
+
+        .rig-badge rect {
+            fill: rgba(15, 23, 42, .62); stroke: rgba(148, 163, 184, .3); stroke-width: 1;
+        }
+        .rig-badge-dot { fill: #34d399; animation: rigBlink 1.6s ease-in-out infinite; }
+        .rig-badge-text {
+            fill: #e2e8f0; font-size: 12.5px; font-weight: 600;
+            letter-spacing: .3px; dominant-baseline: middle;
+        }
+        .rig-caption {
+            fill: rgba(148, 163, 184, .85); font-size: 10.5px; font-weight: 500; letter-spacing: .4px;
+        }
+        .rig-vblock { fill: #1d2940; stroke: rgba(148, 163, 184, .25); stroke-width: 1; }
+        .rig-col-tick { stroke: rgba(15, 23, 42, .5); stroke-width: 1; }
+        .rig-col-tick.maj { stroke-width: 1.6; }
+        .rig-part-notch { stroke: rgba(15, 23, 42, .4); stroke-width: 1.6; stroke-linecap: round; }
+        .rig-dial-tick { stroke: #64748b; stroke-width: 1; }
+        .rig-dial-tick.maj { stroke: #334155; stroke-width: 1.8; }
+        .rig-dial-num {
+            fill: #334155; font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 8.5px; font-weight: 600; text-anchor: middle; dominant-baseline: middle;
+        }
+        .rig-face-brand {
+            fill: #64748b; font-size: 8px; font-weight: 700; letter-spacing: 2px; text-anchor: middle;
+        }
+        .rig-face-unit {
+            fill: #94a3b8; font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 7.5px; font-weight: 600; text-anchor: middle;
+        }
+        /* Tolerans yayları: alt %80 yeşil (uygun), üstteki dar dilim amber (tolerans dışı) */
+        .rig-tol-ok  { fill: none; stroke: rgba(16, 185, 129, .3);  stroke-width: 4; }
+        .rig-tol-out { fill: none; stroke: rgba(245, 158, 11, .38); stroke-width: 4; }
+        .rig-needle { stroke: #e11d48; stroke-width: 2.4; stroke-linecap: round; }
+        .rig-needle-tail { fill: #e11d48; }
+        .rig-counter-needle { stroke: #6366f1; stroke-width: 1.6; stroke-linecap: round; }
+        .rig-counter-tick { stroke: #94a3b8; stroke-width: 1; }
+        .rig-glass { fill: rgba(255, 255, 255, .3); }
+        /* Yalnız DOĞRUDAN çocuklar: panel çerçevesi + ayraç çizgileri. İç gruplardaki
+           (tolerans barı, hata grafiği) rect/line'lar bu kurallardan etkilenmemeli. */
+        .rig-hud > rect {
+            fill: rgba(10, 15, 28, .78); stroke: rgba(99, 102, 241, .3); stroke-width: 1;
+        }
+        .rig-hud > line { stroke: rgba(148, 163, 184, .18); stroke-width: 1; }
+        .rig-hud-label {
+            fill: rgba(148, 163, 184, .8); font-size: 9.5px; font-weight: 600;
+            letter-spacing: 1.1px;
+        }
+        .rig-hud-value {
+            fill: #7dd3fc; font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 17px; font-weight: 600; letter-spacing: .4px;
+        }
+        .rig-hud-sub {
+            fill: #a5b4fc; font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 14px; font-weight: 600;
+        }
+        .rig-trace-axis { stroke: rgba(148, 163, 184, .28) !important; stroke-dasharray: 3 3; }
+        .rig-trace {
+            fill: none; stroke: #22d3ee; stroke-width: 1.6;
+            stroke-linejoin: round; stroke-linecap: round;
+            filter: drop-shadow(0 0 3px rgba(34, 211, 238, .55));
+        }
+        @@keyframes rigBlink { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+        /* Dar hero'da (tek kolon mobil düzen) düzenek kartla çakışır — gizle */
+        @@media (max-width: 900px) {
+            .login-rig, .login-hero-blur { display: none; }
+        }
+        @@media (prefers-reduced-motion: reduce) {
+            .rig-badge-dot { animation: none; }
+        }
+    </style>
+</head>
+<body class="login-page app-theme-@runtime.ThemeCode"
+      data-reset-workspace-tabs="1">
+<!-- Tema toggle — sag ust kose -->
+<button type="button" id="btnThemeToggle" class="login-theme-toggle" title="Tema değiştir" aria-label="Tema değiştir">
+    <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+    <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4"></circle>
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
+    </svg>
+</button>
+<script>
+    (function () {
+        var TK = 'calibra_theme';
+        var body = document.body;
+        var btn  = document.getElementById('btnThemeToggle');
+        var themeInput = document.getElementById('loginThemeInput');
+        var form = document.getElementById('loginForm');
+
+        // localStorage tercihini hem UI'a hem hidden input'a uygula
+        function applyTheme(t) {
+            body.classList.remove('app-theme-light', 'app-theme-dark');
+            body.classList.add('app-theme-' + t);
+            if (themeInput) themeInput.value = t;
+            try { localStorage.setItem(TK, t); } catch (e) {}
+        }
+
+        var saved = null;
+        try { saved = localStorage.getItem(TK); } catch (e) {}
+        if (saved === 'dark' || saved === 'light') { applyTheme(saved); }
+        else if (themeInput) { themeInput.value = body.classList.contains('app-theme-dark') ? 'dark' : 'light'; }
+
+        function currentTheme() {
+            return body.classList.contains('app-theme-dark') ? 'dark' : 'light';
+        }
+        btn.addEventListener('click', function () {
+            applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
+        });
+    })();
+</script>
+<div class="login-shell">
+    <section class="login-hero" aria-hidden="true">
+        @* CalibraHub Software marka görseli. Frame overflow:hidden + img object-fit:cover
+           ile panel tamamen kaplanır, sağ-alt sparkle filigranı doğal olarak kırpılır. *@
+        <div class="login-hero-frame">
+            <img src="~/Document/CalibraHubLoginLogo.png" alt="CalibraHub Software" />
+        </div>
+
+        @* Görselin SOL bölgesini flulaştıran/koyulaştıran katman — maske sağa doğru
+           şeffaflaşır, böylece marka logosu ve sloganı net kalır. *@
+        <div class="login-hero-blur"></div>
+
+        @* ── Canlı kalibrasyon düzenekleri — CİHAZ SEÇİMLİ (2026-08-05 kullanıcı isteği).
+              Soldaki ray (rig-devices) üç sahne arasında geçiş yapar:
+              (1) Komparatör — salgı (runout) ölçümü: dönen eksantrik parça, temas ucu,
+                  ibre, TIR + kayan trend.
+              (2) Mikrometre — dış çap ölçümü: tambur döner, mil parçaya iner, okuma
+                  oturur, sapma raporlanır; parça değişir, çevrim yinelenir.
+              (3) Manometre — basınç kalibrasyonu: el pompası basıncı kalibrasyon
+                  noktalarında (0/25/50/75/100 bar) gezdirir, Ref/Cihaz/Hata izlenir.
+              Her sahnenin kendi fizik state'i var; yalnız AKTİF sahne tick alır (sayfa
+              sonundaki rig script'i, tek rAF). Salt dekoratif: login akışına bağı yok. ── *@
+        <div class="login-rig">
+            <div class="rig-devices" id="rigDevices">
+                <button type="button" class="rig-dev-btn is-active" data-rig="komp" title="Komparatör — salgı ölçümü">
+                    <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="11" y1="11" x2="14.2" y2="5.8" />
+                        <line x1="11" y1="19" x2="11" y2="21" />
+                        <circle cx="11" cy="11" r="1" fill="currentColor" stroke="none" />
+                    </svg>
+                    <span>Komparatör</span>
+                </button>
+                <button type="button" class="rig-dev-btn" data-rig="mik" title="Mikrometre — dış çap ölçümü">
+                    <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+                        <path d="M13.5 6.5 A6.8 6.8 0 1 0 13.5 15.5" />
+                        <line x1="4.5" y1="8" x2="20" y2="8" />
+                        <line x1="16" y1="5.6" x2="16" y2="10.4" />
+                        <line x1="19" y1="5.6" x2="19" y2="10.4" />
+                    </svg>
+                    <span>Mikrometre</span>
+                </button>
+                <button type="button" class="rig-dev-btn" data-rig="man" title="Manometre — basınç kalibrasyonu">
+                    <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+                        <path d="M4 14.5 A7.6 7.6 0 0 1 18 14.5" />
+                        <line x1="11" y1="14" x2="14.4" y2="9.2" />
+                        <line x1="7" y1="18" x2="15" y2="18" />
+                        <circle cx="11" cy="14" r="1" fill="currentColor" stroke="none" />
+                    </svg>
+                    <span>Manometre</span>
+                </button>
+            </div>
+
+            <div class="rig-main">
+            @* Ortak gradient/clip tanımları — üç sahne de url(#...) ile buradan besleniyor
+               (inline SVG'de paint server'lar belge genelinde çözülür; id'ler tekildir). *@
+            <svg class="rig-defs" width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+                <defs>
+                    <linearGradient id="rigSteel" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0" stop-color="#42506a" />
+                        <stop offset=".22" stop-color="#cbd5e1" />
+                        <stop offset=".5" stop-color="#94a3b8" />
+                        <stop offset="1" stop-color="#2f3b4f" />
+                    </linearGradient>
+                    <linearGradient id="rigSteelV" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stop-color="#cbd5e1" />
+                        <stop offset=".55" stop-color="#8b98ab" />
+                        <stop offset="1" stop-color="#3a4658" />
+                    </linearGradient>
+                    <linearGradient id="rigGranite" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stop-color="#26334a" />
+                        <stop offset="1" stop-color="#0a111e" />
+                    </linearGradient>
+                    <radialGradient id="rigBezel" cx=".34" cy=".24" r=".95">
+                        <stop offset="0" stop-color="#eef2f7" />
+                        <stop offset=".52" stop-color="#94a1b4" />
+                        <stop offset="1" stop-color="#2f3b4f" />
+                    </radialGradient>
+                    <radialGradient id="rigFace" cx=".36" cy=".26" r=".92">
+                        <stop offset="0" stop-color="#ffffff" />
+                        <stop offset="1" stop-color="#dde5ef" />
+                    </radialGradient>
+                    <linearGradient id="rigPartG" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0" stop-color="#8f9db1" />
+                        <stop offset=".42" stop-color="#e6ecf4" />
+                        <stop offset="1" stop-color="#5b697f" />
+                    </linearGradient>
+                    <radialGradient id="rigFloor" cx=".5" cy=".5" r=".5">
+                        <stop offset="0" stop-color="rgba(99,102,241,.38)" />
+                        <stop offset="1" stop-color="rgba(99,102,241,0)" />
+                    </radialGradient>
+                    <clipPath id="mikThimbleClip">
+                        <rect x="312" y="220" width="46" height="60" rx="7" />
+                    </clipPath>
+                </defs>
+            </svg>
+
+            @* ── Sahne 1: Komparatör — salgı (runout) ölçümü ── *@
+            <svg id="rigSvg" class="login-rig-svg rig-scene is-active" viewBox="0 0 420 520" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                @* Durum şeridi *@
+                <g class="rig-badge">
+                    <rect x="28" y="20" width="204" height="28" rx="14" />
+                    <circle class="rig-badge-dot" cx="45" cy="34" r="4" />
+                    <text class="rig-badge-text" x="58" y="34.5">Kalibrasyon Sürüyor</text>
+                </g>
+                <text class="rig-caption" x="29" y="64">Komparatör · Salgı (Runout) Ölçümü</text>
+
+                @* Zemin ışığı + granit tabla *@
+                <ellipse cx="205" cy="424" rx="178" ry="26" fill="url(#rigFloor)" />
+                <path class="rig-vblock" d="M162 392 V350 H193 L250 386 L307 350 H338 V392 Z" />
+                <rect x="30" y="392" width="330" height="30" rx="5" fill="url(#rigGranite)" />
+                <rect x="30" y="392" width="330" height="2.6" rx="1.3" fill="rgba(226,232,240,.22)" />
+                <rect x="40" y="422" width="310" height="6" rx="3" fill="rgba(2,6,23,.6)" />
+
+                @* Sütun + taban bloğu + ince ayar kolu *@
+                <rect x="52" y="366" width="60" height="28" rx="4" fill="url(#rigSteelV)" />
+                <rect x="70" y="120" width="22" height="248" rx="3" fill="url(#rigSteel)" />
+                <g class="rig-col-scale" id="rigColScale"></g>
+                <circle cx="81" cy="304" r="13" fill="url(#rigBezel)" />
+                <circle cx="81" cy="304" r="5" fill="#334155" />
+
+                @* Kol + kelepçe (kadranın gövdesini taşır) *@
+                <rect x="88" y="224" width="132" height="16" rx="4" fill="url(#rigSteelV)" />
+                <rect x="244" y="208" width="12" height="50" rx="3" fill="url(#rigSteel)" />
+
+                @* Pinol (temas ucu) — JS ile dikey ötelenir *@
+                <g id="rigPlunger">
+                    <rect x="247" y="246" width="6" height="31" rx="3" fill="#cbd5e1" />
+                    <circle cx="250" cy="277" r="5" fill="#eef2f7" stroke="rgba(15,23,42,.45)" stroke-width="1" />
+                </g>
+
+                <rect x="212" y="212" width="52" height="42" rx="7" fill="url(#rigSteelV)" />
+                <circle cx="238" cy="206" r="5" fill="#94a3b8" stroke="rgba(15,23,42,.4)" stroke-width="1" />
+
+                @* Ölçülen parça — V-blok içinde dönen eksantrik disk.
+                   Disk merkezi (255,330), dönme ekseni (250,330): 5 px'lik eksantriklik
+                   dönerken tepe noktasını sinüzoidal olarak oynatır = gerçek salgı. *@
+                <g id="rigPartSpin">
+                    <circle cx="255" cy="330" r="48" fill="url(#rigPartG)" stroke="rgba(15,23,42,.55)" stroke-width="1.2" />
+                    <circle cx="255" cy="330" r="41" fill="none" stroke="rgba(15,23,42,.18)" stroke-width="1" />
+                    <g id="rigPartNotches"></g>
+                    <circle cx="255" cy="330" r="13" fill="#1b2637" stroke="rgba(226,232,240,.32)" stroke-width="1.2" />
+                    <rect x="251" y="309" width="8" height="9" rx="1.5" fill="#1b2637" />
+                    <circle cx="255" cy="300" r="3" fill="#e11d48" />
+                </g>
+
+                @* Komparatör gövdesi *@
+                <rect x="242" y="76" width="16" height="12" rx="2.5" fill="url(#rigSteelV)" />
+                <circle cx="250" cy="150" r="66" fill="url(#rigBezel)" />
+                <circle cx="250" cy="150" r="60" fill="none" stroke="rgba(15,23,42,.35)" stroke-width="1.2" />
+                <circle cx="250" cy="150" r="58" fill="url(#rigFace)" />
+                <path class="rig-tol-ok" d="M208.74 180 A51 51 0 1 1 291.26 180" />
+                <path class="rig-tol-out" d="M291.26 180 A51 51 0 0 1 208.74 180" />
+                <g id="rigDialTicks"></g>
+                <g id="rigDialNums"></g>
+                <text class="rig-face-brand" x="250" y="118">CALIBRA</text>
+                <text class="rig-face-unit" x="250" y="131">0,001 mm</text>
+
+                @* Tur sayacı (küçük kadran) *@
+                <circle cx="250" cy="192" r="16" fill="#eef2f7" stroke="rgba(15,23,42,.35)" stroke-width="1" />
+                <g id="rigCounterTicks"></g>
+                <g id="rigCounter">
+                    <line class="rig-counter-needle" x1="250" y1="194" x2="250" y2="181" />
+                </g>
+                <circle cx="250" cy="192" r="2" fill="#334155" />
+
+                @* Ana ibre *@
+                <g id="rigNeedle">
+                    <line class="rig-needle" x1="250" y1="159" x2="250" y2="97" />
+                    <circle class="rig-needle-tail" cx="250" cy="159" r="3.4" />
+                </g>
+                <circle cx="250" cy="150" r="5.6" fill="#475569" />
+                <circle cx="250" cy="150" r="2.4" fill="#cbd5e1" />
+                <ellipse class="rig-glass" cx="226" cy="120" rx="36" ry="17" transform="rotate(-28 226 120)" />
+
+                @* Dijital okuma paneli — sapma / TIR / kayan trend *@
+                <g class="rig-hud">
+                    <rect x="28" y="436" width="362" height="70" rx="12" />
+                    <line x1="168" y1="448" x2="168" y2="494" />
+                    <line x1="240" y1="448" x2="240" y2="494" />
+                    <text class="rig-hud-label" x="46" y="459">Sapma</text>
+                    <text class="rig-hud-value" id="rigDev" x="46" y="486">+0,000 mm</text>
+                    <text class="rig-hud-label" x="184" y="459">TIR</text>
+                    <text class="rig-hud-sub" id="rigTir" x="184" y="483">0,000</text>
+                    <line class="rig-trace-axis" x1="252" y1="471" x2="378" y2="471" />
+                    <polyline class="rig-trace" id="rigTrace" points="" />
+                </g>
+
+                @* Parça hit alanı — fareyle tutup çevirme (scrub). SVG'nin en sonunda
+                   (en üst katman); kap .login-rig pointer-events:none olduğundan
+                   yalnız bu daire etkileşim alır, login formunu asla engellemez. *@
+                <circle class="rig-part-hit" id="rigPartHit" cx="255" cy="330" r="52" fill="transparent">
+                    <title>Parçayı sürükleyerek çevirin</title>
+                </circle>
+            </svg>
+
+            @* ── Sahne 2: Mikrometre (0-25 mm, 0,001 mm) — dış çap ölçümü.
+                  Ölçek TUTARLI: 1 mm = 3,6 px; parça yarıçapı da nominal çaptan türetildi
+                  (r = 17,45·3,6/2 ≈ 31 px), böylece mil tam parça yüzeyinde temas eder.
+                  Katmanlar (çizim sırası önemli): mil → SABİT kovan (ana skala) → tambur
+                  + cırcır (mil ile birlikte öteler, kovanın ÜSTÜNDE kayar; gerçek
+                  mikrometrede tambur kovanı örter). Tambur çizgileri + rakamları 0,5 mm
+                  hatveye göre kaydırılır (1 tur = 50 bölme = 0,50 mm). ── *@
+            <svg id="rigSvgMik" class="login-rig-svg rig-scene" viewBox="0 0 420 520" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <g class="rig-badge">
+                    <rect x="28" y="20" width="204" height="28" rx="14" />
+                    <circle class="rig-badge-dot" cx="45" cy="34" r="4" />
+                    <text class="rig-badge-text" x="58" y="34.5">Kalibrasyon Sürüyor</text>
+                </g>
+                <text class="rig-caption" x="29" y="64">Mikrometre · Dış Çap Ölçümü (0-25 mm)</text>
+
+                <ellipse cx="205" cy="424" rx="178" ry="26" fill="url(#rigFloor)" />
+                <rect x="30" y="392" width="330" height="30" rx="5" fill="url(#rigGranite)" />
+                <rect x="30" y="392" width="330" height="2.6" rx="1.3" fill="rgba(226,232,240,.22)" />
+                <rect x="40" y="422" width="310" height="6" rx="3" fill="rgba(2,6,23,.6)" />
+
+                @* Ayar mastarı (sıfırlama çubuğu) — tabla üzerinde bekliyor *@
+                <rect x="48" y="374" width="84" height="14" rx="2" fill="url(#rigSteelV)" />
+                <rect x="48" y="374" width="6" height="14" rx="1" fill="#eef2f7" />
+                <rect x="126" y="374" width="6" height="14" rx="1" fill="#eef2f7" />
+                <text class="rig-tag" x="90" y="368">Mastar 25 mm</text>
+
+                @* Stand: kolon + kelepçe — mikrometreyi yatay tutar *@
+                <path d="M170 392 L182 336 H210 L222 392 Z" fill="#1d2940" stroke="rgba(148,163,184,.25)" stroke-width="1" />
+                <rect x="172" y="318" width="48" height="22" rx="5" fill="url(#rigSteelV)" />
+                <circle cx="196" cy="312" r="6" fill="#94a3b8" stroke="rgba(15,23,42,.4)" stroke-width="1" />
+
+                @* C-gövde + iç kenar parlaması + ısı yalıtım pedleri (el ısısı sapması önler) *@
+                <path d="M128 266 A106 106 0 0 0 320 266" fill="none" stroke="url(#rigSteelV)" stroke-width="17" stroke-linecap="round" />
+                <path d="M133 269 A99 99 0 0 0 315 269" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="3" stroke-linecap="round" />
+                <rect x="150" y="318" width="30" height="15" rx="4" fill="#4a3b32" transform="rotate(-22 165 325)" />
+                <rect x="268" y="318" width="30" height="15" rx="4" fill="#4a3b32" transform="rotate(22 283 325)" />
+
+                @* Örs (anvil) — sabit çene + karbür ölçüm yüzeyi *@
+                <rect x="118" y="226" width="31" height="48" rx="3" fill="url(#rigSteelV)" />
+                <rect x="144" y="230" width="5" height="40" rx="1" fill="#eef2f7" />
+
+                @* Ölçülen parça — mil kesiti (tırtıl + merkez deliği); çap ölçekle tutarlı *@
+                <text class="rig-tag" id="mikPartTag" x="180" y="211">Parça P-001</text>
+                <circle cx="180" cy="250" r="31" fill="url(#rigPartG)" stroke="rgba(15,23,42,.55)" stroke-width="1.2" />
+                <circle cx="180" cy="250" r="25" fill="none" stroke="rgba(15,23,42,.16)" stroke-width="1" />
+                <g id="mikPartKnurl"></g>
+                <circle cx="180" cy="250" r="8" fill="#1b2637" stroke="rgba(226,232,240,.3)" stroke-width="1.1" />
+
+                @* Mil (spindle) — kovanın ALTINDAN geçer; tamburla aynı ötelemeyi alır *@
+                <g id="mikSpindleG">
+                    <rect x="211" y="243" width="122" height="14" rx="2" fill="url(#rigSteelV)" />
+                    <rect x="211" y="245" width="5" height="10" rx="1" fill="#eef2f7" />
+                </g>
+
+                @* Kovan (sleeve) — SABİT; ana mm skalası (üstte tam, altta yarım mm) *@
+                <rect x="246" y="232" width="94" height="36" rx="5" fill="url(#rigSteelV)" />
+                <line x1="250" y1="250" x2="336" y2="250" stroke="rgba(15,23,42,.6)" stroke-width="1.4" />
+                <g id="mikSleeveTicks"></g>
+                <g id="mikSleeveNums"></g>
+
+                @* Kilit kolu — ölçüm tutulurken kapanır (JS rotate) *@
+                <g id="mikLock">
+                    <rect x="256" y="266" width="9" height="21" rx="4" fill="#64748b" stroke="rgba(15,23,42,.4)" stroke-width="1" />
+                </g>
+
+                @* Dijital gösterge — kovan gövdesine bağlı (sabit) *@
+                <rect x="242" y="188" width="96" height="36" rx="6" fill="#0a1120" stroke="rgba(99,102,241,.4)" stroke-width="1" />
+                <rect x="246" y="192" width="88" height="28" rx="4" fill="rgba(8,47,73,.45)" />
+                <text class="rig-lcd" id="mikLcd" x="328" y="212">17,450</text>
+                <text class="rig-lcd-unit" x="252" y="200">mm</text>
+                <text class="rig-lcd-unit" id="mikLcdMode" x="252" y="217">ABS</text>
+                <line x1="290" y1="224" x2="290" y2="232" stroke="rgba(148,163,184,.4)" stroke-width="2" />
+
+                @* Tambur (thimble) + cırcır (ratchet) — mil ile birlikte öteler *@
+                <g id="mikThimbleG">
+                    <g clip-path="url(#mikThimbleClip)">
+                        <rect x="312" y="220" width="46" height="60" rx="7" fill="url(#rigSteel)" />
+                        <g id="mikThimbleTicks" class="rig-mik-thticks"></g>
+                        <g id="mikThimbleNums"></g>
+                    </g>
+                    <line x1="312" y1="250" x2="358" y2="250" stroke="rgba(15,23,42,.22)" stroke-width="1" />
+                    <g id="mikRatchet">
+                        <rect x="358" y="234" width="16" height="32" rx="5" fill="url(#rigSteelV)" />
+                        <line x1="362" y1="239" x2="362" y2="261" stroke="rgba(15,23,42,.45)" stroke-width="1" />
+                        <line x1="366" y1="239" x2="366" y2="261" stroke="rgba(15,23,42,.45)" stroke-width="1" />
+                        <line x1="370" y1="239" x2="370" y2="261" stroke="rgba(15,23,42,.45)" stroke-width="1" />
+                    </g>
+                </g>
+
+                @* HUD — okuma / sapma+karar / tolerans barı + son ölçüm noktaları *@
+                <g class="rig-hud">
+                    <rect x="28" y="436" width="362" height="70" rx="12" />
+                    <line x1="158" y1="448" x2="158" y2="494" />
+                    <line x1="252" y1="448" x2="252" y2="494" />
+                    <text class="rig-hud-label" x="44" y="459">Okuma</text>
+                    <text class="rig-hud-value" id="mikRead" x="44" y="484">22,450 mm</text>
+                    <text class="rig-hud-note" x="44" y="499">nominal 17,450 mm</text>
+                    <text class="rig-hud-label" x="172" y="459">Sapma</text>
+                    <text class="rig-hud-sub" id="mikDevi" x="172" y="484">—</text>
+                    <text class="rig-hud-note" id="mikVerdict" x="172" y="499">ölçülüyor</text>
+                    <text class="rig-hud-label" x="266" y="459">Tolerans ±0,010</text>
+                    <g id="mikTolBar"></g>
+                </g>
+
+                @* Tambur hit alanı — yatay sürükleme mili ilerletir/geri çeker *@
+                <rect class="rig-part-hit" id="mikHit" x="300" y="206" width="96" height="90" fill="transparent">
+                    <title>Tamburu sürükleyerek mili ilerletin</title>
+                </rect>
+            </svg>
+
+            @* ── Sahne 3: Manometre — basınç kalibrasyon tezgâhı (karşılaştırma yöntemi).
+                  Gerçek düzenek: yağ haznesi → tahliye vanası → manifold → İKİ gösterge:
+                  solda REFERANS standart (sınıf 0,1) + sağda test edilen cihaz/DUT
+                  (sınıf 1,6) + vidalı basınç üreteci (volan + piston). Kalibrasyon
+                  noktaları (0/25/50/75/100 bar) kadranda işaretli, aktif nokta kırmızı
+                  yanar; sürüklenen (max) ibre tepe basıncı tutar; HUD'da nokta-nokta
+                  hata çubuk grafiği dolar. ── *@
+            <svg id="rigSvgMan" class="login-rig-svg rig-scene" viewBox="0 0 420 520" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <g class="rig-badge">
+                    <rect x="28" y="20" width="204" height="28" rx="14" />
+                    <circle class="rig-badge-dot" cx="45" cy="34" r="4" />
+                    <text class="rig-badge-text" x="58" y="34.5">Kalibrasyon Sürüyor</text>
+                </g>
+                <text class="rig-caption" x="29" y="64">Manometre · Basınç Kalibrasyonu (0-100 bar)</text>
+
+                <ellipse cx="205" cy="424" rx="178" ry="26" fill="url(#rigFloor)" />
+                <rect x="30" y="392" width="330" height="30" rx="5" fill="url(#rigGranite)" />
+                <rect x="30" y="392" width="330" height="2.6" rx="1.3" fill="rgba(226,232,240,.22)" />
+                <rect x="40" y="422" width="310" height="6" rx="3" fill="rgba(2,6,23,.6)" />
+
+                @* Yağ haznesi — seviye basınç arttıkça düşer (akışkan sisteme basılır) *@
+                <rect x="36" y="322" width="58" height="70" rx="6" fill="rgba(12,18,32,.85)" stroke="rgba(148,163,184,.35)" stroke-width="1" />
+                <rect id="manFluid" x="39" y="341" width="52" height="48" rx="4" fill="rgba(34,211,238,.26)" />
+                <rect x="52" y="312" width="26" height="12" rx="3" fill="url(#rigSteelV)" />
+                <text class="rig-tag" x="65" y="410">Hazne</text>
+
+                @* Manifold bloğu + destek + bağlantı rakorları *@
+                <rect x="100" y="344" width="196" height="30" rx="5" fill="url(#rigSteelV)" />
+                <rect x="150" y="374" width="100" height="18" rx="3" fill="#1d2940" stroke="rgba(148,163,184,.22)" stroke-width="1" />
+                <rect x="88" y="352" width="14" height="14" rx="2" fill="url(#rigSteel)" />
+                <rect x="90" y="338" width="10" height="10" rx="2" fill="url(#rigSteel)" />
+
+                @* Tahliye vanası — basınç düşerken döner *@
+                <rect x="127" y="336" width="6" height="10" fill="url(#rigSteel)" />
+                <g id="manValve">
+                    <circle cx="130" cy="326" r="12" fill="none" stroke="#94a3b8" stroke-width="3" />
+                    <line x1="118" y1="326" x2="142" y2="326" stroke="#94a3b8" stroke-width="2.4" />
+                    <line x1="130" y1="314" x2="130" y2="338" stroke="#94a3b8" stroke-width="2.4" />
+                </g>
+                <text class="rig-tag" x="130" y="410">Tahliye</text>
+
+                @* Basınç üreteci — vidalı piston + volan (basınç değişirken döner) *@
+                <rect id="manPiston" x="294" y="352" width="42" height="14" rx="3" fill="url(#rigSteel)" />
+                <g id="manWheel">
+                    <circle cx="336" cy="359" r="26" fill="none" stroke="#8b98ab" stroke-width="6" />
+                    <line x1="313" y1="346" x2="359" y2="372" stroke="#8b98ab" stroke-width="3" />
+                    <line x1="313" y1="372" x2="359" y2="346" stroke="#8b98ab" stroke-width="3" />
+                    <line x1="336" y1="333" x2="336" y2="385" stroke="#8b98ab" stroke-width="3" />
+                </g>
+                <circle cx="336" cy="359" r="5" fill="#475569" />
+                <text class="rig-tag" x="336" y="410">Pompa</text>
+
+                @* ── Referans standart gösterge (sınıf 0,1) — sol port ── *@
+                <rect x="96" y="296" width="10" height="50" fill="url(#rigSteel)" />
+                <circle cx="101" cy="248" r="48" fill="url(#rigBezel)" />
+                <circle cx="101" cy="248" r="44" fill="none" stroke="rgba(15,23,42,.3)" stroke-width="1" />
+                <circle cx="101" cy="248" r="43" fill="url(#rigFace)" />
+                <g id="manRefTicks"></g>
+                <g id="manRefNums"></g>
+                <text class="rig-face-unit" x="101" y="272">REF · 0,1</text>
+                <g id="manRefNeedle">
+                    <line class="rig-ref-needle" x1="101" y1="254" x2="101" y2="214" />
+                </g>
+                <circle cx="101" cy="248" r="3.4" fill="#475569" />
+                <ellipse class="rig-glass" cx="88" cy="230" rx="19" ry="9" transform="rotate(-28 88 230)" />
+
+                @* ── Test edilen cihaz (DUT, sınıf 1,6) — sağ port ── *@
+                <rect x="246" y="260" width="12" height="86" fill="url(#rigSteel)" />
+                <circle cx="252" cy="172" r="88" fill="url(#rigBezel)" />
+                <circle cx="252" cy="172" r="86" fill="none" stroke="rgba(15,23,42,.35)" stroke-width="1.2" />
+                <circle cx="252" cy="172" r="84" fill="url(#rigFace)" />
+                <g id="manArcs"></g>
+                <g id="manTicks"></g>
+                <g id="manNums"></g>
+                <g id="manCalMarks"></g>
+                <text class="rig-face-brand" x="252" y="138">CALIBRA</text>
+                <text class="rig-face-unit" x="252" y="150">bar · sınıf 1,6</text>
+                <text class="rig-face-unit" id="manPointTxt" x="252" y="214">Nokta 1/5</text>
+                @* Sürüklenen (max) ibre — tepe basıncı tutar, çevrim başında sıfırlanır *@
+                <g id="manDrag">
+                    <line class="rig-drag-needle" x1="252" y1="172" x2="252" y2="96" />
+                </g>
+                <g id="manNeedle">
+                    <line class="rig-needle" x1="252" y1="184" x2="252" y2="100" />
+                    <circle class="rig-needle-tail" cx="252" cy="184" r="3.4" />
+                </g>
+                <circle cx="252" cy="172" r="5.6" fill="#475569" />
+                <circle cx="252" cy="172" r="2.4" fill="#cbd5e1" />
+                <ellipse class="rig-glass" cx="228" cy="142" rx="36" ry="17" transform="rotate(-28 228 142)" />
+
+                @* HUD — referans / cihaz / hata + nokta-nokta hata çubuk grafiği *@
+                <g class="rig-hud">
+                    <rect x="28" y="436" width="362" height="70" rx="12" />
+                    <line x1="146" y1="448" x2="146" y2="494" />
+                    <line x1="254" y1="448" x2="254" y2="494" />
+                    <text class="rig-hud-label" x="44" y="459">Ref</text>
+                    <text class="rig-hud-value" id="manRef" x="44" y="486">0,0 bar</text>
+                    <text class="rig-hud-label" x="160" y="459">Cihaz</text>
+                    <text class="rig-hud-value" id="manDut" x="160" y="486">0,0 bar</text>
+                    <text class="rig-hud-label" x="266" y="452">Hata</text>
+                    <text class="rig-hud-sub" id="manErr" x="266" y="469">—</text>
+                    <g id="manErrBars"></g>
+                </g>
+
+                @* Kadran hit alanı — sürükleyerek basınç ayarı *@
+                <circle class="rig-part-hit" id="manHit" cx="252" cy="172" r="88" fill="transparent">
+                    <title>Kadran üzerinde sürükleyerek basıncı ayarlayın</title>
+                </circle>
+            </svg>
+
+            @* Hız barı — aktif cihazın çevrim hızını ayarlar (komparatörde dev/dk,
+               diğerlerinde %); etiket/aralık sahne geçişinde script tarafından güncellenir. *@
+            <div class="login-rig-controls">
+                <span class="rig-ctl-label" id="rigSpeedLabel">Devir</span>
+                <input type="range" id="rigSpeed" min="0" max="60" step="1" value="17"
+                       aria-label="Animasyon hızı" />
+                <span class="rig-ctl-value" id="rigSpeedVal">17 dev/dk</span>
+            </div>
+            <div class="rig-ctl-hint" id="rigHint">Parçayı fareyle sürükleyip çevirebilirsiniz</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="login-panel">
+        <div class="login-card">
+            <h1>CalibraHub</h1>
+
+            @* Kimlik kalibrasyon kadranı v3 — 3 iğneli (yelkovan) analog gösterge. Şifre
+               karakterine bağlı round-robin iğne rotasyonu (yalnız bir iğne/tuş) + sunucu
+               onayına bağlı çözülme mantığı sayfa sonundaki script'te (window.CalibraLoginDial). *@
+            <div class="cald-wrap" id="caldDial">
+                <div class="cald-stage" id="caldStage" aria-hidden="true">
+                    <svg class="cald-svg" viewBox="0 0 200 200">
+                        <circle class="cald-track" cx="100" cy="100" r="88" />
+                        <g class="cald-ticks" id="caldTicks"></g>
+                        @* Basılı ölçek rakamları (4 ana çentik) — JS ile konumlanır (bkz. buildScale). *@
+                        <g class="cald-scale" id="caldScale"></g>
+                        @* İç kadran 1 (dış, r=60) — 8 çentik; büyük iğnelerden bağımsız, tuş
+                           başına rastgele döner (bkz. script spinInnerRandom). *@
+                        <circle class="cald-inner-track" cx="100" cy="100" r="60" />
+                        <g class="cald-inner-grp" id="caldInner1">
+                            <g id="caldInner1Ticks"></g>
+                            <circle class="cald-inner-mark cald-inner-mark-1" cx="100" cy="40" r="2.2" />
+                        </g>
+                        @* İç kadran 2 (iç, r=34) — 6 çentik; aynı şekilde bağımsız/rastgele. *@
+                        <circle class="cald-inner-track" cx="100" cy="100" r="34" />
+                        <g class="cald-inner-grp" id="caldInner2">
+                            <g id="caldInner2Ticks"></g>
+                            <circle class="cald-inner-mark cald-inner-mark-2" cx="100" cy="66" r="1.8" />
+                        </g>
+                        <g class="cald-needle-grp" id="caldNeedle3">
+                            <line class="cald-needle n3" x1="100" y1="100" x2="100" y2="62" />
+                        </g>
+                        <g class="cald-needle-grp" id="caldNeedle2">
+                            <line class="cald-needle n2" x1="100" y1="100" x2="100" y2="48" />
+                        </g>
+                        <g class="cald-needle-grp" id="caldNeedle1">
+                            <line class="cald-needle n1" x1="100" y1="108" x2="100" y2="32" />
+                            <circle class="cald-tail" cx="100" cy="108" r="3" />
+                        </g>
+                        <circle class="cald-hub-ring" cx="100" cy="100" r="8" />
+                        <circle class="cald-hub" cx="100" cy="100" r="4.2" />
+                        @* Dijital okuma penceresi (alt-orta) — iğnelerin ÜSTÜNDE, okunur kalsın.
+                           İçerik JS ile sürülür (scrambleReadout / runCalcSequence). *@
+                        <rect class="cald-readout-box" x="59" y="121" width="82" height="18" rx="4" ry="4" />
+                        <text class="cald-readout-text" id="caldReadout" x="100" y="130.5">----</text>
+                    </svg>
+                </div>
+                <div class="cald-status" id="caldStatus">Giriş yapmaya hazır</div>
+            </div>
+
+            <form asp-action="Login" method="post" autocomplete="off" id="loginForm">
+                @Html.AntiForgeryToken()
+                <input asp-for="ReturnUrl" type="hidden" />
+                <input type="hidden" name="ThemeCode" id="loginThemeInput" value="" />
+
+                <div class="form-floating login-field mb-3">
+                    @* a11y (rapor §6.6): autofocus + required + aria-required + class="cb-field-error" *@
+                    <input asp-for="Email" class="form-control" autocomplete="email"
+                           placeholder=" " autofocus required aria-required="true" />
+                    <label asp-for="Email" class="cb-field-required">@ui.Text("email")</label>
+                    <span asp-validation-for="Email" class="cb-field-error"></span>
+                </div>
+
+                <div class="form-floating login-field mb-3">
+                    <select asp-for="CompanyId" asp-items="Model.CompanyOptions" class="form-select">
+                        <option value="">@ui.Text("company_placeholder")</option>
+                    </select>
+                    <label asp-for="CompanyId">@ui.Text("company")</label>
+                    <span asp-validation-for="CompanyId"></span>
+                </div>
+
+                <div class="form-floating login-field mb-3">
+                    <input asp-for="Password" type="password" class="form-control"
+                           autocomplete="current-password" placeholder=" " required aria-required="true" />
+                    <label asp-for="Password" class="cb-field-required">@ui.Text("password")</label>
+                    <span asp-validation-for="Password" class="cb-field-error"></span>
+                </div>
+
+                <div class="login-remember-row mb-3">
+                    <label class="login-switch" for="rememberToggle">
+                        <input type="checkbox" id="rememberToggle" />
+                        <span class="login-switch-track"></span>
+                    </label>
+                    <span class="login-remember-label">Beni hatırla</span>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">@ui.Text("submit")</button>
+
+                <div class="text-center mt-3">
+                    <a href="@Url.Action("ForgotPassword", "Account")" class="text-muted small"
+                       style="text-decoration:none;opacity:.75;transition:opacity .15s"
+                       onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.75'">
+                        Şifremi Unuttum
+                    </a>
+                </div>
+            </form>
+
+            @if (ViewBag.ShowSetupLink == true)
+            {
+                <div class="mt-4 pt-3 border-top text-center">
+                    <p class="text-muted small mb-2">Sistemde henüz şirket tanımlanmamış.</p>
+                    <a href="/Gate" class="btn btn-outline-secondary btn-sm">
+                        İlk Kurulumu Yap
+                    </a>
+                </div>
+            }
+
+
+        </div>
+    </section>
+</div>
+
+<script src="~/lib/jquery/dist/jquery.min.js"></script>
+<script src="~/lib/jquery-validation/dist/jquery.validate.min.js"></script>
+<script src="~/lib/jquery-validation-unobtrusive/jquery.validate.unobtrusive.min.js"></script>
+<script src="~/js/site.js" asp-append-version="true"></script>
+<script>
+    (function () {
+        const companyPlaceholderText = @Html.Raw(JsonSerializer.Serialize(ui.Text("company_placeholder")));
+        const emailInput = document.getElementById("Email");
+        const companySelect = document.getElementById("CompanyId");
+        if (!emailInput || !companySelect) {
+            return;
+        }
+
+        const endpoint = '@Url.Action("CompaniesForUser", "Account")';
+
+        function renderCompanies(items) {
+            const currentValue = companySelect.value;
+            companySelect.innerHTML = "";
+
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = companyPlaceholderText;
+            companySelect.appendChild(placeholder);
+
+            let hasCurrent = false;
+            items.forEach(function (item) {
+                const option = document.createElement("option");
+                option.value = item.id;
+                option.textContent = item.name;
+                if (item.id === currentValue) {
+                    option.selected = true;
+                    hasCurrent = true;
+                }
+
+                companySelect.appendChild(option);
+            });
+
+            if (!hasCurrent) {
+                companySelect.value = "";
+            }
+        }
+
+        async function loadCompanies() {
+            const email = emailInput.value.trim();
+            if (!email) {
+                renderCompanies([]);
+                return;
+            }
+
+            try {
+                const response = await fetch(endpoint + "?email=" + encodeURIComponent(email), {
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest"
+                    }
+                });
+
+                if (!response.ok) {
+                    renderCompanies([]);
+                    return;
+                }
+
+                const data = await response.json();
+                renderCompanies(Array.isArray(data) ? data : []);
+            } catch {
+                renderCompanies([]);
+            }
+        }
+
+        emailInput.addEventListener("blur", loadCompanies);
+        emailInput.addEventListener("change", loadCompanies);
+
+        if (emailInput.value.trim().length > 0) {
+            loadCompanies();
+        }
+
+        // Beni hatırla switch
+        var rememberToggle = document.getElementById("rememberToggle");
+        var rememberLabel = document.querySelector(".login-remember-label");
+        var remembered = localStorage.getItem("calibra_login_remember") === "1";
+
+        if (rememberToggle) {
+            rememberToggle.checked = remembered;
+
+            // Önceki oturumdan hatırlanan bilgileri yükle
+            if (remembered && !emailInput.value) {
+                var savedEmail = localStorage.getItem("calibra_login_email");
+                var savedCompany = localStorage.getItem("calibra_login_company");
+                if (savedEmail) {
+                    emailInput.value = savedEmail;
+                    loadCompanies().then(function () {
+                        if (savedCompany && companySelect) {
+                            companySelect.value = savedCompany;
+                        }
+                    });
+                }
+            }
+
+            if (rememberLabel) {
+                rememberLabel.addEventListener("click", function () {
+                    rememberToggle.checked = !rememberToggle.checked;
+                });
+            }
+        }
+
+        var loginForm = emailInput.closest("form");
+        if (loginForm) {
+            var pwInput = document.getElementById("Password");
+            var pwWrap  = pwInput ? pwInput.closest(".login-field") : null;
+
+            loginForm.addEventListener("submit", async function (e) {
+                e.preventDefault();
+
+                // Tema hidden input'u güncelle
+                var themeInput = document.getElementById("loginThemeInput");
+                if (themeInput) themeInput.value = document.body.classList.contains("app-theme-dark") ? "dark" : "light";
+
+                // Beni hatırla
+                if (rememberToggle && rememberToggle.checked) {
+                    localStorage.setItem("calibra_login_remember", "1");
+                    localStorage.setItem("calibra_login_email", emailInput.value.trim());
+                    if (companySelect.value) localStorage.setItem("calibra_login_company", companySelect.value);
+                } else {
+                    localStorage.removeItem("calibra_login_remember");
+                    localStorage.removeItem("calibra_login_email");
+                    localStorage.removeItem("calibra_login_company");
+                }
+
+                // Kilit bulmacası: sunucu doğrulaması başladı
+                if (window.CalibraLoginDial) window.CalibraLoginDial.begin();
+
+                // AJAX submit
+                try {
+                    var resp = await fetch(loginForm.action || window.location.href, {
+                        method: "POST",
+                        body: new FormData(loginForm),
+                        headers: { "X-Requested-With": "XMLHttpRequest" }
+                    });
+                    var json = await resp.json();
+
+                    if (json.ok) {
+                        // Doğru giriş — 3 iğne ortak faza (yukarı) oturup hizalanır (yeşil), sonra login
+                        if (window.CalibraLoginDial) window.CalibraLoginDial.success(function () { window.location.href = json.redirect; });
+                        else window.location.href = json.redirect;
+                        return;
+                    }
+
+                    // Giriş başarısız — iğneler hizasız kalır + shake + kırmızı tint (kanonik v3 spec)
+                    if (json.error === "locked") {
+                        if (window.CalibraLoginDial) window.CalibraLoginDial.fail('Hesap kilitli');
+                        if (pwInput) {
+                            pwInput.value = "";
+                            pwInput.disabled = true;
+                            setTimeout(function () { pwInput.disabled = false; }, 5000);
+                        }
+                    } else if (json.error === "validation") {
+                        if (window.CalibraLoginDial) window.CalibraLoginDial.fail('Alanları doldurun');
+                    } else {   // credentials
+                        var rem = (typeof json.remaining === "number") ? json.remaining : -1;
+                        var det = rem > 0 ? ("Şifreniz hatalı, " + rem + " deneme kaldı") : "Şifreniz hatalı";
+                        if (window.CalibraLoginDial) window.CalibraLoginDial.fail("Giriş başarısız", det);
+                        if (pwInput) { pwInput.value = ""; pwInput.focus(); }
+                    }
+                } catch {
+                    // Network hatası: normal submit
+                    loginForm.submit();
+                }
+            });
+        }
+    })();
+</script>
+<script>
+    /* ── Kimlik kalibrasyon kadranı v3 — 3 iğneli (yelkovan) analog gösterge ──
+       Merkezden (hub) çıkan 3 iğne (indigo n1 / cyan n2 / violet n3), farklı uzunluk +
+       kalınlıkta (n1 en uzun/kalın = "ana" şifre iğnesi). 12 çentikli (30°'lik) kadranda
+       idle'da üç iğne SABİT, birbirinden 120° ayrık dinlenme açısındadır (çentik 1/5/9).
+
+       Şifre her karakterinde SADECE BİR iğne bir çentik ilerler — round-robin (n. tuş →
+       n%3. iğne), sonra oturur; TÜM iğneler DEĞİL, SÜREKLİ DEĞİL. [KRİTİK — 2026-07-16
+       kullanıcı geri bildirimi]: önceki sürümde "tüm yelkovanlar sürekli hareket ediyor"
+       şikayeti alınmıştı — bu ASLA tekrarlanmayacak: needleSteps(len, r) yalnızca [r]
+       iğnesinin SIRASI geldiğinde (len'in üçe bölümünde kendi kalanına denk geldiğinde)
+       artar, diğer iki iğnenin hedefi DEĞİŞMEZ — dolayısıyla toTyping() her tuşta 3
+       iğne için de animateNeedleStepped çağırsa da, hedefi değişmeyen 2 iğne görsel
+       olarak KIPIRDAMAZ (aynı hedefe animasyon no-op'tur, delta≈0 erken çıkış). Silme
+       aynı adımları geri sarar (adım sayısı parola uzunluğundan türetilir, tuş
+       yönünden bağımsızdır).
+
+       Çözülme YALNIZ sunucu login onayıyla (window.CalibraLoginDial.success) tetiklenir
+       — client parola doğrulamaz. Solved'de her iğne kendi en yakın 360° katına "klik"
+       diye oturur (mod 360 ≡ 0 olduğundan üçü de aynı mutlak açıda/yukarıda çakışır).
+
+       Görsel zenginleştirme eki (2026-07-17 — SOLVE MANTIĞI DEĞİŞMEDİ, round-robin/
+       server-truth kuralı yukarıdaki paragraflar AYNEN geçerli, yalnız çizim/animasyon):
+       (a) toTyping() artık animateNeedle yerine animateNeedleStepped kullanır — hedef
+       açıya tek parça glide değil, N=4 mini-adımlı "dura-dura" (detent) hareketle gider
+       (her mini-adım: hızlı hareket + kısa duraklama, bkz. NEEDLE_STEP_* sabitleri).
+       Toplam süre eskisinden (220ms) biraz daha yavaş (~288ms: 4 hareket + aradaki 3
+       duraklama) ama yine hızlı/akıcı — sürünme yok.
+       (b) Ana kadranın içine 2 eş-merkezli İÇ KADRAN eklendi (caldInner1/caldInner2,
+       r=60 cyan + r=34 violet, çentikli halka + dönen işaret noktası, bkz. buildInnerTicks).
+       (c) İç kadranlar spinInnerRandom() ile her tuş vuruşunda (pwEl 'input') büyük
+       iğnelerin hedefli hareketinden BAĞIMSIZ, rastgele yön (cw/ccw) + rastgele küçük
+       açı (14°-52°) ile serbestçe döner — needleSteps/typingTarget/round-robin
+       mantığına dokunulmadı. */
+    (function () {
+        var dial = document.getElementById('caldDial');
+        if (!dial) return;
+        var statusEl = document.getElementById('caldStatus');
+        var ticksG   = document.getElementById('caldTicks');
+        var innerTicksG1 = document.getElementById('caldInner1Ticks');   // iç kadran 1 (r=60) çentik konteyneri
+        var innerTicksG2 = document.getElementById('caldInner2Ticks');   // iç kadran 2 (r=34) çentik konteyneri
+        var NS = 'http://www.w3.org/2000/svg';
+        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        var SLOTS    = 12;
+        var SLOT_DEG = 360 / SLOTS;   // 30°
+
+        // 3 iğne: taban dinlenme açısı (çentik 1/5/9 — birbirinden tam 120° ayrık), yön
+        // (yalnız kozmetik — hangi yöne "ilerlediğini" belirler) ve <g> sarmalayıcı id'si.
+        var NEEDLES = [
+            { base: 1 * SLOT_DEG, dir: +1, id: 'caldNeedle1' },   // n1 — indigo, ana (şifre) iğnesi
+            { base: 5 * SLOT_DEG, dir: -1, id: 'caldNeedle2' },   // n2 — cyan
+            { base: 9 * SLOT_DEG, dir: +1, id: 'caldNeedle3' }    // n3 — violet
+        ];
+
+        var groups = NEEDLES.map(function (n) { return document.getElementById(n.id); });
+        var ndlDeg = NEEDLES.map(function (n) { return n.base; });   // sürekli (unwrap) açı — hiç mod alınmaz
+        var ndlRaf = [null, null, null];
+
+        // ── Çentik (tick) halkası — 12 çentik; her 3.'sü (0/90/180/270) belirgin ──
+        for (var i = 0; i < SLOTS; i++) {
+            var tDeg  = i * SLOT_DEG;
+            var tRad  = (tDeg - 90) * Math.PI / 180;
+            var major = (i % 3 === 0);
+            var rOuter = 88, rInner = major ? 76 : 81;
+            var ln = document.createElementNS(NS, 'line');
+            ln.setAttribute('x1', (100 + rOuter * Math.cos(tRad)).toFixed(2));
+            ln.setAttribute('y1', (100 + rOuter * Math.sin(tRad)).toFixed(2));
+            ln.setAttribute('x2', (100 + rInner * Math.cos(tRad)).toFixed(2));
+            ln.setAttribute('y2', (100 + rInner * Math.sin(tRad)).toFixed(2));
+            ln.setAttribute('class', 'cald-tick' + (major ? ' maj' : ''));
+            ticksG.appendChild(ln);
+        }
+
+        // ── İç kadranlar — çentik üretimi (dış tick döngüsüyle aynı trigonometri, tek
+        //    fark: major/minor ayrımı yok, tek tip çentik). Halkanın kendisi <g> içine
+        //    KONMAZ (dairesel simetrik, rotasyona gerek yok) — yalnız çentikler + işaret
+        //    noktası ilgili caldInnerN <g>'sinin içine konur ki spinInnerRandom() onları
+        //    birlikte döndürebilsin. ──
+        function buildInnerTicks(container, count, r, len, cls) {
+            for (var i = 0; i < count; i++) {
+                var tDeg = i * (360 / count);
+                var tRad = (tDeg - 90) * Math.PI / 180;
+                var ro = r, ri = r - len;
+                var ln = document.createElementNS(NS, 'line');
+                ln.setAttribute('x1', (100 + ro * Math.cos(tRad)).toFixed(2));
+                ln.setAttribute('y1', (100 + ro * Math.sin(tRad)).toFixed(2));
+                ln.setAttribute('x2', (100 + ri * Math.cos(tRad)).toFixed(2));
+                ln.setAttribute('y2', (100 + ri * Math.sin(tRad)).toFixed(2));
+                ln.setAttribute('class', cls);
+                container.appendChild(ln);
+            }
+        }
+        buildInnerTicks(innerTicksG1, 8, 60, 7, 'cald-inner-tick i1');
+        buildInnerTicks(innerTicksG2, 6, 34, 5, 'cald-inner-tick i2');
+
+        // İğne açısı doğrudan SVG rotate(deg, 100, 100) transform'u — 0°=yukarı (12 yönü),
+        // saat yönünde artar. Trigonometri gerekmez (harf-yerleşimi versiyonunun aksine).
+        function placeNeedle(r, deg) {
+            groups[r].setAttribute('transform', 'rotate(' + deg.toFixed(2) + ' 100 100)');
+        }
+
+        function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+        function easeOutBack(t) { var c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
+
+        function cancelNeedle(r) { if (ndlRaf[r]) { cancelAnimationFrame(ndlRaf[r]); ndlRaf[r] = null; } }
+        function animateNeedle(r, target, durationMs, ease, onDone) {
+            cancelNeedle(r);
+            if (reduce) { ndlDeg[r] = target; placeNeedle(r, target); if (onDone) onDone(); return; }
+            var start = ndlDeg[r], delta = target - start, t0 = null;
+            function step(ts) {
+                if (t0 === null) t0 = ts;
+                var t = Math.min(1, (ts - t0) / durationMs);
+                ndlDeg[r] = start + delta * (ease ? ease(t) : t);
+                placeNeedle(r, ndlDeg[r]);
+                if (t < 1) { ndlRaf[r] = requestAnimationFrame(step); }
+                else { ndlDeg[r] = target; placeNeedle(r, target); ndlRaf[r] = null; if (onDone) onDone(); }
+            }
+            ndlRaf[r] = requestAnimationFrame(step);
+        }
+
+        // ── Büyük iğnelerin tuş-başı hareketi — "dura-dura" (detent/stepped) ──
+        // toTyping() bunu çağırır (animateNeedle DEĞİL): 30°'lik hedef adımı tek parça
+        // glide yerine N=4 mini-adıma böler, her mini-adımda hızlı hareket + kısa
+        // duraklama (mekanik kadran/kasa kilidi hissi). Toplam süre = 4 hareket + aradaki
+        // 3 duraklama (son adımdan sonra bekleme YOK — hedefe varır varmaz biter):
+        // 4×(80×.6) + 3×(80×.4) = 192+96 = 288ms — eskisinden (220ms) biraz daha yavaş,
+        // yine de akıcı/hızlı (sürünme yok). delta≈0 olan (bu tuşta sırası gelmeyen)
+        // iğneler için anında çıkar — gereksiz rAF döngüsü çalışmaz.
+        var NEEDLE_STEP_COUNT     = 4;      // 30°'lik adım kaç mini-adıma bölünüyor
+        var NEEDLE_STEP_MS        = 80;     // mini-adım başına toplam süre (hareket+duraklama)
+        var NEEDLE_STEP_MOVE_FRAC = 0.6;    // mini-adım süresinin hareket kısmı (kalanı duraklama)
+        function animateNeedleStepped(r, target) {
+            cancelNeedle(r);
+            var start = ndlDeg[r], delta = target - start;
+            if (reduce || Math.abs(delta) < 0.001) { ndlDeg[r] = target; placeNeedle(r, target); return; }
+            var moveMs  = NEEDLE_STEP_MS * NEEDLE_STEP_MOVE_FRAC;
+            var pauseMs = NEEDLE_STEP_MS - moveMs;
+            function stepBoundary(i) { return i >= NEEDLE_STEP_COUNT ? target : start + delta * i / NEEDLE_STEP_COUNT; }
+            var step = 0, phase = 'move', phaseStart = null;
+            var phaseFrom = start, phaseTo = stepBoundary(1);
+            function frame(ts) {
+                if (phaseStart === null) phaseStart = ts;
+                var elapsed = ts - phaseStart;
+                if (phase === 'move') {
+                    var t = Math.min(1, elapsed / moveMs);
+                    var v = phaseFrom + (phaseTo - phaseFrom) * easeOutCubic(t);
+                    ndlDeg[r] = v; placeNeedle(r, v);
+                    if (t >= 1) {
+                        ndlDeg[r] = phaseTo; placeNeedle(r, phaseTo);
+                        step++;
+                        if (step >= NEEDLE_STEP_COUNT) { ndlRaf[r] = null; return; }
+                        phase = 'pause'; phaseStart = null;
+                    }
+                } else if (elapsed >= pauseMs) {
+                    phase = 'move'; phaseStart = null;
+                    phaseFrom = phaseTo; phaseTo = stepBoundary(step + 1);
+                }
+                ndlRaf[r] = requestAnimationFrame(frame);
+            }
+            ndlRaf[r] = requestAnimationFrame(frame);
+        }
+
+        // ── İç kadranlar — büyük iğnelerden bağımsız, salt dekoratif rotasyon katmanı.
+        //    Needle motoruyla birebir aynı desende (start→target rAF interpolasyonu),
+        //    ayrı state dizileriyle çalışır — needle mantığına hiç dokunmaz. ──
+        var innerGroups = [document.getElementById('caldInner1'), document.getElementById('caldInner2')];
+        var innerDeg    = [0, 0];
+        var innerRaf    = [null, null];
+        var INNER_SPIN_MIN = 14, INNER_SPIN_MAX = 52;   // derece — "rastgele küçük açı"
+        var INNER_SPIN_MS  = [340, 260];                // idx0 (r=60) biraz daha ağır, idx1 (r=34) daha çevik
+        function placeInner(idx, deg) { innerGroups[idx].setAttribute('transform', 'rotate(' + deg.toFixed(2) + ' 100 100)'); }
+        function cancelInner(idx) { if (innerRaf[idx]) { cancelAnimationFrame(innerRaf[idx]); innerRaf[idx] = null; } }
+        function animateInner(idx, target, durationMs) {
+            cancelInner(idx);
+            if (reduce) { innerDeg[idx] = target; placeInner(idx, target); return; }
+            var start = innerDeg[idx], delta = target - start, t0 = null;
+            function step(ts) {
+                if (t0 === null) t0 = ts;
+                var t = Math.min(1, (ts - t0) / durationMs);
+                innerDeg[idx] = start + delta * easeOutBack(t);
+                placeInner(idx, innerDeg[idx]);
+                if (t < 1) { innerRaf[idx] = requestAnimationFrame(step); }
+                else { innerDeg[idx] = target; placeInner(idx, target); innerRaf[idx] = null; }
+            }
+            innerRaf[idx] = requestAnimationFrame(step);
+        }
+        // Her tuş vuruşunda çağrılır (bkz. pwEl 'input'): 2 iç kadranın HER BİRİ kendi
+        // mevcut açısından, rastgele yön (cw/ccw) + rastgele küçük açıyla yeni bir hedefe
+        // döner — büyük iğnelerin round-robin/hedefli mantığıyla HİÇBİR bağı yok.
+        function spinInnerRandom() {
+            for (var idx = 0; idx < 2; idx++) {
+                var dir    = Math.random() < 0.5 ? -1 : 1;
+                var amount = INNER_SPIN_MIN + Math.random() * (INNER_SPIN_MAX - INNER_SPIN_MIN);
+                animateInner(idx, innerDeg[idx] + dir * amount, INNER_SPIN_MS[idx]);
+            }
+        }
+
+        // n. tuş vuruşu iğneleri döngüsel gezer (1.→n1, 2.→n2, 3.→n3, 4.→n1…): [r]
+        // iğnesinin parola [len] uzunluğundayken almış olduğu toplam adım sayısı.
+        // Uzunluktan türetildiği için silme otomatik olarak aynı adımları geri sarar.
+        function needleSteps(len, r) {
+            if (len <= 0) return 0;
+            var c = 0;
+            for (var k = 1; k <= len; k++) { if ((k - 1) % 3 === r) c++; }
+            return c;
+        }
+        function typingTarget(len, r) {
+            var N = NEEDLES[r];
+            return N.base + N.dir * SLOT_DEG * needleSteps(len, r);
+        }
+
+        var mode = 'idle';   // idle | typing | measuring | solved | fail
+        function setStatus(t) { if (statusEl) statusEl.textContent = t; }
+        function setMode(m, cls) {
+            mode = m;
+            dial.classList.remove('is-typing', 'is-measuring', 'is-solved', 'is-fail');
+            if (cls) dial.classList.add(cls);
+        }
+        function toTyping(len) {
+            for (var r = 0; r < 3; r++) animateNeedleStepped(r, typingTarget(len, r));
+        }
+
+        // ── Kalibrasyon okuma katmanı — salt dekoratif "mühendislik hesabı" hissi ──
+        // (a) Basılı ölçek rakamları: 4 ana çentikte (0/90/180/270) sabit skala değerleri
+        //     — gerçek bir enstrüman kadranı gibi iğnelerin "gösterdiği" rakamlar.
+        // (b) Dijital okuma penceresi: monospace ölçüm değeri; her tuşta hızla değişip
+        //     oturur (hesaplanıyor hissi), doğrulama fazında kanal-kanal hızlı sekans.
+        // Bu katmanın needle/solve mantığıyla HİÇBİR bağı yoktur (server-truth korunur).
+        (function buildScale() {
+            var scaleG = document.getElementById('caldScale');
+            if (!scaleG) return;
+            // Saat yönünde tepeden: 0 → 25 → 50 → 75 (basılı skala), r=68'de yerleşir.
+            var SC = [{ deg: 0, txt: '0' }, { deg: 90, txt: '25' }, { deg: 180, txt: '50' }, { deg: 270, txt: '75' }];
+            SC.forEach(function (s) {
+                var rad = (s.deg - 90) * Math.PI / 180;
+                var t = document.createElementNS(NS, 'text');
+                t.setAttribute('x', (100 + 68 * Math.cos(rad)).toFixed(2));
+                t.setAttribute('y', (100 + 68 * Math.sin(rad)).toFixed(2));
+                t.setAttribute('class', 'cald-scale-num');
+                t.textContent = s.txt;
+                scaleG.appendChild(t);
+            });
+        })();
+
+        // Ölçüm kanalları — ASCII birimler (mojibake güvenli, bkz. Türkçe/encoding kuralı).
+        var READ_CH = [
+            { unit: 'mm',  dec: 4, min: 0.001, max: 0.098 },
+            { unit: 'Hz',  dec: 1, min: 40,    max: 260 },
+            { unit: 'V',   dec: 3, min: 3.00,  max: 5.20 },
+            { unit: 'Nm',  dec: 2, min: 1.5,   max: 48 },
+            { unit: 'mV',  dec: 1, min: 5,     max: 240 },
+            { unit: 'kPa', dec: 2, min: 96,    max: 104 }
+        ];
+        var readoutEl = document.getElementById('caldReadout');
+        var readoutRaf = null;
+        var seqTimer = null;
+        function fmtRead(ch, v) { return v.toFixed(ch.dec) + ' ' + ch.unit; }
+        function stopReadoutAnims() {
+            if (readoutRaf) { cancelAnimationFrame(readoutRaf); readoutRaf = null; }
+            if (seqTimer) { clearTimeout(seqTimer); seqTimer = null; }
+        }
+        // Bir değere doğru "hesaplanıp oturan" haneler: jitter ~1'den 0'a söner.
+        function scrambleReadout(ch, finalV, durMs) {
+            if (!readoutEl) return;
+            if (readoutRaf) { cancelAnimationFrame(readoutRaf); readoutRaf = null; }
+            if (reduce) { readoutEl.textContent = fmtRead(ch, finalV); return; }
+            var span = (ch.max - ch.min) * 0.5, t0 = null;
+            function frame(ts) {
+                if (t0 === null) t0 = ts;
+                var t = Math.min(1, (ts - t0) / durMs);
+                var v = finalV + (Math.random() * 2 - 1) * span * (1 - t);
+                if (v < ch.min) v = ch.min + (ch.min - v) * 0.3;
+                readoutEl.textContent = fmtRead(ch, v);
+                if (t < 1) { readoutRaf = requestAnimationFrame(frame); }
+                else { readoutEl.textContent = fmtRead(ch, finalV); readoutRaf = null; }
+            }
+            readoutRaf = requestAnimationFrame(frame);
+        }
+        // Doğrulama fazı: kanal-kanal hızlı hesap sekansı (durana kadar döner).
+        function runCalcSequence() {
+            stopReadoutAnims();
+            if (reduce) { if (readoutEl) readoutEl.textContent = 'CALC...'; return; }
+            var i = 0;
+            (function tick() {
+                var ch = READ_CH[i % READ_CH.length];
+                scrambleReadout(ch, ch.min + Math.random() * (ch.max - ch.min), 170);
+                i++;
+                seqTimer = setTimeout(tick, 200);
+            })();
+        }
+
+        // ── Şifre alanı: her karakter SADECE bir iğneyi bir çentik döndürür (round-robin),
+        //    silme geri sarar. Kullanıcı adı/şirket alanları iğneleri OYNATMAZ. ──
+        var pwEl = document.getElementById('Password');
+        if (pwEl) {
+            pwEl.addEventListener('input', function () {
+                if (mode === 'measuring' || mode === 'solved') return;   // aktif akışla çakışma
+                var len = pwEl.value.length;
+                setMode(len > 0 ? 'typing' : 'idle', len > 0 ? 'is-typing' : null);
+                setStatus(len > 0 ? 'Şifre giriliyor…' : 'Giriş yapmaya hazır');
+                toTyping(len);
+                spinInnerRandom();   // iç kadranlar — büyük iğnelerden bağımsız rastgele dönüş
+                // Okuma penceresi — her tuşta hesaplanıp oturan ölçüm değeri (uzunluğa bağlı,
+                // deterministik-ish → tuşa tepki verir ama tahmin edilebilir değildir).
+                if (len > 0) {
+                    var ch = READ_CH[(len - 1) % READ_CH.length];
+                    var frac = ((len * 37) % 100) / 100;
+                    scrambleReadout(ch, ch.min + frac * (ch.max - ch.min), 240);
+                } else {
+                    stopReadoutAnims();
+                    if (readoutEl) readoutEl.textContent = '----';
+                }
+            });
+        }
+
+        // ── Dış API — submit handler çağırır (bkz. loginForm AJAX submit script'i) ──
+        window.CalibraLoginDial = {
+            begin: function () {
+                setMode('measuring', 'is-measuring');
+                setStatus('Doğrulanıyor…');
+                runCalcSequence();   // okuma penceresi — kanal-kanal hızlı hesap sekansı
+                // Kısa "oturma/arama" sekmesi (bir kerelik) — her iğne mevcut konumundan
+                // ufak bir kick alıp yaylı (spring) dönüşle AYNI konuma geri oturur; client
+                // parola doğrulamaz, yalnızca "işleniyor" hissi verir. Kick bitince iğneler
+                // durur — yalnız stage'in caldPulse nabzı sürer (sürekli iğne hareketi YOK).
+                for (var r = 0; r < 3; r++) {
+                    (function (r) {
+                        var cur  = ndlDeg[r];
+                        var kick = (r % 2 === 0 ? 1 : -1) * (14 + r * 4);
+                        animateNeedle(r, cur + kick, 200, easeOutCubic, function () {
+                            animateNeedle(r, cur, 320, easeOutBack);
+                        });
+                    })(r);
+                }
+            },
+            success: function (done) {
+                setMode('solved', 'is-solved');
+                setStatus('Giriş başarılı');
+                stopReadoutAnims();
+                if (readoutEl) readoutEl.textContent = '100.0 %';   // kalibrasyon tamam
+                // Kilit açılışı: her iğne SIRAYLA en yakın ORTAK faza (360°'nin tam katı,
+                // yani mod 360 ≡ 0 → yukarı/12 yönü) "klik" diye oturur — üçü de aynı mutlak
+                // açıya geldiği için tam hizalanır → "kilit açıldı" hissi + yeşil parıltı.
+                NEEDLES.forEach(function (n, r) {
+                    setTimeout(function () {
+                        var target = Math.round(ndlDeg[r] / 360) * 360;
+                        animateNeedle(r, target, 560, easeOutBack);
+                    }, r * 150);
+                });
+                setTimeout(function () { if (done) done(); }, 1300);
+            },
+            fail: function (label, detail) {
+                setMode('fail', 'is-fail');
+                setStatus(label || 'Giriş başarısız');
+                stopReadoutAnims();
+                if (readoutEl) readoutEl.textContent = 'ERR';   // kalibrasyon başarısız
+                dial.classList.remove('cald-shake');
+                void dial.offsetWidth;   // reflow — animasyonu yeniden tetikler
+                dial.classList.add('cald-shake');
+                // Reddetme tepkisi: her iğne kısa bir "sekme" (kick + yaylı geri dönüş) yapar
+                // — hizalanma OLMAZ, iğne kendi (hizasız) konumuna geri oturur; kırmızı tint +
+                // kadran sarsılması (cald-shake) yeterli "kalibre edilemedi" sinyalini verir.
+                for (var r = 0; r < 3; r++) {
+                    (function (r) {
+                        var cur  = ndlDeg[r];
+                        var kick = (r % 2 === 0 ? -1 : 1) * (9 + r * 3);
+                        animateNeedle(r, cur + kick, 90, easeOutCubic, function () {
+                            animateNeedle(r, cur, 260, easeOutBack);
+                        });
+                    })(r);
+                }
+                if (detail) setTimeout(function () { if (mode === 'fail') setStatus(detail); }, 900);
+            }
+        };
+
+        // ── İlk render ──
+        NEEDLES.forEach(function (n, r) { placeNeedle(r, ndlDeg[r]); });
+        innerGroups.forEach(function (g, idx) { placeInner(idx, innerDeg[idx]); });
+
+        // Tam-sayfa POST fallback'i (fetch/network istisnası) sunucu tarafında ModelState
+        // hatasıyla yeniden render edildiyse kadran ilk açılışta hizasız/kırmızı başlar.
+        var serverHadError = @(ViewData.ModelState.IsValid ? "false" : "true");
+        if (serverHadError) window.CalibraLoginDial.fail('Giriş başarısız');
+    })();
+</script>
+<script>
+    /* ── Sol hero: canlı kalibrasyon düzenekleri — CİHAZ SEÇİMLİ (2026-08-05) ──
+       Üç sahne: komp (komparatör/salgı), mik (mikrometre/dış çap), man (manometre/
+       basınç). Soldaki ray sahneler arasında geçiş yapar; her sahnenin KENDİ fizik
+       state'i vardır ve yalnız AKTİF sahne tick alır — pasif sahne donuk kalır,
+       dönülünce kaldığı yerden sürer. Ortak hız barı + fare etkileşimi (hit alanı)
+       sahne geçişinde yeniden hedeflenir. Her sahnede tüm görsel öğeler tek fizik
+       değerinden türetilir (senkron asla bozulmaz, CSS keyframe yok).
+       Salt dekoratif: login/kadran (CalibraLoginDial) mantığıyla hiçbir bağı yoktur.
+       prefers-reduced-motion'da sahne başına tek sabit poz; sekme arka plana düşünce
+       döngü durur (visibilitychange). */
+    (function () {
+        var rigRoot = document.querySelector('.login-rig');
+        if (!rigRoot) return;
+
+        var NS = 'http://www.w3.org/2000/svg';
+        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        function mkLine(parent, x1, y1, x2, y2, cls) {
+            var ln = document.createElementNS(NS, 'line');
+            ln.setAttribute('x1', x1.toFixed(2)); ln.setAttribute('y1', y1.toFixed(2));
+            ln.setAttribute('x2', x2.toFixed(2)); ln.setAttribute('y2', y2.toFixed(2));
+            if (cls) ln.setAttribute('class', cls);
+            parent.appendChild(ln);
+        }
+        // Kutupsal yardımcı: 0° = yukarı, saat yönünde artar.
+        function polar(cx, cy, r, deg) {
+            var a = (deg - 90) * Math.PI / 180;
+            return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+        }
+        function fmt(v, dec) { return v.toFixed(dec).replace('.', ','); }
+        // Ekran koordinatını ilgili SVG'nin viewBox koordinatına çevirir
+        // (gizli/display:none sahnede CTM null olur — null dönüşü çağıran ele alır).
+        function svgPointOf(svg, evt) {
+            var m = svg.getScreenCTM();
+            if (!m) return null;
+            var pt = svg.createSVGPoint();
+            pt.x = evt.clientX; pt.y = evt.clientY;
+            return pt.matrixTransform(m.inverse());
+        }
+
+        var scenes = {}, active = null;
+
+        /* ════ Sahne 1: Komparatör — salgı (runout) ölçümü ════
+           th (parça açısı) → d_px = ECC*sin(th) → ibre/uç/HUD/trend hep bu değerden. */
+        scenes.komp = (function () {
+            var svg = document.getElementById('rigSvg');
+            var ECC_PX = 5, MM_PER_PX = 0.024 / 5, REV_PER_MM = 0.1;
+            var TRACE_N = 64, TRACE_MS = 60, TRACE_X0 = 252, TRACE_X1 = 378, TRACE_Y = 471, TRACE_AMP = 20;
+
+            // Kadran: 100 bölme (0,001 mm/bölme), her 10.'su uzun + rakamlı
+            var ticks = document.getElementById('rigDialTicks');
+            var nums  = document.getElementById('rigDialNums');
+            for (var i = 0; i < 100; i++) {
+                var deg = i * 3.6, major = (i % 10 === 0);
+                var o = polar(250, 150, 55, deg), n = polar(250, 150, major ? 45 : 50, deg);
+                mkLine(ticks, o[0], o[1], n[0], n[1], 'rig-dial-tick' + (major ? ' maj' : ''));
+                if (major) {
+                    var p = polar(250, 150, 36, deg);
+                    var t = document.createElementNS(NS, 'text');
+                    t.setAttribute('x', p[0].toFixed(2)); t.setAttribute('y', p[1].toFixed(2));
+                    t.setAttribute('class', 'rig-dial-num');
+                    t.textContent = String(i);
+                    nums.appendChild(t);
+                }
+            }
+            var ct = document.getElementById('rigCounterTicks');
+            for (var k = 0; k < 10; k++) {
+                var a = polar(250, 192, 14, k * 36), b = polar(250, 192, 11, k * 36);
+                mkLine(ct, a[0], a[1], b[0], b[1], 'rig-counter-tick');
+            }
+            var cs = document.getElementById('rigColScale');
+            for (var y = 140; y <= 350; y += 12) {
+                var lng = ((y - 140) % 60 === 0);
+                mkLine(cs, 92, y, lng ? 101 : 97, y, 'rig-col-tick' + (lng ? ' maj' : ''));
+            }
+            var pn = document.getElementById('rigPartNotches');
+            for (var j = 0; j < 12; j++) {
+                var q1 = polar(255, 330, 48, j * 30), q2 = polar(255, 330, 42, j * 30);
+                mkLine(pn, q1[0], q1[1], q2[0], q2[1], 'rig-part-notch');
+            }
+
+            var spinEl    = document.getElementById('rigPartSpin');
+            var plungerEl = document.getElementById('rigPlunger');
+            var needleEl  = document.getElementById('rigNeedle');
+            var counterEl = document.getElementById('rigCounter');
+            var devEl     = document.getElementById('rigDev');
+            var tirEl     = document.getElementById('rigTir');
+            var traceEl   = document.getElementById('rigTrace');
+
+            var th = 40, lastTh = 40, spd = 17;
+            var trace = [], tirMin = 0, tirMax = 0, tirShown = 0, sampleAcc = 0, revAcc = 0;
+            var drag = { on: false, ang: null };
+
+            function render() {
+                var dPx = ECC_PX * Math.sin(th * Math.PI / 180), dMm = dPx * MM_PER_PX;
+                spinEl.setAttribute('transform', 'rotate(' + th.toFixed(2) + ' 250 330)');
+                plungerEl.setAttribute('transform', 'translate(0 ' + dPx.toFixed(2) + ')');
+                needleEl.setAttribute('transform', 'rotate(' + (dMm / REV_PER_MM * 360).toFixed(2) + ' 250 150)');
+                counterEl.setAttribute('transform', 'rotate(' + (dMm * 360).toFixed(2) + ' 250 192)');
+                devEl.textContent = (dMm >= 0 ? '+' : '−') + fmt(Math.abs(dMm), 3) + ' mm';
+                tirEl.textContent = fmt(tirShown, 3) + ' mm';
+                if (trace.length > 1) {
+                    var step = (TRACE_X1 - TRACE_X0) / (TRACE_N - 1), pts = '';
+                    for (var q = 0; q < trace.length; q++) {
+                        var x = TRACE_X0 + (TRACE_N - trace.length + q) * step;
+                        var yy = TRACE_Y - (trace[q] / (ECC_PX * MM_PER_PX)) * TRACE_AMP;
+                        pts += x.toFixed(1) + ',' + yy.toFixed(1) + ' ';
+                    }
+                    traceEl.setAttribute('points', pts.trim());
+                }
+            }
+            function tick(dt) {
+                if (!drag.on) th += (spd / 60) * 360 * dt;   // sürüklerken oto dönüş askıda
+                var dMm = ECC_PX * Math.sin(th * Math.PI / 180) * MM_PER_PX;
+                // TIR = 2 turda bir kilitlenip sıfırlanan tepe-tepe (oto + sürükleme dahil)
+                if (dMm < tirMin) tirMin = dMm;
+                if (dMm > tirMax) tirMax = dMm;
+                tirShown = tirMax - tirMin;
+                revAcc += Math.abs(th - lastTh) / 360;
+                lastTh = th;
+                if (revAcc >= 2) { revAcc = 0; tirMin = dMm; tirMax = dMm; }
+                sampleAcc += dt * 1000;
+                if (sampleAcc >= TRACE_MS) {
+                    sampleAcc = 0;
+                    trace.push(dMm);
+                    if (trace.length > TRACE_N) trace.shift();
+                }
+                render();
+            }
+
+            var hit = document.getElementById('rigPartHit');
+            function ptrAng(evt) {
+                var p = svgPointOf(svg, evt);
+                return p ? Math.atan2(p.y - 330, p.x - 255) * 180 / Math.PI : null;
+            }
+            if (hit && !reduce) {
+                hit.addEventListener('pointerdown', function (e) {
+                    var a = ptrAng(e); if (a === null) return;
+                    drag.on = true; drag.ang = a;
+                    try { hit.setPointerCapture(e.pointerId); } catch (err) {}
+                    e.preventDefault();
+                });
+                hit.addEventListener('pointermove', function (e) {
+                    if (!drag.on) return;
+                    var a = ptrAng(e); if (a === null) return;
+                    var d = a - drag.ang;
+                    if (d > 180) d -= 360; else if (d < -180) d += 360;   // ±180° sarma
+                    th += d; drag.ang = a;
+                });
+                var end = function () { drag.on = false; drag.ang = null; };
+                hit.addEventListener('pointerup', end);
+                hit.addEventListener('pointercancel', end);
+            }
+
+            if (reduce) tirShown = 2 * ECC_PX * MM_PER_PX;
+            render();   // ilk / statik poz
+            return {
+                el: svg, hint: 'Parçayı fareyle sürükleyip çevirebilirsiniz',
+                speed: { label: 'Devir', unit: ' dev/dk', min: 0, max: 60, val: 17 },
+                setSpeed: function (v) { spd = v; }, tick: tick
+            };
+        })();
+
+        /* ════ Sahne 2: Mikrometre (0-25 mm) — dış çap ölçümü ════
+           gap (mil-parça açıklığı, mm) TEK state: mil+tambur ötelenmesi, tambur skala
+           kaydırması/rakamları (0,5 mm hatve = 50 bölme/tur), LCD, HUD okuması, sapma
+           ve tolerans barı hep ondan türetilir.
+           Çevrim: yaklaş → otur (cırcır kayar) → tut (kilit kapanır, sapma raporlanır)
+           → geri çek → yeni parça. */
+        scenes.mik = (function () {
+            var svg = document.getElementById('rigSvgMik');
+            var PXMM = 3.6;          // ölçek: 1 mm = 3,6 px (parça yarıçapı da buna uyumlu)
+            var GAP0 = 5;            // tam açık konum (mm)
+            var NOM  = 17.450;       // nominal çap (mm)
+            var TOL  = 0.010;        // ± tolerans (mm)
+            var BAR_RANGE = 0.014;   // tolerans barının uç değeri (mm)
+            var PITCH = 2.8, MAJ = 5, MAJPX = PITCH * MAJ;   // tambur: 1 bölme = 2,8 px
+
+            // ── Kovan ana skalası: üstte tam mm, altta yarım mm, 5'te bir rakam ──
+            var slG = document.getElementById('mikSleeveTicks');
+            var slN = document.getElementById('mikSleeveNums');
+            for (var i = 0; i <= 20; i++) {
+                var sx = 252 + i * 3;
+                mkLine(slG, sx, 250, sx, 244, 'rig-mik-sltick');
+                if (i < 20) mkLine(slG, sx + 1.5, 250, sx + 1.5, 255, 'rig-mik-sltick');
+                if (i % 5 === 0) {
+                    var sn = document.createElementNS(NS, 'text');
+                    sn.setAttribute('x', sx.toFixed(1)); sn.setAttribute('y', '241');
+                    sn.setAttribute('class', 'rig-mik-slnum');
+                    sn.textContent = String(i);
+                    slN.appendChild(sn);
+                }
+            }
+
+            // ── Parça tırtılı ──
+            var pk = document.getElementById('mikPartKnurl');
+            for (var j = 0; j < 28; j++) {
+                var k1 = polar(180, 250, 31, j * (360 / 28)), k2 = polar(180, 250, 26, j * (360 / 28));
+                mkLine(pk, k1[0], k1[1], k2[0], k2[1], 'rig-part-notch');
+            }
+
+            // ── Tambur çevresel skalası: her bölme çizgi, 5'te bir uzun + rakam.
+            //    Yandan bakışta dönüş = desenin DİKEY kayması (clip içinde). ──
+            var thT = document.getElementById('mikThimbleTicks');
+            var thN = document.getElementById('mikThimbleNums');
+            var thNumEls = [];
+            for (var ty = 206; ty <= 296.1; ty += PITCH) {
+                var isMaj = (Math.round((ty - 206) / PITCH) % MAJ === 0);
+                mkLine(thT, 316, ty, isMaj ? 332 : 325, ty, '');
+            }
+            for (var nk = 0; nk <= 6; nk++) {
+                var tn = document.createElementNS(NS, 'text');
+                tn.setAttribute('x', '338');
+                tn.setAttribute('y', (206 + nk * MAJPX + 2.3).toFixed(1));
+                tn.setAttribute('class', 'rig-mik-thnum');
+                thN.appendChild(tn); thNumEls.push(tn);
+            }
+
+            // ── Tolerans barı + son ölçüm noktaları ──
+            var tb = document.getElementById('mikTolBar');
+            function mkRect(parent, x, y, w, h, rx, cls) {
+                var r = document.createElementNS(NS, 'rect');
+                r.setAttribute('x', x); r.setAttribute('y', y);
+                r.setAttribute('width', w); r.setAttribute('height', h);
+                if (rx) r.setAttribute('rx', rx);
+                r.setAttribute('class', cls);
+                parent.appendChild(r);
+                return r;
+            }
+            var TOL_CX = 322, TOL_HW = 56;
+            mkRect(tb, TOL_CX - TOL_HW, 470, TOL_HW * 2, 8, 4, 'rig-tol-track');
+            mkRect(tb, TOL_CX - TOL_HW * TOL / BAR_RANGE, 470, TOL_HW * 2 * TOL / BAR_RANGE, 8, 4, 'rig-tol-zone');
+            mkLine(tb, TOL_CX, 466, TOL_CX, 482, 'rig-tol-center');
+            var tolMark = document.createElementNS(NS, 'path');
+            tolMark.setAttribute('d', 'M' + TOL_CX + ' 468 L' + (TOL_CX - 4) + ' 461 L' + (TOL_CX + 4) + ' 461 Z');
+            tolMark.setAttribute('class', 'rig-tol-mark');
+            tb.appendChild(tolMark);
+            var histEls = [];
+            for (var hd = 0; hd < 6; hd++) {
+                var c = document.createElementNS(NS, 'circle');
+                c.setAttribute('cx', TOL_CX); c.setAttribute('cy', '490'); c.setAttribute('r', '2');
+                c.setAttribute('class', 'rig-tol-dot'); c.setAttribute('opacity', '0');
+                tb.appendChild(c); histEls.push(c);
+            }
+
+            var spinG    = document.getElementById('mikSpindleG');
+            var thimG    = document.getElementById('mikThimbleG');
+            var ratchetE = document.getElementById('mikRatchet');
+            var lockE    = document.getElementById('mikLock');
+            var lcdE     = document.getElementById('mikLcd');
+            var lcdModeE = document.getElementById('mikLcdMode');
+            var readEl   = document.getElementById('mikRead');
+            var devEl    = document.getElementById('mikDevi');
+            var verdictE = document.getElementById('mikVerdict');
+            var partTagE = document.getElementById('mikPartTag');
+
+            var D = NOM, gap = GAP0, phase = 'advance', phT = 0, spd = 40, partNo = 1;
+            var reading = D + gap, sap = null, hist = [];
+            var drag = { on: false, x: 0 };
+            function newPart() {
+                D = NOM + (Math.random() * 2 - 1) * 0.013;   // parça çapı sapması (± ~0,013)
+                partNo++;
+                partTagE.textContent = 'Parça P-' + ('00' + partNo).slice(-3);
+            }
+            function pushHist(v) {
+                hist.push(v);
+                if (hist.length > histEls.length) hist.shift();
+                for (var q = 0; q < histEls.length; q++) {
+                    if (q < hist.length) {
+                        var f = Math.max(-1, Math.min(1, hist[q] / BAR_RANGE));
+                        histEls[q].setAttribute('cx', (TOL_CX + f * TOL_HW).toFixed(1));
+                        histEls[q].setAttribute('opacity', (0.25 + 0.6 * (q + 1) / hist.length).toFixed(2));
+                    } else histEls[q].setAttribute('opacity', '0');
+                }
+            }
+
+            function render() {
+                var gpx = (gap * PXMM).toFixed(2);
+                spinG.setAttribute('transform', 'translate(' + gpx + ' 0)');
+                thimG.setAttribute('transform', 'translate(' + gpx + ' 0)');
+
+                // Tambur dönüşü: 0,5 mm ilerleme = 1 tur = 50 bölme
+                var rotDiv = (GAP0 - gap) / 0.5 * 50;
+                var scroll = ((rotDiv * PITCH) % MAJPX + MAJPX) % MAJPX;
+                thT.setAttribute('transform', 'translate(0 ' + scroll.toFixed(2) + ')');
+                thN.setAttribute('transform', 'translate(0 ' + scroll.toFixed(2) + ')');
+                var base = Math.floor(rotDiv / MAJ);
+                for (var q = 0; q < thNumEls.length; q++) {
+                    var v = ((base - q) * MAJ) % 50;
+                    if (v < 0) v += 50;
+                    thNumEls[q].textContent = (v < 10 ? '0' : '') + v;
+                }
+
+                // Cırcır ölçüm otururken kayar (klik); kilit tutma fazında kapanır
+                ratchetE.setAttribute('transform',
+                    phase === 'settle' ? 'rotate(' + (Math.sin(phT * 70) * 3).toFixed(2) + ' 366 250)' : '');
+                lockE.setAttribute('transform', phase === 'hold' ? 'rotate(42 260 268)' : '');
+
+                lcdE.textContent = fmt(reading, 3);
+                lcdModeE.textContent = (phase === 'hold') ? 'HOLD' : 'ABS';
+                readEl.textContent = fmt(reading, 3) + ' mm';
+                devEl.textContent = (sap === null) ? '—'
+                    : ((sap >= 0 ? '+' : '−') + fmt(Math.abs(sap), 3) + ' mm');
+                verdictE.textContent = (sap === null) ? 'ölçülüyor'
+                    : (Math.abs(sap) <= TOL ? 'uygun' : 'tolerans dışı');
+                verdictE.setAttribute('class', 'rig-hud-note' +
+                    (sap === null ? '' : (Math.abs(sap) <= TOL ? ' ok' : ' bad')));
+
+                var f = Math.max(-1, Math.min(1, (sap === null ? 0 : sap) / BAR_RANGE));
+                tolMark.setAttribute('transform', 'translate(' + (f * TOL_HW).toFixed(1) + ' 0)');
+            }
+
+            function tick(dt) {
+                if (drag.on) { reading = D + gap; sap = null; render(); return; }
+                var rate = 0.8 + spd / 100 * 3.6;   // mm/sn
+                if (phase === 'advance') {
+                    gap -= rate * dt; sap = null;
+                    if (gap <= 0) { gap = 0; phase = 'settle'; phT = 0; }
+                    reading = D + gap;
+                } else if (phase === 'settle') {
+                    phT += dt;
+                    reading = D + (Math.random() * 2 - 1) * 0.004 * Math.max(0, 1 - phT / 0.8);
+                    if (phT >= 0.8) {
+                        reading = D; sap = D - NOM; phase = 'hold'; phT = 0; pushHist(sap);
+                    }
+                } else if (phase === 'hold') {
+                    phT += dt;
+                    if (phT >= 1.5) phase = 'retract';
+                } else {   // retract
+                    gap += rate * 1.7 * dt; sap = null;
+                    if (gap >= GAP0) { gap = GAP0; newPart(); phase = 'advance'; }
+                    reading = D + gap;
+                }
+                render();
+            }
+
+            var hit = document.getElementById('mikHit');
+            if (hit && !reduce) {
+                hit.addEventListener('pointerdown', function (e) {
+                    var p = svgPointOf(svg, e); if (!p) return;
+                    drag.on = true; drag.x = p.x;
+                    try { hit.setPointerCapture(e.pointerId); } catch (err) {}
+                    e.preventDefault();
+                });
+                hit.addEventListener('pointermove', function (e) {
+                    if (!drag.on) return;
+                    var p = svgPointOf(svg, e); if (!p) return;
+                    gap = Math.max(0, Math.min(GAP0, gap + (p.x - drag.x) / PXMM));
+                    drag.x = p.x;
+                });
+                var end = function () {
+                    if (!drag.on) return;
+                    drag.on = false;
+                    // Bırakılan yerden akışa dön: temasta ise ölçüm otursun, değilse yaklaşsın
+                    if (gap <= 0) { phase = 'settle'; phT = 0; }
+                    else { phase = 'advance'; sap = null; }
+                };
+                hit.addEventListener('pointerup', end);
+                hit.addEventListener('pointercancel', end);
+            }
+
+            if (reduce) { gap = 1.4; reading = D + gap; }
+            partTagE.textContent = 'Parça P-001';
+            render();
+            return {
+                el: svg, hint: 'Tamburu sürükleyerek mili ilerletebilirsiniz',
+                speed: { label: 'Hız', unit: ' %', min: 0, max: 100, val: 40 },
+                setSpeed: function (v) { spd = v; }, tick: tick
+            };
+        })();
+
+        /* ════ Sahne 3: Manometre — basınç kalibrasyon tezgâhı ════
+           P (referans basınç, bar) TEK state: iki ibre (referans + DUT), pompa volanı,
+           piston, hazne seviyesi, tahliye vanası, sürüklenen max ibre, HUD okumaları ve
+           hata çubuk grafiği hep ondan türetilir. Otomatik akış kalibrasyon noktalarını
+           (0→25→50→75→100→0) yaylı rampalarla gezer; her noktada durup hatayı kaydeder,
+           çevrim tamamlanınca grafik sıfırlanır. */
+        scenes.man = (function () {
+            var svg = document.getElementById('rigSvgMan');
+            var CX = 252, CY = 172, A0 = -135, SWEEP = 270, PMAX = 100;
+            var RCX = 101, RCY = 248;                 // referans standart gösterge merkezi
+            var PTS = [0, 25, 50, 75, 100];           // kalibrasyon noktaları
+            var SEQ = [0, 25, 50, 75, 100, 0];        // çevrim: yukarı tarama + sıfıra dönüş
+
+            // Tolerans yayları (DUT): 0-80 bar yeşil, 80-100 amber
+            var arcs = document.getElementById('manArcs');
+            function arc(a1, a2, cls) {
+                var p1 = polar(CX, CY, 70, a1), p2 = polar(CX, CY, 70, a2);
+                var path = document.createElementNS(NS, 'path');
+                path.setAttribute('d', 'M' + p1[0].toFixed(1) + ' ' + p1[1].toFixed(1) +
+                    ' A70 70 0 ' + ((a2 - a1) > 180 ? 1 : 0) + ' 1 ' + p2[0].toFixed(1) + ' ' + p2[1].toFixed(1));
+                path.setAttribute('class', cls);
+                arcs.appendChild(path);
+            }
+            arc(A0, A0 + 0.8 * SWEEP, 'rig-tol-ok');
+            arc(A0 + 0.8 * SWEEP, A0 + SWEEP, 'rig-tol-out');
+
+            // DUT çentikleri: 5 bar aralık, 25 bar majör + rakam
+            var ticks = document.getElementById('manTicks');
+            var nums  = document.getElementById('manNums');
+            for (var i = 0; i <= 20; i++) {
+                var deg = A0 + i * (SWEEP / 20), maj = (i % 5 === 0);
+                var o = polar(CX, CY, 82, deg), n = polar(CX, CY, maj ? 72 : 77, deg);
+                mkLine(ticks, o[0], o[1], n[0], n[1], 'rig-dial-tick' + (maj ? ' maj' : ''));
+                if (maj) {
+                    var p = polar(CX, CY, 57, deg);
+                    var t = document.createElementNS(NS, 'text');
+                    t.setAttribute('x', p[0].toFixed(1)); t.setAttribute('y', p[1].toFixed(1));
+                    t.setAttribute('class', 'rig-dial-num');
+                    t.textContent = String(i / 5 * 25);
+                    nums.appendChild(t);
+                }
+            }
+
+            // Kalibrasyon noktası işaretleri — aktif hedef kırmızı yanar
+            var cmG = document.getElementById('manCalMarks'), calMarkEls = [];
+            PTS.forEach(function (pv) {
+                var d = A0 + pv / PMAX * SWEEP;
+                var a = polar(CX, CY, 68, d), b = polar(CX, CY, 63, d - 2.4), c = polar(CX, CY, 63, d + 2.4);
+                var tri = document.createElementNS(NS, 'path');
+                tri.setAttribute('d', 'M' + a[0].toFixed(1) + ' ' + a[1].toFixed(1) +
+                    ' L' + b[0].toFixed(1) + ' ' + b[1].toFixed(1) +
+                    ' L' + c[0].toFixed(1) + ' ' + c[1].toFixed(1) + ' Z');
+                tri.setAttribute('class', 'rig-calmark');
+                cmG.appendChild(tri); calMarkEls.push(tri);
+            });
+
+            // Referans gösterge çentikleri (10 bar aralık) + 0/50/100 rakamları
+            var rt = document.getElementById('manRefTicks');
+            var rn = document.getElementById('manRefNums');
+            for (var r = 0; r <= 10; r++) {
+                var rd = A0 + r * (SWEEP / 10), rmaj = (r % 5 === 0);
+                var ro = polar(RCX, RCY, 40, rd), ri = polar(RCX, RCY, rmaj ? 31 : 35, rd);
+                mkLine(rt, ro[0], ro[1], ri[0], ri[1], 'rig-dial-tick' + (rmaj ? ' maj' : ''));
+                if (rmaj) {
+                    var rp = polar(RCX, RCY, 23, rd);
+                    var rtx = document.createElementNS(NS, 'text');
+                    rtx.setAttribute('x', rp[0].toFixed(1)); rtx.setAttribute('y', rp[1].toFixed(1));
+                    rtx.setAttribute('class', 'rig-mik-slnum');
+                    rtx.textContent = String(r * 10);
+                    rn.appendChild(rtx);
+                }
+            }
+
+            // Hata çubuk grafiği — 5 nokta, sıfır çizgisi 488, ±11 px = ±1,0 bar
+            var ebG = document.getElementById('manErrBars');
+            var EB_X = 270, EB_W = 16, EB_GAP = 6, EB_ZERO = 488, EB_H = 11;
+            var slotEls = [], barEls = [];
+            for (var s = 0; s < PTS.length; s++) {
+                var bx = EB_X + s * (EB_W + EB_GAP);
+                var slot = document.createElementNS(NS, 'rect');
+                slot.setAttribute('x', bx); slot.setAttribute('y', EB_ZERO - EB_H - 2);
+                slot.setAttribute('width', EB_W); slot.setAttribute('height', EB_H * 2 + 4);
+                slot.setAttribute('rx', '2'); slot.setAttribute('class', 'rig-err-slot');
+                ebG.appendChild(slot); slotEls.push(slot);
+                var bar = document.createElementNS(NS, 'rect');
+                bar.setAttribute('x', bx + 3); bar.setAttribute('width', EB_W - 6);
+                bar.setAttribute('y', EB_ZERO); bar.setAttribute('height', 0);
+                bar.setAttribute('class', 'rig-errbar');
+                ebG.appendChild(bar); barEls.push(bar);
+            }
+            mkLine(ebG, EB_X - 4, EB_ZERO, EB_X + PTS.length * (EB_W + EB_GAP) - EB_GAP + 4, EB_ZERO, 'rig-err-zero');
+
+            var needle   = document.getElementById('manNeedle');
+            var dragNdl  = document.getElementById('manDrag');
+            var refNdl   = document.getElementById('manRefNeedle');
+            var wheelE   = document.getElementById('manWheel');
+            var valveE   = document.getElementById('manValve');
+            var pistonE  = document.getElementById('manPiston');
+            var fluidE   = document.getElementById('manFluid');
+            var refEl    = document.getElementById('manRef');
+            var dutEl    = document.getElementById('manDut');
+            var errEl    = document.getElementById('manErr');
+            var pointE   = document.getElementById('manPointTxt');
+
+            var si = 1, P = 0, vel = 0, phase = 'ramp', ht = 0, spd = 40;
+            var bias = 0, maxP = 0, wheelAng = 0, valveAng = 0;
+            var errs = new Array(PTS.length);
+            var drag = { on: false };
+            function nextBias() { bias = (Math.random() * 2 - 1) * 0.55; }
+            nextBias();
+            function dutOf(p) { return Math.max(0, p + bias * (p / PMAX)); }
+            function activeIdx() { return PTS.indexOf(SEQ[si]); }
+
+            function renderBars() {
+                var ai = activeIdx();
+                for (var q = 0; q < PTS.length; q++) {
+                    // Aktif hedef nokta: hem kadran işareti kırmızı yanar hem grafik yuvası vurgulanır
+                    calMarkEls[q].setAttribute('class', 'rig-calmark' + (q === ai ? ' is-active' : ''));
+                    slotEls[q].setAttribute('class', 'rig-err-slot' + (q === ai ? ' is-active' : ''));
+                    var e = errs[q];
+                    if (e === undefined) { barEls[q].setAttribute('height', 0); barEls[q].setAttribute('y', EB_ZERO); continue; }
+                    var h = Math.min(EB_H, Math.abs(e) / 1.0 * EB_H);
+                    barEls[q].setAttribute('y', (e >= 0 ? EB_ZERO - h : EB_ZERO).toFixed(1));
+                    barEls[q].setAttribute('height', Math.max(1, h).toFixed(1));
+                    barEls[q].setAttribute('class', 'rig-errbar' + (Math.abs(e) > 0.6 ? ' warn' : ''));
+                }
+            }
+            function render() {
+                var dut = dutOf(P);
+                needle.setAttribute('transform', 'rotate(' + (A0 + dut / PMAX * SWEEP).toFixed(2) + ' ' + CX + ' ' + CY + ')');
+                dragNdl.setAttribute('transform', 'rotate(' + (A0 + dutOf(maxP) / PMAX * SWEEP).toFixed(2) + ' ' + CX + ' ' + CY + ')');
+                refNdl.setAttribute('transform', 'rotate(' + (A0 + P / PMAX * SWEEP).toFixed(2) + ' ' + RCX + ' ' + RCY + ')');
+                wheelE.setAttribute('transform', 'rotate(' + wheelAng.toFixed(1) + ' 336 359)');
+                valveE.setAttribute('transform', 'rotate(' + valveAng.toFixed(1) + ' 130 326)');
+                pistonE.setAttribute('transform', 'translate(' + (-(P / PMAX) * 14).toFixed(1) + ' 0)');
+                var drop = (P / PMAX) * 14;
+                fluidE.setAttribute('y', (341 + drop).toFixed(1));
+                fluidE.setAttribute('height', (48 - drop).toFixed(1));
+                refEl.textContent = fmt(P, 1) + ' bar';
+                dutEl.textContent = fmt(dut, 1) + ' bar';
+                errEl.textContent = (phase === 'hold')
+                    ? ((dut - P >= 0 ? '+' : '−') + fmt(Math.abs(dut - P), 2) + ' bar') : '—';
+                pointE.textContent = 'Nokta ' + (activeIdx() + 1) + '/' + PTS.length;
+            }
+            function tick(dt) {
+                if (!drag.on) {
+                    var T = SEQ[si], s = 0.4 + spd / 100 * 1.6;
+                    vel += ((T - P) * 12 * s - vel * 5.2) * dt;   // yaylı yaklaşım (hafif overshoot)
+                    P += vel * dt;
+                    if (P < 0) { P = 0; vel = 0; }
+                    if (P > PMAX + 3) { P = PMAX + 3; vel = 0; }
+                    if (phase === 'ramp' && Math.abs(T - P) < 0.2 && Math.abs(vel) < 0.5) {
+                        phase = 'hold'; ht = 0; P = T; vel = 0;
+                        errs[activeIdx()] = dutOf(P) - P;   // noktayı kaydet
+                        renderBars();
+                    } else if (phase === 'hold') {
+                        ht += dt;
+                        if (ht >= 1.4) {
+                            si++;
+                            if (si >= SEQ.length) {          // çevrim bitti → grafiği tazele
+                                si = 0; errs = new Array(PTS.length); maxP = 0;
+                            }
+                            nextBias(); phase = 'ramp'; renderBars();
+                        }
+                    }
+                }
+                if (P > maxP) maxP = P;
+                // Volan basınç değişimiyle döner; tahliye vanası yalnız basınç düşerken
+                wheelAng += vel * 2.4 * dt;
+                if (vel < -2) valveAng += -vel * 1.6 * dt;
+                render();
+            }
+
+            var hit = document.getElementById('manHit');
+            function angToP(evt) {
+                var p = svgPointOf(svg, evt); if (!p) return null;
+                var a = Math.atan2(p.y - CY, p.x - CX) * 180 / Math.PI + 90;   // 0° = yukarı
+                if (a > 180) a -= 360;
+                if (a > 135) a = 135;          // alt sağ ölü bölge → üst sınıra kilitle
+                if (a < A0) a = A0;            // alt sol ölü bölge → alt sınıra kilitle
+                return (a - A0) / SWEEP * PMAX;
+            }
+            if (hit && !reduce) {
+                hit.addEventListener('pointerdown', function (e) {
+                    var v = angToP(e); if (v === null) return;
+                    drag.on = true; P = v; vel = 0; phase = 'ramp';
+                    try { hit.setPointerCapture(e.pointerId); } catch (err) {}
+                    e.preventDefault();
+                });
+                hit.addEventListener('pointermove', function (e) {
+                    if (!drag.on) return;
+                    var v = angToP(e);
+                    if (v !== null) { wheelAng += (v - P) * 2.4; P = v; }
+                });
+                var end = function () { drag.on = false; vel = 0; phase = 'ramp'; };
+                hit.addEventListener('pointerup', end);
+                hit.addEventListener('pointercancel', end);
+            }
+
+            if (reduce) { P = 50; maxP = 50; }
+            renderBars(); render();
+            return {
+                el: svg, hint: 'Kadran üzerinde sürükleyerek basıncı ayarlayabilirsiniz',
+                speed: { label: 'Hız', unit: ' %', min: 0, max: 100, val: 40 },
+                setSpeed: function (v) { spd = v; }, tick: tick
+            };
+        })();
+
+        /* ── Ortak kontrol: cihaz rayı + hız barı + ipucu ── */
+        var speedEl      = document.getElementById('rigSpeed');
+        var speedValEl   = document.getElementById('rigSpeedVal');
+        var speedLabelEl = document.getElementById('rigSpeedLabel');
+        var hintEl       = document.getElementById('rigHint');
+
+        function setSpeedUi(s) {
+            if (!speedEl) return;
+            if (speedLabelEl) speedLabelEl.textContent = s.speed.label;
+            speedEl.min = s.speed.min; speedEl.max = s.speed.max; speedEl.value = s.speed.val;
+            if (speedValEl) speedValEl.textContent = Math.round(s.speed.val) + s.speed.unit;
+        }
+        function activate(key) {
+            Object.keys(scenes).forEach(function (k) {
+                scenes[k].el.classList.toggle('is-active', k === key);
+            });
+            Array.prototype.forEach.call(rigRoot.querySelectorAll('.rig-dev-btn'), function (b) {
+                b.classList.toggle('is-active', b.getAttribute('data-rig') === key);
+            });
+            active = scenes[key];
+            setSpeedUi(active);
+            if (hintEl) hintEl.textContent = active.hint;
+        }
+        Array.prototype.forEach.call(rigRoot.querySelectorAll('.rig-dev-btn'), function (b) {
+            b.addEventListener('click', function () { activate(b.getAttribute('data-rig')); });
+        });
+        if (speedEl) {
+            speedEl.addEventListener('input', function () {
+                var v = parseFloat(speedEl.value) || 0;
+                if (!active) return;
+                active.speed.val = v;
+                active.setSpeed(v);
+                if (speedValEl) speedValEl.textContent = Math.round(v) + active.speed.unit;
+            });
+        }
+        activate('komp');
+
+        if (reduce) return;   // statik pozlar çizildi; döngü ve sürükleme yok
+
+        var last = null, raf = null;
+        function frame(ts) {
+            if (last === null) last = ts;
+            var dt = Math.min(0.05, (ts - last) / 1000); last = ts;
+            if (active) active.tick(dt);
+            raf = requestAnimationFrame(frame);
+        }
+        function start() { if (raf === null) { last = null; raf = requestAnimationFrame(frame); } }
+        function stop()  { if (raf !== null) { cancelAnimationFrame(raf); raf = null; } }
+        document.addEventListener('visibilitychange', function () {
+            if (document.hidden) stop(); else start();
+        });
+        start();
+    })();
+</script>
+</body>
+</html>
+
