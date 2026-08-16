@@ -1,3 +1,4 @@
+using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 
@@ -14,15 +15,29 @@ namespace CalibraHub.Application.Services.Import;
 public sealed class PersonnelImportHandler : RowImportHandlerBase
 {
     private readonly IPersonnelService _personnel;
+    private readonly ImportWidgetSupport _widgetSupport;
     private List<PersonnelDto>? _cache;   // run-cache (scoped, satırlar sıralı işlenir)
 
-    public PersonnelImportHandler(IPersonnelService personnel) => _personnel = personnel;
+    public PersonnelImportHandler(
+        IPersonnelService personnel,
+        IWidgetRepository widgetRepo,
+        IWidgetService widgetService)
+    {
+        _personnel = personnel;
+        // PERSONNEL_EDIT — PersonnelEdit ekranının DynamicWidgetRenderer formCode'u;
+        // RecordId = Personnel.Id (ekrandaki data-record-id ile aynı konvansiyon).
+        _widgetSupport = new ImportWidgetSupport(widgetRepo, widgetService, "PERSONNEL_EDIT");
+    }
+
+    public override Task PreloadAsync(CancellationToken ct) => _widgetSupport.PreloadAsync(ct);
 
     public override string Entity => "PERSONNEL";
     public override string Label => "Personel";
 
-    public override IReadOnlyList<ImportTargetFieldDto> GetFields() => new List<ImportTargetFieldDto>
+    public override IReadOnlyList<ImportTargetFieldDto> GetFields()
     {
+        var fields = new List<ImportTargetFieldDto>
+        {
         new("FullName", "Ad Soyad", "string", true, true, "Personelin adı soyadı (zorunlu)", MaxLength: 200),
         new("Code", "Sicil No", "string", false, true, "Boşsa addan otomatik üretilir", MaxLength: 50),
         new("Title", "Görev", "string", false, false, MaxLength: 100),
@@ -34,7 +49,11 @@ public sealed class PersonnelImportHandler : RowImportHandlerBase
             new[] { "Evet", "Hayır" }),
         new("IsActive", "Aktif", "bool", false, false, "Evet / Hayır", new[] { "Evet", "Hayır" }),
         new("Notes", "Notlar", "string", false, false),
-    };
+        };
+        // Personel kartına admin'in eklediği özel (widget) alanlar — PreloadAsync ile yüklenir.
+        fields.AddRange(_widgetSupport.GetFields());
+        return fields;
+    }
 
     protected override IReadOnlyList<string> ValidateRow(IReadOnlyDictionary<string, string?> d)
     {
@@ -134,6 +153,11 @@ public sealed class PersonnelImportHandler : RowImportHandlerBase
 
         var id = await _personnel.SaveAsync(req, ct);
         _cache = null;   // ad benzersizliği sonraki satırlarda güncel listeyi görmeli
+
+        // Özel (widget) alanlar — RecordId = Personnel.Id
+        var wErr = await _widgetSupport.SaveRowValuesAsync(id.ToString(), d, ct);
+        if (wErr != null) return (false, $"Personel kaydedildi, {wErr}", id);
+
         return (true, null, id);
     }
 

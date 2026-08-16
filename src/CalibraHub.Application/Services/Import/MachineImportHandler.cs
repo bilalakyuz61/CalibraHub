@@ -1,3 +1,4 @@
+using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 
@@ -14,23 +15,41 @@ namespace CalibraHub.Application.Services.Import;
 public sealed class MachineImportHandler : RowImportHandlerBase
 {
     private readonly ILogisticsConfigurationService _logistics;
+    private readonly ImportWidgetSupport _widgetSupport;
     private List<MachineDto>? _machines;
     private List<LocationDto>? _locations;
 
-    public MachineImportHandler(ILogisticsConfigurationService logistics) => _logistics = logistics;
+    public MachineImportHandler(
+        ILogisticsConfigurationService logistics,
+        IWidgetRepository widgetRepo,
+        IWidgetService widgetService)
+    {
+        _logistics = logistics;
+        // MACHINES — MachineEdit ekranının DynamicWidgetRenderer formCode'u;
+        // RecordId = Machine.Id (ekrandaki data-record-id ile aynı konvansiyon).
+        _widgetSupport = new ImportWidgetSupport(widgetRepo, widgetService, "MACHINES");
+    }
+
+    public override Task PreloadAsync(CancellationToken ct) => _widgetSupport.PreloadAsync(ct);
 
     public override string Entity => "MACHINE";
     public override string Label => "Makine";
 
-    public override IReadOnlyList<ImportTargetFieldDto> GetFields() => new List<ImportTargetFieldDto>
+    public override IReadOnlyList<ImportTargetFieldDto> GetFields()
     {
+        var fields = new List<ImportTargetFieldDto>
+        {
         new("Name", "Makine Adı", "string", true, true, "Zorunlu", MaxLength: 200),
         new("Code", "Makine Kodu", "string", false, true, "Boşsa addan otomatik üretilir", MaxLength: 50),
         new("LocationCode", "Lokasyon Kodu", "string", true, false, "Makinenin bağlı olduğu lokasyon (kod veya ad)"),
         new("HourlyCapacity", "Saatlik Kapasite", "decimal", false, false),
         new("SortOrder", "Sıra", "int", false, false),
         new("IsActive", "Aktif", "bool", false, false, "Evet / Hayır", new[] { "Evet", "Hayır" }),
-    };
+        };
+        // Makine kartına admin'in eklediği özel (widget) alanlar — PreloadAsync ile yüklenir.
+        fields.AddRange(_widgetSupport.GetFields());
+        return fields;
+    }
 
     protected override IReadOnlyList<string> ValidateRow(IReadOnlyDictionary<string, string?> d)
     {
@@ -121,6 +140,10 @@ public sealed class MachineImportHandler : RowImportHandlerBase
             await _logistics.UpdateMachineAsync(
                 new UpdateMachineRequest(existing.Id, locationId.Value, existing.Code, name, capacity, sortOrder, isActive), ct);
             _machines = null;
+
+            var wErrU = await _widgetSupport.SaveRowValuesAsync(existing.Id.ToString(), d, ct);
+            if (wErrU != null) return (false, $"Makine güncellendi, {wErrU}", existing.Id);
+
             return (true, null, existing.Id);
         }
 
@@ -128,6 +151,12 @@ public sealed class MachineImportHandler : RowImportHandlerBase
         var id = await _logistics.CreateMachineAsync(
             new CreateMachineRequest(locationId.Value, code, name, capacity, sortOrder, isActive), ct);
         _machines = null;
+
+        // Özel (widget) alanlar — RecordId = Machine.Id. CreateMachineAsync Id döndürdüğü
+        // için stok kartındaki gibi ek sorguya gerek yok.
+        var wErr = await _widgetSupport.SaveRowValuesAsync(id.ToString(), d, ct);
+        if (wErr != null) return (false, $"Makine oluşturuldu, {wErr}", id);
+
         return (true, null, id);
     }
 
