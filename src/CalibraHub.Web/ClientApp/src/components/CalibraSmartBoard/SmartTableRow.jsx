@@ -690,6 +690,14 @@ export default function SmartTableRow(props) {
   function dispatchMenuAction(action) {
     if (!action || busy) return
     if (action.apiUrl) { runMenuApiAction(action); return }
+    // SmartCard sözleşmesi: extraActions'ta POST `type:'api-post'` + `url` ile de
+    // verilebiliyor. Burada tanınmazsa aksiyon SESSİZCE navigasyona düşüyor ve
+    // kullanıcı API adresine gidip hata sayfası görüyor (DbImport "Pasifleştir"
+    // bu şekilde kırıldı). İki bileşen aynı config'i kabul etsin.
+    if (action.type === 'api-post' && action.url) {
+      runMenuApiAction(Object.assign({}, action, { apiUrl: action.url }))
+      return
+    }
     dispatchActionUrl(action)
   }
 
