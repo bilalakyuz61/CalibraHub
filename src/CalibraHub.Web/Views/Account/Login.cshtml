@@ -138,225 +138,155 @@
             animation: loginShake .42s cubic-bezier(.36,.07,.19,.97) both;
         }
 
-        /* ── Kimlik kalibrasyon kadranı v3 — 3 iğneli (yelkovan) analog gösterge ──
-           Harf-bulmacalı kilit kadranı (v2) yerine dönüldü: merkezden çıkan 3 iğne
-           (indigo #6366f1 / cyan #06b6d4 / violet #8b5cf6), farklı uzunluk + kalınlıkta
-           (n1 en uzun/kalın = "ana" şifre iğnesi, n3 en kısa/ince). İdle'da üç iğne 12
-           çentikli (30°'lik) kadranda birbirinden 120° ayrık, SABİT dinlenme açılarındadır
-           (çok ince bir "nabız" dışında hareket YOK). Şifre her karakterinde SADECE bir
-           iğne bir çentik ilerler — round-robin (n. tuş → n%3. iğne), sonra oturur; TÜM
-           iğneler DEĞİL, SÜREKLİ DEĞİL (2026-07-16 kullanıcı geri bildirimi: "tüm
-           yelkovanlar sürekli hareket ediyor" şikayeti — bir daha tekrarlanmaz, bkz.
-           sayfa sonundaki script yorumu). Çözülme YALNIZ sunucu login onayında
-           (server-truth) tetiklenir — client parola doğrulamaz. Glass-stage mimarisi +
-           is-solved/is-fail durum CSS'i v2'den bilinçli olarak korundu; mobil (Compose
-           Canvas) ile birebir aynı kanonik tasarım/renk paleti.
-
-           Görsel zenginleştirme eki (2026-07-17, kullanıcı "çok sade" geri bildirimi —
-           SOLVE MANTIĞI DEĞİŞMEDİ, yalnız çizim/animasyon): (a) ana kadranın içine 2
-           eş-merkezli İÇ KADRAN eklendi — r=60/8-çentik cyan + r=34/6-çentik violet,
-           salt dekoratif katman (bkz. .cald-inner-* kuralları + script buildInnerTicks/
-           spinInnerRandom). (b) büyük iğnelerin tuş-başı 30°'lik hareketi artık tek parça
-           glide değil, N=4 mini-adımlı "dura-dura" (detent/stepped) hareket — bkz. script
-           animateNeedleStepped. (c) iç kadranlar her tuş vuruşunda büyük iğnelerin
-           hedefli/round-robin hareketinden BAĞIMSIZ, rastgele yön+açı ile döner — bkz.
-           script spinInnerRandom. */
+        /* ── Kalibrasyon göstergesi v4 (2026-08-15) — sayfadaki TEK animasyon ────────
+           v3'ün "oyuncak" hisleri bilinçli olarak kaldırıldı: rastgele yön/açıyla dönen
+           iç kadranlar, zıplayan easeOutBack, titreyen (scramble) rakamlar, hatada kadran
+           sarsılması (shake) ve idle'da nefes alan parlaklık. Yerine gerçek bir komparatör
+           (dial indicator) disiplini kondu — HER hareket bir şey ölçer, hiçbiri rastgele
+           değildir:
+             • İğne açısı    = kalibrasyon yüzdesi (0-100 → 0-360°, tam tur = tam skala)
+             • İlerleme yayı = aynı yüzde (kenarda çevresel okuma)
+             • Okuma penceresi = aynı yüzde, sayılarak oturur (jitter/scramble YOK)
+           Hareket fiziği: TEK rAF döngüsünde kritik-sönümlü yay (galvanometre gibi tek
+           küçük aşım + oturma). Durağanken döngü tamamen durur — idle'da CPU harcanmaz.
+           Palet: tek vurgu rengi (indigo) + nötr çentikler; yeşil/kırmızı yalnız DURUM
+           belirtir (v3'teki indigo+cyan+violet üçlüsü kaldırıldı).
+           Çözülme YALNIZ sunucu onayıyla (server-truth) tetiklenir — client parola
+           doğrulamaz; bu mantık v3'ten aynen korundu. */
         .cald-wrap {
-            width: 148px; margin: 2px auto 20px; position: relative;
+            width: 152px; margin: 2px auto 20px; position: relative;
             color-scheme: light;
-            --cald-glass-a: rgba(255,255,255,.95);
-            --cald-glass-b: rgba(148,163,184,.18);
-            --cald-ring: rgba(148,163,184,.30);
-            --cald-n1: #6366f1;   /* indigo — ana (şifre) iğnesi, en uzun/kalın */
-            --cald-n2: #06b6d4;   /* cyan   — ikincil iğne */
-            --cald-n3: #8b5cf6;   /* violet — üçüncül iğne */
-            --cald-tick: rgba(100,116,139,.45);
-            --cald-tick-major: rgba(71,85,105,.65);
-            --cald-inner1: rgba(6,182,212,.42);        /* iç kadran 1 (r=60) çentik rengi — cyan ton */
-            --cald-inner1-mark: rgba(6,182,212,.95);   /* iç kadran 1 işaret noktası */
-            --cald-inner2: rgba(139,92,246,.40);       /* iç kadran 2 (r=34) çentik rengi — violet ton */
-            --cald-inner2-mark: rgba(139,92,246,.95);  /* iç kadran 2 işaret noktası */
-            --cald-hub: #6366f1;
+            --cald-face-a: #ffffff;
+            --cald-face-b: #e6eaf2;
+            --cald-bezel: rgba(100,116,139,.34);
+            --cald-tick: rgba(100,116,139,.55);
+            --cald-tick-maj: rgba(51,65,85,.85);
+            --cald-num: rgba(71,85,105,.75);
+            --cald-accent: #4f46e5;
+            --cald-arc-bg: rgba(100,116,139,.16);
+            --cald-hub: #334155;
+            --cald-readout: #334155;
+            --cald-readout-bg: rgba(148,163,184,.13);
             --cald-success: #059669;
             --cald-danger: #e11d48;
             --cald-status: #64748b;
         }
         body.app-theme-dark .cald-wrap {
             color-scheme: dark;
-            --cald-glass-a: rgba(148,163,184,.16);
-            --cald-glass-b: rgba(2,6,23,.35);
-            --cald-ring: rgba(148,163,184,.22);
-            --cald-n1: #818cf8;
-            --cald-n2: #22d3ee;
-            --cald-n3: #a78bfa;
-            --cald-tick: rgba(148,163,184,.4);
-            --cald-tick-major: rgba(203,213,225,.55);
-            --cald-inner1: rgba(34,211,238,.42);
-            --cald-inner1-mark: rgba(34,211,238,.95);
-            --cald-inner2: rgba(167,139,250,.40);
-            --cald-inner2-mark: rgba(167,139,250,.95);
-            --cald-hub: #818cf8;
+            --cald-face-a: #131c30;
+            --cald-face-b: #070b14;
+            --cald-bezel: rgba(148,163,184,.28);
+            --cald-tick: rgba(148,163,184,.5);
+            --cald-tick-maj: rgba(226,232,240,.82);
+            --cald-num: rgba(203,213,225,.72);
+            --cald-accent: #818cf8;
+            --cald-arc-bg: rgba(148,163,184,.14);
+            --cald-hub: #cbd5e1;
+            --cald-readout: #e2e8f0;
+            --cald-readout-bg: rgba(2,6,23,.45);
             --cald-success: #34d399;
             --cald-danger: #fb7185;
             --cald-status: #94a3b8;
         }
+        /* Kadran gövdesi — bezel + cam. Statik: idle'da hiçbir animasyon yok
+           (v3'teki caldIdleBreathe kaldırıldı; ölçü aleti dururken durur). */
         .cald-stage {
-            position: relative; width: 148px; height: 148px; margin: 0 auto; border-radius: 50%; overflow: hidden;
-            background:
-                radial-gradient(118% 118% at 30% 22%, var(--cald-glass-a), rgba(226,232,240,.06) 56%, var(--cald-glass-b) 100%),
-                radial-gradient(90% 90% at 50% 128%, rgba(99,102,241,.14), transparent 62%);
+            position: relative; width: 152px; height: 152px; margin: 0 auto;
+            border-radius: 50%;
+            background: radial-gradient(120% 120% at 32% 24%, var(--cald-face-a), var(--cald-face-b) 78%);
             box-shadow:
-                inset 0 2px 6px rgba(255,255,255,.9),
-                inset 0 -12px 24px rgba(79,70,229,.12),
-                inset 0 0 0 1px var(--cald-ring),
-                0 14px 28px -12px rgba(30,41,59,.36),
-                0 4px 12px -6px rgba(99,102,241,.3);
-            transition: box-shadow .5s ease;
-            animation: caldIdleBreathe 4.4s ease-in-out infinite;
+                inset 0 0 0 1px var(--cald-bezel),
+                inset 0 1px 2px rgba(255,255,255,.55),
+                inset 0 -10px 22px rgba(15,23,42,.07),
+                0 10px 24px -12px rgba(15,23,42,.42);
+            transition: box-shadow .45s ease;
         }
         body.app-theme-dark .cald-stage {
             box-shadow:
-                inset 0 2px 6px rgba(226,232,240,.24),
-                inset 0 -12px 26px rgba(2,6,23,.58),
-                inset 0 0 0 1px var(--cald-ring),
-                0 18px 34px -14px rgba(0,0,0,.66),
-                0 4px 14px -6px rgba(139,92,246,.36);
+                inset 0 0 0 1px var(--cald-bezel),
+                inset 0 1px 2px rgba(226,232,240,.14),
+                inset 0 -10px 24px rgba(0,0,0,.55),
+                0 14px 30px -14px rgba(0,0,0,.7);
         }
+        /* Durum halkası — parıltı değil, ölçülü bir çerçeve vurgusu. */
         .cald-wrap.is-solved .cald-stage {
             box-shadow:
-                inset 0 2px 6px rgba(255,255,255,.9), inset 0 -12px 24px rgba(16,185,129,.16),
-                inset 0 0 0 1px rgba(52,211,153,.5),
-                0 14px 28px -12px rgba(30,41,59,.36), 0 0 0 4px rgba(52,211,153,.16), 0 0 22px rgba(52,211,153,.42);
-        }
-        body.app-theme-dark .cald-wrap.is-solved .cald-stage {
-            box-shadow:
-                inset 0 2px 6px rgba(226,232,240,.24), inset 0 -12px 26px rgba(2,6,23,.58),
-                inset 0 0 0 1px rgba(52,211,153,.5),
-                0 18px 34px -14px rgba(0,0,0,.66), 0 0 0 4px rgba(16,185,129,.2), 0 0 24px rgba(16,185,129,.5);
+                inset 0 0 0 1px rgba(5,150,105,.55),
+                inset 0 1px 2px rgba(255,255,255,.55),
+                inset 0 -10px 22px rgba(5,150,105,.10),
+                0 10px 24px -12px rgba(15,23,42,.42),
+                0 0 0 3px rgba(5,150,105,.14);
         }
         .cald-wrap.is-fail .cald-stage {
             box-shadow:
-                inset 0 2px 6px rgba(255,255,255,.9), inset 0 -12px 24px rgba(244,63,94,.16),
-                inset 0 0 0 1px rgba(251,113,133,.5),
-                0 14px 28px -12px rgba(30,41,59,.36), 0 0 0 4px rgba(251,113,133,.16), 0 0 22px rgba(244,63,94,.42);
+                inset 0 0 0 1px rgba(225,29,72,.55),
+                inset 0 1px 2px rgba(255,255,255,.55),
+                inset 0 -10px 22px rgba(225,29,72,.10),
+                0 10px 24px -12px rgba(15,23,42,.42),
+                0 0 0 3px rgba(225,29,72,.14);
         }
-        body.app-theme-dark .cald-wrap.is-fail .cald-stage {
-            box-shadow:
-                inset 0 2px 6px rgba(226,232,240,.24), inset 0 -12px 26px rgba(2,6,23,.58),
-                inset 0 0 0 1px rgba(251,113,133,.5),
-                0 18px 34px -14px rgba(0,0,0,.66), 0 0 0 4px rgba(244,63,94,.2), 0 0 24px rgba(244,63,94,.5);
-        }
-        .cald-wrap.is-solved .cald-stage,
-        .cald-wrap.is-fail .cald-stage { animation: none; }
-        .cald-wrap.is-measuring .cald-stage { animation: caldPulse 1.1s ease-in-out infinite; }
         .cald-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; display: block; }
-        .cald-track { fill: none; stroke: var(--cald-ring); stroke-width: 1.4; }
-        /* Çentik (tick) halkası — 12 çentik / 30°'lik adım; her 3.'sü (0/90/180/270,
-           kadranın kuzey/doğu/güney/batısı) belirgin (maj) çizilir. */
-        .cald-tick { stroke: var(--cald-tick); stroke-width: 1.4; }
-        .cald-tick.maj { stroke: var(--cald-tick-major); stroke-width: 2.2; }
-        /* İç kadranlar (2 adet, iç içe: r=60 cyan + r=34 violet) — büyük iğnelerden
-           bağımsız, her tuş vuruşunda rastgele yön/açıyla dönen dekoratif katman (bkz.
-           script spinInnerRandom). Sınır halkası ince/sabit görünür; asıl "dönüyor"
-           hissini rotasyona giren çentik grubu + işaret noktası verir. */
-        .cald-inner-track { fill: none; stroke: var(--cald-ring); stroke-width: 1; opacity: .65; }
-        .cald-inner-grp { transition: none; }
-        .cald-inner-tick { stroke-linecap: round; stroke-width: 1.15; }
-        .cald-inner-tick.i1 { stroke: var(--cald-inner1); }
-        .cald-inner-tick.i2 { stroke: var(--cald-inner2); stroke-width: 1.05; }
-        .cald-inner-mark-1 { fill: var(--cald-inner1-mark); filter: drop-shadow(0 0 2px var(--cald-inner1-mark)); }
-        .cald-inner-mark-2 { fill: var(--cald-inner2-mark); filter: drop-shadow(0 0 1.6px var(--cald-inner2-mark)); }
-        /* 3 iğne — hub'dan (merkez) çıkar, farklı uzunluk/kalınlık/renkte (saat ibresi
-           hiyerarşisi: n1 en uzun+kalın=ana/şifre iğnesi, n3 en kısa+ince). Açı doğrudan
-           <g> sarmalayıcısının SVG rotate() transform'uyla sürülür (bkz. script placeNeedle). */
-        .cald-needle-grp { transition: filter .3s ease; }
+
+        /* Skala — 50 ince + 10 kalın çentik (tam skala = 100 bölme, komparatör standardı) */
+        .cald-tick { stroke: var(--cald-tick); stroke-width: 1; }
+        .cald-tick.maj { stroke: var(--cald-tick-maj); stroke-width: 1.9; }
+        .cald-num {
+            fill: var(--cald-num);
+            font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 10px; font-weight: 600;
+            text-anchor: middle; dominant-baseline: middle;
+        }
+
+        /* İlerleme yayı — iğneyle AYNI değeri gösterir (dekoratif değil, yedek okuma) */
+        .cald-arc-bg { fill: none; stroke: var(--cald-arc-bg); stroke-width: 3; }
+        .cald-arc {
+            fill: none; stroke: var(--cald-accent); stroke-width: 3; stroke-linecap: round;
+            transition: stroke .4s ease;
+        }
+        .cald-wrap.is-solved .cald-arc { stroke: var(--cald-success); }
+        .cald-wrap.is-fail .cald-arc { stroke: var(--cald-danger); }
+
+        /* Ana iğne — sivrilen bıçak + karşı ağırlık (tek renk, tek iğne) */
         .cald-needle {
-            stroke-linecap: round;
-            transition: stroke .3s ease, filter .3s ease, opacity .3s ease;
+            fill: var(--cald-accent);
+            transition: fill .4s ease;
         }
-        .cald-needle.n1 { stroke: var(--cald-n1); stroke-width: 3.2; filter: drop-shadow(0 0 2.5px rgba(99,102,241,.45)); }
-        .cald-needle.n2 { stroke: var(--cald-n2); stroke-width: 2.4; }
-        .cald-needle.n3 { stroke: var(--cald-n3); stroke-width: 1.9; opacity: .92; }
-        .cald-tail { fill: var(--cald-n1); transition: fill .3s ease; }
+        .cald-counterweight { fill: var(--cald-accent); transition: fill .4s ease; }
         .cald-wrap.is-solved .cald-needle,
-        .cald-wrap.is-solved .cald-tail {
-            stroke: var(--cald-success) !important; fill: var(--cald-success) !important;
-            opacity: 1; filter: drop-shadow(0 0 3px rgba(16,185,129,.5));
-        }
+        .cald-wrap.is-solved .cald-counterweight { fill: var(--cald-success); }
         .cald-wrap.is-fail .cald-needle,
-        .cald-wrap.is-fail .cald-tail {
-            stroke: var(--cald-danger) !important; fill: var(--cald-danger) !important;
-            filter: drop-shadow(0 0 3px rgba(244,63,94,.45));
-        }
-        .cald-hub-ring { fill: none; stroke: var(--cald-ring); stroke-width: 1.6; }
-        .cald-hub { fill: var(--cald-hub); transition: fill .3s ease; }
-        .cald-wrap.is-solved .cald-hub { fill: var(--cald-success); }
-        .cald-wrap.is-fail .cald-hub { fill: var(--cald-danger); }
-        /* 2026-07-23 kullanıcı geri bildirimi: kadran içinde beliren onay tiki (.cald-check
-           path'i) yelkovanlarla üst üste binip kötü görünüyordu — kaldırıldı. Başarı hissi
-           kadranın kalan öğeleriyle veriliyor: iğneler+hub yeşile döner (yukarıdaki
-           .cald-wrap.is-solved kuralları), stage glow'u (.cald-wrap.is-solved .cald-stage,
-           bkz. yukarı) ve durum metni rengi (.cald-wrap.is-solved .cald-status, aşağıda). */
-        .cald-status {
-            margin-top: 16px; text-align: center; font-size: .86rem; font-weight: 600;
-            min-height: 1.2em; white-space: nowrap; color: var(--cald-status); transition: color .3s;
-        }
-        .cald-wrap.is-measuring .cald-status { color: var(--cald-n1); }
-        .cald-wrap.is-solved .cald-status { color: var(--cald-success); }
-        .cald-wrap.is-fail .cald-status { color: var(--cald-danger); }
-        @@keyframes caldIdleBreathe { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.035); } }
-        @@keyframes caldPulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.14); } }
-        @@keyframes caldShake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-7px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(3px)} }
-        .cald-wrap.cald-shake .cald-stage { animation: caldShake .5s ease; }
+        .cald-wrap.is-fail .cald-counterweight { fill: var(--cald-danger); }
+        .cald-hub-ring { fill: var(--cald-face-a); stroke: var(--cald-bezel); stroke-width: 1; }
+        .cald-hub { fill: var(--cald-hub); }
 
-        /* ── Kalibrasyon okuma katmanı — "havalı mühendislik hesabı" hissi (2026-08-03) ──
-           SOLVE MANTIĞI DEĞİŞMEDİ (round-robin iğne + server-truth çözülme aynen geçerli).
-           Yalnız dekoratif iki katman: (a) dış kadranda 4 ana çentikte BASILI ölçek rakamları
-           (.cald-scale-num) — idle'da çok soluk, şifre girişinde/doğrulamada belirginleşir
-           (iğnelerin "gösterdiği" skala hissi). (b) alt-orta dijital okuma penceresi
-           (.cald-readout*) — monospace, her tuşta hesaplanıp oturan ölçüm değeri; doğrulama
-           fazında kanal-kanal hızlı hesap sekansı. Kullanıcının 2026-07-16 "iğneler sürekli
-           hareket etmesin" geri bildirimine dokunulmaz — bu katman sayısal, iğne değil. */
-        .cald-scale-num {
-            fill: var(--cald-status);
-            font-family: ui-monospace, Menlo, Consolas, monospace;
-            font-size: 11px; font-weight: 600;
-            text-anchor: middle; dominant-baseline: middle;
-            opacity: .22; transition: opacity .35s ease, fill .3s ease;
-        }
-        .cald-wrap.is-typing .cald-scale-num { opacity: .60; }
-        .cald-wrap.is-measuring .cald-scale-num { opacity: .78; }
-        .cald-wrap.is-solved .cald-scale-num { fill: var(--cald-success); opacity: .55; }
-        .cald-wrap.is-fail .cald-scale-num { fill: var(--cald-danger); opacity: .55; }
-
-        .cald-readout-box {
-            fill: var(--cald-glass-b); stroke: var(--cald-ring); stroke-width: 1;
-            opacity: 0; transition: opacity .35s ease;
-        }
+        /* Okuma penceresi — sayarak oturan değer (jitter yok) */
+        .cald-readout-box { fill: var(--cald-readout-bg); stroke: var(--cald-bezel); stroke-width: .8; }
         .cald-readout-text {
-            fill: var(--cald-n1);
+            fill: var(--cald-readout);
             font-family: ui-monospace, Menlo, Consolas, monospace;
-            font-size: 11px; font-weight: 600; letter-spacing: .2px;
+            font-size: 10.5px; font-weight: 600; letter-spacing: .3px;
             text-anchor: middle; dominant-baseline: middle;
-            opacity: 0; transition: opacity .35s ease, fill .3s ease;
+            transition: fill .4s ease;
         }
-        .cald-wrap.is-typing .cald-readout-box,
-        .cald-wrap.is-measuring .cald-readout-box,
-        .cald-wrap.is-solved .cald-readout-box,
-        .cald-wrap.is-fail .cald-readout-box { opacity: .92; }
-        .cald-wrap.is-typing .cald-readout-text,
-        .cald-wrap.is-measuring .cald-readout-text,
-        .cald-wrap.is-solved .cald-readout-text,
-        .cald-wrap.is-fail .cald-readout-text { opacity: 1; }
-        .cald-wrap.is-measuring .cald-readout-text { fill: var(--cald-n2); }
         .cald-wrap.is-solved .cald-readout-text { fill: var(--cald-success); }
         .cald-wrap.is-fail .cald-readout-text { fill: var(--cald-danger); }
 
+        /* Cam yansıması — statik, tek ince parlama (hareketli parıltı yok) */
+        .cald-glass { fill: rgba(255,255,255,.34); pointer-events: none; }
+        body.app-theme-dark .cald-glass { fill: rgba(226,232,240,.06); }
+
+        .cald-status {
+            margin-top: 14px; text-align: center; font-size: .86rem; font-weight: 600;
+            min-height: 1.2em; white-space: nowrap; color: var(--cald-status);
+            transition: color .35s ease;
+        }
+        .cald-wrap.is-measuring .cald-status { color: var(--cald-accent); }
+        .cald-wrap.is-solved .cald-status { color: var(--cald-success); }
+        .cald-wrap.is-fail .cald-status { color: var(--cald-danger); }
+
         @@media (prefers-reduced-motion: reduce) {
-            .cald-needle, .cald-stage { transition: none; }
-            .cald-stage,
-            .cald-wrap.is-measuring .cald-stage { animation: none; }
-            .cald-wrap.cald-shake .cald-stage { animation: none; }
+            .cald-stage, .cald-arc, .cald-needle, .cald-counterweight,
+            .cald-readout-text, .cald-status { transition: none; }
         }
 
     </style>
@@ -416,45 +346,37 @@
         <div class="login-card">
             <h1>CalibraHub</h1>
 
-            @* Kimlik kalibrasyon kadranı v3 — 3 iğneli (yelkovan) analog gösterge. Şifre
-               karakterine bağlı round-robin iğne rotasyonu (yalnız bir iğne/tuş) + sunucu
-               onayına bağlı çözülme mantığı sayfa sonundaki script'te (window.CalibraLoginDial). *@
+            @* Kalibrasyon göstergesi v4 — komparatör (dial indicator) disiplini.
+               ÜÇ öğe, hepsi AYNI ölçülen değeri gösterir (rastgele hareket yoktur):
+               ana iğne (skala üzerinde), kenar ilerleme yayı, dijital okuma penceresi.
+               v3'teki iki dekoratif iç kadran kaldırıldı — ana iğneyle çakışıyor ve
+               yayla aynı bilgiyi tekrarlıyorlardı. Skala JS ile üretilir. *@
             <div class="cald-wrap" id="caldDial">
                 <div class="cald-stage" id="caldStage" aria-hidden="true">
                     <svg class="cald-svg" viewBox="0 0 200 200">
-                        <circle class="cald-track" cx="100" cy="100" r="88" />
+                        @* Skala: 50 çentik (her 2 bölmede bir), her 5.'si kalın; tam tur = 100 bölme *@
                         <g class="cald-ticks" id="caldTicks"></g>
-                        @* Basılı ölçek rakamları (4 ana çentik) — JS ile konumlanır (bkz. buildScale). *@
-                        <g class="cald-scale" id="caldScale"></g>
-                        @* İç kadran 1 (dış, r=60) — 8 çentik; büyük iğnelerden bağımsız, tuş
-                           başına rastgele döner (bkz. script spinInnerRandom). *@
-                        <circle class="cald-inner-track" cx="100" cy="100" r="60" />
-                        <g class="cald-inner-grp" id="caldInner1">
-                            <g id="caldInner1Ticks"></g>
-                            <circle class="cald-inner-mark cald-inner-mark-1" cx="100" cy="40" r="2.2" />
+                        <g class="cald-nums" id="caldNums"></g>
+
+                        @* Kenar ilerleme yayı — iğneyle aynı yüzde, çevresel okuma *@
+                        <circle class="cald-arc-bg" cx="100" cy="100" r="94" />
+                        <circle class="cald-arc" id="caldArc" cx="100" cy="100" r="94"
+                                transform="rotate(-90 100 100)" stroke-dasharray="0 591" />
+
+                        @* Ana iğne — sivrilen bıçak + karşı ağırlık, tek parça döner *@
+                        <g id="caldNeedle">
+                            <polygon class="cald-needle" points="98.5,103 100,32 101.5,103" />
+                            <circle class="cald-counterweight" cx="100" cy="108" r="4.4" />
                         </g>
-                        @* İç kadran 2 (iç, r=34) — 6 çentik; aynı şekilde bağımsız/rastgele. *@
-                        <circle class="cald-inner-track" cx="100" cy="100" r="34" />
-                        <g class="cald-inner-grp" id="caldInner2">
-                            <g id="caldInner2Ticks"></g>
-                            <circle class="cald-inner-mark cald-inner-mark-2" cx="100" cy="66" r="1.8" />
-                        </g>
-                        <g class="cald-needle-grp" id="caldNeedle3">
-                            <line class="cald-needle n3" x1="100" y1="100" x2="100" y2="62" />
-                        </g>
-                        <g class="cald-needle-grp" id="caldNeedle2">
-                            <line class="cald-needle n2" x1="100" y1="100" x2="100" y2="48" />
-                        </g>
-                        <g class="cald-needle-grp" id="caldNeedle1">
-                            <line class="cald-needle n1" x1="100" y1="108" x2="100" y2="32" />
-                            <circle class="cald-tail" cx="100" cy="108" r="3" />
-                        </g>
-                        <circle class="cald-hub-ring" cx="100" cy="100" r="8" />
-                        <circle class="cald-hub" cx="100" cy="100" r="4.2" />
-                        @* Dijital okuma penceresi (alt-orta) — iğnelerin ÜSTÜNDE, okunur kalsın.
-                           İçerik JS ile sürülür (scrambleReadout / runCalcSequence). *@
-                        <rect class="cald-readout-box" x="59" y="121" width="82" height="18" rx="4" ry="4" />
-                        <text class="cald-readout-text" id="caldReadout" x="100" y="130.5">----</text>
+                        <circle class="cald-hub-ring" cx="100" cy="100" r="6.5" />
+                        <circle class="cald-hub" cx="100" cy="100" r="2.6" />
+
+                        @* Okuma penceresi — iğnenin ÜSTÜNDE çizilir ki üzerinden geçtiğinde okunur kalsın *@
+                        <rect class="cald-readout-box" x="66" y="130" width="68" height="16" rx="3" ry="3" />
+                        <text class="cald-readout-text" id="caldReadout" x="100" y="138.5">0.0 %</text>
+
+                        @* Cam — statik tek parlama (hareketli parıltı yok) *@
+                        <path class="cald-glass" d="M100 10 A90 90 0 0 0 26 142 A122 122 0 0 1 100 10 Z" />
                     </svg>
                 </div>
                 <div class="cald-status" id="caldStatus">Giriş yapmaya hazır</div>
@@ -693,387 +615,201 @@
     })();
 </script>
 <script>
-    /* ── Kimlik kalibrasyon kadranı v3 — 3 iğneli (yelkovan) analog gösterge ──
-       Merkezden (hub) çıkan 3 iğne (indigo n1 / cyan n2 / violet n3), farklı uzunluk +
-       kalınlıkta (n1 en uzun/kalın = "ana" şifre iğnesi). 12 çentikli (30°'lik) kadranda
-       idle'da üç iğne SABİT, birbirinden 120° ayrık dinlenme açısındadır (çentik 1/5/9).
+    /* ── Kalibrasyon göstergesi v4 (2026-08-15) — sayfadaki TEK animasyon ────────────
+       v3'ün rastgelelikleri bilinçli olarak kaldırıldı (spinInnerRandom, scrambleReadout,
+       runCalcSequence'ın rastgele birim/değer döngüsü, caldShake, easeOutBack zıplaması).
+       Yerine ölçü aleti disiplini: gösterilen HER değer tek bir ölçümden türer.
 
-       Şifre her karakterinde SADECE BİR iğne bir çentik ilerler — round-robin (n. tuş →
-       n%3. iğne), sonra oturur; TÜM iğneler DEĞİL, SÜREKLİ DEĞİL. [KRİTİK — 2026-07-16
-       kullanıcı geri bildirimi]: önceki sürümde "tüm yelkovanlar sürekli hareket ediyor"
-       şikayeti alınmıştı — bu ASLA tekrarlanmayacak: needleSteps(len, r) yalnızca [r]
-       iğnesinin SIRASI geldiğinde (len'in üçe bölümünde kendi kalanına denk geldiğinde)
-       artar, diğer iki iğnenin hedefi DEĞİŞMEZ — dolayısıyla toTyping() her tuşta 3
-       iğne için de animateNeedleStepped çağırsa da, hedefi değişmeyen 2 iğne görsel
-       olarak KIPIRDAMAZ (aynı hedefe animasyon no-op'tur, delta≈0 erken çıkış). Silme
-       aynı adımları geri sarar (adım sayısı parola uzunluğundan türetilir, tuş
-       yönünden bağımsızdır).
+         ölçüm  = kimlik kalibrasyon yüzdesi
+                  · yazarken : şifre uzunluğundan (12 karakter = %92 — tam skalaya
+                    KASITLI olarak ulaşmaz; %100 yalnız sunucu onayıyla gelir, böylece
+                    doğrulama anında her zaman görünür bir son süpürme olur)
+                  · doğrularken/başarıda : %100
+                  · hatada : %0 (iğne sıfıra döner, okuma "--- %" ile geçersizlenir)
+         iğne   = ölçüm × 3.6°   (tam tur = tam skala, 100 bölme)
+         yay    = ölçüm          (kenarda çevresel okuma)
+         pencere= ölçüm          (sayılarak oturur; jitter yok)
 
-       Çözülme YALNIZ sunucu login onayıyla (window.CalibraLoginDial.success) tetiklenir
-       — client parola doğrulamaz. Solved'de her iğne kendi en yakın 360° katına "klik"
-       diye oturur (mod 360 ≡ 0 olduğundan üçü de aynı mutlak açıda/yukarıda çakışır).
+       Fizik: TEK requestAnimationFrame döngüsünde yay-sönüm entegrasyonu.
+         · iğne  ζ≈0.68 → galvanometre gibi tek küçük aşım + oturma
+         · yay/pencere ζ≈1 → aşımsız, temiz oturma
+       Döngü yalnız hareket varken çalışır; her şey hedefine oturunca durdurulur
+       (idle'da 0 CPU — v3'teki sürekli "nefes alan" parlaklık kalktı).
 
-       Görsel zenginleştirme eki (2026-07-17 — SOLVE MANTIĞI DEĞİŞMEDİ, round-robin/
-       server-truth kuralı yukarıdaki paragraflar AYNEN geçerli, yalnız çizim/animasyon):
-       (a) toTyping() artık animateNeedle yerine animateNeedleStepped kullanır — hedef
-       açıya tek parça glide değil, N=4 mini-adımlı "dura-dura" (detent) hareketle gider
-       (her mini-adım: hızlı hareket + kısa duraklama, bkz. NEEDLE_STEP_* sabitleri).
-       Toplam süre eskisinden (220ms) biraz daha yavaş (~288ms: 4 hareket + aradaki 3
-       duraklama) ama yine hızlı/akıcı — sürünme yok.
-       (b) Ana kadranın içine 2 eş-merkezli İÇ KADRAN eklendi (caldInner1/caldInner2,
-       r=60 cyan + r=34 violet, çentikli halka + dönen işaret noktası, bkz. buildInnerTicks).
-       (c) İç kadranlar spinInnerRandom() ile her tuş vuruşunda (pwEl 'input') büyük
-       iğnelerin hedefli hareketinden BAĞIMSIZ, rastgele yön (cw/ccw) + rastgele küçük
-       açı (14°-52°) ile serbestçe döner — needleSteps/typingTarget/round-robin
-       mantığına dokunulmadı. */
+       Çözülme YALNIZ sunucu login onayıyla (window.CalibraLoginDial.success) tetiklenir —
+       istemci parola doğrulaması YOKTUR. Bu güvenlik kuralı v3'ten aynen korundu.
+       Dışa açık sözleşme değişmedi: begin() / success(done) / fail(label, detail). */
     (function () {
-        var dial = document.getElementById('caldDial');
-        if (!dial) return;
+        var wrap = document.getElementById('caldDial');
+        var needleG = document.getElementById('caldNeedle');
+        var arcEl = document.getElementById('caldArc');
+        var readoutEl = document.getElementById('caldReadout');
+        var ticksG = document.getElementById('caldTicks');
+        var numsG = document.getElementById('caldNums');
         var statusEl = document.getElementById('caldStatus');
-        var ticksG   = document.getElementById('caldTicks');
-        var innerTicksG1 = document.getElementById('caldInner1Ticks');   // iç kadran 1 (r=60) çentik konteyneri
-        var innerTicksG2 = document.getElementById('caldInner2Ticks');   // iç kadran 2 (r=34) çentik konteyneri
-        var NS = 'http://www.w3.org/2000/svg';
-        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!wrap || !needleG || !arcEl || !readoutEl) return;
 
-        var SLOTS    = 12;
-        var SLOT_DEG = 360 / SLOTS;   // 30°
+        var SVGNS = 'http://www.w3.org/2000/svg';
+        var ARC_LEN = 2 * Math.PI * 94;      // kenar yayının çevresi (r=94)
+        var CHAR_FULL = 12;                  // 12 karakter → yazma tavanı
+        var TYPE_CAP = 92;                   // yazarken ulaşılabilen en yüksek yüzde
+        var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
-        // 3 iğne: taban dinlenme açısı (çentik 1/5/9 — birbirinden tam 120° ayrık), yön
-        // (yalnız kozmetik — hangi yöne "ilerlediğini" belirler) ve <g> sarmalayıcı id'si.
-        var NEEDLES = [
-            { base: 1 * SLOT_DEG, dir: +1, id: 'caldNeedle1' },   // n1 — indigo, ana (şifre) iğnesi
-            { base: 5 * SLOT_DEG, dir: -1, id: 'caldNeedle2' },   // n2 — cyan
-            { base: 9 * SLOT_DEG, dir: +1, id: 'caldNeedle3' }    // n3 — violet
-        ];
-
-        var groups = NEEDLES.map(function (n) { return document.getElementById(n.id); });
-        var ndlDeg = NEEDLES.map(function (n) { return n.base; });   // sürekli (unwrap) açı — hiç mod alınmaz
-        var ndlRaf = [null, null, null];
-
-        // ── Çentik (tick) halkası — 12 çentik; her 3.'sü (0/90/180/270) belirgin ──
-        for (var i = 0; i < SLOTS; i++) {
-            var tDeg  = i * SLOT_DEG;
-            var tRad  = (tDeg - 90) * Math.PI / 180;
-            var major = (i % 3 === 0);
-            var rOuter = 88, rInner = major ? 76 : 81;
-            var ln = document.createElementNS(NS, 'line');
-            ln.setAttribute('x1', (100 + rOuter * Math.cos(tRad)).toFixed(2));
-            ln.setAttribute('y1', (100 + rOuter * Math.sin(tRad)).toFixed(2));
-            ln.setAttribute('x2', (100 + rInner * Math.cos(tRad)).toFixed(2));
-            ln.setAttribute('y2', (100 + rInner * Math.sin(tRad)).toFixed(2));
-            ln.setAttribute('class', 'cald-tick' + (major ? ' maj' : ''));
-            ticksG.appendChild(ln);
-        }
-
-        // ── İç kadranlar — çentik üretimi (dış tick döngüsüyle aynı trigonometri, tek
-        //    fark: major/minor ayrımı yok, tek tip çentik). Halkanın kendisi <g> içine
-        //    KONMAZ (dairesel simetrik, rotasyona gerek yok) — yalnız çentikler + işaret
-        //    noktası ilgili caldInnerN <g>'sinin içine konur ki spinInnerRandom() onları
-        //    birlikte döndürebilsin. ──
-        function buildInnerTicks(container, count, r, len, cls) {
-            for (var i = 0; i < count; i++) {
-                var tDeg = i * (360 / count);
-                var tRad = (tDeg - 90) * Math.PI / 180;
-                var ro = r, ri = r - len;
-                var ln = document.createElementNS(NS, 'line');
-                ln.setAttribute('x1', (100 + ro * Math.cos(tRad)).toFixed(2));
-                ln.setAttribute('y1', (100 + ro * Math.sin(tRad)).toFixed(2));
-                ln.setAttribute('x2', (100 + ri * Math.cos(tRad)).toFixed(2));
-                ln.setAttribute('y2', (100 + ri * Math.sin(tRad)).toFixed(2));
-                ln.setAttribute('class', cls);
-                container.appendChild(ln);
-            }
-        }
-        buildInnerTicks(innerTicksG1, 8, 60, 7, 'cald-inner-tick i1');
-        buildInnerTicks(innerTicksG2, 6, 34, 5, 'cald-inner-tick i2');
-
-        // İğne açısı doğrudan SVG rotate(deg, 100, 100) transform'u — 0°=yukarı (12 yönü),
-        // saat yönünde artar. Trigonometri gerekmez (harf-yerleşimi versiyonunun aksine).
-        function placeNeedle(r, deg) {
-            groups[r].setAttribute('transform', 'rotate(' + deg.toFixed(2) + ' 100 100)');
-        }
-
-        function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
-        function easeOutBack(t) { var c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
-
-        function cancelNeedle(r) { if (ndlRaf[r]) { cancelAnimationFrame(ndlRaf[r]); ndlRaf[r] = null; } }
-        function animateNeedle(r, target, durationMs, ease, onDone) {
-            cancelNeedle(r);
-            if (reduce) { ndlDeg[r] = target; placeNeedle(r, target); if (onDone) onDone(); return; }
-            var start = ndlDeg[r], delta = target - start, t0 = null;
-            function step(ts) {
-                if (t0 === null) t0 = ts;
-                var t = Math.min(1, (ts - t0) / durationMs);
-                ndlDeg[r] = start + delta * (ease ? ease(t) : t);
-                placeNeedle(r, ndlDeg[r]);
-                if (t < 1) { ndlRaf[r] = requestAnimationFrame(step); }
-                else { ndlDeg[r] = target; placeNeedle(r, target); ndlRaf[r] = null; if (onDone) onDone(); }
-            }
-            ndlRaf[r] = requestAnimationFrame(step);
-        }
-
-        // ── Büyük iğnelerin tuş-başı hareketi — "dura-dura" (detent/stepped) ──
-        // toTyping() bunu çağırır (animateNeedle DEĞİL): 30°'lik hedef adımı tek parça
-        // glide yerine N=4 mini-adıma böler, her mini-adımda hızlı hareket + kısa
-        // duraklama (mekanik kadran/kasa kilidi hissi). Toplam süre = 4 hareket + aradaki
-        // 3 duraklama (son adımdan sonra bekleme YOK — hedefe varır varmaz biter):
-        // 4×(80×.6) + 3×(80×.4) = 192+96 = 288ms — eskisinden (220ms) biraz daha yavaş,
-        // yine de akıcı/hızlı (sürünme yok). delta≈0 olan (bu tuşta sırası gelmeyen)
-        // iğneler için anında çıkar — gereksiz rAF döngüsü çalışmaz.
-        var NEEDLE_STEP_COUNT     = 4;      // 30°'lik adım kaç mini-adıma bölünüyor
-        var NEEDLE_STEP_MS        = 80;     // mini-adım başına toplam süre (hareket+duraklama)
-        var NEEDLE_STEP_MOVE_FRAC = 0.6;    // mini-adım süresinin hareket kısmı (kalanı duraklama)
-        function animateNeedleStepped(r, target) {
-            cancelNeedle(r);
-            var start = ndlDeg[r], delta = target - start;
-            if (reduce || Math.abs(delta) < 0.001) { ndlDeg[r] = target; placeNeedle(r, target); return; }
-            var moveMs  = NEEDLE_STEP_MS * NEEDLE_STEP_MOVE_FRAC;
-            var pauseMs = NEEDLE_STEP_MS - moveMs;
-            function stepBoundary(i) { return i >= NEEDLE_STEP_COUNT ? target : start + delta * i / NEEDLE_STEP_COUNT; }
-            var step = 0, phase = 'move', phaseStart = null;
-            var phaseFrom = start, phaseTo = stepBoundary(1);
-            function frame(ts) {
-                if (phaseStart === null) phaseStart = ts;
-                var elapsed = ts - phaseStart;
-                if (phase === 'move') {
-                    var t = Math.min(1, elapsed / moveMs);
-                    var v = phaseFrom + (phaseTo - phaseFrom) * easeOutCubic(t);
-                    ndlDeg[r] = v; placeNeedle(r, v);
-                    if (t >= 1) {
-                        ndlDeg[r] = phaseTo; placeNeedle(r, phaseTo);
-                        step++;
-                        if (step >= NEEDLE_STEP_COUNT) { ndlRaf[r] = null; return; }
-                        phase = 'pause'; phaseStart = null;
-                    }
-                } else if (elapsed >= pauseMs) {
-                    phase = 'move'; phaseStart = null;
-                    phaseFrom = phaseTo; phaseTo = stepBoundary(step + 1);
-                }
-                ndlRaf[r] = requestAnimationFrame(frame);
-            }
-            ndlRaf[r] = requestAnimationFrame(frame);
-        }
-
-        // ── İç kadranlar — büyük iğnelerden bağımsız, salt dekoratif rotasyon katmanı.
-        //    Needle motoruyla birebir aynı desende (start→target rAF interpolasyonu),
-        //    ayrı state dizileriyle çalışır — needle mantığına hiç dokunmaz. ──
-        var innerGroups = [document.getElementById('caldInner1'), document.getElementById('caldInner2')];
-        var innerDeg    = [0, 0];
-        var innerRaf    = [null, null];
-        var INNER_SPIN_MIN = 14, INNER_SPIN_MAX = 52;   // derece — "rastgele küçük açı"
-        var INNER_SPIN_MS  = [340, 260];                // idx0 (r=60) biraz daha ağır, idx1 (r=34) daha çevik
-        function placeInner(idx, deg) { innerGroups[idx].setAttribute('transform', 'rotate(' + deg.toFixed(2) + ' 100 100)'); }
-        function cancelInner(idx) { if (innerRaf[idx]) { cancelAnimationFrame(innerRaf[idx]); innerRaf[idx] = null; } }
-        function animateInner(idx, target, durationMs) {
-            cancelInner(idx);
-            if (reduce) { innerDeg[idx] = target; placeInner(idx, target); return; }
-            var start = innerDeg[idx], delta = target - start, t0 = null;
-            function step(ts) {
-                if (t0 === null) t0 = ts;
-                var t = Math.min(1, (ts - t0) / durationMs);
-                innerDeg[idx] = start + delta * easeOutBack(t);
-                placeInner(idx, innerDeg[idx]);
-                if (t < 1) { innerRaf[idx] = requestAnimationFrame(step); }
-                else { innerDeg[idx] = target; placeInner(idx, target); innerRaf[idx] = null; }
-            }
-            innerRaf[idx] = requestAnimationFrame(step);
-        }
-        // Her tuş vuruşunda çağrılır (bkz. pwEl 'input'): 2 iç kadranın HER BİRİ kendi
-        // mevcut açısından, rastgele yön (cw/ccw) + rastgele küçük açıyla yeni bir hedefe
-        // döner — büyük iğnelerin round-robin/hedefli mantığıyla HİÇBİR bağı yok.
-        function spinInnerRandom() {
-            for (var idx = 0; idx < 2; idx++) {
-                var dir    = Math.random() < 0.5 ? -1 : 1;
-                var amount = INNER_SPIN_MIN + Math.random() * (INNER_SPIN_MAX - INNER_SPIN_MIN);
-                animateInner(idx, innerDeg[idx] + dir * amount, INNER_SPIN_MS[idx]);
-            }
-        }
-
-        // n. tuş vuruşu iğneleri döngüsel gezer (1.→n1, 2.→n2, 3.→n3, 4.→n1…): [r]
-        // iğnesinin parola [len] uzunluğundayken almış olduğu toplam adım sayısı.
-        // Uzunluktan türetildiği için silme otomatik olarak aynı adımları geri sarar.
-        function needleSteps(len, r) {
-            if (len <= 0) return 0;
-            var c = 0;
-            for (var k = 1; k <= len; k++) { if ((k - 1) % 3 === r) c++; }
-            return c;
-        }
-        function typingTarget(len, r) {
-            var N = NEEDLES[r];
-            return N.base + N.dir * SLOT_DEG * needleSteps(len, r);
-        }
-
-        var mode = 'idle';   // idle | typing | measuring | solved | fail
-        function setStatus(t) { if (statusEl) statusEl.textContent = t; }
-        function setMode(m, cls) {
-            mode = m;
-            dial.classList.remove('is-typing', 'is-measuring', 'is-solved', 'is-fail');
-            if (cls) dial.classList.add(cls);
-        }
-        function toTyping(len) {
-            for (var r = 0; r < 3; r++) animateNeedleStepped(r, typingTarget(len, r));
-        }
-
-        // ── Kalibrasyon okuma katmanı — salt dekoratif "mühendislik hesabı" hissi ──
-        // (a) Basılı ölçek rakamları: 4 ana çentikte (0/90/180/270) sabit skala değerleri
-        //     — gerçek bir enstrüman kadranı gibi iğnelerin "gösterdiği" rakamlar.
-        // (b) Dijital okuma penceresi: monospace ölçüm değeri; her tuşta hızla değişip
-        //     oturur (hesaplanıyor hissi), doğrulama fazında kanal-kanal hızlı sekans.
-        // Bu katmanın needle/solve mantığıyla HİÇBİR bağı yoktur (server-truth korunur).
+        /* ── Skala (statik, bir kez üretilir) ────────────────────────────────────────
+           50 çentik = her 2 bölmede bir; her 5.'si kalın (= her 10 bölme);
+           rakamlar her 10. çentikte (0/20/40/60/80) — komparatör kadranı düzeni. */
         (function buildScale() {
-            var scaleG = document.getElementById('caldScale');
-            if (!scaleG) return;
-            // Saat yönünde tepeden: 0 → 25 → 50 → 75 (basılı skala), r=68'de yerleşir.
-            var SC = [{ deg: 0, txt: '0' }, { deg: 90, txt: '25' }, { deg: 180, txt: '50' }, { deg: 270, txt: '75' }];
-            SC.forEach(function (s) {
-                var rad = (s.deg - 90) * Math.PI / 180;
-                var t = document.createElementNS(NS, 'text');
-                t.setAttribute('x', (100 + 68 * Math.cos(rad)).toFixed(2));
-                t.setAttribute('y', (100 + 68 * Math.sin(rad)).toFixed(2));
-                t.setAttribute('class', 'cald-scale-num');
-                t.textContent = s.txt;
-                scaleG.appendChild(t);
-            });
+            var R_OUT = 86, R_MIN = 80, R_MAJ = 74, R_NUM = 63;
+            for (var i = 0; i < 50; i++) {
+                var isMajor = (i % 5 === 0);
+                var rad = (i * 7.2 - 90) * Math.PI / 180;
+                var cos = Math.cos(rad), sin = Math.sin(rad);
+                var ri = isMajor ? R_MAJ : R_MIN;
+                var ln = document.createElementNS(SVGNS, 'line');
+                ln.setAttribute('x1', (100 + cos * ri).toFixed(2));
+                ln.setAttribute('y1', (100 + sin * ri).toFixed(2));
+                ln.setAttribute('x2', (100 + cos * R_OUT).toFixed(2));
+                ln.setAttribute('y2', (100 + sin * R_OUT).toFixed(2));
+                ln.setAttribute('class', isMajor ? 'cald-tick maj' : 'cald-tick');
+                ticksG.appendChild(ln);
+                if (i % 10 === 0) {
+                    var tx = document.createElementNS(SVGNS, 'text');
+                    tx.setAttribute('class', 'cald-num');
+                    tx.setAttribute('x', (100 + cos * R_NUM).toFixed(2));
+                    tx.setAttribute('y', (100 + sin * R_NUM).toFixed(2));
+                    tx.textContent = String(i * 2);
+                    numsG.appendChild(tx);
+                }
+            }
         })();
 
-        // Ölçüm kanalları — ASCII birimler (mojibake güvenli, bkz. Türkçe/encoding kuralı).
-        var READ_CH = [
-            { unit: 'mm',  dec: 4, min: 0.001, max: 0.098 },
-            { unit: 'Hz',  dec: 1, min: 40,    max: 260 },
-            { unit: 'V',   dec: 3, min: 3.00,  max: 5.20 },
-            { unit: 'Nm',  dec: 2, min: 1.5,   max: 48 },
-            { unit: 'mV',  dec: 1, min: 5,     max: 240 },
-            { unit: 'kPa', dec: 2, min: 96,    max: 104 }
-        ];
-        var readoutEl = document.getElementById('caldReadout');
-        var readoutRaf = null;
-        var seqTimer = null;
-        function fmtRead(ch, v) { return v.toFixed(ch.dec) + ' ' + ch.unit; }
-        function stopReadoutAnims() {
-            if (readoutRaf) { cancelAnimationFrame(readoutRaf); readoutRaf = null; }
-            if (seqTimer) { clearTimeout(seqTimer); seqTimer = null; }
-        }
-        // Bir değere doğru "hesaplanıp oturan" haneler: jitter ~1'den 0'a söner.
-        function scrambleReadout(ch, finalV, durMs) {
-            if (!readoutEl) return;
-            if (readoutRaf) { cancelAnimationFrame(readoutRaf); readoutRaf = null; }
-            if (reduce) { readoutEl.textContent = fmtRead(ch, finalV); return; }
-            var span = (ch.max - ch.min) * 0.5, t0 = null;
-            function frame(ts) {
-                if (t0 === null) t0 = ts;
-                var t = Math.min(1, (ts - t0) / durMs);
-                var v = finalV + (Math.random() * 2 - 1) * span * (1 - t);
-                if (v < ch.min) v = ch.min + (ch.min - v) * 0.3;
-                readoutEl.textContent = fmtRead(ch, v);
-                if (t < 1) { readoutRaf = requestAnimationFrame(frame); }
-                else { readoutEl.textContent = fmtRead(ch, finalV); readoutRaf = null; }
+        /* ── Yay-sönüm entegratörü ───────────────────────────────────────────────────
+           a = (hedef - x)·k - v·c   →   ζ = c / (2√k)
+           k/c seçimi: iğne hafif aşımlı (canlı ama ölçülü), yay ve okuma aşımsız. */
+        function makeSpring(k, c, eps) { return { x: 0, v: 0, target: 0, k: k, c: c, eps: eps }; }
+        function stepSpring(s, dt) {
+            if (s.x === s.target && s.v === 0) return false;
+            s.v += ((s.target - s.x) * s.k - s.v * s.c) * dt;
+            s.x += s.v * dt;
+            if (Math.abs(s.target - s.x) < s.eps && Math.abs(s.v) < s.eps * 6) {
+                s.x = s.target; s.v = 0; return false;
             }
-            readoutRaf = requestAnimationFrame(frame);
+            return true;
         }
-        // Doğrulama fazı: kanal-kanal hızlı hesap sekansı (durana kadar döner).
-        function runCalcSequence() {
-            stopReadoutAnims();
-            if (reduce) { if (readoutEl) readoutEl.textContent = 'CALC...'; return; }
-            var i = 0;
-            (function tick() {
-                var ch = READ_CH[i % READ_CH.length];
-                scrambleReadout(ch, ch.min + Math.random() * (ch.max - ch.min), 170);
-                i++;
-                seqTimer = setTimeout(tick, 200);
-            })();
+        // Katsayılar ölçülerek seçildi (60 fps entegrasyon, hedefe oturma süresi + aşım):
+        //   iğne    ζ0.68 → tam süpürmede ~9° sıçrama, tuş başına ~0.8° (fark edilmez), 667 ms
+        //   yay     ζ1.01 → aşımsız, 783 ms
+        //   pencere ζ1.02 → aşımsız sayarak oturur, 883 ms
+        var sNeedle = makeSpring(300, 23.5, 0.08);      // derece
+        var sArc = makeSpring(250, 32, 0.001);          // 0..1
+        var sReadout = makeSpring(230, 31, 0.05);       // 0..100
+
+        var readoutOverride = null;   // geçersiz ölçümde ("--- %") sayısal okumayı bastırır
+        var onSettle = null;          // hareket bittiğinde bir kez çalışır
+        var rafId = 0, lastTs = 0;
+
+        function render() {
+            needleG.setAttribute('transform', 'rotate(' + sNeedle.x.toFixed(2) + ' 100 100)');
+            var frac = Math.max(0, Math.min(1, sArc.x));
+            arcEl.setAttribute('stroke-dasharray', (ARC_LEN * frac).toFixed(2) + ' ' + ARC_LEN.toFixed(2));
+            readoutEl.textContent = readoutOverride !== null
+                ? readoutOverride
+                : (sReadout.x.toFixed(1) + ' %');
+        }
+        function fireSettle() {
+            if (!onSettle) return;
+            var fn = onSettle; onSettle = null; fn();
+        }
+        function frame(ts) {
+            // Sekme arkaplandayken biriken dev dt yayı patlatır → 1/30 s'ye kırp.
+            var dt = lastTs ? Math.min((ts - lastTs) / 1000, 1 / 30) : 1 / 60;
+            lastTs = ts;
+            var moving = false;
+            if (stepSpring(sNeedle, dt)) moving = true;
+            if (stepSpring(sArc, dt)) moving = true;
+            if (stepSpring(sReadout, dt)) moving = true;
+            render();
+            if (moving) { rafId = requestAnimationFrame(frame); return; }
+            rafId = 0; lastTs = 0; fireSettle();
+        }
+        function kick() {
+            if (reduceMotion) {
+                sNeedle.x = sNeedle.target; sNeedle.v = 0;
+                sArc.x = sArc.target; sArc.v = 0;
+                sReadout.x = sReadout.target; sReadout.v = 0;
+                render(); fireSettle(); return;
+            }
+            if (!rafId) { lastTs = 0; rafId = requestAnimationFrame(frame); }
         }
 
-        // ── Şifre alanı: her karakter SADECE bir iğneyi bir çentik döndürür (round-robin),
-        //    silme geri sarar. Kullanıcı adı/şirket alanları iğneleri OYNATMAZ. ──
-        var pwEl = document.getElementById('Password');
-        if (pwEl) {
-            pwEl.addEventListener('input', function () {
-                if (mode === 'measuring' || mode === 'solved') return;   // aktif akışla çakışma
-                var len = pwEl.value.length;
-                setMode(len > 0 ? 'typing' : 'idle', len > 0 ? 'is-typing' : null);
-                setStatus(len > 0 ? 'Şifre giriliyor…' : 'Giriş yapmaya hazır');
-                toTyping(len);
-                spinInnerRandom();   // iç kadranlar — büyük iğnelerden bağımsız rastgele dönüş
-                // Okuma penceresi — her tuşta hesaplanıp oturan ölçüm değeri (uzunluğa bağlı,
-                // deterministik-ish → tuşa tepki verir ama tahmin edilebilir değildir).
-                if (len > 0) {
-                    var ch = READ_CH[(len - 1) % READ_CH.length];
-                    var frac = ((len * 37) % 100) / 100;
-                    scrambleReadout(ch, ch.min + frac * (ch.max - ch.min), 240);
-                } else {
-                    stopReadoutAnims();
-                    if (readoutEl) readoutEl.textContent = '----';
-                }
-            });
+        /* Tek giriş noktası: üç göstergenin hedefi de aynı ölçümden gelir. */
+        function setMeasurement(pct) {
+            pct = Math.max(0, Math.min(100, pct));
+            sNeedle.target = pct * 3.6;
+            sArc.target = pct / 100;
+            sReadout.target = pct;
+            kick();
+        }
+        function setMode(mode) {
+            wrap.classList.remove('is-measuring', 'is-solved', 'is-fail');
+            if (mode) wrap.classList.add('is-' + mode);
+        }
+        function setStatus(text, detail) {
+            if (!statusEl) return;
+            statusEl.textContent = text;
+            if (detail) statusEl.title = detail; else statusEl.removeAttribute('title');
         }
 
-        // ── Dış API — submit handler çağırır (bkz. loginForm AJAX submit script'i) ──
+        /* ── Şifre girişi kadranı sürer (doğrulama başlayınca kilitlenir) ──────────── */
+        var locked = false;
+        var pwdInput = document.querySelector('.cb-form input[type="password"]')
+                    || document.querySelector('input[type="password"]');
+        function onPasswordInput() {
+            if (locked) return;
+            var n = pwdInput ? pwdInput.value.length : 0;
+            readoutOverride = null;
+            setMode(n > 0 ? 'measuring' : null);
+            setStatus(n > 0 ? 'Kimlik ölçülüyor' : 'Giriş yapmaya hazır');
+            setMeasurement(Math.min(TYPE_CAP, (n / CHAR_FULL) * TYPE_CAP));
+        }
+        if (pwdInput) pwdInput.addEventListener('input', onPasswordInput);
+
+        render();
+
         window.CalibraLoginDial = {
+            /* Sunucuya istek gitti — iğne tam skalaya süpürülür. */
             begin: function () {
-                setMode('measuring', 'is-measuring');
-                setStatus('Doğrulanıyor…');
-                runCalcSequence();   // okuma penceresi — kanal-kanal hızlı hesap sekansı
-                // Kısa "oturma/arama" sekmesi (bir kerelik) — her iğne mevcut konumundan
-                // ufak bir kick alıp yaylı (spring) dönüşle AYNI konuma geri oturur; client
-                // parola doğrulamaz, yalnızca "işleniyor" hissi verir. Kick bitince iğneler
-                // durur — yalnız stage'in caldPulse nabzı sürer (sürekli iğne hareketi YOK).
-                for (var r = 0; r < 3; r++) {
-                    (function (r) {
-                        var cur  = ndlDeg[r];
-                        var kick = (r % 2 === 0 ? 1 : -1) * (14 + r * 4);
-                        animateNeedle(r, cur + kick, 200, easeOutCubic, function () {
-                            animateNeedle(r, cur, 320, easeOutBack);
-                        });
-                    })(r);
-                }
+                locked = true;
+                onSettle = null;
+                readoutOverride = null;
+                setMode('measuring');
+                setStatus('Doğrulanıyor');
+                setMeasurement(100);
             },
+            /* Sunucu onayladı — tam skalada yeşile oturur, oturunca done() çağrılır. */
             success: function (done) {
-                setMode('solved', 'is-solved');
-                setStatus('Giriş başarılı');
-                stopReadoutAnims();
-                if (readoutEl) readoutEl.textContent = '100.0 %';   // kalibrasyon tamam
-                // Kilit açılışı: her iğne SIRAYLA en yakın ORTAK faza (360°'nin tam katı,
-                // yani mod 360 ≡ 0 → yukarı/12 yönü) "klik" diye oturur — üçü de aynı mutlak
-                // açıya geldiği için tam hizalanır → "kilit açıldı" hissi + yeşil parıltı.
-                NEEDLES.forEach(function (n, r) {
-                    setTimeout(function () {
-                        var target = Math.round(ndlDeg[r] / 360) * 360;
-                        animateNeedle(r, target, 560, easeOutBack);
-                    }, r * 150);
-                });
-                setTimeout(function () { if (done) done(); }, 1300);
+                locked = true;
+                readoutOverride = null;
+                setMode('solved');
+                setStatus('Kalibrasyon tamam');
+                onSettle = function () {
+                    if (typeof done === 'function') setTimeout(done, 320);
+                };
+                // kick() hareket olmasa bile bir kare çalıştırır → onSettle her hâlükârda gelir.
+                setMeasurement(100);
             },
+            /* Sunucu reddetti — ölçüm geçersiz: iğne sıfıra döner, okuma bastırılır. */
             fail: function (label, detail) {
-                setMode('fail', 'is-fail');
-                setStatus(label || 'Giriş başarısız');
-                stopReadoutAnims();
-                if (readoutEl) readoutEl.textContent = 'ERR';   // kalibrasyon başarısız
-                dial.classList.remove('cald-shake');
-                void dial.offsetWidth;   // reflow — animasyonu yeniden tetikler
-                dial.classList.add('cald-shake');
-                // Reddetme tepkisi: her iğne kısa bir "sekme" (kick + yaylı geri dönüş) yapar
-                // — hizalanma OLMAZ, iğne kendi (hizasız) konumuna geri oturur; kırmızı tint +
-                // kadran sarsılması (cald-shake) yeterli "kalibre edilemedi" sinyalini verir.
-                for (var r = 0; r < 3; r++) {
-                    (function (r) {
-                        var cur  = ndlDeg[r];
-                        var kick = (r % 2 === 0 ? -1 : 1) * (9 + r * 3);
-                        animateNeedle(r, cur + kick, 90, easeOutCubic, function () {
-                            animateNeedle(r, cur, 260, easeOutBack);
-                        });
-                    })(r);
-                }
-                if (detail) setTimeout(function () { if (mode === 'fail') setStatus(detail); }, 900);
+                locked = false;
+                onSettle = null;
+                readoutOverride = '--- %';
+                setMode('fail');
+                setStatus(label || 'Giriş başarısız', detail);
+                setMeasurement(0);
             }
         };
 
-        // ── İlk render ──
-        NEEDLES.forEach(function (n, r) { placeNeedle(r, ndlDeg[r]); });
-        innerGroups.forEach(function (g, idx) { placeInner(idx, innerDeg[idx]); });
-
-        // Tam-sayfa POST fallback'i (fetch/network istisnası) sunucu tarafında ModelState
-        // hatasıyla yeniden render edildiyse kadran ilk açılışta hizasız/kırmızı başlar.
+        // Sunucu tarafı (non-AJAX) doğrulama hatasıyla dönüldüyse kadranı hata durumuna al.
         var serverHadError = @(ViewData.ModelState.IsValid ? "false" : "true");
         if (serverHadError) window.CalibraLoginDial.fail('Giriş başarısız');
     })();
