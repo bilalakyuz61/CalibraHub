@@ -138,21 +138,28 @@
             animation: loginShake .42s cubic-bezier(.36,.07,.19,.97) both;
         }
 
-        /* ── Kalibrasyon göstergesi v4 (2026-08-15) — sayfadaki TEK animasyon ────────
-           v3'ün "oyuncak" hisleri bilinçli olarak kaldırıldı: rastgele yön/açıyla dönen
-           iç kadranlar, zıplayan easeOutBack, titreyen (scramble) rakamlar, hatada kadran
-           sarsılması (shake) ve idle'da nefes alan parlaklık. Yerine gerçek bir komparatör
-           (dial indicator) disiplini kondu — HER hareket bir şey ölçer, hiçbiri rastgele
-           değildir:
-             • İğne açısı    = kalibrasyon yüzdesi (0-100 → 0-360°, tam tur = tam skala)
-             • İlerleme yayı = aynı yüzde (kenarda çevresel okuma)
-             • Okuma penceresi = aynı yüzde, sayılarak oturur (jitter/scramble YOK)
-           Hareket fiziği: TEK rAF döngüsünde kritik-sönümlü yay (galvanometre gibi tek
-           küçük aşım + oturma). Durağanken döngü tamamen durur — idle'da CPU harcanmaz.
-           Palet: tek vurgu rengi (indigo) + nötr çentikler; yeşil/kırmızı yalnız DURUM
-           belirtir (v3'teki indigo+cyan+violet üçlüsü kaldırıldı).
-           Çözülme YALNIZ sunucu onayıyla (server-truth) tetiklenir — client parola
-           doğrulamaz; bu mantık v3'ten aynen korundu. */
+        /* ── Kalibrasyon göstergesi v5 (2026-08-17) — sayfadaki TEK animasyon ────────
+           v3'ün üç kolu geri geldi, ama rastgeleliği geri gelmedi. v3'te üç iğne üç ayrı
+           renkteydi (indigo/cyan/violet) ve her tuşta rastgele yön + rastgele açıyla dönen
+           iki dekoratif iç kadran vardı. v5'te üç iğne bir KRONOGRAF gibi çalışır: tek renk
+           ailesi, üç farklı hız, hepsi aynı ölçümden türer — hiçbiri rastgele değildir.
+
+             ölçüm n = (e-posta + şifre) karakter sayısı
+             yüzde   = 92·(1 − e^(−n/10))   ← asimptotik: HİÇ doymaz, her tuşta artar
+                       (v4 12 karakterde tavana vuruyordu → uzun şifrede iğne duruyordu;
+                        v4 ayrıca yalnız şifreyi dinliyordu → e-posta alanı ölü kalıyordu)
+
+             ana iğne (uzun, ince)   = yüzde × 3.6°    · tam tur = tam skala
+             devir iğnesi (kısa)     = yüzde × 0.36°   · ana iğnenin 1/10'u (akrep)
+             hızlı iğne (en uzun)    = n × 24°         · tuş başına sabit çentik, sarmalanmaz
+
+           Fizik: TEK requestAnimationFrame döngüsünde yay-sönüm entegrasyonu; her şey
+           hedefine oturunca döngü durur (idle'da 0 CPU). Katsayılar v4'e göre KASITLI
+           yavaşlatıldı — v4 fazla çevikti. Palet tek vurgu rengi; devir iğnesi nötr kalır,
+           yeşil/kırmızı yalnız DURUM belirtir.
+
+           Çözülme YALNIZ sunucu onayıyla (server-truth) tetiklenir — istemci parola
+           doğrulaması YOKTUR. Bu güvenlik kuralı v3'ten beri korunuyor. */
         .cald-wrap {
             width: 152px; margin: 2px auto 20px; position: relative;
             color-scheme: light;
@@ -163,6 +170,8 @@
             --cald-tick-maj: rgba(51,65,85,.85);
             --cald-num: rgba(71,85,105,.75);
             --cald-accent: #4f46e5;
+            --cald-n-rev: rgba(71,85,105,.62);
+            --cald-n-fast: rgba(79,70,229,.40);
             --cald-arc-bg: rgba(100,116,139,.16);
             --cald-hub: #334155;
             --cald-readout: #334155;
@@ -180,6 +189,8 @@
             --cald-tick-maj: rgba(226,232,240,.82);
             --cald-num: rgba(203,213,225,.72);
             --cald-accent: #818cf8;
+            --cald-n-rev: rgba(203,213,225,.58);
+            --cald-n-fast: rgba(129,140,248,.44);
             --cald-arc-bg: rgba(148,163,184,.14);
             --cald-hub: #cbd5e1;
             --cald-readout: #e2e8f0;
@@ -188,8 +199,7 @@
             --cald-danger: #fb7185;
             --cald-status: #94a3b8;
         }
-        /* Kadran gövdesi — bezel + cam. Statik: idle'da hiçbir animasyon yok
-           (v3'teki caldIdleBreathe kaldırıldı; ölçü aleti dururken durur). */
+        /* Kadran gövdesi — statik. Idle'da hiçbir animasyon yok (ölçü aleti dururken durur). */
         .cald-stage {
             position: relative; width: 152px; height: 152px; margin: 0 auto;
             border-radius: 50%;
@@ -208,7 +218,6 @@
                 inset 0 -10px 24px rgba(0,0,0,.55),
                 0 14px 30px -14px rgba(0,0,0,.7);
         }
-        /* Durum halkası — parıltı değil, ölçülü bir çerçeve vurgusu. */
         .cald-wrap.is-solved .cald-stage {
             box-shadow:
                 inset 0 0 0 1px rgba(5,150,105,.55),
@@ -227,7 +236,7 @@
         }
         .cald-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; display: block; }
 
-        /* Skala — 50 ince + 10 kalın çentik (tam skala = 100 bölme, komparatör standardı) */
+        /* Skala — 50 çentik, her 5.'si kalın; rakamlar 0/20/40/60/80 (komparatör düzeni) */
         .cald-tick { stroke: var(--cald-tick); stroke-width: 1; }
         .cald-tick.maj { stroke: var(--cald-tick-maj); stroke-width: 1.9; }
         .cald-num {
@@ -237,7 +246,7 @@
             text-anchor: middle; dominant-baseline: middle;
         }
 
-        /* İlerleme yayı — iğneyle AYNI değeri gösterir (dekoratif değil, yedek okuma) */
+        /* Kenar ilerleme yayı — ana iğneyle aynı yüzde */
         .cald-arc-bg { fill: none; stroke: var(--cald-arc-bg); stroke-width: 3; }
         .cald-arc {
             fill: none; stroke: var(--cald-accent); stroke-width: 3; stroke-linecap: round;
@@ -246,16 +255,25 @@
         .cald-wrap.is-solved .cald-arc { stroke: var(--cald-success); }
         .cald-wrap.is-fail .cald-arc { stroke: var(--cald-danger); }
 
-        /* Ana iğne — sivrilen bıçak + karşı ağırlık (tek renk, tek iğne) */
-        .cald-needle {
-            fill: var(--cald-accent);
-            transition: fill .4s ease;
-        }
+        /* ── Üç iğne — kronograf hiyerarşisi ──────────────────────────────────────────
+           ana : dolu bıçak + karşı ağırlık, vurgu rengi (baskın)
+           devir: kısa kalın çubuk, nötr renk — sayaçtır, hüküm bildirmez
+           hızlı: uzun kıl gibi çizgi, düşük opaklık — her tuşta ilerleyen tepki kolu */
+        .cald-needle-main { fill: var(--cald-accent); transition: fill .4s ease; }
         .cald-counterweight { fill: var(--cald-accent); transition: fill .4s ease; }
-        .cald-wrap.is-solved .cald-needle,
+        .cald-needle-rev {
+            stroke: var(--cald-n-rev); stroke-width: 3.4; stroke-linecap: round;
+        }
+        .cald-needle-fast {
+            stroke: var(--cald-n-fast); stroke-width: 1.3; stroke-linecap: round;
+            transition: stroke .4s ease;
+        }
+        .cald-wrap.is-solved .cald-needle-main,
         .cald-wrap.is-solved .cald-counterweight { fill: var(--cald-success); }
-        .cald-wrap.is-fail .cald-needle,
+        .cald-wrap.is-solved .cald-needle-fast { stroke: var(--cald-success); }
+        .cald-wrap.is-fail .cald-needle-main,
         .cald-wrap.is-fail .cald-counterweight { fill: var(--cald-danger); }
+        .cald-wrap.is-fail .cald-needle-fast { stroke: var(--cald-danger); }
         .cald-hub-ring { fill: var(--cald-face-a); stroke: var(--cald-bezel); stroke-width: 1; }
         .cald-hub { fill: var(--cald-hub); }
 
@@ -271,7 +289,7 @@
         .cald-wrap.is-solved .cald-readout-text { fill: var(--cald-success); }
         .cald-wrap.is-fail .cald-readout-text { fill: var(--cald-danger); }
 
-        /* Cam yansıması — statik, tek ince parlama (hareketli parıltı yok) */
+        /* Cam yansıması — statik tek parlama */
         .cald-glass { fill: rgba(255,255,255,.34); pointer-events: none; }
         body.app-theme-dark .cald-glass { fill: rgba(226,232,240,.06); }
 
@@ -285,8 +303,8 @@
         .cald-wrap.is-fail .cald-status { color: var(--cald-danger); }
 
         @@media (prefers-reduced-motion: reduce) {
-            .cald-stage, .cald-arc, .cald-needle, .cald-counterweight,
-            .cald-readout-text, .cald-status { transition: none; }
+            .cald-stage, .cald-arc, .cald-needle-main, .cald-counterweight,
+            .cald-needle-fast, .cald-readout-text, .cald-status { transition: none; }
         }
 
     </style>
@@ -346,36 +364,46 @@
         <div class="login-card">
             <h1>CalibraHub</h1>
 
-            @* Kalibrasyon göstergesi v4 — komparatör (dial indicator) disiplini.
-               ÜÇ öğe, hepsi AYNI ölçülen değeri gösterir (rastgele hareket yoktur):
-               ana iğne (skala üzerinde), kenar ilerleme yayı, dijital okuma penceresi.
-               v3'teki iki dekoratif iç kadran kaldırıldı — ana iğneyle çakışıyor ve
-               yayla aynı bilgiyi tekrarlıyorlardı. Skala JS ile üretilir. *@
+            @* Kalibrasyon göstergesi v5 — üç iğneli kronograf düzeni.
+               Üç kol da AYNI ölçümden türer, farklı hızlarda döner (rastgelelik yok):
+               hızlı iğne tuş başına sabit çentik, ana iğne yüzdenin tamamı, devir iğnesi
+               onun 1/10'u. Çizim sırası önemli: hızlı → devir → ana (ana en üstte),
+               okuma penceresi hepsinin üstünde ki iğne üzerinden geçerken okunur kalsın.
+               Skala JS ile üretilir (bkz. sayfa sonundaki kadran script'i). *@
             <div class="cald-wrap" id="caldDial">
                 <div class="cald-stage" id="caldStage" aria-hidden="true">
                     <svg class="cald-svg" viewBox="0 0 200 200">
-                        @* Skala: 50 çentik (her 2 bölmede bir), her 5.'si kalın; tam tur = 100 bölme *@
                         <g class="cald-ticks" id="caldTicks"></g>
                         <g class="cald-nums" id="caldNums"></g>
 
-                        @* Kenar ilerleme yayı — iğneyle aynı yüzde, çevresel okuma *@
+                        @* Kenar ilerleme yayı *@
                         <circle class="cald-arc-bg" cx="100" cy="100" r="94" />
                         <circle class="cald-arc" id="caldArc" cx="100" cy="100" r="94"
                                 transform="rotate(-90 100 100)" stroke-dasharray="0 591" />
 
-                        @* Ana iğne — sivrilen bıçak + karşı ağırlık, tek parça döner *@
-                        <g id="caldNeedle">
-                            <polygon class="cald-needle" points="98.5,103 100,32 101.5,103" />
+                        @* Hızlı iğne — en uzun, kıl gibi; her tuşta ilerler *@
+                        <g id="caldNeedleFast">
+                            <line class="cald-needle-fast" x1="100" y1="112" x2="100" y2="26" />
+                        </g>
+
+                        @* Devir iğnesi — kısa kalın çubuk, nötr renk (sayaç) *@
+                        <g id="caldNeedleRev">
+                            <line class="cald-needle-rev" x1="100" y1="104" x2="100" y2="56" />
+                        </g>
+
+                        @* Ana iğne — dolu bıçak + karşı ağırlık, en üstte *@
+                        <g id="caldNeedleMain">
+                            <polygon class="cald-needle-main" points="98.5,103 100,34 101.5,103" />
                             <circle class="cald-counterweight" cx="100" cy="108" r="4.4" />
                         </g>
                         <circle class="cald-hub-ring" cx="100" cy="100" r="6.5" />
                         <circle class="cald-hub" cx="100" cy="100" r="2.6" />
 
-                        @* Okuma penceresi — iğnenin ÜSTÜNDE çizilir ki üzerinden geçtiğinde okunur kalsın *@
+                        @* Okuma penceresi — iğnelerin ÜSTÜNDE *@
                         <rect class="cald-readout-box" x="66" y="130" width="68" height="16" rx="3" ry="3" />
                         <text class="cald-readout-text" id="caldReadout" x="100" y="138.5">0.0 %</text>
 
-                        @* Cam — statik tek parlama (hareketli parıltı yok) *@
+                        @* Cam — statik tek parlama *@
                         <path class="cald-glass" d="M100 10 A90 90 0 0 0 26 142 A122 122 0 0 1 100 10 Z" />
                     </svg>
                 </div>
@@ -615,49 +643,47 @@
     })();
 </script>
 <script>
-    /* ── Kalibrasyon göstergesi v4 (2026-08-15) — sayfadaki TEK animasyon ────────────
-       v3'ün rastgelelikleri bilinçli olarak kaldırıldı (spinInnerRandom, scrambleReadout,
-       runCalcSequence'ın rastgele birim/değer döngüsü, caldShake, easeOutBack zıplaması).
-       Yerine ölçü aleti disiplini: gösterilen HER değer tek bir ölçümden türer.
+    /* ── Kalibrasyon göstergesi v5 (2026-08-17) — sayfadaki TEK animasyon ────────────
+       Üç kol geri geldi (v4 tek iğneye inmişti), rastgelelik geri gelmedi. v3'ün
+       spinInnerRandom / scrambleReadout / caldShake / easeOutBack zıplaması yok; üç iğne
+       bir KRONOGRAF gibi tek ölçümü üç hızda okur.
 
-         ölçüm  = kimlik kalibrasyon yüzdesi
-                  · yazarken : şifre uzunluğundan (12 karakter = %92 — tam skalaya
-                    KASITLI olarak ulaşmaz; %100 yalnız sunucu onayıyla gelir, böylece
-                    doğrulama anında her zaman görünür bir son süpürme olur)
-                  · doğrularken/başarıda : %100
-                  · hatada : %0 (iğne sıfıra döner, okuma "--- %" ile geçersizlenir)
-         iğne   = ölçüm × 3.6°   (tam tur = tam skala, 100 bölme)
-         yay    = ölçüm          (kenarda çevresel okuma)
-         pencere= ölçüm          (sayılarak oturur; jitter yok)
+       ÖLÇÜM  n = (e-posta + şifre) karakter sayısı — v4 yalnız şifreyi dinliyordu.
+              yüzde = 92·(1 − e^(−n/10))  → asimptotik, HİÇ doymaz.
+              (v4'te 12 karakterde tavan vardı; uzun şifre yazarken iğne duruyordu.)
 
-       Fizik: TEK requestAnimationFrame döngüsünde yay-sönüm entegrasyonu.
-         · iğne  ζ≈0.68 → galvanometre gibi tek küçük aşım + oturma
-         · yay/pencere ζ≈1 → aşımsız, temiz oturma
-       Döngü yalnız hareket varken çalışır; her şey hedefine oturunca durdurulur
-       (idle'da 0 CPU — v3'teki sürekli "nefes alan" parlaklık kalktı).
+       İĞNELER
+         ana   = yüzde × 3.6°   (tam tur = tam skala; baskın, vurgu renginde)
+         devir = yüzde × 0.36°  (ananın 1/10'u — akrep; nötr renk, hüküm bildirmez)
+         hızlı = fastBase + n × 24°  (tuş başına SABİT çentik, sarmalanmaz → her tuşta
+                 mutlaka görünür hareket; doğrulamada fastBase +360 ile son bir tur atar)
 
-       Çözülme YALNIZ sunucu login onayıyla (window.CalibraLoginDial.success) tetiklenir —
-       istemci parola doğrulaması YOKTUR. Bu güvenlik kuralı v3'ten aynen korundu.
-       Dışa açık sözleşme değişmedi: begin() / success(done) / fail(label, detail). */
+       FİZİK  TEK requestAnimationFrame döngüsünde yay-sönüm entegrasyonu; hedefe oturunca
+              döngü durur (idle'da 0 CPU). Katsayılar v4'e göre KASITLI yavaşlatıldı —
+              v4 fazla çevikti. Ölçülen değerler makeSpring satırlarında.
+
+       Çözülme YALNIZ sunucu onayıyla (success) tetiklenir — istemci parola doğrulaması
+       YOKTUR. Dışa açık sözleşme değişmedi: begin() / success(done) / fail(label, detail). */
     (function () {
         var wrap = document.getElementById('caldDial');
-        var needleG = document.getElementById('caldNeedle');
+        var gMain = document.getElementById('caldNeedleMain');
+        var gRev = document.getElementById('caldNeedleRev');
+        var gFast = document.getElementById('caldNeedleFast');
         var arcEl = document.getElementById('caldArc');
         var readoutEl = document.getElementById('caldReadout');
         var ticksG = document.getElementById('caldTicks');
         var numsG = document.getElementById('caldNums');
         var statusEl = document.getElementById('caldStatus');
-        if (!wrap || !needleG || !arcEl || !readoutEl) return;
+        if (!wrap || !gMain || !gRev || !gFast || !arcEl || !readoutEl) return;
 
         var SVGNS = 'http://www.w3.org/2000/svg';
-        var ARC_LEN = 2 * Math.PI * 94;      // kenar yayının çevresi (r=94)
-        var CHAR_FULL = 12;                  // 12 karakter → yazma tavanı
-        var TYPE_CAP = 92;                   // yazarken ulaşılabilen en yüksek yüzde
+        var ARC_LEN = 2 * Math.PI * 94;
+        var PCT_MAX = 92;        // yazarken ulaşılabilen tavan; %100 yalnız sunucu onayıyla
+        var PCT_TAU = 10;        // asimptotik doyma sabiti (karakter)
+        var FAST_STEP = 24;      // hızlı iğnenin tuş başına derecesi
         var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
-        /* ── Skala (statik, bir kez üretilir) ────────────────────────────────────────
-           50 çentik = her 2 bölmede bir; her 5.'si kalın (= her 10 bölme);
-           rakamlar her 10. çentikte (0/20/40/60/80) — komparatör kadranı düzeni. */
+        /* ── Skala (statik, bir kez) — 50 çentik, her 5.'si kalın, rakam her 10.'da ── */
         (function buildScale() {
             var R_OUT = 86, R_MIN = 80, R_MAJ = 74, R_NUM = 63;
             for (var i = 0; i < 50; i++) {
@@ -683,9 +709,7 @@
             }
         })();
 
-        /* ── Yay-sönüm entegratörü ───────────────────────────────────────────────────
-           a = (hedef - x)·k - v·c   →   ζ = c / (2√k)
-           k/c seçimi: iğne hafif aşımlı (canlı ama ölçülü), yay ve okuma aşımsız. */
+        /* ── Yay-sönüm entegratörü:  a = (hedef − x)·k − v·c ,  ζ = c / (2√k) ── */
         function makeSpring(k, c, eps) { return { x: 0, v: 0, target: 0, k: k, c: c, eps: eps }; }
         function stepSpring(s, dt) {
             if (s.x === s.target && s.v === 0) return false;
@@ -696,36 +720,37 @@
             }
             return true;
         }
-        // Katsayılar ölçülerek seçildi (60 fps entegrasyon, hedefe oturma süresi + aşım):
-        //   iğne    ζ0.68 → tam süpürmede ~9° sıçrama, tuş başına ~0.8° (fark edilmez), 667 ms
-        //   yay     ζ1.01 → aşımsız, 783 ms
-        //   pencere ζ1.02 → aşımsız sayarak oturur, 883 ms
-        var sNeedle = makeSpring(300, 23.5, 0.08);      // derece
-        var sArc = makeSpring(250, 32, 0.001);          // 0..1
-        var sReadout = makeSpring(230, 31, 0.05);       // 0..100
+        // Katsayılar 60 fps entegrasyonla ölçülerek seçildi (v4'ün ~2 katı süre = daha ağır his):
+        //   ana ζ0.76 · devir ζ0.81 (en ağır) · hızlı ζ0.69 (tek çevik kol) · yay/pencere ζ≈1 (aşımsız)
+        var sMain = makeSpring(80, 13.5, 0.08);     // derece
+        var sRev = makeSpring(65, 13, 0.05);        // derece
+        var sFast = makeSpring(150, 17, 0.12);      // derece
+        var sArc = makeSpring(75, 17, 0.001);       // 0..1
+        var sReadout = makeSpring(70, 17, 0.05);    // 0..100
 
-        var readoutOverride = null;   // geçersiz ölçümde ("--- %") sayısal okumayı bastırır
-        var onSettle = null;          // hareket bittiğinde bir kez çalışır
+        var readoutOverride = null;
+        var onSettle = null;
         var rafId = 0, lastTs = 0;
 
         function render() {
-            needleG.setAttribute('transform', 'rotate(' + sNeedle.x.toFixed(2) + ' 100 100)');
+            gMain.setAttribute('transform', 'rotate(' + sMain.x.toFixed(2) + ' 100 100)');
+            gRev.setAttribute('transform', 'rotate(' + sRev.x.toFixed(2) + ' 100 100)');
+            gFast.setAttribute('transform', 'rotate(' + sFast.x.toFixed(2) + ' 100 100)');
             var frac = Math.max(0, Math.min(1, sArc.x));
             arcEl.setAttribute('stroke-dasharray', (ARC_LEN * frac).toFixed(2) + ' ' + ARC_LEN.toFixed(2));
             readoutEl.textContent = readoutOverride !== null
                 ? readoutOverride
                 : (sReadout.x.toFixed(1) + ' %');
         }
-        function fireSettle() {
-            if (!onSettle) return;
-            var fn = onSettle; onSettle = null; fn();
-        }
+        function fireSettle() { if (onSettle) { var fn = onSettle; onSettle = null; fn(); } }
         function frame(ts) {
             // Sekme arkaplandayken biriken dev dt yayı patlatır → 1/30 s'ye kırp.
             var dt = lastTs ? Math.min((ts - lastTs) / 1000, 1 / 30) : 1 / 60;
             lastTs = ts;
             var moving = false;
-            if (stepSpring(sNeedle, dt)) moving = true;
+            if (stepSpring(sMain, dt)) moving = true;
+            if (stepSpring(sRev, dt)) moving = true;
+            if (stepSpring(sFast, dt)) moving = true;
             if (stepSpring(sArc, dt)) moving = true;
             if (stepSpring(sReadout, dt)) moving = true;
             render();
@@ -734,18 +759,19 @@
         }
         function kick() {
             if (reduceMotion) {
-                sNeedle.x = sNeedle.target; sNeedle.v = 0;
-                sArc.x = sArc.target; sArc.v = 0;
-                sReadout.x = sReadout.target; sReadout.v = 0;
+                [sMain, sRev, sFast, sArc, sReadout].forEach(function (s) { s.x = s.target; s.v = 0; });
                 render(); fireSettle(); return;
             }
             if (!rafId) { lastTs = 0; rafId = requestAnimationFrame(frame); }
         }
 
-        /* Tek giriş noktası: üç göstergenin hedefi de aynı ölçümden gelir. */
-        function setMeasurement(pct) {
+        /* Tek giriş noktası: beş hedefin tamamı aynı ölçümden gelir. */
+        var fastBase = 0;
+        function apply(pct, charCount) {
             pct = Math.max(0, Math.min(100, pct));
-            sNeedle.target = pct * 3.6;
+            sMain.target = pct * 3.6;
+            sRev.target = pct * 0.36;
+            sFast.target = fastBase + charCount * FAST_STEP;
             sArc.target = pct / 100;
             sReadout.target = pct;
             kick();
@@ -760,31 +786,46 @@
             if (detail) statusEl.title = detail; else statusEl.removeAttribute('title');
         }
 
-        /* ── Şifre girişi kadranı sürer (doğrulama başlayınca kilitlenir) ──────────── */
+        /* ── Alanlar kadranı sürer: e-posta + şifre birlikte (v4 yalnız şifreyi dinliyordu) ── */
         var locked = false;
-        var pwdInput = document.querySelector('.cb-form input[type="password"]')
-                    || document.querySelector('input[type="password"]');
-        function onPasswordInput() {
+        var emailEl = document.getElementById('Email') || document.querySelector('input[type="email"]');
+        var pwdEl = document.getElementById('Password') || document.querySelector('input[type="password"]');
+        var lastN = -1;
+        function charCount() {
+            return ((emailEl && emailEl.value) || '').length + ((pwdEl && pwdEl.value) || '').length;
+        }
+        function syncFields() {
             if (locked) return;
-            var n = pwdInput ? pwdInput.value.length : 0;
+            var n = charCount();
+            if (n === lastN) return;        // değişmediyse döngüyü uyandırma
+            lastN = n;
             readoutOverride = null;
             setMode(n > 0 ? 'measuring' : null);
             setStatus(n > 0 ? 'Kimlik ölçülüyor' : 'Giriş yapmaya hazır');
-            setMeasurement(Math.min(TYPE_CAP, (n / CHAR_FULL) * TYPE_CAP));
+            apply(PCT_MAX * (1 - Math.exp(-n / PCT_TAU)), n);
         }
-        if (pwdInput) pwdInput.addEventListener('input', onPasswordInput);
+        [emailEl, pwdEl].forEach(function (el) {
+            if (!el) return;
+            el.addEventListener('input', syncFields);
+            el.addEventListener('change', syncFields);   // tarayıcı otomatik doldurması
+        });
+        // Otomatik doldurma yükleme sonrası gelebilir → birkaç kez yokla (input olayı gelmez).
+        syncFields();
+        setTimeout(syncFields, 250);
+        setTimeout(syncFields, 900);
 
         render();
 
         window.CalibraLoginDial = {
-            /* Sunucuya istek gitti — iğne tam skalaya süpürülür. */
+            /* Sunucuya istek gitti — iğneler tam skalaya, hızlı iğne bir tur daha atar. */
             begin: function () {
                 locked = true;
                 onSettle = null;
                 readoutOverride = null;
+                fastBase += 360;
                 setMode('measuring');
                 setStatus('Doğrulanıyor');
-                setMeasurement(100);
+                apply(100, charCount());
             },
             /* Sunucu onayladı — tam skalada yeşile oturur, oturunca done() çağrılır. */
             success: function (done) {
@@ -792,20 +833,22 @@
                 readoutOverride = null;
                 setMode('solved');
                 setStatus('Kalibrasyon tamam');
-                onSettle = function () {
-                    if (typeof done === 'function') setTimeout(done, 320);
-                };
+                onSettle = function () { if (typeof done === 'function') setTimeout(done, 320); };
                 // kick() hareket olmasa bile bir kare çalıştırır → onSettle her hâlükârda gelir.
-                setMeasurement(100);
+                apply(100, charCount());
             },
-            /* Sunucu reddetti — ölçüm geçersiz: iğne sıfıra döner, okuma bastırılır. */
+            /* Sunucu reddetti — ölçüm geçersiz: ana/devir sıfıra, okuma bastırılır.
+               Hızlı iğne YERİNDE kalır: o bir tuş sayacıdır, hata onu sıfırlamaz
+               (ve kullanıcı yazmaya devam edince kaldığı yerden ilerler). */
             fail: function (label, detail) {
                 locked = false;
+                lastN = -1;                      // sonraki tuşta syncFields kesin çalışsın
                 onSettle = null;
                 readoutOverride = '--- %';
                 setMode('fail');
                 setStatus(label || 'Giriş başarısız', detail);
-                setMeasurement(0);
+                sMain.target = 0; sRev.target = 0; sArc.target = 0; sReadout.target = 0;
+                kick();
             }
         };
 
@@ -816,4 +859,3 @@
 </script>
 </body>
 </html>
-
