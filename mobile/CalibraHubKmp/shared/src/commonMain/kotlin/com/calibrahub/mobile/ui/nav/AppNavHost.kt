@@ -164,13 +164,22 @@ fun AppNavHost(session: SessionManager) {
 
     val topLevelRoutes = drawerTopLevelRoutes
 
+    // Drawer / Ana Sayfa modül ızgarası → yaprak ekran navigasyonu. HOME'u dipte TUTAR
+    // (popUpTo(HOME) non-inclusive) → her yaprak ekrandan geri tuşu ANA SAYFA'ya döner, ana
+    // sayfadan geri uygulamadan çıkar (beklenen Android davranışı).
+    //
+    // DİKKAT — `saveState=true`/`restoreState=true` BİLİNÇLİ olarak KULLANILMIYOR: o "bottom-nav
+    // çoklu back-stack" deseni, top-level destination'ların GRAPH START'ının doğrudan çocukları
+    // olduğu senaryo içindir. Burada graph start'ı dinamik ("login" ya da HOME) ve login-sonrası
+    // pop'lanıyor; bu kombinasyonda org.jetbrains.androidx.navigation (multiplatform) saveState'i
+    // HOME'u aktif geri-yığınında tutmuyordu → yaprak ekrandan geri tuşu HOME yerine uygulamadan
+    // ÇIKIYORDU (2026-08 cihaz tekrar-üretimi). Sade popUpTo bu hatayı ortadan kaldırır.
     val navigateToTopLevel: (String) -> Unit = { route ->
         scope.launch { drawerState.close() }
         if (route != currentRoute) {
             navController.navigate(route) {
-                popUpTo(AppRoutes.HOME) { saveState = true }
+                popUpTo(AppRoutes.HOME)
                 launchSingleTop = true
-                restoreState = true
             }
         }
     }
