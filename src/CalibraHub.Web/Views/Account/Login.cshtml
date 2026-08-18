@@ -138,20 +138,20 @@
             animation: loginShake .42s cubic-bezier(.36,.07,.19,.97) both;
         }
 
-        /* ── Kalibrasyon göstergesi v5 (2026-08-17) — sayfadaki TEK animasyon ────────
-           v3'ün üç kolu geri geldi, ama rastgeleliği geri gelmedi. v3'te üç iğne üç ayrı
-           renkteydi (indigo/cyan/violet) ve her tuşta rastgele yön + rastgele açıyla dönen
-           iki dekoratif iç kadran vardı. v5'te üç iğne bir KRONOGRAF gibi çalışır: tek renk
-           ailesi, üç farklı hız, hepsi aynı ölçümden türer — hiçbiri rastgele değildir.
+        /* ── Kalibrasyon göstergesi v5.1 (2026-08-17) — sayfadaki TEK animasyon ──────
+           v3'ün üç kolu ve canlı/oynak okuması geri geldi, rastgeleliği geri gelmedi.
+           v3'te üç iğne üç ayrı renkteydi (indigo/cyan/violet) ve iki dekoratif iç kadran
+           her tuşta Math.random() ile dönüyordu. v5.1'de üç iğne bir KRONOGRAF gibi
+           çalışır: tek renk ailesi, üç farklı hız, hepsi aynı ölçümden türer.
 
-             ölçüm n = (e-posta + şifre) karakter sayısı
-             yüzde   = 92·(1 − e^(−n/10))   ← asimptotik: HİÇ doymaz, her tuşta artar
-                       (v4 12 karakterde tavana vuruyordu → uzun şifrede iğne duruyordu;
-                        v4 ayrıca yalnız şifreyi dinliyordu → e-posta alanı ölü kalıyordu)
+             ana iğne (uzun, ince)   = sig × 3.6°   · OYNAK okuma, iki yöne de gider
+             devir iğnesi (kısa)     = prog × 0.36° · tekdüze birikir, hiç geri gitmez
+             hızlı iğne (en uzun)    = n × 24°      · tuş başına sabit çentik, hep ileri
 
-             ana iğne (uzun, ince)   = yüzde × 3.6°    · tam tur = tam skala
-             devir iğnesi (kısa)     = yüzde × 0.36°   · ana iğnenin 1/10'u (akrep)
-             hızlı iğne (en uzun)    = n × 24°         · tuş başına sabit çentik, sarmalanmaz
+           sig, yazılan metnin FNV-1a imzasından türer ve veri arttıkça sapması daralır →
+           iğne önce geniş salınır, sonra yakınsayıp oturur (gerçek bir ölçümün davranışı).
+           Rastgelelik yoktur: aynı metin her zaman aynı okumayı verir. Ayrıntılı model
+           sayfa sonundaki kadran script'inin başında.
 
            Fizik: TEK requestAnimationFrame döngüsünde yay-sönüm entegrasyonu; her şey
            hedefine oturunca döngü durur (idle'da 0 CPU). Katsayılar v4'e göre KASITLI
@@ -643,20 +643,26 @@
     })();
 </script>
 <script>
-    /* ── Kalibrasyon göstergesi v5 (2026-08-17) — sayfadaki TEK animasyon ────────────
-       Üç kol geri geldi (v4 tek iğneye inmişti), rastgelelik geri gelmedi. v3'ün
-       spinInnerRandom / scrambleReadout / caldShake / easeOutBack zıplaması yok; üç iğne
-       bir KRONOGRAF gibi tek ölçümü üç hızda okur.
+    /* ── Kalibrasyon göstergesi v5.1 (2026-08-17) — sayfadaki TEK animasyon ──────────
+       Üç kol v3'teki gibi geri geldi (v4 tek iğneye inmişti) ve okuma yine CANLI oynuyor
+       — ama v3'ün rastgeleliği geri gelmedi. v3 Math.random() ile her tuşta rastgele yön
+       ve açı üretiyordu; v5.1 aynı canlı hissi girdinin İMZASINDAN türetir, dolayısıyla
+       deterministiktir: aynı metin her zaman aynı okumayı verir.
 
-       ÖLÇÜM  n = (e-posta + şifre) karakter sayısı — v4 yalnız şifreyi dinliyordu.
-              yüzde = 92·(1 − e^(−n/10))  → asimptotik, HİÇ doymaz.
-              (v4'te 12 karakterde tavan vardı; uzun şifre yazarken iğne duruyordu.)
+       ÖLÇÜM  metin = e-posta + şifre  (v4 yalnız şifreyi dinliyordu → e-posta ölüydü)
+              n     = karakter sayısı
+              prog  = 1 − e^(−n/PCT_TAU)                    · tekdüze doluluk
+              sig   = PCT_MAX·prog + (h−0.5)·2·spread       · h = FNV-1a imzası
+              spread= SPREAD_MAX·(1−prog) + SPREAD_MIN      · veri arttıkça daralır
+              Sonuç: az veriyle iğne geniş salınır, veri arttıkça yakınsayıp oturur —
+              gerçek bir ölçümün davranışı. v5'te sig yalnız n'e bağlıydı: hep ileri,
+              tekdüze. v4'te ayrıca 12 karakterde tavan vardı; artık tavan yok.
 
-       İĞNELER
-         ana   = yüzde × 3.6°   (tam tur = tam skala; baskın, vurgu renginde)
-         devir = yüzde × 0.36°  (ananın 1/10'u — akrep; nötr renk, hüküm bildirmez)
-         hızlı = fastBase + n × 24°  (tuş başına SABİT çentik, sarmalanmaz → her tuşta
-                 mutlaka görünür hareket; doğrulamada fastBase +360 ile son bir tur atar)
+       İĞNELER (üç ayrı davranış, hepsi aynı ölçümden)
+         ana   = sig × 3.6°          · oynak; iki yöne de gider, tam tur = tam skala
+         devir = PCT_MAX·prog × 0.36°· tekdüze birikir, hiç geri gitmez (akrep)
+         hızlı = fastBase + n × 24°  · tuş başına SABİT çentik, sarmalanmaz → her tuşta
+                 mutlaka görünür hareket; doğrulamada fastBase +360 ile son bir tur atar
 
        FİZİK  TEK requestAnimationFrame döngüsünde yay-sönüm entegrasyonu; hedefe oturunca
               döngü durur (idle'da 0 CPU). Katsayılar v4'e göre KASITLI yavaşlatıldı —
@@ -678,8 +684,10 @@
 
         var SVGNS = 'http://www.w3.org/2000/svg';
         var ARC_LEN = 2 * Math.PI * 94;
-        var PCT_MAX = 92;        // yazarken ulaşılabilen tavan; %100 yalnız sunucu onayıyla
-        var PCT_TAU = 10;        // asimptotik doyma sabiti (karakter)
+        var PCT_MAX = 92;        // okumaların yakınsadığı tavan; %100 yalnız sunucu onayıyla
+        var PCT_TAU = 10;        // yakınsama sabiti (karakter) — sapma bu hızla daralır
+        var SPREAD_MAX = 46;     // ilk karakterlerde okuma sapmasının genliği (yüzde puanı)
+        var SPREAD_MIN = 2;      // sapma tabanı — iğne asla tamamen donuklaşmasın
         var FAST_STEP = 24;      // hızlı iğnenin tuş başına derecesi
         var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
@@ -765,15 +773,41 @@
             if (!rafId) { lastTs = 0; rafId = requestAnimationFrame(frame); }
         }
 
-        /* Tek giriş noktası: beş hedefin tamamı aynı ölçümden gelir. */
+        /* ── Ölçüm modeli: yakınsayan gösterge (v5.1) ────────────────────────────────
+           v5'te iğne yalnız karakter SAYISINA bakıyordu → her tuşta hep ileri, tekdüze.
+           Gerçek bir ölçü aleti böyle davranmaz: az veriyle okuma oynaktır, veri arttıkça
+           sapma daralır ve okuma oturur. v5.1 bunu modelliyor — rastgelelik KULLANMADAN:
+
+             prog   = 1 − e^(−n/PCT_TAU)              · veri doluluğu (tekdüze artar)
+             center = PCT_MAX · prog                  · okumaların yakınsadığı merkez
+             spread = SPREAD_MAX·(1−prog) + SPREAD_MIN· sapma genliği (daralır, sıfırlanmaz)
+             sig    = center + (h − 0.5)·2·spread     · h = yazılan metnin imzası (FNV-1a)
+
+           h girdinin İMZASI olduğu için okuma her tuşta ileri/geri oynar (v3'ün istenen
+           canlı hissi) ama Math.random() yoktur: aynı metin her zaman aynı okumayı verir.
+           Ölçüm tekrarlanabilirdir — bir aletin yapması gerektiği gibi. Ayrıca imza tüm
+           metinden türediği için karakter EKLEMEK kadar SİLMEK de iğneyi oynatır.
+
+           Üç kol üç ayrı davranış gösterir (hepsi deterministik):
+             ana   = sig   → oynak, iki yöne de gider
+             devir = prog  → tekdüze birikir, hiç geri gitmez
+             hızlı = n     → tuş başına sabit çentik, hep ileri */
         var fastBase = 0;
-        function apply(pct, charCount) {
-            pct = Math.max(0, Math.min(100, pct));
-            sMain.target = pct * 3.6;
-            sRev.target = pct * 0.36;
+        function hash01(str) {
+            var h = 2166136261;                        // FNV-1a, 32-bit
+            for (var i = 0; i < str.length; i++) {
+                h ^= str.charCodeAt(i);
+                h = (h * 16777619) >>> 0;
+            }
+            return (h >>> 8) / 16777216;               // 0..1
+        }
+        function apply(sig, prog, charCount) {
+            sig = Math.max(0, Math.min(100, sig));
+            sMain.target = sig * 3.6;                  // oynak okuma
+            sRev.target = PCT_MAX * prog * 0.36;       // tekdüze birikim
             sFast.target = fastBase + charCount * FAST_STEP;
-            sArc.target = pct / 100;
-            sReadout.target = pct;
+            sArc.target = prog;                        // gerçek ilerleme (geri gitmez)
+            sReadout.target = sig;
             kick();
         }
         function setMode(mode) {
@@ -786,23 +820,31 @@
             if (detail) statusEl.title = detail; else statusEl.removeAttribute('title');
         }
 
-        /* ── Alanlar kadranı sürer: e-posta + şifre birlikte (v4 yalnız şifreyi dinliyordu) ── */
+        /* ── Alanlar kadranı sürer: e-posta + şifre birlikte ── */
         var locked = false;
         var emailEl = document.getElementById('Email') || document.querySelector('input[type="email"]');
         var pwdEl = document.getElementById('Password') || document.querySelector('input[type="password"]');
-        var lastN = -1;
+        var lastText = null;
+        function fieldText() {
+            // \u0001 ayıracı: "ab"+"c" ile "a"+"bc" farklı imza üretsin.
+            return ((emailEl && emailEl.value) || '') + '\u0001' + ((pwdEl && pwdEl.value) || '');
+        }
         function charCount() {
             return ((emailEl && emailEl.value) || '').length + ((pwdEl && pwdEl.value) || '').length;
         }
         function syncFields() {
             if (locked) return;
+            var txt = fieldText();
+            if (txt === lastText) return;   // içerik değişmediyse döngüyü uyandırma
+            lastText = txt;
             var n = charCount();
-            if (n === lastN) return;        // değişmediyse döngüyü uyandırma
-            lastN = n;
             readoutOverride = null;
             setMode(n > 0 ? 'measuring' : null);
             setStatus(n > 0 ? 'Kimlik ölçülüyor' : 'Giriş yapmaya hazır');
-            apply(PCT_MAX * (1 - Math.exp(-n / PCT_TAU)), n);
+            if (n === 0) { apply(0, 0, 0); return; }
+            var prog = 1 - Math.exp(-n / PCT_TAU);
+            var spread = SPREAD_MAX * (1 - prog) + SPREAD_MIN;
+            apply(PCT_MAX * prog + (hash01(txt) - 0.5) * 2 * spread, prog, n);
         }
         [emailEl, pwdEl].forEach(function (el) {
             if (!el) return;
@@ -825,7 +867,7 @@
                 fastBase += 360;
                 setMode('measuring');
                 setStatus('Doğrulanıyor');
-                apply(100, charCount());
+                apply(100, 1, charCount());
             },
             /* Sunucu onayladı — tam skalada yeşile oturur, oturunca done() çağrılır. */
             success: function (done) {
@@ -835,14 +877,14 @@
                 setStatus('Kalibrasyon tamam');
                 onSettle = function () { if (typeof done === 'function') setTimeout(done, 320); };
                 // kick() hareket olmasa bile bir kare çalıştırır → onSettle her hâlükârda gelir.
-                apply(100, charCount());
+                apply(100, 1, charCount());
             },
             /* Sunucu reddetti — ölçüm geçersiz: ana/devir sıfıra, okuma bastırılır.
                Hızlı iğne YERİNDE kalır: o bir tuş sayacıdır, hata onu sıfırlamaz
                (ve kullanıcı yazmaya devam edince kaldığı yerden ilerler). */
             fail: function (label, detail) {
                 locked = false;
-                lastN = -1;                      // sonraki tuşta syncFields kesin çalışsın
+                lastText = null;                 // sonraki tuşta syncFields kesin çalışsın
                 onSettle = null;
                 readoutOverride = '--- %';
                 setMode('fail');
