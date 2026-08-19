@@ -2180,22 +2180,28 @@
     }
     body.app-theme-dark .sqe-ident-total-value { color: rgba(255,255,255,.92); }
 
-    .sqe-strip {
-        /* 2026-08-19: align-items flex-start (stretch DEĞİL) — bir hücre (ör. Teslim
-           Gun/Tarih iki input) diğerlerinden uzun olsa da diğer hücreler tam yükseklige
-           gerilip devasa bosluk birakmiyor; her hucre kendi icerigi kadar yer kaplar. */
-        display: flex; align-items: flex-start; flex-wrap: wrap;
+    /* 2026-08-19 (kullanıcı isteği): şeritler AYRI kutular değil, TEK bloğun içinde
+       alt alta satırlar — aralarında yatay ayraç. Kenarlık/zemin artık sarmalayıcıda. */
+    .sqe-strips {
         border: 1px solid var(--sqe-strip-border, #e2e8f0);
         border-radius: 10px;
         background: var(--sqe-strip-bg, #f8fafc);
         overflow: hidden;
         margin-top: 4px;
     }
-    .sqe-strip:empty { display: none; }
-    body.app-theme-dark .sqe-strip {
+    body.app-theme-dark .sqe-strips {
         --sqe-strip-bg: rgba(255,255,255,.025);
         --sqe-strip-border: rgba(255,255,255,.08);
     }
+    .sqe-strip {
+        /* align-items flex-start (stretch DEĞİL) — bir hücre (ör. Teslim Gun/Tarih iki
+           input) diğerlerinden uzun olsa da diğerleri gerilip boşluk bırakmıyor. */
+        display: flex; align-items: flex-start; flex-wrap: wrap;
+        justify-content: flex-start;
+    }
+    .sqe-strip + .sqe-strip { border-top: 1px solid var(--sqe-strip-border, #e2e8f0); }
+    .sqe-strip:empty { display: none; }
+    body.app-theme-dark .sqe-strip { --sqe-strip-border: rgba(255,255,255,.08); }
 
     /* Kimlik/şerit içindeki .sqe-hrow: etiket ÜSTTE, değer ALTTA (dış sarmalayıcı
        değişiyor, iç input/select/label id+class AYNEN kalıyor). */
@@ -2205,9 +2211,24 @@
     }
     .sqe-hform .sqe-strip .sqe-hrow {
         flex: 0 0 auto;
-        padding: 10px 16px;
+        padding: 8px 14px;
         border-left: 1px solid var(--sqe-strip-border, #e2e8f0);
     }
+    /* 2026-08-19: tarih hücreleri daralsın — "19.08.2026 📅" için 176px fazlaydı
+       (Seq 1065/1059 genel 176px kuralı kart düzeninde gereksiz genişlik yapıyordu).
+       Hücre içi dikey boşluk da kısaldı; etiket ile değer arası tek satır. */
+    .sqe-hform .sqe-strip #sqQuoteDate,
+    .sqe-hform .sqe-strip #sqQuoteDate + input.calibra-date-input,
+    .sqe-hform .sqe-strip #sqValidUntil,
+    .sqe-hform .sqe-strip #sqValidUntil + input.calibra-date-input,
+    .sqe-hform .sqe-strip #sqRateDate,
+    .sqe-hform .sqe-strip #sqRateDate + input.calibra-date-input {
+        flex: 0 0 136px !important;
+        max-width: 136px !important;
+    }
+    .sqe-hform .sqe-strip .sqe-hrow > * { margin-top: 0; margin-bottom: 0; }
+    .sqe-hform .sqe-strip .sqe-hrow .form-control,
+    .sqe-hform .sqe-strip .sqe-hrow .form-select { padding-top: 4px; padding-bottom: 4px; }
     .sqe-hform .sqe-strip .sqe-hrow:first-child { border-left: none; }
     .sqe-hform .sqe-ident-row .sqe-hlabel,
     .sqe-hform .sqe-strip .sqe-hlabel {
@@ -2868,6 +2889,8 @@
                     </div>
                 </div>
 
+                @* 2026-08-19: şeritler tek blok içinde alt alta satırlar (ayrı kutular değil). *@
+                <div class="sqe-strips">
                 <div class="sqe-strip" data-sqe-section="1">
                     <div class="sqe-hrow" data-field-key="quoteDate">
                         <label class="sqe-hlabel">Tarih</label>
@@ -3057,6 +3080,7 @@
                             </script>
                         }
                     }
+                </div>
                 </div>
             </div>
         </div>
@@ -3627,7 +3651,9 @@
                         target = document.createElement('div');
                         target.className = 'sqe-strip';
                         target.setAttribute('data-sqe-section', String(section));
-                        hform.appendChild(target);
+                        // Yeni şerit, şerit BLOĞUNUN içine eklenir (ayrı kutu değil,
+                        // aynı bloğun bir sonraki satırı) — bkz. .sqe-strips (2026-08-19).
+                        (hform.querySelector('.sqe-strips') || hform).appendChild(target);
                     }
                 }
                 if (target) target.appendChild(container);
