@@ -2146,6 +2146,92 @@
     }
 
     /* flatpickr takvim teması: global calibra-datepicker.css'e taşındı (2026-07-06) */
+
+    /* ══════════ Üst-bilgi "kimlik + şerit" düzeni (2026-08-19) ══════════
+       Kalem kartıyla aynı görsel dil: kimlik satırı (belge no + cari, büyük/
+       vurgulu — sağda salt-okunur genel toplam) + altında ince kenarlıklı
+       "şerit" kutu(lar) — her hücre üstte küçük soluk etiket, altta değer.
+       React bundle .clc-* sınıfları CSS_URL async yüklendiği için (bkz.
+       bootstrapLineGrid) bu statik sayfanın İLK render'ında garanti değil —
+       bu yüzden bağımsız sqe- eşdeğeri (aynı renk/ölçü dili). Aşağıdaki
+       kurallar mevcut .sqe-hrow/.sqe-hlabel/.sqe-hcombo/.sqe-hinput temel
+       tanımlarını (yukarıda) İÇERİK/ID/CLASS'ları DEĞİŞTİRMEDEN, yalnızca bu
+       yeni sarmalayıcılar (.sqe-ident-row / .sqe-strip) İÇİNDE override eder —
+       dosya sonunda tanımlandığı için eşit özgüllükte de kazanır. */
+    .sqe-hform { max-width: 940px; }
+    .sqe-ident-row {
+        display: flex; align-items: flex-start; justify-content: space-between;
+        gap: 20px; flex-wrap: wrap;
+        padding-bottom: 12px; margin-bottom: 2px;
+        border-bottom: 1px solid var(--sqe-strip-border, #e2e8f0);
+    }
+    body.app-theme-dark .sqe-ident-row { --sqe-strip-border: rgba(255,255,255,.1); }
+    .sqe-ident-fields { display: flex; align-items: flex-start; gap: 28px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
+    .sqe-ident-total { flex: 0 0 auto; text-align: right; display: none; }
+    .sqe-ident-total.is-visible { display: block; }
+    .sqe-ident-total-label {
+        display: block; font-size: .68rem; font-weight: 700; letter-spacing: .02em;
+        color: var(--app-text-muted, #94a3b8); opacity: .75; margin-bottom: 3px;
+    }
+    body.app-theme-dark .sqe-ident-total-label { color: rgba(255,255,255,.55); opacity: 1; }
+    .sqe-ident-total-value {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 1.08rem; font-weight: 700; color: #0f172a; white-space: nowrap;
+    }
+    body.app-theme-dark .sqe-ident-total-value { color: rgba(255,255,255,.92); }
+
+    .sqe-strip {
+        display: flex; align-items: stretch; flex-wrap: wrap;
+        border: 1px solid var(--sqe-strip-border, #e2e8f0);
+        border-radius: 10px;
+        background: var(--sqe-strip-bg, #f8fafc);
+        overflow: hidden;
+        margin-top: 4px;
+    }
+    .sqe-strip:empty { display: none; }
+    body.app-theme-dark .sqe-strip {
+        --sqe-strip-bg: rgba(255,255,255,.025);
+        --sqe-strip-border: rgba(255,255,255,.08);
+    }
+
+    /* Kimlik/şerit içindeki .sqe-hrow: etiket ÜSTTE, değer ALTTA (dış sarmalayıcı
+       değişiyor, iç input/select/label id+class AYNEN kalıyor). */
+    .sqe-hform .sqe-ident-row .sqe-hrow,
+    .sqe-hform .sqe-strip .sqe-hrow {
+        flex-direction: column; align-items: flex-start; gap: 4px; min-height: auto;
+    }
+    .sqe-hform .sqe-strip .sqe-hrow {
+        flex: 0 0 auto;
+        padding: 10px 16px;
+        border-left: 1px solid var(--sqe-strip-border, #e2e8f0);
+    }
+    .sqe-hform .sqe-strip .sqe-hrow:first-child { border-left: none; }
+    .sqe-hform .sqe-ident-row .sqe-hlabel,
+    .sqe-hform .sqe-strip .sqe-hlabel {
+        flex: 0 0 auto;
+        font-size: .68rem; letter-spacing: .02em;
+        color: var(--app-text-muted, #94a3b8); opacity: .75;
+    }
+    body.app-theme-dark .sqe-hform .sqe-ident-row .sqe-hlabel,
+    body.app-theme-dark .sqe-hform .sqe-strip .sqe-hlabel {
+        color: rgba(255,255,255,.55); opacity: 1;
+    }
+    .sqe-hform .sqe-ident-row .sqe-hcombo,
+    .sqe-hform .sqe-strip .sqe-hcombo,
+    .sqe-hform .sqe-ident-row .gl-wrapper,
+    .sqe-hform .sqe-strip .gl-wrapper {
+        flex: 0 0 auto; max-width: 230px; width: auto;
+    }
+    .sqe-hform .sqe-ident-row .sqe-hinput,
+    .sqe-hform .sqe-strip .sqe-hinput {
+        flex: 0 0 auto; max-width: 210px; width: auto;
+    }
+    /* Belge No — kimlik satırında büyük/vurgulu kalır (inline style zaten
+       font-weight:600; burada yalnız birazcık büyütüyoruz — referans .clc-ident-code). */
+    .sqe-ident-row #sqQuoteNumber { font-size: 1.1rem !important; }
+    /* Cari adı (badge) kimlik satırında input'un hemen altına iner — satır içi
+       değil (label-üstte deseniyle tutarlı). */
+    .sqe-ident-row .sqe-customer-name.sqe-hlabel-value { display: block; margin-left: 0; margin-top: 2px; max-width: 260px; }
 </style>
 }
 
