@@ -28,6 +28,12 @@ public sealed class FormFieldBehavior
     public string? LabelText { get; set; }
     public string? LabelStyle { get; set; }
     public string? RulesJson { get; set; }
+    /// <summary>
+    /// Üst bilgi "kimlik + şerit" kart düzeni (2026-08-19): 0=Kimlik (kart başlığı),
+    /// 1/2/3...=Şerit N. null = ayarlanmamış — varsayılan dağılım FRONTEND'de yorumlanır,
+    /// backend yalnız taşır/saklar.
+    /// </summary>
+    public int? CardSection { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
     public int? CreatedById { get; init; }

@@ -14106,6 +14106,7 @@ END;";
     private async Task EnsureFormFieldBehaviorTableAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
         var s = _schema.Replace("]", "]]");
+        var sl = _schema.Replace("'", "''");
         var sql = $"""
             IF OBJECT_ID(N'[{s}].[FormFieldBehavior]', N'U') IS NULL
             BEGIN
@@ -14121,6 +14122,7 @@ END;";
                     [LabelStyle]   NVARCHAR(20)   NULL,
                     [RulesJSON]    NVARCHAR(MAX)  NULL,
                     [SortOrder]    INT            NOT NULL CONSTRAINT [DF_FormFieldBehavior_Sort] DEFAULT 0,
+                    [CardSection]  INT            NULL,
                     [IsActive]     BIT            NOT NULL CONSTRAINT [DF_FormFieldBehavior_IsActive] DEFAULT 1,
                     [CreatedById]  INT            NULL,
                     [CreatedBy]    NVARCHAR(120)  NULL,
@@ -14131,6 +14133,12 @@ END;";
                 );
                 CREATE UNIQUE INDEX [UX_FormFieldBehavior_Form_Field]
                     ON [{s}].[FormFieldBehavior]([FormCode],[FieldKey]);
+            END;
+
+            IF OBJECT_ID(N'[{s}].[FormFieldBehavior]', N'U') IS NOT NULL
+            BEGIN
+                IF COL_LENGTH(N'{sl}.FormFieldBehavior', N'CardSection') IS NULL
+                    ALTER TABLE [{s}].[FormFieldBehavior] ADD [CardSection] INT NULL;
             END;
             """;
         await using var cmd = connection.CreateCommand();

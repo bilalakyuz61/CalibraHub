@@ -30,7 +30,7 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT [Id],[FormCode],[FieldKey],[IsVisible],[IsRequired],[DefaultValue],
-                   [LabelText],[LabelStyle],[RulesJSON],[SortOrder],[IsActive],
+                   [LabelText],[LabelStyle],[RulesJSON],[SortOrder],[CardSection],[IsActive],
                    [CreatedById],[CreatedBy],[Created],[UpdatedById],[UpdatedBy],[Updated]
             FROM {_table}
             WHERE [FormCode]=@FormCode AND [IsActive]=1
@@ -53,13 +53,14 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                 LabelStyle = r.IsDBNull(7) ? null : r.GetString(7),
                 RulesJson = r.IsDBNull(8) ? null : r.GetString(8),
                 SortOrder = r.GetInt32(9),
-                IsActive = r.GetBoolean(10),
-                CreatedById = r.IsDBNull(11) ? null : r.GetInt32(11),
-                CreatedBy = r.IsDBNull(12) ? null : r.GetString(12),
-                Created = r.GetDateTime(13),
-                UpdatedById = r.IsDBNull(14) ? null : r.GetInt32(14),
-                UpdatedBy = r.IsDBNull(15) ? null : r.GetString(15),
-                Updated = r.IsDBNull(16) ? null : r.GetDateTime(16),
+                CardSection = r.IsDBNull(10) ? null : r.GetInt32(10),
+                IsActive = r.GetBoolean(11),
+                CreatedById = r.IsDBNull(12) ? null : r.GetInt32(12),
+                CreatedBy = r.IsDBNull(13) ? null : r.GetString(13),
+                Created = r.GetDateTime(14),
+                UpdatedById = r.IsDBNull(15) ? null : r.GetInt32(15),
+                UpdatedBy = r.IsDBNull(16) ? null : r.GetString(16),
+                Updated = r.IsDBNull(17) ? null : r.GetDateTime(17),
             });
         }
         return list;
