@@ -2074,6 +2074,21 @@ export default function CalibraLineItemsGrid(props) {
                 )
               }
 
+              /* ── Ortak kimlik-satırı görünürlüğü (2026-08-19 — referans tasarım
+                 iki dalda da zorunlu) ────────────────────────────────────────────
+                 materialCode her zaman kimlik satırında (giris kapisi, hicbir
+                 duzenle gizlenemez — locked). materialName/lineTotal icin: ozel
+                 duzen varsa admin'in o alan icin verdigi visible bayragina
+                 saygi duyulur (cardItems icinde bulunur); ozel duzen yoksa (veya
+                 admin'in duzeninde hic yer almiyorsa) eskisi gibi hep gosterilir. */
+              var __identityNameItem = cardItems.find(function (it) { return it.col === materialNameCol }) || null
+              var __identityTotalItem = cardItems.find(function (it) { return it.col === lineTotalCol }) || null
+              var showIdentityName = !!materialNameCol && (!__identityNameItem || __identityNameItem.visible !== false)
+              var showIdentityTotal = !!lineTotalCol && (!__identityTotalItem || __identityTotalItem.visible !== false)
+              // Serit alanlarindan HER ZAMAN cikarilir — kimlik satirinda zaten
+              // gosterilirler (cift-gosterim olmasin, hem varsayilan hem ozel duzen).
+              function __isIdentityCol(col) { return col === materialCodeCol || col === materialNameCol || col === lineTotalCol }
+
               return (
                 <motion.div
                   key={row._uid}
@@ -2112,42 +2127,19 @@ export default function CalibraLineItemsGrid(props) {
                     />
                   )}
 
-                  {useCustomLayout ? (
-                  /* ══════════ ÖZEL KART DÜZENİ (LineCardLayoutEditor) — DOKUNULMADI ══════════
-                     Admin'in tanımladığı 12/24-birim yerleşim birebir korunur: aksiyon
-                     şeridi dikey sütun solda, kimlik kolonları (materialCode/materialName
-                     dahil) alan ızgarasının İÇİNDE admin'in belirlediği konumda çizilir. */
-                  <div
-                    className="p-2.5 sm:p-3"
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'auto 1fr',
-                      gridTemplateAreas: '"actions fields"',
-                      columnGap: 12, rowGap: 10, alignItems: 'start',
-                    }}
-                  >
-                    <div style={{ gridArea: 'actions', alignSelf: 'start' }} className="flex flex-col items-center gap-1 flex-shrink-0 justify-self-start">
-                      {renderActionButtons()}
-                    </div>
-                    {renderFieldsList(
-                      {
-                        gridArea: 'fields', display: 'grid',
-                        gridTemplateColumns: 'repeat(' + CARD_GRID_UNITS + ', minmax(0, 1fr))',
-                        gridAutoRows: 'minmax(' + CARD_ROW_HEIGHT + 'px, auto)',
-                        columnGap: 12, rowGap: 10, alignItems: 'end',
-                      },
-                      isKitComponent ? 'opacity-90' : '',
-                      null
-                    )}
-                  </div>
-                  ) : (
-                  /* ══════════ VARSAYILAN KART TASARIMI (referans uyarlaması, 2026-08-19) ══════════
+                  {/* ══════════ ORTAK KART İSKELETİ (referans tasarım, 2026-08-19 — hem
+                     varsayılan hem özel kart düzeninde AYNI dış yapı) ══════════
                      1) Kimlik satırı: #sıra + kalın malzeme kodu + soluk malzeme adı, sağ
                         uçta kalın satır toplamı (+ TL karşılığı).
                      2) Rozet satırı (varsa): KİT / kit bileşeni işaretleri.
-                     3) Bölmeli "şerit": solda kompakt aksiyon ikon grubu, sağda kalan
-                        alanlar (miktar/birim/fiyat/iskonto/kdv/widget'lar) — lineTotal
-                        şeritten çıkarılır (üstte zaten gösteriliyor). */
+                     3) Bölmeli "şerit": solda kompakt YATAY aksiyon ikon grubu, sağda kalan
+                        alanlar (miktar/birim/fiyat/iskonto/kdv/widget'lar) — materialCode/
+                        materialName/lineTotal şeritten HER ZAMAN çıkarılır (kimlik satırında
+                        zaten gösterilir, çift-gösterim olmasın). Özel kart düzeni (admin'in
+                        LineCardLayoutEditor ile tanımladığı 12/24-birim yerleşim) YALNIZCA
+                        şeridin İÇİNDEKİ alan ızgarasının stilini (span/sıra/serbest satır-
+                        sütun) belirler — dış iskelet (kimlik/rozet/şerit/aksiyon grubu)
+                        değişmez. */}
                   <div className="p-2.5 sm:p-3 flex flex-col gap-2.5">
                     <div className="min-w-0">
                       <div className="flex items-start justify-between gap-3">
@@ -2171,7 +2163,7 @@ export default function CalibraLineItemsGrid(props) {
                           {materialCodeCol && (materialCodeCol.required || materialCodeCol.requirePositive) && (
                             <span className="text-rose-500 dark:text-rose-400 text-[11px] leading-none select-none flex-shrink-0">*</span>
                           )}
-                          {materialNameCol && (
+                          {showIdentityName && (
                             <div data-cell-key={materialNameCol.key} className="clc-ident-name clc-cell-underline min-w-0 flex-1">
                               <LineGridCell
                                 column={materialNameCol}
@@ -2183,7 +2175,7 @@ export default function CalibraLineItemsGrid(props) {
                             </div>
                           )}
                         </div>
-                        {lineTotalCol && (
+                        {showIdentityTotal && (
                           <div className="flex-shrink-0 text-right">
                             <div className="clc-ident-total-value">{TR_FMT(tlCellValue(lineTotalCol, row), lineTotalCol.precision)}</div>
                             {showTlColumns && tlMirrorBySource[lineTotalCol.key] && (
@@ -2210,18 +2202,25 @@ export default function CalibraLineItemsGrid(props) {
                         {renderActionButtons()}
                       </div>
                       {renderFieldsList(
-                        {
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fill, minmax(126px, 1fr))',
-                          columnGap: 12, rowGap: 10, alignItems: 'end',
-                          padding: '10px 12px', flex: 1, minWidth: 0,
-                        },
+                        useCustomLayout
+                          ? {
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(' + CARD_GRID_UNITS + ', minmax(0, 1fr))',
+                              gridAutoRows: 'minmax(' + CARD_ROW_HEIGHT + 'px, auto)',
+                              columnGap: 12, rowGap: 10, alignItems: 'end',
+                              padding: '10px 12px', flex: 1, minWidth: 0,
+                            }
+                          : {
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(auto-fill, minmax(126px, 1fr))',
+                              columnGap: 12, rowGap: 10, alignItems: 'end',
+                              padding: '10px 12px', flex: 1, minWidth: 0,
+                            },
                         isKitComponent ? 'opacity-90' : '',
-                        function(item) { return item.col !== lineTotalCol }
+                        function(item) { return !__isIdentityCol(item.col) }
                       )}
                     </div>
                   </div>
-                  )}
 
                   {/* Satir alti kolonlar (placement: row-below) — ornegin "Not".
                       Panel sadece kullanici "Not ekle" butonuna basinca VEYA not doluysa gorunur. */}
