@@ -505,7 +505,14 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
       var __payloadValues = __mergeVals
         ? Object.assign({}, __mergeVals, currentValues)
         : currentValues
-      return saveRecord(formCode, recordId, { values: __payloadValues, grids: gridsPayload })
+      // skipValidation (otomatik/ara kayit) sunucuya da tasinir: eskiden yalnizca
+      // ISTEMCI kontrolunu atliyordu, sunucu zorunluyu yine dayatiyordu — bu yuzden
+      // Satis Teklifi'nde stok secer secmez "Zorunlu alanlar bos birakilamaz" cikiyordu.
+      return saveRecord(formCode, recordId, {
+        values: __payloadValues,
+        grids: gridsPayload,
+        enforceRequired: !(opts && opts.skipValidation),
+      })
     },
     // validate() — kaydetmeden zorunlu alan kontrolu. { valid, errors[] } doner.
     // MaterialCardEdit mceSave() icin: ana form fetch'inden ONCE cagrilir.

@@ -4244,3 +4244,25 @@ body.app-theme-dark .calibra-line-card {
 body.app-theme-dark .calibra-line-card:hover {
   border-color: rgba(129,140,248,0.35) !important;
 }
+
+/* ══════════ 2026-08-19: Kalem TABLO/DATAGRID görünümü koyu tema uyumu ══════════
+   Kart/Tablo geçişi eklendiğinde kök konteyner `bg-white/70` Tailwind utility'sini
+   AYNEN korur (yukarıdaki --cards ile ortak kök) — tablo modunda da aynı beyaz-kutu
+   riski var, bu yüzden --table sınıfı için de aynı override tekrarlanır. Başlık
+   satırı (.clg-table-head) ve satır hover'ı (.clg-table-row) ayrı Tailwind
+   `bg-slate-50/70` / `hover:bg-slate-50/70` utility'leri kullanır — aynı sınıf
+   bug'ına karşı burada da kanonik override. */
+body.app-theme-dark .calibra-line-grid--table {
+  background: rgba(255,255,255,0.03) !important;
+  border-color: rgba(255,255,255,0.10) !important;
+}
+body.app-theme-dark .clg-table-head {
+  background: rgba(255,255,255,0.05) !important;
+}
+body.app-theme-dark .clg-table-row:hover {
+  background: rgba(255,255,255,0.03) !important;
+}
+/* Görünüm seçici (Kart/Tablo) — aktif sekme zemini de aynı utility bug'ına tabi. */
+body.app-theme-dark .clg-view-btn.is-active {
+  background: rgba(99,102,241,0.18) !important;
+}

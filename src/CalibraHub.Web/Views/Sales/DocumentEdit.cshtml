@@ -5138,7 +5138,10 @@
                                     method: 'POST',
                                     credentials: 'same-origin',
                                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                                    body: JSON.stringify({ values: lr.__extras, grids: null }),
+                                    // Ara (sessiz) kayitta zorunlu kontrolu kapali: kullanici
+                                    // henuz belgeyi tamamlamadi, sadece stok secti. Acik
+                                    // "Kaydet"te (_validate=true) sunucu zorunluyu dayatir.
+                                    body: JSON.stringify({ values: lr.__extras, grids: null, enforceRequired: _validate }),
                                 });
                                 var extText = '';
                                 try { extText = await extResp.text(); } catch(_) {}

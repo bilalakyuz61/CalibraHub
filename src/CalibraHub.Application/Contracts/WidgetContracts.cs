@@ -174,7 +174,14 @@ public sealed record SaveWidgetValuesRequest(
 /// </summary>
 public sealed record SaveRecordRequest(
     IReadOnlyDictionary<string, object?>? Values,
-    IReadOnlyDictionary<string, SaveGridPayload>? Grids);
+    IReadOnlyDictionary<string, SaveGridPayload>? Grids,
+    // 2026-08-19 — Zorunlu alan kontrolu ARA kayitlarda kapatilabilir olmali.
+    // Satis Teklifi'nde malzeme secimi 150ms sonra SESSIZ kayit tetikler; bu ara
+    // kayit kullanicinin "belgeyi tamamladigi" an DEGILDIR. Sunucu her zaman
+    // zorunluyu dayattigi icin, formda doldurulmamis zorunlu bir ek alan varsa
+    // kullanici daha stok secer secmez hata aliyordu. Varsayilan true (guvenli):
+    // yalnizca ara/sessiz kayit akislari false gonderir; acik "Kaydet" true kalir.
+    bool EnforceRequired = true);
 
 public sealed record SaveGridPayload(
     string ChildFormCode,

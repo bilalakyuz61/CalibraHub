@@ -142,6 +142,43 @@ export default function CalibraLineItemsGrid(props) {
   // kucuklukte alan uretir — genislik esiginin altinda varsayilan auto-fill'e don.
   var [gridNarrow, setGridNarrow] = useState(false)
 
+  // ── Görünüm modu: KART / TABLO (2026-08-19) ─────────────────────────────
+  //   config.viewMode backend'den kullanicinin kayitli tercihini tasir
+  //   (UiConfigController.LineViewMode ile yazilir, UiConfigKeys.LineGridViewMode
+  //   altinda user_settings'te saklanir). Kayit yoksa/gecersizse 'card' (mevcut
+  //   davranis birebir korunur — fail-open). Degisim aninda hem local state
+  //   guncellenir (UI beklemeden gecer) hem de kalici hale getirilir; kaydetme
+  //   basarisiz olsa bile gecis calismaya devam eder (sessiz-kirik degil,
+  //   kullaniciya toast ile bildirilir — asagida persistViewMode).
+  var [viewMode, setViewMode] = useState(function () {
+    return config.viewMode === 'grid' ? 'grid' : 'card'
+  })
+  function persistViewMode(mode) {
+    var token = (typeof document !== 'undefined'
+      ? (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value : '') || ''
+    var headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+    if (token) headers['RequestVerificationToken'] = token
+    fetch('/UiConfig/LineViewMode', {
+      method: 'POST', credentials: 'same-origin', headers: headers,
+      body: JSON.stringify({ mode: mode }),
+    })
+      .then(function (r) { return r.json().catch(function () { return { ok: false } }) })
+      .then(function (data) {
+        if (!data || data.ok !== true) throw new Error((data && data.error) || 'save failed')
+      })
+      .catch(function () {
+        if (window.CalibraHub && window.CalibraHub.toast) {
+          window.CalibraHub.toast('Görünüm tercihi kaydedilemedi — bu oturumda geçiş çalışmaya devam eder', 'warn')
+        }
+      })
+  }
+  function handleViewModeChange(mode) {
+    if (mode !== 'card' && mode !== 'grid') return
+    if (mode === viewMode) return
+    setViewMode(mode)
+    persistViewMode(mode)
+  }
+
   // Widget → LineGridCell kolon adaptasyonu. Sadece inline-uyumlu tipler:
   // text/numeric/date/dropdown. Karmasik tipler (textarea, lookup, dosya, grid...)
   // kartta gosterilmez — ⚙ Ek Alanlar modalinde kalir.
@@ -1537,9 +1574,14 @@ export default function CalibraLineItemsGrid(props) {
 
   var totalSum = Object.values(subtotals).reduce(function(a, b) { return a + b }, 0)
 
-  // Not: eski tablo duzeninin kolon-genisligi hesaplayan widthCss() yardimcisi
-  // kart duzenine gecince (PageComment Seq 1079) kaldirildi — alan izgarasi artik
-  // CSS grid auto-fill ile genisliyor, kolon bazli px genislik gerekmiyor.
+  // Eski tablo duzeninin kolon-genisligi yardimcisi (kart duzenine gecince
+  // PageComment Seq 1079'da kaldirilmisti) — Tablo/Datagrid gorunumu icin
+  // (2026-08-19) geri getirildi; col.width backend'den gelmiyorsa esit
+  // esnek genislik (flex) ile 120px min genislik uygulanir.
+  function widthCss(col) {
+    if (col.width === 'flex' || col.width === '*' || !col.width) return { flex: '1 1 0', minWidth: '120px' }
+    return { width: col.width + 'px', flex: '0 0 ' + col.width + 'px' }
+  }
 
   // Keyboard navigasyonu:
   //   Tab         → yatayda (browser default — mudahale yok)
@@ -1617,11 +1659,53 @@ export default function CalibraLineItemsGrid(props) {
     <div
       ref={gridRootRef}
       onKeyDown={handleGridKeyDown}
-      className="calibra-line-grid calibra-line-grid--cards rounded-2xl border border-slate-200 bg-white/70 dark:bg-white/[0.04] dark:border-white/10 backdrop-blur-xl shadow-sm">
+      className={'calibra-line-grid rounded-2xl border border-slate-200 bg-white/70 dark:bg-white/[0.04] dark:border-white/10 backdrop-blur-xl shadow-sm ' +
+        (viewMode === 'grid' ? 'calibra-line-grid--table' : 'calibra-line-grid--cards')}>
+      {/* Görünüm seçici (2026-08-19) — Kart / Tablo. Seçim aninda uygulanir + kalici
+          hale getirilir (persistViewMode → /UiConfig/LineViewMode, user_settings).
+          Backend fail-open: config.viewMode gecersizse/yoksa 'card' — bkz. yukaridaki
+          useState. */}
+      <div className="clg-viewtoggle-bar flex items-center justify-end gap-2 px-2.5 sm:px-3 pt-2">
+        <div className="clg-view-toggle inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-white/[0.04]" role="tablist" aria-label="Görünüm">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewMode === 'card'}
+            onClick={function () { handleViewModeChange('card') }}
+            className={'clg-view-btn flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-semibold transition-colors ' + (
+              viewMode === 'card'
+                ? 'is-active bg-white text-indigo-600 shadow-sm dark:bg-indigo-500/20 dark:text-indigo-200'
+                : 'text-slate-500 hover:text-slate-700 dark:text-white/45 dark:hover:text-white/70'
+            )}
+            title="Kart Görünümü"
+          >
+            <LayoutGrid size={13} strokeWidth={2} />
+            <span>Kart</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewMode === 'grid'}
+            onClick={function () { handleViewModeChange('grid') }}
+            className={'clg-view-btn flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-semibold transition-colors ' + (
+              viewMode === 'grid'
+                ? 'is-active bg-white text-indigo-600 shadow-sm dark:bg-indigo-500/20 dark:text-indigo-200'
+                : 'text-slate-500 hover:text-slate-700 dark:text-white/45 dark:hover:text-white/70'
+            )}
+            title="Tablo Görünümü"
+          >
+            <Table2 size={13} strokeWidth={2} />
+            <span>Tablo</span>
+          </button>
+        </div>
+      </div>
+
       {/* Kart listesi (PageComment Seq 1079) — her aktif kalem tek bir karttir.
           Onceki tablo basligi (kolon adlari) kaldirildi; her alanin etiketi artik
           kartin icinde, o alanin hemen ustunde gosterilir (bkz. asagidaki
-          cardBodyColumns.map). */}
+          cardBodyColumns.map). Yalnizca viewMode==='card' iken render edilir
+          (2026-08-19 — Tablo/Datagrid gorunumu asagida ayri blokta). */}
+      {viewMode === 'card' && (
       <div className="p-2.5 sm:p-3 flex flex-col gap-2.5">
         {/* ── Revize zinciri: superseded satirlari GIZLE ─────────────────
             Bir satir X'i revize ederek yeni satir Y eklenince, X "kapanmis"
@@ -2149,6 +2233,288 @@ export default function CalibraLineItemsGrid(props) {
           </AnimatePresence>
         )}
       </div>
+      )}
+
+      {/* Tablo/Datagrid görünümü (2026-08-19) — eski satır-tablo iskeleti
+          (commit d577914, kart görünümüne geçmeden ÖNCEki sürüm) buraya
+          uyarlandı: widthCss() kolon genişliği + aksiyon şeridi (•••/Kombinasyon/
+          Seri/Ek Alanlar/Sil) + kit rozetleri BİREBİR o sürümden alındı. Ama
+          silme artık ORTADA ONAY MODALI (deleteConfirmUid/performDeleteRow) —
+          eski 3sn geri-sayım (pendingDelete) YOK. TL kolonları (tlMirror) ayrı
+          kolon olarak listede kendiliğinden görünür (columns zaten showTlColumns
+          durumuna göre filtrelenmiş — kart görünümündeki rozet yerine burada
+          düz kolon, kullanıcı isteğindeki "ayrı TL kolonu" kararı). Kartta
+          gösterilen özel widget'lar (cardWidgets/widgetCardColumns) burada AYRI
+          kolon olarak eklenmedi — ⚙ Ek Alanlar modali üzerinden düzenlenmeye
+          devam eder (tüm görünümlerde ortak, regresyon yok). Başlık satırı eski
+          sürümde YOKTU — datagrid beklentisiyle burada eklendi (col.label). */}
+      {viewMode === 'grid' && (
+      <div className="clg-table-scroll overflow-x-auto">
+        {rows.length === 0 ? (
+          <div className="px-6 py-10 text-center text-[12px] text-slate-400 dark:text-white/30">
+            {labels.emptyText || 'Henuz kalem eklenmemis'}
+          </div>
+        ) : (
+          <div style={{ minWidth: 'max-content' }}>
+            {/* Başlık satırı — kolon genişlikleri gövde hücreleriyle AYNI widthCss(). */}
+            <div className="clg-table-head flex items-stretch border-b border-slate-200 bg-slate-50/70 dark:border-white/[0.08] dark:bg-white/[0.03]">
+              <div className="w-[140px] flex-shrink-0 flex items-center justify-center px-2 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-white/40 border-r border-slate-100 dark:border-white/[0.06]">
+                İşlemler
+              </div>
+              {columns.map(function (col) {
+                return (
+                  <div
+                    key={col.key}
+                    style={widthCss(col)}
+                    className="flex items-center px-2.5 py-2 text-[10.5px] font-bold tracking-wide text-slate-500 dark:text-white/45 border-r border-slate-100 last:border-r-0 dark:border-white/[0.06] truncate"
+                  >
+                    <span className="truncate">{col.label}</span>
+                    {(col.required || col.requirePositive) && <span className="text-rose-500 dark:text-rose-400 ml-0.5">*</span>}
+                  </div>
+                )
+              })}
+            </div>
+
+            <AnimatePresence initial={false}>
+              {(function () {
+                // Aktif satirlar: revisedFromId bos — eski (superseded) satirlarda revisedFromId dolu
+                var visibleRows = rows.filter(function (r) {
+                  return r.revisedFromId == null || Number(r.revisedFromId) <= 0
+                })
+                if (visibleRows.length === 0) {
+                  return (
+                    <div className="px-6 py-6 text-center text-[12px] text-slate-400 dark:text-white/30">
+                      Gorunur satir yok (tumu revize edilmis)
+                    </div>
+                  )
+                }
+                var kitHeaderIds = {}
+                visibleRows.forEach(function (r) {
+                  if (r.kitParentLineId != null && Number(r.kitParentLineId) > 0) {
+                    kitHeaderIds[Number(r.kitParentLineId)] = true
+                  }
+                })
+                return visibleRows.map(function (row) {
+                  var isKitHeader = row.id != null && Number(row.id) > 0 && kitHeaderIds[Number(row.id)] === true
+                  var isKitComponent = row.kitParentLineId != null && Number(row.kitParentLineId) > 0
+                  return (
+                    <motion.div
+                      key={row._uid}
+                      data-row-uid={row._uid}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className={'clg-table-row border-b border-slate-100 hover:bg-slate-50/70 dark:border-white/[0.05] dark:hover:bg-white/[0.02] transition-colors' +
+                        (isKitComponent ? ' bg-indigo-50/40 dark:bg-indigo-500/[0.03]' : '')}
+                      style={{ position: 'relative' }}
+                    >
+                      <div className="flex items-stretch" style={{ position: 'relative' }}>
+                        {isKitComponent && (
+                          <div
+                            title="Kit bileseni — kit baslik satirinin teslim edilen bir parcasi"
+                            style={{
+                              position: 'absolute', left: 0, top: 0, bottom: 0,
+                              width: 3, zIndex: 3, pointerEvents: 'none',
+                              background: 'linear-gradient(180deg, rgba(99,102,241,.55), rgba(99,102,241,.15))',
+                            }}
+                          />
+                        )}
+                        {/* Aksiyon seridi — kart görünümüyle AYNI mantık (•••/Kombinasyon/Seri/Ek Alanlar/Sil),
+                            yalnızca dış yerleşim dikey (grid-area) yerine sabit-genişlik yatay şerit. */}
+                        <div className="w-[140px] flex-shrink-0 flex items-center justify-center gap-1 border-r border-slate-100 dark:border-white/[0.04]">
+                          <button
+                            type="button"
+                            onClick={function (e) {
+                              var rect = e.currentTarget.getBoundingClientRect()
+                              setShortcutsMenu({
+                                row: row,
+                                pos: { top: rect.bottom + 4, left: rect.left, width: 200 },
+                              })
+                            }}
+                            className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:text-white/30 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10"
+                            title="Kisayollar / satir islemleri"
+                            aria-label="Kisayol menusu"
+                            aria-haspopup="menu"
+                            aria-expanded={!!(shortcutsMenu && shortcutsMenu.row && shortcutsMenu.row._uid === row._uid)}
+                          >
+                            <MoreHorizontal size={14} strokeWidth={2} />
+                          </button>
+                          {actionLookupColumns.map(function (col) {
+                            return (
+                              <div key={col.key} style={isRowLocked(row) ? { opacity: 0.45, pointerEvents: 'none' } : {}}>
+                                <CombinationLookupCell
+                                  compact={true}
+                                  column={col}
+                                  row={row}
+                                  value={row[col.key]}
+                                  onChange={function (k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                                />
+                              </div>
+                            )
+                          })}
+                          {traceColumns.map(function (col) {
+                            return (
+                              <div key={col.key} style={isRowLocked(row) ? { opacity: 0.45, pointerEvents: 'none' } : {}}>
+                                <TraceEntryCell column={col} row={row} onOpen={function (r) { setTraceModalRow({ row: r, column: col }) }} />
+                              </div>
+                            )
+                          })}
+                          {(function () {
+                            var savedLineId = row.id != null && row.id !== '' && Number(row.id) > 0 ? Number(row.id) : null
+                            var disabled = !canModify(row)
+                            var hasPending = row.__extras && Object.keys(row.__extras).length > 0
+                            var isInvalid = savedLineId != null && invalidLineIds.indexOf(savedLineId) !== -1
+                            var colorClass
+                            if (disabled) {
+                              colorClass = 'text-slate-300 dark:text-white/15 cursor-not-allowed'
+                            } else if (isInvalid) {
+                              colorClass = 'text-white bg-rose-600 hover:bg-rose-500 dark:bg-rose-500/80 dark:hover:bg-rose-500'
+                            } else if (savedLineId == null && !hasPending) {
+                              colorClass = 'text-sky-600 bg-sky-50 hover:bg-sky-100 dark:text-sky-300 dark:bg-sky-500/15 dark:hover:bg-sky-500/25'
+                            } else {
+                              colorClass = 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25'
+                            }
+                            return (
+                              <button
+                                type="button"
+                                data-extras-line-id={savedLineId || ''}
+                                onClick={function () {
+                                  if (disabled) return
+                                  setExtrasModalRow(row)
+                                }}
+                                disabled={disabled}
+                                className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + colorClass}
+                                title={disabled
+                                  ? 'Once kilidi acin'
+                                  : (isInvalid
+                                      ? 'Zorunlu ek alanlar eksik — doldurun'
+                                      : (savedLineId == null
+                                          ? (hasPending ? 'Ek alan girildi — satiri Kaydet ile kesinlestirin' : 'Bu satir icin ek alan gir (Kaydet ile kesinlesir)')
+                                          : 'Satira ait ek alanlari duzenle'))}
+                              >
+                                <Settings size={13} strokeWidth={1.8} />
+                              </button>
+                            )
+                          })()}
+                          <button
+                            type="button"
+                            onClick={function () {
+                              if (canDelete(row)) handleDeleteRow(row._uid)
+                            }}
+                            disabled={!canDelete(row)}
+                            className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + (
+                              !canDelete(row)
+                                ? 'text-slate-300 dark:text-white/15 cursor-not-allowed'
+                                : 'text-rose-500 hover:text-white hover:bg-rose-500 dark:text-rose-400 dark:hover:text-white dark:hover:bg-rose-500'
+                            )}
+                            title={(isKitHeader || isKitComponent) ? 'Kit teslimat satiri — kit bilesenleriyle birlikte yonetilir, tek tek duzenlenemez/silinemez'
+                                   : (isRowLocked(row) ? 'Once kilidi acin' : (row.__canDelete === false ? (row.__deleteLockReason || 'Bu satir silinemez') : 'Sil'))}
+                          >
+                            {canDelete(row) ? <Trash2 size={13} strokeWidth={2} /> : <Lock size={12} strokeWidth={1.8} />}
+                          </button>
+                        </div>
+                        {columns.map(function (col) {
+                          var lockedStyle = isRowLocked(row) ? { opacity: 0.75, pointerEvents: 'none' } : {}
+                          var isMaterialCell = col.key === 'materialCode'
+                          return (
+                            <div
+                              key={col.key}
+                              data-cell-key={col.key}
+                              className={'flex items-center border-r border-slate-100 last:border-r-0 dark:border-white/[0.04]' +
+                                (isKitComponent ? ' opacity-80' : '')}
+                              style={Object.assign({}, widthCss(col), { position: 'relative' }, lockedStyle)}
+                            >
+                              {isMaterialCell && isKitComponent && (
+                                <span
+                                  className="absolute left-0.5 top-0.5 text-[11px] leading-none text-indigo-400 dark:text-indigo-300/70 pointer-events-none select-none"
+                                  style={{ zIndex: 2 }}
+                                  title="Kit bileseni"
+                                >↳</span>
+                              )}
+                              {isMaterialCell && isKitHeader && (
+                                <span
+                                  className="absolute right-1 top-1 inline-flex items-center rounded px-1 py-[1px] text-[9px] font-bold tracking-wide bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 pointer-events-none select-none"
+                                  style={{ zIndex: 2 }}
+                                  title="Kit — bilesenleri asagida listelenir"
+                                >KİT</span>
+                              )}
+                              <LineGridCell
+                                column={col}
+                                row={row}
+                                value={tlCellValue(col, row)}
+                                onChange={function (k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                                siblingColumns={allColumns}
+                              />
+                            </div>
+                          )
+                        })}
+                        {rowHasInvalidRequiredQty(row) && (
+                          <div
+                            style={{
+                              position: 'absolute', left: 0, top: 0, bottom: 0,
+                              width: 3, zIndex: 4, pointerEvents: 'none',
+                              background: '#ef4444',
+                              boxShadow: '0 0 6px rgba(239,68,68,.6)',
+                            }}
+                          />
+                        )}
+                      </div>
+
+                      {/* Satir alti kolonlar (placement: row-below) — ornegin "Not". */}
+                      {belowColumns.length > 0 && isNoteOpen(row) && (
+                        <div className="flex flex-col gap-1 pl-3 pr-3 pb-2.5 pt-0 border-t border-slate-100 dark:border-white/[0.06]">
+                          {belowColumns.map(function (col) {
+                            var Icon = resolveIcon(col.icon)
+                            return (
+                              <div
+                                key={col.key}
+                                data-below-cell
+                                className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50/60 dark:border-white/[0.06] dark:bg-white/[0.02] mt-2"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={function () { if (canModify(row)) toggleNotePin(row._uid) }}
+                                  disabled={!canModify(row)}
+                                  className={'ml-1.5 w-6 h-6 rounded-md flex items-center justify-center transition-colors flex-shrink-0 ' + (
+                                    !canModify(row)
+                                      ? 'text-slate-300 dark:text-white/15 cursor-not-allowed'
+                                      : (row.notesPinned
+                                          ? 'text-indigo-600 bg-indigo-50 dark:text-indigo-300 dark:bg-indigo-500/15'
+                                          : 'text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:text-white/40 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10')
+                                  )}
+                                  title={!canModify(row) ? 'Once kilidi acin' : (row.notesPinned ? 'Pini cikar — belge acilisinda not gizli gelir' : 'Pinle — belge acilisinda not otomatik acilir')}
+                                >
+                                  {row.notesPinned
+                                    ? <Pin size={12} strokeWidth={2} />
+                                    : <PinOff size={12} strokeWidth={1.8} />}
+                                </button>
+                                <div className="flex items-center gap-1.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/50 flex-shrink-0">
+                                  {Icon && <Icon size={11} strokeWidth={1.8} className="text-slate-400 dark:text-white/40 flex-shrink-0" />}
+                                  <span>{col.label}</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <LineGridCell
+                                    column={col}
+                                    row={row}
+                                    value={row[col.key]}
+                                    onChange={function (k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                                  />
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </motion.div>
+                  )
+                })
+              })()}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
+      )}
 
       {/* Footer: Yeni kalem + toplam */}
       <div className="flex items-center justify-between px-3 py-2.5 border-t border-slate-200 bg-slate-50/60 dark:bg-white/[0.02] dark:border-white/[0.08]">

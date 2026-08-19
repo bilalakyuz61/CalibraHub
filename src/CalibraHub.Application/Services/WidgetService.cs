@@ -1269,7 +1269,10 @@ public sealed class WidgetService : IWidgetService
 
         // 1) Parent kaydet — values null olabilir (sadece grid guncellemesi durumu)
         var parentValues = request.Values ?? new Dictionary<string, object?>();
-        await SaveValuesAsync(new SaveWidgetValuesRequest(formId, recordId, parentValues), ct);
+        await SaveValuesAsync(
+            new SaveWidgetValuesRequest(formId, recordId, parentValues,
+                EnforceRequired: request.EnforceRequired),
+            ct);
 
         // 2) Master form'un widget'larini cek — grid widgetCode → metadata resolve icin
         var masterWidgets = await _repository.GetWidgetsByFormAsync(formId, ct);
@@ -1325,7 +1328,8 @@ public sealed class WidgetService : IWidgetService
                             childForm.Id,
                             childRecordId,
                             row.Values ?? new Dictionary<string, object?>(),
-                            ParentRecordId: recordId),
+                            ParentRecordId: recordId,
+                            EnforceRequired: request.EnforceRequired),
                         ct);
 
                     keptSet.Add(childRecordId);

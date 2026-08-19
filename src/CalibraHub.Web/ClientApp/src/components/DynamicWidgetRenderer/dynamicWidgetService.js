@@ -126,6 +126,12 @@ export async function saveRecord(formCode, recordId, payload) {
   var body = (payload && typeof payload === 'object' && ('values' in payload || 'grids' in payload))
     ? { values: payload.values || {}, grids: payload.grids || null }
     : { values: payload || {}, grids: null }
+  // Zorunlu alan kontrolu sunucuda varsayilan olarak ACIK. Ara/sessiz kayitlar
+  // (orn. Satis Teklifi'nde malzeme secimi sonrasi otomatik kayit) bunu kapatir;
+  // acik "Kaydet" akisi bayragi hic gondermez ve varsayilan true'da kalir.
+  if (payload && typeof payload === 'object' && payload.enforceRequired === false) {
+    body.enforceRequired = false
+  }
   var resp = await fetch(url, {
     method: 'POST',
     credentials: 'same-origin',
