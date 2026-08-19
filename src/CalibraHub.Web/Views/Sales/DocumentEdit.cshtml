@@ -2158,7 +2158,9 @@
        tanımlarını (yukarıda) İÇERİK/ID/CLASS'ları DEĞİŞTİRMEDEN, yalnızca bu
        yeni sarmalayıcılar (.sqe-ident-row / .sqe-strip) İÇİNDE override eder —
        dosya sonunda tanımlandığı için eşit özgüllükte de kazanır. */
-    .sqe-hform { max-width: 940px; }
+    /* 2026-08-19 (kullanici istegi): ust bilgi karti ekrani yatayda DOLDURSUN —
+       940px tavani sagda genis bir bosluk birakiyordu. */
+    .sqe-hform { max-width: none; }
     .sqe-ident-row {
         display: flex; align-items: flex-start; justify-content: space-between;
         gap: 20px; flex-wrap: wrap;
@@ -2186,7 +2188,13 @@
         border: 1px solid var(--sqe-strip-border, #e2e8f0);
         border-radius: 10px;
         background: var(--sqe-strip-bg, #f8fafc);
-        overflow: hidden;
+        /* 2026-08-19: `overflow: hidden` KALDIRILDI. Temsilci acilir paneli
+           (.sqe-rep-panel, position:absolute) bu kabin ICINDE kaliyordu; overflow:hidden
+           onu hem kirpiyor hem de kabi kaydirilabilir yapiyordu. sqRepOpen() icindeki
+           filter.focus() ve selected.scrollIntoView() bu kabi kaydirinca ust bilgi
+           icerigi YUKARI ziplayordu. Overflow acilinca panel serbestce tasar ve
+           scrollIntoView dogru hedefi (.sqe-rep-list, overflow-y:auto) kaydirir.
+           Koseler bozulmuyor: .sqe-strip'lerin kendi zemini yok, zemin sarmalayicida. */
         margin-top: 4px;
     }
     body.app-theme-dark .sqe-strips {
