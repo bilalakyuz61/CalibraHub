@@ -42,6 +42,12 @@ public static class DocumentHeaderFieldCatalog
         new("quoteDate",       "Tarih",                "general",    "date",         true),
         new("validUntil",      "Gün / Tarih",          "general",    "date",         false),
         new("currency",        "Para Birimi",          "general",    "currencyCode", true),
+        // 2026-08-08: Kur ve Kur Tarihi, Para Birimi satırının İÇİNDE gömülüydü — kart
+        // düzeninde tek hücrede alt alta çıkıyor ve ayrı yerleştirilemiyorlardı. Ayrı
+        // katalog alanı olarak tanımlandılar: kendi hücreleri olur, Standart Alanlar'dan
+        // bağımsız bölüme/şeride taşınabilirler. (Görünürlük yine dövize bağlı: TRY'de gizli.)
+        new("exchangeRate",    "Kur",                  "general",    "numeric",      false),
+        new("rateDate",        "Kur Tarihi",           "general",    "date",         false),
         new("vatIncluded",     "KDV Dahil",            "general",    "boolean",      false),
         new("customer",        "Cari / Tedarikçi",     "general",    "text",         true),
         new("salesRep",        "Temsilci",             "general",    "text",         false),
