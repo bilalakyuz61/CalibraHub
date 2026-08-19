@@ -69,6 +69,33 @@ function evalRowRule(expr, row) {
   catch (e) { return null }
 }
 
+/* Kart ve Tablo dallarının İKİSİ İÇİN ORTAK satır-scope davranış hesabı
+   (2026-08-19 adversarial review bulgu 1). Önceden yalnız kart dalında
+   (cardItems.map) hesaplanıyordu — tablo dalı visibleIf/requiredIf'i hiç
+   değerlendirmiyordu: kartta gizli bir alan tabloda düzenlenebiliyor
+   (politika ihlali), koşullu zorunlu alan tabloda işaretsiz kalıyordu.
+   Fail-open: __behavior yoksa/eval hata verirse görünür + zorunlu değil. */
+function evalCellBehavior(col, row) {
+  var beh = col.__behavior || null
+  if (!beh) return { beh: null, hidden: false, behReqNow: false, behEmpty: false, behInvalid: false }
+  var hidden = !!(beh.visibleIf && evalRowRule(beh.visibleIf, row) === false)
+  var behReqNow = !!((beh.isRequired) || (beh.requiredIf && evalRowRule(beh.requiredIf, row) === true))
+  var behEmpty = false
+  if (behReqNow) {
+    var raw = row[col.key]
+    var isNum = col.type === 'number' || col.type === 'currency' || col.type === 'percent'
+    if (isNum) {
+      var n = typeof raw === 'number' ? raw : parseFloat(String(raw == null ? '' : raw).replace(',', '.'))
+      behEmpty = isNaN(n) || n <= 0
+    } else {
+      behEmpty = raw == null || String(raw).trim() === ''
+    }
+  }
+  var rowHasContent = !!(row.materialCode && String(row.materialCode).trim() !== '')
+  var behInvalid = behReqNow && behEmpty && rowHasContent
+  return { beh: beh, hidden: hidden, behReqNow: behReqNow, behEmpty: behEmpty, behInvalid: behInvalid }
+}
+
 /* Satir icin benzersiz _uid uret (React key ve yerel takip icin) */
 var uidCounter = 0
 function makeUid() {
@@ -1899,23 +1926,12 @@ export default function CalibraLineItemsGrid(props) {
                         // ── Form Davranış Katmanı: satır-scope kurallar ──
                         //   visibleIf false → hücre bu SATIRDA gizli; requiredIf true →
                         //   dinamik zorunlu (yıldız + boşsa kırmızı çerçeve). Eval hatası
-                        //   fail-open (görünür / zorunlu değil).
-                        var beh = col.__behavior || null
-                        if (beh && beh.visibleIf && evalRowRule(beh.visibleIf, row) === false) return null
-                        var behReqNow = !!(beh && ((beh.isRequired) || (beh.requiredIf && evalRowRule(beh.requiredIf, row) === true)))
-                        var behEmpty = false
-                        if (behReqNow) {
-                          var __bRaw = row[col.key]
-                          var __bIsNum = col.type === 'number' || col.type === 'currency' || col.type === 'percent'
-                          if (__bIsNum) {
-                            var __bN = typeof __bRaw === 'number' ? __bRaw : parseFloat(String(__bRaw == null ? '' : __bRaw).replace(',', '.'))
-                            behEmpty = isNaN(__bN) || __bN <= 0
-                          } else {
-                            behEmpty = __bRaw == null || String(__bRaw).trim() === ''
-                          }
-                        }
-                        var __rowHasContent = !!(row.materialCode && String(row.materialCode).trim() !== '')
-                        var behInvalid = behReqNow && behEmpty && __rowHasContent
+                        //   fail-open (görünür / zorunlu değil). Hesap ortak evalCellBehavior'da
+                        //   (tablo dalıyla PAYLAŞILIR — 2026-08-19).
+                        var __cellBeh = evalCellBehavior(col, row)
+                        if (__cellBeh.hidden) return null
+                        var behReqNow = __cellBeh.behReqNow
+                        var behInvalid = __cellBeh.behInvalid
                         // Kilitli satirda tum hucrelere pointer-events: none — sadece gorsel, tiklanmaz
                         var lockedStyle = isRowLocked(row) ? { opacity: 0.75, pointerEvents: 'none' } : {}
                         var Icon = resolveIcon(col.icon)
@@ -2244,9 +2260,10 @@ export default function CalibraLineItemsGrid(props) {
           kolon olarak listede kendiliğinden görünür (columns zaten showTlColumns
           durumuna göre filtrelenmiş — kart görünümündeki rozet yerine burada
           düz kolon, kullanıcı isteğindeki "ayrı TL kolonu" kararı). Kartta
-          gösterilen özel widget'lar (cardWidgets/widgetCardColumns) burada AYRI
-          kolon olarak eklenmedi — ⚙ Ek Alanlar modali üzerinden düzenlenmeye
-          devam eder (tüm görünümlerde ortak, regresyon yok). Başlık satırı eski
+          gösterilen özel widget'lar (cardWidgets/widgetCardColumns) tablo
+          dalında da AYNI kolon seti olarak eklenir (2026-08-19 adversarial
+          review bulgu 2 — önceden yalnız kartta görünüyordu, aynı belge iki
+          görünümde farklı alan seti gösteriyordu). Başlık satırı eski
           sürümde YOKTU — datagrid beklentisiyle burada eklendi (col.label). */}
       {viewMode === 'grid' && (
       <div className="clg-table-scroll overflow-x-auto">
@@ -2258,7 +2275,7 @@ export default function CalibraLineItemsGrid(props) {
           <div style={{ minWidth: 'max-content' }}>
             {/* Başlık satırı — kolon genişlikleri gövde hücreleriyle AYNI widthCss(). */}
             <div className="clg-table-head flex items-stretch border-b border-slate-200 bg-slate-50/70 dark:border-white/[0.08] dark:bg-white/[0.03]">
-              <div className="w-[140px] flex-shrink-0 flex items-center justify-center px-2 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-white/40 border-r border-slate-100 dark:border-white/[0.06]">
+              <div className="w-[180px] flex-shrink-0 flex items-center justify-center px-2 py-2 text-[10px] font-bold tracking-wide text-slate-500 dark:text-white/40 border-r border-slate-100 dark:border-white/[0.06]">
                 İşlemler
               </div>
               {columns.map(function (col) {
@@ -2269,7 +2286,19 @@ export default function CalibraLineItemsGrid(props) {
                     className="flex items-center px-2.5 py-2 text-[10.5px] font-bold tracking-wide text-slate-500 dark:text-white/45 border-r border-slate-100 last:border-r-0 dark:border-white/[0.06] truncate"
                   >
                     <span className="truncate">{col.label}</span>
-                    {(col.required || col.requirePositive) && <span className="text-rose-500 dark:text-rose-400 ml-0.5">*</span>}
+                    {(col.required || col.requirePositive || (col.__behavior && col.__behavior.isRequired)) && <span className="text-rose-500 dark:text-rose-400 ml-0.5">*</span>}
+                  </div>
+                )
+              })}
+              {widgetCardColumns.map(function (col) {
+                return (
+                  <div
+                    key={col.key}
+                    style={widthCss(col)}
+                    className="flex items-center px-2.5 py-2 text-[10.5px] font-bold tracking-wide text-slate-500 dark:text-white/45 border-r border-slate-100 last:border-r-0 dark:border-white/[0.06] truncate"
+                  >
+                    <span className="truncate">{col.label}</span>
+                    {col.required && <span className="text-rose-500 dark:text-rose-400 ml-0.5">*</span>}
                   </div>
                 )
               })}
@@ -2321,8 +2350,10 @@ export default function CalibraLineItemsGrid(props) {
                           />
                         )}
                         {/* Aksiyon seridi — kart görünümüyle AYNI mantık (•••/Kombinasyon/Seri/Ek Alanlar/Sil),
-                            yalnızca dış yerleşim dikey (grid-area) yerine sabit-genişlik yatay şerit. */}
-                        <div className="w-[140px] flex-shrink-0 flex items-center justify-center gap-1 border-r border-slate-100 dark:border-white/[0.04]">
+                            yalnızca dış yerleşim dikey (grid-area) yerine sabit-genişlik yatay şerit.
+                            140px → 180px + her buton flex-shrink-0 (2026-08-19 review bulgu 4 — 5 buton
+                            5×28px + gap'lerle 140px'te ezilip taşıyordu). */}
+                        <div className="w-[180px] flex-shrink-0 flex items-center justify-center gap-1 border-r border-slate-100 dark:border-white/[0.04]">
                           <button
                             type="button"
                             onClick={function (e) {
@@ -2332,7 +2363,7 @@ export default function CalibraLineItemsGrid(props) {
                                 pos: { top: rect.bottom + 4, left: rect.left, width: 200 },
                               })
                             }}
-                            className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:text-white/30 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10"
+                            className="w-7 h-7 flex-shrink-0 rounded-lg flex items-center justify-center transition-colors text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:text-white/30 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10"
                             title="Kisayollar / satir islemleri"
                             aria-label="Kisayol menusu"
                             aria-haspopup="menu"
@@ -2342,7 +2373,7 @@ export default function CalibraLineItemsGrid(props) {
                           </button>
                           {actionLookupColumns.map(function (col) {
                             return (
-                              <div key={col.key} style={isRowLocked(row) ? { opacity: 0.45, pointerEvents: 'none' } : {}}>
+                              <div key={col.key} className="flex-shrink-0" style={isRowLocked(row) ? { opacity: 0.45, pointerEvents: 'none' } : {}}>
                                 <CombinationLookupCell
                                   compact={true}
                                   column={col}
@@ -2355,7 +2386,7 @@ export default function CalibraLineItemsGrid(props) {
                           })}
                           {traceColumns.map(function (col) {
                             return (
-                              <div key={col.key} style={isRowLocked(row) ? { opacity: 0.45, pointerEvents: 'none' } : {}}>
+                              <div key={col.key} className="flex-shrink-0" style={isRowLocked(row) ? { opacity: 0.45, pointerEvents: 'none' } : {}}>
                                 <TraceEntryCell column={col} row={row} onOpen={function (r) { setTraceModalRow({ row: r, column: col }) }} />
                               </div>
                             )
@@ -2384,7 +2415,7 @@ export default function CalibraLineItemsGrid(props) {
                                   setExtrasModalRow(row)
                                 }}
                                 disabled={disabled}
-                                className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + colorClass}
+                                className={'w-7 h-7 flex-shrink-0 rounded-lg flex items-center justify-center transition-colors ' + colorClass}
                                 title={disabled
                                   ? 'Once kilidi acin'
                                   : (isInvalid
@@ -2403,7 +2434,7 @@ export default function CalibraLineItemsGrid(props) {
                               if (canDelete(row)) handleDeleteRow(row._uid)
                             }}
                             disabled={!canDelete(row)}
-                            className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + (
+                            className={'w-7 h-7 flex-shrink-0 rounded-lg flex items-center justify-center transition-colors ' + (
                               !canDelete(row)
                                 ? 'text-slate-300 dark:text-white/15 cursor-not-allowed'
                                 : 'text-rose-500 hover:text-white hover:bg-rose-500 dark:text-rose-400 dark:hover:text-white dark:hover:bg-rose-500'

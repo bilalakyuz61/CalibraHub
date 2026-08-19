@@ -4973,7 +4973,10 @@
                                         method: 'POST',
                                         credentials: 'same-origin',
                                         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                                        body: JSON.stringify({ values: lrr.__extras, grids: null }),
+                                        // KURTARMA yolu: ana kayit basarisiz oldu, amac kullanicinin
+                                        // girdigi degerleri kaybetmemek. Burada zorunlu dayatmak
+                                        // kurtarmanin kendisini dusururdu → her zaman kapali.
+                                        body: JSON.stringify({ values: lrr.__extras, grids: null, enforceRequired: false }),
                                     });
                                     var xText = '';
                                     try { xText = await xResp.text(); } catch(_) {}

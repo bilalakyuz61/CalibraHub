@@ -51,6 +51,7 @@ public sealed class ProductionController : Controller
     private readonly CalibraHub.Application.Services.ShopFloorLockoutTracker _shopFloorLockout;
     private readonly CalibraHub.Persistence.Database.SqlServerConnectionFactory _connectionFactory;
     private readonly ILogger<ProductionController> _logger;
+    private readonly IUserSettingRepository _userSettings;
     // 2026-08-04 — Makine Planlama (Üretim Çizelgeleme) Faz 1 Manuel.
     private readonly IMachineScheduleRepository _machineSchedule;
     // 2026-08-05 — Makine Çalışma Takvimi (haftalık müsaitlik + resmi tatil) Faz 2.
@@ -80,7 +81,8 @@ public sealed class ProductionController : Controller
         IMachineCalendarRepository machineCalendar,
         IMachineAutoScheduleService autoSchedule,
         CalibraHub.Application.Auditing.IAuditTrailService audit,
-        ILogger<ProductionController> logger)
+        ILogger<ProductionController> logger,
+        IUserSettingRepository userSettings)
     {
         _service = service;
         _operations = operations;
@@ -103,6 +105,7 @@ public sealed class ProductionController : Controller
         _autoSchedule = autoSchedule;
         _audit = audit;
         _logger = logger;
+        _userSettings = userSettings;
     }
 
     private static string BlockTypeLabel(byte t) => t switch
@@ -360,7 +363,7 @@ public sealed class ProductionController : Controller
         // Üretim sarfı modalı kalem grid'i — STOCK_OUT kolon seti (lookup + kombinasyon +
         // seri-pick + lot + miktar) aynen yeniden kullanılır (2026-07-10 üretim sarfı).
         ViewData["ConsumptionGridConfigJson"] = System.Text.Json.JsonSerializer.Serialize(
-            WarehouseController.BuildLineGridConfig("STOCK_OUT"),
+            WarehouseController.BuildLineGridConfig("STOCK_OUT", null, await GetLineViewModeAsync(ct)),
             new System.Text.Json.JsonSerializerOptions
             {
                 PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
@@ -2322,6 +2325,28 @@ public sealed class ProductionController : Controller
                 label = GetActivityTypeLabel(t),
             });
         return Json(types);
+    }
+
+    /// <summary>
+    /// Kalem grid görünüm modu (kart/tablo) — kullanıcı ayarı. Üretim sarfı modalı da aynı
+    /// tercihi kullanır: aksi halde modal her açılışta karta dönüyor, ama modaldeki geçiş
+    /// düğmesi GLOBAL tercihi değiştirip satış/depo ekranlarını etkiliyordu (review bulgusu).
+    /// Okunamazsa "card" (fail-open, mevcut davranış korunur).
+    /// </summary>
+    private async Task<string> GetLineViewModeAsync(CancellationToken ct)
+    {
+        var userId = CurrentUserId();
+        if (userId is null) return UiConfigKeys.ViewModeCard;
+        try
+        {
+            var raw = await _userSettings.GetAsync(userId.Value, UiConfigKeys.LineGridViewMode, ct);
+            return UiConfigKeys.NormalizeViewMode(raw);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Kalem görünüm modu okunamadı (userId={UserId}) — 'card' varsayılana düşüldü.", userId);
+            return UiConfigKeys.ViewModeCard;
+        }
     }
 
     private int? CurrentUserId()
