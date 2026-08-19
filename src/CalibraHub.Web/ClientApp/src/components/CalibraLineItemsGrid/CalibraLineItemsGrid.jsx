@@ -1808,6 +1808,272 @@ export default function CalibraLineItemsGrid(props) {
               return visibleRows.map(function(row, __rowIdx) {
               var isKitHeader = row.id != null && Number(row.id) > 0 && kitHeaderIds[Number(row.id)] === true
               var isKitComponent = row.kitParentLineId != null && Number(row.kitParentLineId) > 0
+
+              /* ── Aksiyon dugmeleri (•••/Kombinasyon/Seri/Ek Alanlar/Sil) — tek yerde
+                 tanimlanir, IKI farkli konteynere (custom-layout dikey serit VEYA
+                 varsayilan kart alt "seridi") aynen tasinir (DRY — CLAUDE.md sadelik
+                 kurali). Davranis/markup birebir onceki surumle ayni, sadece disaridaki
+                 wrapper div degisiyor. */
+              function renderActionButtons() {
+                return (
+                  <>
+                    <button
+                      type="button"
+                      onClick={function (e) {
+                        var rect = e.currentTarget.getBoundingClientRect()
+                        setShortcutsMenu({
+                          row: row,
+                          pos: { top: rect.bottom + 4, left: rect.left, width: 200 },
+                        })
+                      }}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:text-white/30 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10 flex-shrink-0"
+                      title="Kisayollar / satir islemleri"
+                      aria-label="Kisayol menusu"
+                      aria-haspopup="menu"
+                      aria-expanded={!!(shortcutsMenu && shortcutsMenu.row && shortcutsMenu.row._uid === row._uid)}
+                    >
+                      <MoreHorizontal size={14} strokeWidth={2} />
+                    </button>
+                    {actionLookupColumns.map(function(col) {
+                      return (
+                        <div key={col.key} className="flex-shrink-0" style={isRowLocked(row) ? { opacity: 0.45, pointerEvents: 'none' } : {}}>
+                          <CombinationLookupCell
+                            compact={true}
+                            column={col}
+                            row={row}
+                            value={row[col.key]}
+                            onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                          />
+                        </div>
+                      )
+                    })}
+                    {traceColumns.map(function(col) {
+                      return (
+                        <div key={col.key} className="flex-shrink-0" style={isRowLocked(row) ? { opacity: 0.45, pointerEvents: 'none' } : {}}>
+                          <TraceEntryCell column={col} row={row} onOpen={function(r) { setTraceModalRow({ row: r, column: col }) }} />
+                        </div>
+                      )
+                    })}
+                    {(function() {
+                      var savedLineId = row.id != null && row.id !== '' && Number(row.id) > 0 ? Number(row.id) : null
+                      var disabled = !canModify(row)
+                      var hasPending = row.__extras && Object.keys(row.__extras).length > 0
+                      var isInvalid = savedLineId != null && invalidLineIds.indexOf(savedLineId) !== -1
+                      var colorClass
+                      if (disabled) {
+                        colorClass = 'text-slate-300 dark:text-white/15 cursor-not-allowed'
+                      } else if (isInvalid) {
+                        colorClass = 'text-white bg-rose-600 hover:bg-rose-500 dark:bg-rose-500/80 dark:hover:bg-rose-500'
+                      } else if (savedLineId == null && !hasPending) {
+                        colorClass = 'text-sky-600 bg-sky-50 hover:bg-sky-100 dark:text-sky-300 dark:bg-sky-500/15 dark:hover:bg-sky-500/25'
+                      } else {
+                        colorClass = 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25'
+                      }
+                      return (
+                        <button
+                          type="button"
+                          data-extras-line-id={savedLineId || ''}
+                          onClick={function() {
+                            if (disabled) return
+                            setExtrasModalRow(row)
+                          }}
+                          disabled={disabled}
+                          className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 ' + colorClass}
+                          title={disabled
+                            ? 'Once kilidi acin'
+                            : (isInvalid
+                                ? 'Zorunlu ek alanlar eksik — doldurun'
+                                : (savedLineId == null
+                                    ? (hasPending ? 'Ek alan girildi — satiri Kaydet ile kesinlestirin' : 'Bu satir icin ek alan gir (Kaydet ile kesinlesir)')
+                                    : 'Satira ait ek alanlari duzenle'))}
+                        >
+                          <Settings size={13} strokeWidth={1.8} />
+                        </button>
+                      )
+                    })()}
+                    <button
+                      type="button"
+                      onClick={function() {
+                        if (canDelete(row)) handleDeleteRow(row._uid)
+                      }}
+                      disabled={!canDelete(row)}
+                      className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 ' + (
+                        !canDelete(row)
+                          ? 'text-slate-300 dark:text-white/15 cursor-not-allowed'
+                          : 'text-rose-500 hover:text-white hover:bg-rose-500 dark:text-rose-400 dark:hover:text-white dark:hover:bg-rose-500'
+                      )}
+                      title={(isKitHeader || isKitComponent) ? 'Kit teslimat satiri — kit bilesenleriyle birlikte yonetilir, tek tek duzenlenemez/silinemez'
+                             : (isRowLocked(row) ? 'Once kilidi acin' : (row.__canDelete === false ? (row.__deleteLockReason || 'Bu satir silinemez') : 'Sil'))}
+                    >
+                      {canDelete(row) ? <Trash2 size={13} strokeWidth={2} /> : <Lock size={12} strokeWidth={1.8} />}
+                    </button>
+                  </>
+                )
+              }
+
+              /* ── Alan izgarasi (miktar/birim/fiyat/iskonto/kdv/toplam vb.) — hem
+                 ozel duzen hem varsayilan kart tasariminda AYNI hucre render mantigi
+                 kullanilir; sadece disaridaki grid stili ve (varsayilanda) "lineTotal"
+                 filtrelemesi farklidir (lineTotal ust-sag kimlik alaninda ayrica
+                 gosterilir — bkz. asagidaki kimlik blogu). filterFn verilirse o
+                 kolonlari listeden CIKARIR (custom layout'ta filterFn=null → hicbir
+                 sey degismez, admin duzeni birebir korunur). */
+              function renderFieldsList(containerStyle, containerClassName, filterFn) {
+                return (
+                  <div style={containerStyle} className={containerClassName}>
+                    {cardItems.map(function(item) {
+                      var col = item.col
+                      if (!item.visible) return null
+                      if (filterFn && !filterFn(item)) return null
+                      // ── Form Davranış Katmanı: satır-scope kurallar ──
+                      //   visibleIf false → hücre bu SATIRDA gizli; requiredIf true →
+                      //   dinamik zorunlu (yıldız + boşsa kırmızı çerçeve). Eval hatası
+                      //   fail-open (görünür / zorunlu değil). Hesap ortak evalCellBehavior'da
+                      //   (tablo dalıyla PAYLAŞILIR — 2026-08-19).
+                      var __cellBeh = evalCellBehavior(col, row)
+                      if (__cellBeh.hidden) return null
+                      var behReqNow = __cellBeh.behReqNow
+                      var behInvalid = __cellBeh.behInvalid
+                      // Kilitli satirda tum hucrelere pointer-events: none — sadece gorsel, tiklanmaz
+                      var lockedStyle = isRowLocked(row) ? { opacity: 0.75, pointerEvents: 'none' } : {}
+                      var Icon = resolveIcon(col.icon)
+                      var mirror = col.__isWidget ? null : tlMirrorBySource[col.key]
+                      var showMirror = mirror && showTlColumns
+                      var cellStyle = Object.assign({}, lockedStyle)
+                      if (useCustomLayout) {
+                        var __span = Math.min(Math.max(item.span || 12, 1), CARD_GRID_UNITS)
+                        // Serbest yerlesim: duzende satir/sutun varsa hucre TAM O
+                        // konuma oturur (aradaki bosluklar korunur). Yoksa akis.
+                        cellStyle.gridColumn = item.placeCol ? (item.placeCol + ' / span ' + __span) : ('span ' + __span)
+                        if (item.placeRow) cellStyle.gridRow = String(item.placeRow)
+                      } else if (showMirror) {
+                        cellStyle.gridColumn = 'span 2'
+                      } else if (col.type === 'percent') {
+                        // Seq 1085: İskonto/KDV % alanları en fazla 3 karakter (0-100) — ayrılan
+                        // alan gereksiz genişti; dar tutulur (custom layout'ta admin span'i geçerli).
+                        cellStyle.maxWidth = 104
+                      }
+                      // Widget hucre degeri: __extras (bekleyen edit) > __widgetValues (server)
+                      var widgetValue = null
+                      if (col.__isWidget) {
+                        var wc = col.__widgetCode
+                        widgetValue = (row.__extras && (wc in row.__extras))
+                          ? row.__extras[wc]
+                          : ((row.__widgetValues || {})[wc])
+                      }
+                      var isMaterialCodeCell = col === materialCodeCol
+                      // Baslik override'lari (duzen editorunden): metin + boyut +
+                      // kalinlik (inline) + renk (semantik token → Tailwind sinifi)
+                      // + stil (Alan Yonetimi sozlugu: standard/modern/inline).
+                      var labelText = item.label || col.label
+                      var labelMode = (item.labelStyle === 'modern' || item.labelStyle === 'inline') ? item.labelStyle : 'standard'
+                      var labelColorCls = item.labelColor
+                        ? CARD_LABEL_COLOR_CLS[item.labelColor]
+                        : 'text-slate-500 dark:text-white/45'
+                      var labelStyleOv = {}
+                      if (item.labelSize) labelStyleOv.fontSize = item.labelSize
+                      if (item.labelWeight) labelStyleOv.fontWeight = item.labelWeight
+                      // Modern (yuzer) etiket absolute konumlanir — hucre anchor olmali.
+                      if (labelMode === 'modern') cellStyle = Object.assign({}, cellStyle, { position: 'relative' })
+                      // Etiket icerigi — uc stil modunda da ayni (kit susleri dahil).
+                      var labelInner = (
+                        <>
+                          {/* Kit süsleri — kimlik bolgesi ozel duzende kalktigi icin
+                              ↳ oku ve KIT rozeti malzeme kodu hucresinin etiketine tasinir. */}
+                          {isMaterialCodeCell && isKitComponent && (
+                            <span className="text-[12px] leading-none text-indigo-400 dark:text-indigo-300/70 select-none flex-shrink-0" title="Kit bileseni">↳</span>
+                          )}
+                          {/* Icon null olabilir — ikonu bilerek bos birakilan alanlar (Iskonto %/KDV %) */}
+                          {Icon && <Icon size={10} strokeWidth={1.8} className="text-slate-400 dark:text-white/35 flex-shrink-0" />}
+                          <span className="truncate">{labelText}</span>
+                          {(col.required || col.requirePositive || behReqNow) && <span className="text-rose-500 dark:text-rose-400">*</span>}
+                          {isMaterialCodeCell && isKitHeader && (
+                            <span
+                              className="inline-flex items-center rounded px-1.5 py-[2px] text-[9px] font-bold tracking-wide bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 select-none flex-shrink-0"
+                              title="Kit — bilesenleri asagida listelenir"
+                            >KİT</span>
+                          )}
+                        </>
+                      )
+                      return (
+                        <div key={col.key} data-cell-key={col.key} style={cellStyle} className={labelMode === 'inline' ? 'flex items-center gap-2' : undefined}>
+                          {/* standard: etiket ustte · inline (Sade): etiket solda ·
+                              modern: etiket kutunun ust kenarinda yuzer (asagida). */}
+                          {labelMode === 'standard' && (
+                            <div
+                              className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide mb-0.5 ' + labelColorCls}
+                              style={labelStyleOv}
+                            >
+                              {labelInner}
+                            </div>
+                          )}
+                          {labelMode === 'inline' && (
+                            <div
+                              className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide flex-shrink-0 max-w-[45%] ' + labelColorCls}
+                              style={labelStyleOv}
+                            >
+                              {labelInner}
+                            </div>
+                          )}
+                          {labelMode === 'modern' && (
+                            <div
+                              className={/* Underline gorunumde maskelenecek ust kenar yok — yuzer etiket zeminsiz */
+                                'calibra-line-card-label absolute flex items-center gap-1 text-[9.5px] font-bold tracking-wide ' + labelColorCls}
+                              style={Object.assign({ top: -1, left: 10, zIndex: 2, lineHeight: '12px' }, labelStyleOv)}
+                            >
+                              {labelInner}
+                            </div>
+                          )}
+                          <div className={'flex items-stretch gap-1.5' + (labelMode === 'inline' ? ' flex-1 min-w-0' : '') + (labelMode === 'modern' ? ' mt-1.5' : '')}>
+                            <div
+                              className="flex-1 min-w-0 clc-cell-underline"
+                              style={behInvalid ? { borderBottomColor: '#ef4444', boxShadow: '0 1px 0 0 #ef4444', backgroundColor: 'rgba(239,68,68,0.05)' } : undefined}
+                              title={behInvalid ? 'Bu alan zorunlu' : undefined}
+                            >
+                              {col.__isWidget ? (
+                                col.__widgetType === 'date' ? (
+                                  <input
+                                    type="date"
+                                    data-native-date
+                                    value={widgetValue == null ? '' : String(widgetValue)}
+                                    onChange={function(e) { handleWidgetValueChange(row._uid, col.__widgetCode, e.target.value) }}
+                                    className="w-full h-full bg-transparent border-0 outline-none px-2.5 py-2 text-[13px] text-slate-800 dark:text-white/85 transition-colors"
+                                  />
+                                ) : (
+                                  <LineGridCell
+                                    column={col}
+                                    row={row}
+                                    value={widgetValue}
+                                    onChange={function(k, v) { handleWidgetValueChange(row._uid, col.__widgetCode, v) }}
+                                  />
+                                )
+                              ) : (
+                                <LineGridCell
+                                  column={col}
+                                  row={row}
+                                  value={tlCellValue(col, row)}
+                                  onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                                  siblingColumns={allColumns}
+                                />
+                              )}
+                            </div>
+                            {showMirror && (
+                              <div
+                                className="flex-shrink-0 flex items-center gap-1 px-1.5 text-[11px] font-mono tabular-nums text-slate-500 dark:text-white/45"
+                                title="Belge kuruyla TL karşılığı"
+                              >
+                                <span className="opacity-70">₺</span>
+                                <span>{TR_FMT(tlCellValue(mirror, row), mirror.precision)}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              }
+
               return (
                 <motion.div
                   key={row._uid}
@@ -1846,388 +2112,116 @@ export default function CalibraLineItemsGrid(props) {
                     />
                   )}
 
+                  {useCustomLayout ? (
+                  /* ══════════ ÖZEL KART DÜZENİ (LineCardLayoutEditor) — DOKUNULMADI ══════════
+                     Admin'in tanımladığı 12/24-birim yerleşim birebir korunur: aksiyon
+                     şeridi dikey sütun solda, kimlik kolonları (materialCode/materialName
+                     dahil) alan ızgarasının İÇİNDE admin'in belirlediği konumda çizilir. */
                   <div
                     className="p-2.5 sm:p-3"
                     style={{
                       display: 'grid',
                       gridTemplateColumns: 'auto 1fr',
-                      // Aksiyon seridi kartin SOLUNDA dikey sutun (2026-08-05 kullanici
-                      // istegi). Ozel duzen aktifken kimlik kolonlari alan izgarasinin
-                      // ICINDE layout'a gore cizilir — sabit kimlik bolgesi kalkar.
-                      gridTemplateAreas: useCustomLayout
-                        ? '"actions fields"'
-                        : '"actions identity" "actions fields"',
+                      gridTemplateAreas: '"actions fields"',
                       columnGap: 12, rowGap: 10, alignItems: 'start',
                     }}
                   >
-                    {/* DOM sirasi (identity → fields → actions) klavye Enter-nav ile
-                        eslesir (bkz. handleGridKeyDown plain-Enter focusables listesi):
-                        malzeme → alan izgarasi → aksiyon butonlari → sonraki kart.
-                        Gorsel yerlesim ise CSS grid-area ile bagimsiz kontrol edilir —
-                        aksiyonlar DOM'da sonda olsa da saga-usta gorunur, boylece
-                        Enter tuşuyla ilerlerken Sil butonuna erken takilmaz. */}
-                    {/* ── Kart kimlik bolgesi: malzeme kodu + adi. Ozel duzen aktifken
-                        render EDILMEZ — kimlik kolonlari alan izgarasinda layout'a
-                        gore cizilir (KIT rozetleri de oraya tasinir). ── */}
-                    {!useCustomLayout && (
-                    <div style={{ gridArea: 'identity' }} className="min-w-[180px]">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {isKitComponent && (
-                            <span
-                              className="text-[12px] leading-none text-indigo-400 dark:text-indigo-300/70 select-none flex-shrink-0"
-                              title="Kit bileseni"
-                            >↳</span>
-                          )}
+                    <div style={{ gridArea: 'actions', alignSelf: 'start' }} className="flex flex-col items-center gap-1 flex-shrink-0 justify-self-start">
+                      {renderActionButtons()}
+                    </div>
+                    {renderFieldsList(
+                      {
+                        gridArea: 'fields', display: 'grid',
+                        gridTemplateColumns: 'repeat(' + CARD_GRID_UNITS + ', minmax(0, 1fr))',
+                        gridAutoRows: 'minmax(' + CARD_ROW_HEIGHT + 'px, auto)',
+                        columnGap: 12, rowGap: 10, alignItems: 'end',
+                      },
+                      isKitComponent ? 'opacity-90' : '',
+                      null
+                    )}
+                  </div>
+                  ) : (
+                  /* ══════════ VARSAYILAN KART TASARIMI (referans uyarlaması, 2026-08-19) ══════════
+                     1) Kimlik satırı: #sıra + kalın malzeme kodu + soluk malzeme adı, sağ
+                        uçta kalın satır toplamı (+ TL karşılığı).
+                     2) Rozet satırı (varsa): KİT / kit bileşeni işaretleri.
+                     3) Bölmeli "şerit": solda kompakt aksiyon ikon grubu, sağda kalan
+                        alanlar (miktar/birim/fiyat/iskonto/kdv/widget'lar) — lineTotal
+                        şeritten çıkarılır (üstte zaten gösteriliyor). */
+                  <div className="p-2.5 sm:p-3 flex flex-col gap-2.5">
+                    <div className="min-w-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-baseline gap-2 min-w-0 flex-1">
+                          <span className="clc-ident-num flex-shrink-0" title={'Kalem sirasi #' + (__rowIdx + 1)}>{'#' + (__rowIdx + 1)}</span>
                           {materialCodeCol && (
                             <div
                               data-cell-key={materialCodeCol.key}
-                              className="w-full max-w-[260px]"
+                              className="clc-ident-code clc-cell-underline flex-shrink-0 max-w-[220px]"
                               style={isRowLocked(row) ? { opacity: 0.75, pointerEvents: 'none' } : {}}
                             >
-                              <div className="calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide text-slate-500 dark:text-white/45 mb-0.5">
-                                <span className="truncate">{materialCodeCol.label}</span>
-                                {(materialCodeCol.required || materialCodeCol.requirePositive) && <span className="text-rose-500 dark:text-rose-400">*</span>}
-                              </div>
-                              {/* Alt-cizgi (underline) — cizgi yalniz hover/odakta gorunur
-                                  (index.css .clc-cell-underline; odak rengi ust bilgi standardiyla ayni). */}
-                              <div className="clc-cell-underline">
-                                <LineGridCell
-                                  column={materialCodeCol}
-                                  row={row}
-                                  value={tlCellValue(materialCodeCol, row)}
-                                  onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
-                                  siblingColumns={allColumns}
-                                />
-                              </div>
+                              <LineGridCell
+                                column={materialCodeCol}
+                                row={row}
+                                value={tlCellValue(materialCodeCol, row)}
+                                onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                                siblingColumns={allColumns}
+                              />
                             </div>
                           )}
+                          {materialCodeCol && (materialCodeCol.required || materialCodeCol.requirePositive) && (
+                            <span className="text-rose-500 dark:text-rose-400 text-[11px] leading-none select-none flex-shrink-0">*</span>
+                          )}
+                          {materialNameCol && (
+                            <div data-cell-key={materialNameCol.key} className="clc-ident-name clc-cell-underline min-w-0 flex-1">
+                              <LineGridCell
+                                column={materialNameCol}
+                                row={row}
+                                value={tlCellValue(materialNameCol, row)}
+                                onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                                siblingColumns={allColumns}
+                              />
+                            </div>
+                          )}
+                        </div>
+                        {lineTotalCol && (
+                          <div className="flex-shrink-0 text-right">
+                            <div className="clc-ident-total-value">{TR_FMT(tlCellValue(lineTotalCol, row), lineTotalCol.precision)}</div>
+                            {showTlColumns && tlMirrorBySource[lineTotalCol.key] && (
+                              <div className="clc-ident-total-tl">₺ {TR_FMT(tlCellValue(tlMirrorBySource[lineTotalCol.key], row), tlMirrorBySource[lineTotalCol.key].precision)}</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {(isKitComponent || isKitHeader) && (
+                        <div className="flex items-center gap-1.5 mt-1">
+                          {isKitComponent && <span className="clc-badge-arrow" title="Kit bileseni">↳ Kit Bileşeni</span>}
                           {isKitHeader && (
                             <span
-                              className="inline-flex items-center rounded px-1.5 py-[2px] text-[9px] font-bold tracking-wide bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 select-none flex-shrink-0"
+                              className="clc-badge-kit"
                               title="Kit — bilesenleri asagida listelenir"
                             >KİT</span>
                           )}
                         </div>
-                        {materialNameCol && (
-                          <div data-cell-key={materialNameCol.key} className="min-w-0 mt-0.5 clc-cell-underline">
-                            <LineGridCell
-                              column={materialNameCol}
-                              row={row}
-                              value={tlCellValue(materialNameCol, row)}
-                              onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
-                              siblingColumns={allColumns}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* ── Kart alan izgarasi: kalan kolonlar (miktar/birim/fiyat/iskonto/
-                        kdv/toplam/seri vb.), her biri kendi etiketiyle. Sabit min-genislik
-                        + esit sutunlar (auto-fill/minmax) tum alanlarin ayni hiza/genislikte
-                        durmasini saglar; her hucrenin etiketi tek satirda kirpilir (truncate)
-                        boylece giris kutulari hep ayni dikey hizada baslar (PageComment
-                        Seq 1083 "simetrik duzen"). TL karsiligi (tlMirror) olan alanlarda
-                        (birim fiyat/satir toplami) doviz kutusunun HEMEN YANINDA kucuk bir
-                        TL rozeti gosterilir — artik alt satir DEGIL (Seq 1083 "TL yaninda");
-                        bu alanlar 2 sutun kaplar (daha fazla yer gerektigi icin). DOM'da
-                        kimlik alanindan (materialCode/materialName) hemen sonra gelir —
-                        Enter-nav bu alanlari aksiyon butonlarindan ONCE gezer (bkz. asagidaki not). */}
-                    <div
-                      style={useCustomLayout
-                        ? {
-                            // alignItems 'end': farkli baslik stillerinde (standart ustte /
-                            // modern yuzer / sade solda) hucre yukseklikleri degisir —
-                            // taban hizasi giris kutularini ayni satirda ayni cizgiye oturtur.
-                            gridArea: 'fields', display: 'grid',
-                            gridTemplateColumns: 'repeat(' + CARD_GRID_UNITS + ', minmax(0, 1fr))',
-                            // gridAutoRows: serbest yerlesimde BOS birakilan satirlar
-                            // yukseklik almazsa bosluk gorunmez (duzen coker).
-                            gridAutoRows: 'minmax(' + CARD_ROW_HEIGHT + 'px, auto)',
-                            columnGap: 12, rowGap: 10, alignItems: 'end',
-                          }
-                        : {
-                            gridArea: 'fields', display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(126px, 1fr))',
-                            columnGap: 12, rowGap: 10, alignItems: 'end',
-                          }}
-                      className={isKitComponent ? 'opacity-90' : ''}
-                    >
-                      {cardItems.map(function(item) {
-                        var col = item.col
-                        if (!item.visible) return null
-                        // ── Form Davranış Katmanı: satır-scope kurallar ──
-                        //   visibleIf false → hücre bu SATIRDA gizli; requiredIf true →
-                        //   dinamik zorunlu (yıldız + boşsa kırmızı çerçeve). Eval hatası
-                        //   fail-open (görünür / zorunlu değil). Hesap ortak evalCellBehavior'da
-                        //   (tablo dalıyla PAYLAŞILIR — 2026-08-19).
-                        var __cellBeh = evalCellBehavior(col, row)
-                        if (__cellBeh.hidden) return null
-                        var behReqNow = __cellBeh.behReqNow
-                        var behInvalid = __cellBeh.behInvalid
-                        // Kilitli satirda tum hucrelere pointer-events: none — sadece gorsel, tiklanmaz
-                        var lockedStyle = isRowLocked(row) ? { opacity: 0.75, pointerEvents: 'none' } : {}
-                        var Icon = resolveIcon(col.icon)
-                        var mirror = col.__isWidget ? null : tlMirrorBySource[col.key]
-                        var showMirror = mirror && showTlColumns
-                        var cellStyle = Object.assign({}, lockedStyle)
-                        if (useCustomLayout) {
-                          var __span = Math.min(Math.max(item.span || 12, 1), CARD_GRID_UNITS)
-                          // Serbest yerlesim: duzende satir/sutun varsa hucre TAM O
-                          // konuma oturur (aradaki bosluklar korunur). Yoksa akis.
-                          cellStyle.gridColumn = item.placeCol ? (item.placeCol + ' / span ' + __span) : ('span ' + __span)
-                          if (item.placeRow) cellStyle.gridRow = String(item.placeRow)
-                        } else if (showMirror) {
-                          cellStyle.gridColumn = 'span 2'
-                        } else if (col.type === 'percent') {
-                          // Seq 1085: İskonto/KDV % alanları en fazla 3 karakter (0-100) — ayrılan
-                          // alan gereksiz genişti; dar tutulur (custom layout'ta admin span'i geçerli).
-                          cellStyle.maxWidth = 104
-                        }
-                        // Widget hucre degeri: __extras (bekleyen edit) > __widgetValues (server)
-                        var widgetValue = null
-                        if (col.__isWidget) {
-                          var wc = col.__widgetCode
-                          widgetValue = (row.__extras && (wc in row.__extras))
-                            ? row.__extras[wc]
-                            : ((row.__widgetValues || {})[wc])
-                        }
-                        var isMaterialCodeCell = col === materialCodeCol
-                        // Baslik override'lari (duzen editorunden): metin + boyut +
-                        // kalinlik (inline) + renk (semantik token → Tailwind sinifi)
-                        // + stil (Alan Yonetimi sozlugu: standard/modern/inline).
-                        var labelText = item.label || col.label
-                        var labelMode = (item.labelStyle === 'modern' || item.labelStyle === 'inline') ? item.labelStyle : 'standard'
-                        var labelColorCls = item.labelColor
-                          ? CARD_LABEL_COLOR_CLS[item.labelColor]
-                          : 'text-slate-500 dark:text-white/45'
-                        var labelStyleOv = {}
-                        if (item.labelSize) labelStyleOv.fontSize = item.labelSize
-                        if (item.labelWeight) labelStyleOv.fontWeight = item.labelWeight
-                        // Modern (yuzer) etiket absolute konumlanir — hucre anchor olmali.
-                        if (labelMode === 'modern') cellStyle = Object.assign({}, cellStyle, { position: 'relative' })
-                        // Etiket icerigi — uc stil modunda da ayni (kit susleri dahil).
-                        var labelInner = (
-                          <>
-                            {/* Kit süsleri — kimlik bolgesi ozel duzende kalktigi icin
-                                ↳ oku ve KIT rozeti malzeme kodu hucresinin etiketine tasinir. */}
-                            {isMaterialCodeCell && isKitComponent && (
-                              <span className="text-[12px] leading-none text-indigo-400 dark:text-indigo-300/70 select-none flex-shrink-0" title="Kit bileseni">↳</span>
-                            )}
-                            {/* Icon null olabilir — ikonu bilerek bos birakilan alanlar (Iskonto %/KDV %) */}
-                            {Icon && <Icon size={10} strokeWidth={1.8} className="text-slate-400 dark:text-white/35 flex-shrink-0" />}
-                            <span className="truncate">{labelText}</span>
-                            {(col.required || col.requirePositive || behReqNow) && <span className="text-rose-500 dark:text-rose-400">*</span>}
-                            {isMaterialCodeCell && isKitHeader && (
-                              <span
-                                className="inline-flex items-center rounded px-1.5 py-[2px] text-[9px] font-bold tracking-wide bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 select-none flex-shrink-0"
-                                title="Kit — bilesenleri asagida listelenir"
-                              >KİT</span>
-                            )}
-                          </>
-                        )
-                        return (
-                          <div key={col.key} data-cell-key={col.key} style={cellStyle} className={labelMode === 'inline' ? 'flex items-center gap-2' : undefined}>
-                            {/* standard: etiket ustte · inline (Sade): etiket solda ·
-                                modern: etiket kutunun ust kenarinda yuzer (asagida). */}
-                            {labelMode === 'standard' && (
-                              <div
-                                className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide mb-0.5 ' + labelColorCls}
-                                style={labelStyleOv}
-                              >
-                                {labelInner}
-                              </div>
-                            )}
-                            {labelMode === 'inline' && (
-                              <div
-                                className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide flex-shrink-0 max-w-[45%] ' + labelColorCls}
-                                style={labelStyleOv}
-                              >
-                                {labelInner}
-                              </div>
-                            )}
-                            {labelMode === 'modern' && (
-                              <div
-                                className={/* Underline gorunumde maskelenecek ust kenar yok — yuzer etiket zeminsiz */
-                                  'calibra-line-card-label absolute flex items-center gap-1 text-[9.5px] font-bold tracking-wide ' + labelColorCls}
-                                style={Object.assign({ top: -1, left: 10, zIndex: 2, lineHeight: '12px' }, labelStyleOv)}
-                              >
-                                {labelInner}
-                              </div>
-                            )}
-                            <div className={'flex items-stretch gap-1.5' + (labelMode === 'inline' ? ' flex-1 min-w-0' : '') + (labelMode === 'modern' ? ' mt-1.5' : '')}>
-                              <div
-                                className="flex-1 min-w-0 clc-cell-underline"
-                                style={behInvalid ? { borderBottomColor: '#ef4444', boxShadow: '0 1px 0 0 #ef4444', backgroundColor: 'rgba(239,68,68,0.05)' } : undefined}
-                                title={behInvalid ? 'Bu alan zorunlu' : undefined}
-                              >
-                                {col.__isWidget ? (
-                                  col.__widgetType === 'date' ? (
-                                    <input
-                                      type="date"
-                                      data-native-date
-                                      value={widgetValue == null ? '' : String(widgetValue)}
-                                      onChange={function(e) { handleWidgetValueChange(row._uid, col.__widgetCode, e.target.value) }}
-                                      className="w-full h-full bg-transparent border-0 outline-none px-2.5 py-2 text-[13px] text-slate-800 dark:text-white/85 transition-colors"
-                                    />
-                                  ) : (
-                                    <LineGridCell
-                                      column={col}
-                                      row={row}
-                                      value={widgetValue}
-                                      onChange={function(k, v) { handleWidgetValueChange(row._uid, col.__widgetCode, v) }}
-                                    />
-                                  )
-                                ) : (
-                                  <LineGridCell
-                                    column={col}
-                                    row={row}
-                                    value={tlCellValue(col, row)}
-                                    onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
-                                    siblingColumns={allColumns}
-                                  />
-                                )}
-                              </div>
-                              {showMirror && (
-                                <div
-                                  className="flex-shrink-0 flex items-center gap-1 px-1.5 text-[11px] font-mono tabular-nums text-slate-500 dark:text-white/45"
-                                  title="Belge kuruyla TL karşılığı"
-                                >
-                                  <span className="opacity-70">₺</span>
-                                  <span>{TR_FMT(tlCellValue(mirror, row), mirror.precision)}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
+                      )}
                     </div>
 
-                    {/* Aksiyon kumesi (sadelesti): ••• kisayol + Kombinasyon + Seri + Ek Alanlar (⚙) + Sil.
-                        Not ve Revize butonlari ••• icine tasindi — tek dropdown'dan erisilir.
-                        DOM sirasi bilerek alan izgarasindan SONRA konuldu: klavye Enter-nav
-                        (handleGridKeyDown) DOM sirasini takip eder — boylece kullanici
-                        miktar/fiyat/iskonto gibi veri alanlarini gezerken araya giren bir
-                        butona (ozellikle Sil'e) yanlislikla odaklanip Enter'a basmaz. Gorsel
-                        yerlesim grid-area:"actions" ile kimlik satirinin SOLUNA sabitlenir
-                        (Seq 1081 kullanici istegi) — DOM sirasindan bagimsizdir. */}
-                    <div style={{ gridArea: 'actions', alignSelf: 'start' }} className="flex flex-col items-center gap-1 flex-shrink-0 justify-self-start">
-                      {/* Satir kisayol menusu — MoreHorizontal ikonu, tiklayinca liste acilir */}
-                      <button
-                        type="button"
-                        onClick={function (e) {
-                          // Butonun ekrandaki pozisyonunu al, menuyu onun altina konumla.
-                          var rect = e.currentTarget.getBoundingClientRect()
-                          setShortcutsMenu({
-                            row: row,
-                            pos: { top: rect.bottom + 4, left: rect.left, width: 200 },
-                          })
-                        }}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:text-white/30 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10"
-                        title="Kisayollar / satir islemleri"
-                        aria-label="Kisayol menusu"
-                        aria-haspopup="menu"
-                        aria-expanded={!!(shortcutsMenu && shortcutsMenu.row && shortcutsMenu.row._uid === row._uid)}
-                      >
-                        <MoreHorizontal size={14} strokeWidth={2} />
-                      </button>
-                      {actionLookupColumns.map(function(col) {
-                        // Kilitli satirda Kombinasyon butonu da pasif — CombinationLookupCell'in
-                        // kendi iki hali var (secili/eksik), burada locked ozel durumu DOM'da
-                        // pointer-events: none ile disari kapatiyoruz.
-                        return (
-                          <div key={col.key} style={isRowLocked(row) ? { opacity: 0.45, pointerEvents: 'none' } : {}}>
-                            <CombinationLookupCell
-                              compact={true}
-                              column={col}
-                              row={row}
-                              value={row[col.key]}
-                              onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
-                            />
-                          </div>
-                        )
-                      })}
-                      {/* İzlenebilirlik (Lot/Seri) — kompakt buton, modal grid seviyesinde açılır */}
-                      {traceColumns.map(function(col) {
-                        return (
-                          <div key={col.key} style={isRowLocked(row) ? { opacity: 0.45, pointerEvents: 'none' } : {}}>
-                            <TraceEntryCell column={col} row={row} onOpen={function(r) { setTraceModalRow({ row: r, column: col }) }} />
-                          </div>
-                        )
-                      })}
-                      {/* Not butonu aksiyon kumesinden cikartildi — artik ••• kisayol
-                          menusunun icinde "Not Ekle / Goster / Gizle" olarak yer aliyor. */}
-                      {/* Ek Alanlar (SALES_QUOTE_LINES widget'lari) — sadece kayitli satirlarda.
-                          Renk kuralı:
-                            - Satir kaydedilmemis → sky (notr)
-                            - Kaydedilmis + invalidLineIds'de → kirmizi (eksik zorunlu widget)
-                            - Kaydedilmis + invalidLineIds'de degil → yesil (OK) */}
-                      {(function() {
-                        var savedLineId = row.id != null && row.id !== '' && Number(row.id) > 0 ? Number(row.id) : null
-                        // Kayitli olmasa da ⚙ butonu aktif — kullanici ek alanlari
-                        // girip "Kaydet" deyince degerler row.__extras icinde local
-                        // tutulur; ana Kaydet'te satir DB'ye islendikten sonra
-                        // extras widget API'siyle satir id'sine senkron edilir.
-                        // Sadece kilitli satirda pasif (canModify=false).
-                        var disabled = !canModify(row)
-                        var hasPending = row.__extras && Object.keys(row.__extras).length > 0
-                        var isInvalid = savedLineId != null && invalidLineIds.indexOf(savedLineId) !== -1
-                        var colorClass
-                        if (disabled) {
-                          colorClass = 'text-slate-300 dark:text-white/15 cursor-not-allowed'
-                        } else if (isInvalid) {
-                          // Boyut sabit kalsin diye ring yok — sadece zemin + metin rengi.
-                          colorClass = 'text-white bg-rose-600 hover:bg-rose-500 dark:bg-rose-500/80 dark:hover:bg-rose-500'
-                        } else if (savedLineId == null && !hasPending) {
-                          // Kaydedilmemis + ek alan doldurulmamis → notr (sky)
-                          colorClass = 'text-sky-600 bg-sky-50 hover:bg-sky-100 dark:text-sky-300 dark:bg-sky-500/15 dark:hover:bg-sky-500/25'
-                        } else {
-                          // Kaydedilmis + gecerli, veya kaydedilmemis ama local __extras dolu → yesil
-                          colorClass = 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25'
-                        }
-                        return (
-                          <button
-                            type="button"
-                            data-extras-line-id={savedLineId || ''}
-                            onClick={function() {
-                              if (disabled) return
-                              setExtrasModalRow(row)
-                            }}
-                            disabled={disabled}
-                            className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + colorClass}
-                            title={disabled
-                              ? 'Once kilidi acin'
-                              : (isInvalid
-                                  ? 'Zorunlu ek alanlar eksik — doldurun'
-                                  : (savedLineId == null
-                                      ? (hasPending ? 'Ek alan girildi — satiri Kaydet ile kesinlestirin' : 'Bu satir icin ek alan gir (Kaydet ile kesinlesir)')
-                                      : 'Satira ait ek alanlari duzenle'))}
-                          >
-                            <Settings size={13} strokeWidth={1.8} />
-                          </button>
-                        )
-                      })()}
-                      {/* Revize butonu aksiyon kumesinden cikartildi — artik ••• kisayol
-                          menusunde "Revize Et" olarak yer aliyor (hala revised zincir
-                          rozetini kart uzerinde gostermiyoruz; modal icinde zincir var). */}
-                      <button
-                        type="button"
-                        onClick={function() {
-                          if (canDelete(row)) handleDeleteRow(row._uid)
-                        }}
-                        disabled={!canDelete(row)}
-                        className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + (
-                          !canDelete(row)
-                            ? 'text-slate-300 dark:text-white/15 cursor-not-allowed'
-                            : 'text-rose-500 hover:text-white hover:bg-rose-500 dark:text-rose-400 dark:hover:text-white dark:hover:bg-rose-500'
-                        )}
-                        title={(isKitHeader || isKitComponent) ? 'Kit teslimat satiri — kit bilesenleriyle birlikte yonetilir, tek tek duzenlenemez/silinemez'
-                               : (isRowLocked(row) ? 'Once kilidi acin' : (row.__canDelete === false ? (row.__deleteLockReason || 'Bu satir silinemez') : 'Sil'))}
-                      >
-                        {canDelete(row) ? <Trash2 size={13} strokeWidth={2} /> : <Lock size={12} strokeWidth={1.8} />}
-                      </button>
+                    <div className="clc-strip flex items-stretch">
+                      <div className="clc-strip-actions flex items-center gap-1 px-1.5 py-1.5 flex-shrink-0">
+                        {renderActionButtons()}
+                      </div>
+                      {renderFieldsList(
+                        {
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(126px, 1fr))',
+                          columnGap: 12, rowGap: 10, alignItems: 'end',
+                          padding: '10px 12px', flex: 1, minWidth: 0,
+                        },
+                        isKitComponent ? 'opacity-90' : '',
+                        function(item) { return item.col !== lineTotalCol }
+                      )}
                     </div>
                   </div>
+                  )}
 
                   {/* Satir alti kolonlar (placement: row-below) — ornegin "Not".
                       Panel sadece kullanici "Not ekle" butonuna basinca VEYA not doluysa gorunur. */}

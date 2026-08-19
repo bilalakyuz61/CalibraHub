@@ -3281,6 +3281,88 @@ body.app-theme-dark .clc-cell-underline:focus-within {
   box-shadow: 0 1px 0 0 #818cf8 !important;
 }
 
+/* ══════════ CalibraLineItemsGrid — VARSAYILAN kart kimlik/şerit tasarımı
+   (referans uyarlaması, 2026-08-19). Yalnız useCustomLayout=false dalında
+   kullanılır — admin Kart Düzeni tanımlıysa bu sınıflar hiç render edilmez.
+   Light default → body.app-theme-dark override (CLAUDE.md "Light = default"). */
+.clc-ident-num {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1;
+}
+body.app-theme-dark .clc-ident-num { color: rgba(255,255,255,0.35); }
+
+/* Malzeme kodu — kalın + vurgulu renk (referans "başlık" hissi). İç <input>
+   GuideLookupCell/TextLookupCell farklı bileşenlerde satır-içi stille (inline
+   style / Tailwind utility) geliyor — !important bu farklı yollardan gelen
+   stilleri tutarlı biçimde ezmek için gerekli (bkz. .cb-invalid-shake ile aynı
+   proje deseni). */
+.clc-ident-code { --clc-ident-accent: #4338ca; }
+body.app-theme-dark .clc-ident-code { --clc-ident-accent: #a5b4fc; }
+.clc-ident-code input {
+  font-weight: 700 !important;
+  font-size: 13.5px !important;
+  color: var(--clc-ident-accent) !important;
+}
+
+/* Malzeme adı — normal/soluk (referans "alt satır"). */
+.clc-ident-name input {
+  color: #64748b !important;
+  font-size: 13px !important;
+}
+body.app-theme-dark .clc-ident-name input { color: rgba(255,255,255,0.55) !important; }
+
+/* Satır toplamı — kimlik satırının sağ ucu, kalın + mono. */
+.clc-ident-total-value {
+  font-weight: 700;
+  font-size: 13.5px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  color: #0f172a;
+  white-space: nowrap;
+}
+body.app-theme-dark .clc-ident-total-value { color: rgba(255,255,255,0.92); }
+.clc-ident-total-tl {
+  font-size: 10.5px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  color: #94a3b8;
+  white-space: nowrap;
+  margin-top: 1px;
+}
+body.app-theme-dark .clc-ident-total-tl { color: rgba(255,255,255,0.35); }
+
+/* Rozet satırı — KİT başlık / kit bileşeni işareti. */
+.clc-badge-kit {
+  display: inline-flex; align-items: center; border-radius: 4px; padding: 2px 6px;
+  font-size: 9px; font-weight: 700; letter-spacing: .02em;
+  background: #e0e7ff; color: #4338ca;
+}
+body.app-theme-dark .clc-badge-kit { background: rgba(99,102,241,0.2); color: #a5b4fc; }
+.clc-badge-arrow {
+  display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px;
+  color: #818cf8;
+}
+body.app-theme-dark .clc-badge-arrow { color: rgba(165,180,252,0.75); }
+
+/* Bölmeli "şerit" — solda aksiyon ikon grubu, sağda alan ızgarası; tek bordered
+   kutu görünümü. Arka plan/kenarlık CSS değişkeni ile (Tailwind bg-white
+   collision riski yok — bkz. CLAUDE.md "React bileşenlerinde tema"). */
+.clc-strip {
+  --clc-strip-bg: #f8fafc;
+  --clc-strip-border: #e2e8f0;
+  background: var(--clc-strip-bg);
+  border: 1px solid var(--clc-strip-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+body.app-theme-dark .clc-strip {
+  --clc-strip-bg: rgba(255,255,255,0.025);
+  --clc-strip-border: rgba(255,255,255,0.08);
+}
+.clc-strip-actions {
+  border-right: 1px solid var(--clc-strip-border);
+}
+
 /* CalibraLineItemsGrid — Kur (döviz kuru) input'u, grid footer (PageComment Seq 1083).
    Native input color-scheme sinyali olmadan light modda bile beyaz/light render
    olabilir (bkz. CLAUDE.md "color-scheme zorunluluğu") — light default, dark override. */
