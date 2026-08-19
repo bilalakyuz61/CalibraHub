@@ -44,7 +44,7 @@ public sealed partial class FormBehaviorController : Controller
     public sealed record FieldBehaviorDto(
         string Key, bool IsVisible = true, bool IsRequired = false,
         string? DefaultValue = null, string? LabelText = null, string? LabelStyle = null,
-        string? VisibleIf = null, string? RequiredIf = null);
+        string? VisibleIf = null, string? RequiredIf = null, int? CardSection = null);
 
     public sealed record TabBehaviorDto(string Key, bool IsVisible = true, int SortOrder = 0, string? LabelText = null);
 
@@ -104,6 +104,7 @@ public sealed partial class FormBehaviorController : Controller
                 labelStyle = b?.LabelStyle,
                 visibleIf = rules.VisibleIf,
                 requiredIf = rules.RequiredIf,
+                cardSection = b?.CardSection,
             };
         }).ToArray();
 
@@ -181,7 +182,7 @@ public sealed partial class FormBehaviorController : Controller
                 // Varsayılandan farksız davranış SAKLANMAZ — tablo yalın kalır,
                 // fail-open semantiği net olur (satır yok = bugünkü davranış).
                 var isDefault = isVisible && !f.IsRequired && defaultValue is null
-                    && labelText is null && labelStyle is null && rulesJson is null;
+                    && labelText is null && labelStyle is null && rulesJson is null && f.CardSection is null;
                 if (isDefault) continue;
 
                 rows.Add(new FormFieldBehavior
@@ -195,6 +196,7 @@ public sealed partial class FormBehaviorController : Controller
                     LabelStyle = labelStyle,
                     RulesJson = rulesJson,
                     SortOrder = 0,
+                    CardSection = f.CardSection,
                     CreatedById = GetUserId(),
                     CreatedBy = User?.Identity?.Name,
                 });
@@ -252,6 +254,7 @@ public sealed partial class FormBehaviorController : Controller
     private static object ToAuditShape(FormFieldBehavior r) => new
     {
         r.FieldKey, r.IsVisible, r.IsRequired, r.DefaultValue, r.LabelText, r.LabelStyle, r.RulesJson, r.SortOrder,
+        r.CardSection,
     };
 
     private static string SerializeForAudit(IEnumerable<object> rows) =>

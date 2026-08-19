@@ -87,11 +87,11 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                 ins.CommandText = $"""
                     INSERT INTO {_table}
                         ([FormCode],[FieldKey],[IsVisible],[IsRequired],[DefaultValue],
-                         [LabelText],[LabelStyle],[RulesJSON],[SortOrder],[IsActive],
+                         [LabelText],[LabelStyle],[RulesJSON],[SortOrder],[CardSection],[IsActive],
                          [CreatedById],[CreatedBy])
                     VALUES
                         (@FormCode,@FieldKey,@IsVisible,@IsRequired,@DefaultValue,
-                         @LabelText,@LabelStyle,@RulesJson,@SortOrder,1,
+                         @LabelText,@LabelStyle,@RulesJson,@SortOrder,@CardSection,1,
                          @CreatedById,@CreatedBy);
                     """;
                 ins.Parameters.Add(new SqlParameter("@FormCode", formCode));
@@ -103,6 +103,7 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                 ins.Parameters.Add(new SqlParameter("@LabelStyle", (object?)row.LabelStyle ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@RulesJson", (object?)row.RulesJson ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@SortOrder", row.SortOrder));
+                ins.Parameters.Add(new SqlParameter("@CardSection", (object?)row.CardSection ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@CreatedById", (object?)row.CreatedById ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@CreatedBy", (object?)row.CreatedBy ?? DBNull.Value));
                 await ins.ExecuteNonQueryAsync(ct);
