@@ -2193,6 +2193,21 @@
         --sqe-strip-bg: rgba(255,255,255,.025);
         --sqe-strip-border: rgba(255,255,255,.08);
     }
+
+    /* 2026-08-19: Genel Toplam kendi karti — seritlerin altinda, saga yasli.
+       Seritlerle ayni kenarlik/zemin dilini kullanir. */
+    .sqe-total-card {
+        display: flex; align-items: baseline; justify-content: flex-end; gap: 10px;
+        border: 1px solid var(--sqe-strip-border, #e2e8f0);
+        border-radius: 10px;
+        background: var(--sqe-strip-bg, #f8fafc);
+        padding: 10px 16px;
+        margin-top: 8px;
+    }
+    body.app-theme-dark .sqe-total-card {
+        --sqe-strip-bg: rgba(255,255,255,.025);
+        --sqe-strip-border: rgba(255,255,255,.08);
+    }
     .sqe-strip {
         /* align-items flex-start (stretch DEĞİL) — bir hücre (ör. Teslim Gun/Tarih iki
            input) diğerlerinden uzun olsa da diğerleri gerilip boşluk bırakmıyor. */
@@ -2223,7 +2238,14 @@
     .sqe-hform .sqe-strip #sqValidUntil + input.calibra-date-input,
     .sqe-hform .sqe-strip #sqRateDate,
     .sqe-hform .sqe-strip #sqRateDate + input.calibra-date-input {
-        flex: 0 0 136px !important;
+        /* 2026-08-19 DUZELTME: hucre (.sqe-strip .sqe-hrow) flex-direction:column —
+           kolon eksende `flex-basis` GENISLIK degil YUKSEKLIK belirler. `flex:0 0 136px`
+           bu yuzden Tarih ve Kur Tarihi altInput'unu 136px YUKSEK yapiyordu (hucre 169px,
+           digerleri 61px) ve degerler alt satira kayiyordu. Gecerlilik tarihi dogru
+           gorunuyordu cunku o input `.sqe-hcombo` (satir eksen) icinde. Cozum: flex-basis
+           yerine acik `width`. Olculdu: hucre 169px -> 61px, input 136x136 -> 136x28. */
+        flex: 0 0 auto !important;
+        width: 136px !important;
         max-width: 136px !important;
     }
     .sqe-hform .sqe-strip .sqe-hrow > * { margin-top: 0; margin-bottom: 0; }
@@ -2255,7 +2277,37 @@
     .sqe-ident-row #sqQuoteNumber { font-size: 1.1rem !important; }
     /* Cari adı (badge) kimlik satırında input'un hemen altına iner — satır içi
        değil (label-üstte deseniyle tutarlı). */
-    .sqe-ident-row .sqe-customer-name.sqe-hlabel-value { display: block; margin-left: 0; margin-top: 2px; max-width: 260px; }
+    /* 2026-08-19 (kullanici istegi): Cari adi ALTINDA degil, Cari Kod input'unun
+       YANINDA. Hucre column akista oldugu icin etiketi tam satir yapip input + ad'i
+       ayni satirda birakiyoruz. */
+    .sqe-hform .sqe-ident-row .sqe-hrow[data-field-key="customer"] {
+        flex-flow: row wrap; align-items: center; column-gap: 10px;
+    }
+    .sqe-hform .sqe-ident-row .sqe-hrow[data-field-key="customer"] > .sqe-hlabel { flex: 0 0 100%; }
+
+    /* 2026-08-19 (kullanici istegi): Kimlik satirinda Teklif No / Cari Kod / Cari Ad
+       AYNI yatay hizada olmali. #sqQuoteNumber 1.1rem oldugu icin kutusu digerlerinden
+       yuksekti ve degerler birkac px kayiyordu. Deger kutularina ORTAK min-height verip
+       icerigi dikeyde ortaliyoruz (etiketler zaten flex-start ile hizali). */
+    .sqe-hform .sqe-ident-row .sqe-hrow > input.sqe-hinput { min-height: 38px; }
+    .sqe-hform .sqe-ident-row .sqe-hrow > .sqe-hcombo,
+    .sqe-hform .sqe-ident-row .sqe-hrow > .gl-wrapper { min-height: 38px; align-items: center; }
+    .sqe-hform .sqe-ident-row .sqe-hrow[data-field-key="customer"] > .sqe-customer-name { align-self: center; }
+
+    /* 2026-08-19 (kullanici istegi): Temsilci combobox'i dar kaliyordu — sarmalayici
+       `.sqe-hinput` kuralindan `width:auto` aliyor, panel de `left:0;right:0` ile ona
+       yapistigi icin acilir liste daralip metin alt alta sariyordu ("Bilal / Akyuz").
+       Hucreye taban genislik + panele min-width veriyoruz, secenekler tek satir. */
+    .sqe-hform .sqe-strip .sqe-hrow[data-field-key="salesRep"] { min-width: 250px; }
+    .sqe-hform .sqe-strip #sqSalesRepWrapper {
+        width: 100% !important; max-width: none !important; min-width: 230px;
+    }
+    .sqe-rep-panel { min-width: 250px; }
+    .sqe-rep-option { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sqe-ident-row .sqe-customer-name.sqe-hlabel-value {
+        display: inline-block; margin-left: 0; margin-top: 0; max-width: 320px;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
 </style>
 }
 
@@ -2879,14 +2931,6 @@
                             <span id="sqCustomerName" class="sqe-hlabel-value sqe-customer-name" data-placeholder="Cari secildiginde otomatik dolar"></span>
                         </div>
                     </div>
-                    @* Sağ uçta salt-okunur belge genel toplamı — kaynak eleman #sqGrandTotal
-                       (Kalem Bilgileri sekmesi footer) DEĞİŞTİRİLMEDİ; bu yalnız bir AYNA
-                       (mirror) — sqRecalc() ikisini birden günceller. İhtiyaç Kaydı'nda
-                       fiyat/toplam yok → gizli kalır (sqRecalc zaten erken return eder). *@
-                    <div class="sqe-ident-total" id="sqIdentGrandTotalWrap">
-                        <span class="sqe-ident-total-label">Genel Toplam</span>
-                        <span class="sqe-ident-total-value" id="sqGrandTotalIdentMirror">0,00</span>
-                    </div>
                 </div>
 
                 @* 2026-08-19: şeritler tek blok içinde alt alta satırlar (ayrı kutular değil). *@
@@ -3081,6 +3125,17 @@
                         }
                     }
                 </div>
+                </div>
+
+                @* 2026-08-19 (kullanici istegi): Genel Toplam artik kimlik kartinin sag
+                   ucunda degil, seritlerin ALTINDA kendi kartinda. Kaynak eleman
+                   #sqGrandTotal (Kalem Bilgileri footer) DEGISMEDI; bu yalniz bir AYNA
+                   (mirror) — sqRecalc() ikisini birden gunceller. Id ve class adlari
+                   korundu, yalnizca konum degisti (JS dokunulmadi). Ihtiyac Kaydi'nda
+                   fiyat/toplam yok → gizli kalir (sqRecalc erken return eder). *@
+                <div class="sqe-total-card" id="sqIdentGrandTotalWrap">
+                    <span class="sqe-ident-total-label">Genel Toplam</span>
+                    <span class="sqe-ident-total-value" id="sqGrandTotalIdentMirror">0,00</span>
                 </div>
             </div>
         </div>
