@@ -2814,214 +2814,239 @@
             <div class="sqe-hform">
                 @* data-field-key: Form Davranış Katmanı (2026-08-05) — formBehavior.js bu
                    attribute ile alanı bulur (gizle/başlık/zorunlu işaret). Yeni sabit alan
-                   eklerken DocumentHeaderFieldCatalog'a da satır ekle. *@
-                <div class="sqe-hrow" data-field-key="quoteNumber">
-                    @* 2026-05-23: 5 belge tipini destekler — entityLabel switch'ten gelir.
-                       satis_teklifi → "Teklif No", satis_siparisi → "Siparis No",
-                       alis_talebi → "İhtiyaç No", alis_teklifi → "Teklif No", alis_siparisi → "Siparis No" *@
-                    <label class="sqe-hlabel">@(entityLabel) No</label>
-                    <div class="sqe-hcombo" style="align-items:center;gap:6px;">
-                        <input id="sqQuoteNumber" class="form-control form-control-sm sqe-hinput" readonly placeholder="Kaydedildiginde olusturulur" style="font-size:1rem; font-weight:600;" />
-                        @if (isOrder)
-                        {
-                            <button type="button" id="sqOrderLookupBtn" class="sqe-lookup-btn" title="Tekliften olusturulan siparislerden sec" onclick="openOrderLookup()" style="flex-shrink:0;">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <circle cx="11" cy="11" r="7"></circle>
-                                    <path d="m21 21-4.3-4.3"></path>
-                                </svg>
-                            </button>
-                        }
-                    </div>
-                </div>
-                <div class="sqe-hrow" data-field-key="quoteDate">
-                    <label class="sqe-hlabel">Tarih</label>
-                    <input id="sqQuoteDate" type="date" class="form-control form-control-sm sqe-hinput" oninput="sqRecalcValidFromDays()" />
-                </div>
-                @if (isOrder)
-                {
-                    @* Siparis: Teslim Gun + Tarih (iki input)
-                       2026-08-01 PageComment Seq 1060: yeni kayitta varsayilan Gun=0
-                       (asil deger atamasi sqInitNew() JS'te yapilir; buradaki value
-                       sadece JS calisana kadarki ilk render'da tutarli gorunsun diyedir). *@
-                    <div class="sqe-hrow" data-field-key="validUntil">
-                        <label class="sqe-hlabel">Teslim Gun/Tarih</label>
-                        @* 2026-08-05: Tarih ONCE, Gun SONRA — ustteki "Tarih" ile tarihler
-                           sol kenardan alt alta gelsin. *@
-                        <div class="sqe-hcombo">
-                            <input id="sqValidUntil" type="date" class="form-control form-control-sm sqe-hinput" oninput="sqRecalcDaysFromValid()" />
-                            <input id="sqValidDays" type="number" min="0" class="form-control form-control-sm sqe-hinput sqe-fp-days" placeholder="Gun" value="0" oninput="sqRecalcValidFromDays()" />
+                   eklerken DocumentHeaderFieldCatalog'a da satır ekle.
+                   2026-08-19: "Kimlik + Şerit" kart düzeni (kalem kartıyla aynı görsel dil) —
+                   sarmalayıcılar (.sqe-ident-row/.sqe-strip, data-sqe-section) VARSAYILAN
+                   dağılımı temsil eder (Kimlik=0 / Şerit1=1 / Şerit2=2). Her .sqe-hrow'un
+                   içeriği (id/class/handler) DEĞİŞMEDİ — yalnız gruplama/sıra değişti.
+                   sqApplyCardSections() (asağıda) backend'in /api/form-behavior cardSection
+                   alanına göre bu varsayılanı runtime'da override eder (fail-open: alan
+                   için cardSection yoksa burada göründüğü grupta kalır). *@
+                <div class="sqe-ident-row" data-sqe-section="0">
+                    <div class="sqe-ident-fields">
+                        <div class="sqe-hrow" data-field-key="quoteNumber">
+                            @* 2026-05-23: 5 belge tipini destekler — entityLabel switch'ten gelir.
+                               satis_teklifi → "Teklif No", satis_siparisi → "Siparis No",
+                               alis_talebi → "İhtiyaç No", alis_teklifi → "Teklif No", alis_siparisi → "Siparis No" *@
+                            <label class="sqe-hlabel">@(entityLabel) No</label>
+                            <div class="sqe-hcombo" style="align-items:center;gap:6px;">
+                                <input id="sqQuoteNumber" class="form-control form-control-sm sqe-hinput" readonly placeholder="Kaydedildiginde olusturulur" style="font-size:1rem; font-weight:600;" />
+                                @if (isOrder)
+                                {
+                                    <button type="button" id="sqOrderLookupBtn" class="sqe-lookup-btn" title="Tekliften olusturulan siparislerden sec" onclick="openOrderLookup()" style="flex-shrink:0;">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                            <circle cx="11" cy="11" r="7"></circle>
+                                            <path d="m21 21-4.3-4.3"></path>
+                                        </svg>
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                        <div class="sqe-hrow" data-field-key="customer" style="@(isPurchaseRequest ? "display:none;" : "")">
+                            @* 2026-05-23: Satin alma belgelerinde label "Tedarikci", satista "Cari Kod".
+                               Element id'leri (sqCustomerDisplay/sqCustomerId) bilincli olarak ayni —
+                               JS handler'lari ve save akisi degismez. *@
+                            <label class="sqe-hlabel sqe-hlabel--link" title="@(isPurchase ? "Tedarikci karta gitmek icin cift tiklayin" : "Cari karta gitmek icin cift tiklayin")" ondblclick="sqGoToCustomerCard()">@(isPurchase ? "Tedarikçi" : "Cari Kod")</label>
+                            <!-- Stok karti pattern: yazinca lookup; varsa otomatik dolar, yoksa yeni cari ekranina yonlendirir.
+                                 attachGuide rehber butonu hala calisir, ek olarak elle yazma destegi (readonly KALDIRILDI). -->
+                            <input type="text" id="sqCustomerDisplay" class="form-control form-control-sm sqe-hinput"
+                                   placeholder="Kod yazin veya rehberden secin" autocomplete="off" />
+                            <input type="hidden" id="sqCustomerId" />
+                            <span id="sqCustomerName" class="sqe-hlabel-value sqe-customer-name" data-placeholder="Cari secildiginde otomatik dolar"></span>
                         </div>
                     </div>
-                }
-                else
-                {
-                    @* Teklif / İhtiyaç Kaydı: Gecerlilik Gun + Tarih (iki input)
-                       2026-08-01 PageComment Seq 1060: yeni kayitta varsayilan Gun=0
-                       tum belge tiplerinde (onceden yalniz alis_talebi/Ihtiyac Kaydi
-                       icindi, Teklif bos kaliyordu). Asil deger atamasi sqInitNew()
-                       JS'te yapilir (bkz. asagida); buradaki value ilk render icindir. *@
-                    <div class="sqe-hrow" data-field-key="validUntil">
-                        <label class="sqe-hlabel">@(isDelivery ? "Vade Gun/Tarih" : "Gecerlilik Gun/Tarih")</label>
-                        @* 2026-08-05: Tarih ONCE, Gun SONRA — ustteki "Tarih" ile tarihler
-                           sol kenardan alt alta gelsin. *@
-                        <div class="sqe-hcombo">
-                            <input id="sqValidUntil" type="date" class="form-control form-control-sm sqe-hinput" oninput="sqRecalcDaysFromValid()" />
-                            <input id="sqValidDays" type="number" min="0" class="form-control form-control-sm sqe-hinput sqe-fp-days" placeholder="Gun" value="0" oninput="sqRecalcValidFromDays()" />
-                        </div>
+                    @* Sağ uçta salt-okunur belge genel toplamı — kaynak eleman #sqGrandTotal
+                       (Kalem Bilgileri sekmesi footer) DEĞİŞTİRİLMEDİ; bu yalnız bir AYNA
+                       (mirror) — sqRecalc() ikisini birden günceller. İhtiyaç Kaydı'nda
+                       fiyat/toplam yok → gizli kalır (sqRecalc zaten erken return eder). *@
+                    <div class="sqe-ident-total" id="sqIdentGrandTotalWrap">
+                        <span class="sqe-ident-total-label">Genel Toplam</span>
+                        <span class="sqe-ident-total-value" id="sqGrandTotalIdentMirror">0,00</span>
                     </div>
-                }
-                @* 2026-05-23: Satin Alma Talebi belge tipinde Para Birimi ve Cari Kod
-                   gizlenir — talep iç hareket, fiyatlandırma teklifle gelir, tedarikçi
-                   sipariş aşamasında belli olur. Diğer 4 belge tipinde her ikisi de görünür.
-                   Inputlar DOM'da hala mevcut (hidden) — JS save akışı bos string gönderir,
-                   backend default değerleri (CurrencyId=1, ContactId=NULL) uygular. *@
-                <div class="sqe-hrow" data-field-key="currency" style="@(isPurchaseRequest ? "display:none;" : "")">
-                    <label class="sqe-hlabel">Para Birimi</label>
-                    <!-- ID-bazli FK (CurrencyId): value=currencies.id, data-code attribute'unda
-                         ISO kodu (TRY/USD/EUR) tasinir — event listener'lar code'u okur.
-                         Options sayfa load'da /Finance/GetCurrenciesLookup'tan dinamik dolar. -->
-                    <select id="sqCurrency" class="form-select form-select-sm sqe-hinput" style="max-width:90px;"
-                            data-current-id="1"
-                            onchange="(function(el){
-                                try {
-                                    var opt = el.options[el.selectedIndex];
-                                    var code = (opt && opt.getAttribute('data-code')) || 'TRY';
-                                    window.dispatchEvent(new CustomEvent('sq:currency', { detail: { id: parseInt(el.value) || 1, code: code, userInitiated: true } }));
-                                } catch(e) {}
-                            })(this)">
-                        <option value="1" data-code="TRY">TRY</option>
-                    </select>
-                    @* Seq 1084: kur, para biriminin HEMEN YANINDA (ayrı satır değil); "1 GBP = ? TL"
-                       ipucu kaldırıldı. TRY seçiliyken gizli — sq:currency event'i show/hide eder. *@
-                    <input id="sqExchangeRate" type="number" class="form-control form-control-sm sqe-hinput sq-no-spinner sq-no-negative"
-                           @* Seq 1094: alan daraltildi + deger saga yasli (sayisal alan okunurlugu) *@
-                           style="max-width:88px; margin-left:10px; display:none; text-align:right;" value="1" min="0" step="0.000001"
-                           title="Kur — 1 birim belge dövizinin TL karşılığı"
-                           oninput="sqRecalc()" onchange="(function(el){var v=parseFloat(el.value);if(!isFinite(v)||v<=0)el.value=1;sqRecalc();})(this)" />
-                    @* 2026-08-06: Kur tarihi — seçilen günün kurunu (SALES_QUOTE "Kur Tipi" parametresine
-                       göre Satış/Alış/Efektif) getirir. Kur alanıyla birlikte göster/gizle. Flatpickr
-                       enhance altInput'u bu span İÇİNE ekler → span'i toggle etmek native+altInput'u
-                       birlikte gizler. Değeri programatik: window.sqSetDateValue('sqRateDate', iso). *@
-                    <span id="sqRateDateWrap" style="display:none; align-items:center; gap:6px; margin-left:12px;">
-                        <span style="font-size:.72rem; color:var(--app-text-muted,#94a3b8); white-space:nowrap;">Kur tarihi</span>
-                        <input id="sqRateDate" type="date" class="form-control form-control-sm"
-                               title="Kur tarihi — seçilen günün kurunu getirir"
-                               onchange="sqRateDateChanged()" />
-                    </span>
                 </div>
-                @if (!isPurchaseRequest)
-                {
-                    @* Seq 1068: KDV Dahil switch — aktifse girilen birim fiyat KDV dahil kabul edilir. *@
-                    <div class="sqe-hrow" data-field-key="vatIncluded">
-                        <label class="sqe-hlabel">KDV Dahil</label>
-                        <label class="sqe-switch" title="Aktifse birim fiyatlar KDV dahil girilir, net geriye hesaplanır">
-                            <input type="checkbox" id="sqVatIncluded" onchange="sqRecalc()" />
-                            <span class="sqe-switch-track"><span class="sqe-switch-thumb"></span></span>
-                        </label>
+
+                <div class="sqe-strip" data-sqe-section="1">
+                    <div class="sqe-hrow" data-field-key="quoteDate">
+                        <label class="sqe-hlabel">Tarih</label>
+                        <input id="sqQuoteDate" type="date" class="form-control form-control-sm sqe-hinput" oninput="sqRecalcValidFromDays()" />
                     </div>
-                }
-                <div class="sqe-hrow" data-field-key="customer" style="@(isPurchaseRequest ? "display:none;" : "")">
-                    @* 2026-05-23: Satin alma belgelerinde label "Tedarikci", satista "Cari Kod".
-                       Element id'leri (sqCustomerDisplay/sqCustomerId) bilincli olarak ayni —
-                       JS handler'lari ve save akisi degismez. *@
-                    <label class="sqe-hlabel sqe-hlabel--link" title="@(isPurchase ? "Tedarikci karta gitmek icin cift tiklayin" : "Cari karta gitmek icin cift tiklayin")" ondblclick="sqGoToCustomerCard()">@(isPurchase ? "Tedarikçi" : "Cari Kod")</label>
-                    <!-- Stok karti pattern: yazinca lookup; varsa otomatik dolar, yoksa yeni cari ekranina yonlendirir.
-                         attachGuide rehber butonu hala calisir, ek olarak elle yazma destegi (readonly KALDIRILDI). -->
-                    <input type="text" id="sqCustomerDisplay" class="form-control form-control-sm sqe-hinput"
-                           placeholder="Kod yazin veya rehberden secin" autocomplete="off" />
-                    <input type="hidden" id="sqCustomerId" />
-                    <span id="sqCustomerName" class="sqe-hlabel-value sqe-customer-name" data-placeholder="Cari secildiginde otomatik dolar"></span>
-                </div>
-                @if (!isPurchaseRequest)
-                {
-                <div class="sqe-hrow" data-field-key="salesRep">
-                    @if ((bool)(ViewData["CanViewSalesReps"] ?? false))
+                    @if (isOrder)
                     {
-                        @* Seq 1066/1089: yetki varsa etiket ÇİFT TIKLAYINCA (Cari Kod ile aynı desen)
-                           Satış Temsilcileri tanımlama ekranını workspace sekmesi olarak açar — teklif
-                           sayfası açık kalır. Tek tık navigasyon yok (href kaldırıldı, ondblclick). *@
-                        <label class="sqe-hlabel sqe-hlabel--link" style="cursor:pointer;"
-                               ondblclick="sqOpenSalesRepDefs(event)"
-                               title="Çift tıklayınca Satış Temsilcileri tanımlama ekranını açar">Temsilci</label>
+                        @* Siparis: Teslim Gun + Tarih (iki input)
+                           2026-08-01 PageComment Seq 1060: yeni kayitta varsayilan Gun=0
+                           (asil deger atamasi sqInitNew() JS'te yapilir; buradaki value
+                           sadece JS calisana kadarki ilk render'da tutarli gorunsun diyedir). *@
+                        <div class="sqe-hrow" data-field-key="validUntil">
+                            <label class="sqe-hlabel">Teslim Gun/Tarih</label>
+                            @* 2026-08-05: Tarih ONCE, Gun SONRA — ustteki "Tarih" ile tarihler
+                               sol kenardan alt alta gelsin. *@
+                            <div class="sqe-hcombo">
+                                <input id="sqValidUntil" type="date" class="form-control form-control-sm sqe-hinput" oninput="sqRecalcDaysFromValid()" />
+                                <input id="sqValidDays" type="number" min="0" class="form-control form-control-sm sqe-hinput sqe-fp-days" placeholder="Gun" value="0" oninput="sqRecalcValidFromDays()" />
+                            </div>
+                        </div>
                     }
                     else
                     {
-                        <label class="sqe-hlabel">Temsilci</label>
-                    }
-                    <div class="sqe-rep-cb sqe-hinput" id="sqSalesRepWrapper">
-                        <button type="button" class="sqe-rep-btn" id="sqSalesRepBtn" aria-haspopup="listbox" aria-expanded="false">
-                            <span class="sqe-rep-label is-placeholder" id="sqSalesRepLabel">Seçiniz</span>
-                            <svg class="sqe-rep-chevron" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                        </button>
-                        <input type="hidden" id="sqSalesRepId" />
-                        <div class="sqe-rep-panel" id="sqSalesRepPanel" hidden role="listbox">
-                            <div class="sqe-rep-search-wrap" data-nodirty>
-                                <svg class="sqe-rep-search-icon" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M10 10l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                                <input type="text" class="sqe-rep-filter" id="sqSalesRepFilter" placeholder="İsimde ara…" autocomplete="off" />
+                        @* Teklif / İhtiyaç Kaydı: Gecerlilik Gun + Tarih (iki input)
+                           2026-08-01 PageComment Seq 1060: yeni kayitta varsayilan Gun=0
+                           tum belge tiplerinde (onceden yalniz alis_talebi/Ihtiyac Kaydi
+                           icindi, Teklif bos kaliyordu). Asil deger atamasi sqInitNew()
+                           JS'te yapilir (bkz. asagida); buradaki value ilk render icindir. *@
+                        <div class="sqe-hrow" data-field-key="validUntil">
+                            <label class="sqe-hlabel">@(isDelivery ? "Vade Gun/Tarih" : "Gecerlilik Gun/Tarih")</label>
+                            @* 2026-08-05: Tarih ONCE, Gun SONRA — ustteki "Tarih" ile tarihler
+                               sol kenardan alt alta gelsin. *@
+                            <div class="sqe-hcombo">
+                                <input id="sqValidUntil" type="date" class="form-control form-control-sm sqe-hinput" oninput="sqRecalcDaysFromValid()" />
+                                <input id="sqValidDays" type="number" min="0" class="form-control form-control-sm sqe-hinput sqe-fp-days" placeholder="Gun" value="0" oninput="sqRecalcValidFromDays()" />
                             </div>
-                            <div class="sqe-rep-list" id="sqSalesRepList"></div>
+                        </div>
+                    }
+                    @* 2026-05-23: Satin Alma Talebi belge tipinde Para Birimi ve Cari Kod
+                       gizlenir — talep iç hareket, fiyatlandırma teklifle gelir, tedarikçi
+                       sipariş aşamasında belli olur. Diğer 4 belge tipinde her ikisi de görünür.
+                       Inputlar DOM'da hala mevcut (hidden) — JS save akışı bos string gönderir,
+                       backend default değerleri (CurrencyId=1, ContactId=NULL) uygular. *@
+                    <div class="sqe-hrow" data-field-key="currency" style="@(isPurchaseRequest ? "display:none;" : "")">
+                        <label class="sqe-hlabel">Para Birimi</label>
+                        <!-- ID-bazli FK (CurrencyId): value=currencies.id, data-code attribute'unda
+                             ISO kodu (TRY/USD/EUR) tasinir — event listener'lar code'u okur.
+                             Options sayfa load'da /Finance/GetCurrenciesLookup'tan dinamik dolar. -->
+                        <select id="sqCurrency" class="form-select form-select-sm sqe-hinput" style="max-width:90px;"
+                                data-current-id="1"
+                                onchange="(function(el){
+                                    try {
+                                        var opt = el.options[el.selectedIndex];
+                                        var code = (opt && opt.getAttribute('data-code')) || 'TRY';
+                                        window.dispatchEvent(new CustomEvent('sq:currency', { detail: { id: parseInt(el.value) || 1, code: code, userInitiated: true } }));
+                                    } catch(e) {}
+                                })(this)">
+                            <option value="1" data-code="TRY">TRY</option>
+                        </select>
+                        @* Seq 1084: kur, para biriminin HEMEN YANINDA (ayrı satır değil); "1 GBP = ? TL"
+                           ipucu kaldırıldı. TRY seçiliyken gizli — sq:currency event'i show/hide eder. *@
+                        <input id="sqExchangeRate" type="number" class="form-control form-control-sm sqe-hinput sq-no-spinner sq-no-negative"
+                               @* Seq 1094: alan daraltildi + deger saga yasli (sayisal alan okunurlugu) *@
+                               style="max-width:88px; margin-left:10px; display:none; text-align:right;" value="1" min="0" step="0.000001"
+                               title="Kur — 1 birim belge dövizinin TL karşılığı"
+                               oninput="sqRecalc()" onchange="(function(el){var v=parseFloat(el.value);if(!isFinite(v)||v<=0)el.value=1;sqRecalc();})(this)" />
+                        @* 2026-08-06: Kur tarihi — seçilen günün kurunu (SALES_QUOTE "Kur Tipi" parametresine
+                           göre Satış/Alış/Efektif) getirir. Kur alanıyla birlikte göster/gizle. Flatpickr
+                           enhance altInput'u bu span İÇİNE ekler → span'i toggle etmek native+altInput'u
+                           birlikte gizler. Değeri programatik: window.sqSetDateValue('sqRateDate', iso). *@
+                        <span id="sqRateDateWrap" style="display:none; align-items:center; gap:6px; margin-left:12px;">
+                            <span style="font-size:.72rem; color:var(--app-text-muted,#94a3b8); white-space:nowrap;">Kur tarihi</span>
+                            <input id="sqRateDate" type="date" class="form-control form-control-sm"
+                                   title="Kur tarihi — seçilen günün kurunu getirir"
+                                   onchange="sqRateDateChanged()" />
+                        </span>
+                    </div>
+                    @if (!isPurchaseRequest)
+                    {
+                        @* Seq 1068: KDV Dahil switch — aktifse girilen birim fiyat KDV dahil kabul edilir. *@
+                        <div class="sqe-hrow" data-field-key="vatIncluded">
+                            <label class="sqe-hlabel">KDV Dahil</label>
+                            <label class="sqe-switch" title="Aktifse birim fiyatlar KDV dahil girilir, net geriye hesaplanır">
+                                <input type="checkbox" id="sqVatIncluded" onchange="sqRecalc()" />
+                                <span class="sqe-switch-track"><span class="sqe-switch-thumb"></span></span>
+                            </label>
+                        </div>
+                    }
+                </div>
+
+                <div class="sqe-strip" data-sqe-section="2">
+                    @if (!isPurchaseRequest)
+                    {
+                    <div class="sqe-hrow" data-field-key="salesRep">
+                        @if ((bool)(ViewData["CanViewSalesReps"] ?? false))
+                        {
+                            @* Seq 1066/1089: yetki varsa etiket ÇİFT TIKLAYINCA (Cari Kod ile aynı desen)
+                               Satış Temsilcileri tanımlama ekranını workspace sekmesi olarak açar — teklif
+                               sayfası açık kalır. Tek tık navigasyon yok (href kaldırıldı, ondblclick). *@
+                            <label class="sqe-hlabel sqe-hlabel--link" style="cursor:pointer;"
+                                   ondblclick="sqOpenSalesRepDefs(event)"
+                                   title="Çift tıklayınca Satış Temsilcileri tanımlama ekranını açar">Temsilci</label>
+                        }
+                        else
+                        {
+                            <label class="sqe-hlabel">Temsilci</label>
+                        }
+                        <div class="sqe-rep-cb sqe-hinput" id="sqSalesRepWrapper">
+                            <button type="button" class="sqe-rep-btn" id="sqSalesRepBtn" aria-haspopup="listbox" aria-expanded="false">
+                                <span class="sqe-rep-label is-placeholder" id="sqSalesRepLabel">Seçiniz</span>
+                                <svg class="sqe-rep-chevron" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            </button>
+                            <input type="hidden" id="sqSalesRepId" />
+                            <div class="sqe-rep-panel" id="sqSalesRepPanel" hidden role="listbox">
+                                <div class="sqe-rep-search-wrap" data-nodirty>
+                                    <svg class="sqe-rep-search-icon" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M10 10l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                    <input type="text" class="sqe-rep-filter" id="sqSalesRepFilter" placeholder="İsimde ara…" autocomplete="off" />
+                                </div>
+                                <div class="sqe-rep-list" id="sqSalesRepList"></div>
+                            </div>
                         </div>
                     </div>
-                </div>
-                }
-                @if (isPurchaseRequest)
-                {
-                    var personnels         = ViewData["RequesterPersonnels"] as System.Collections.IEnumerable;
-                    var requesterLocked    = (bool)(ViewData["RequesterLocked"] ?? false);
-                    var curPersonnelId     = ViewData["CurrentUserPersonnelId"] as int?;
-                    var locationList       = ViewData["LocationList"] as System.Collections.IEnumerable;
-                    var curLocationId      = ViewData["CurrentLocationId"] as int?;
-                    <div class="sqe-hrow" data-field-key="requester">
-                        <label class="sqe-hlabel">Talep Eden</label>
-                        <select id="sqRequesterId" class="form-select form-select-sm sqe-hinput"
-                            @(requesterLocked ? "disabled" : "")>
-                            <option value="">Seçiniz…</option>
-                            @if (personnels != null)
-                            {
-                                foreach (dynamic p in personnels)
+                    }
+                    @if (isPurchaseRequest)
+                    {
+                        var personnels         = ViewData["RequesterPersonnels"] as System.Collections.IEnumerable;
+                        var requesterLocked    = (bool)(ViewData["RequesterLocked"] ?? false);
+                        var curPersonnelId     = ViewData["CurrentUserPersonnelId"] as int?;
+                        var locationList       = ViewData["LocationList"] as System.Collections.IEnumerable;
+                        var curLocationId      = ViewData["CurrentLocationId"] as int?;
+                        <div class="sqe-hrow" data-field-key="requester">
+                            <label class="sqe-hlabel">Talep Eden</label>
+                            <select id="sqRequesterId" class="form-select form-select-sm sqe-hinput"
+                                @(requesterLocked ? "disabled" : "")>
+                                <option value="">Seçiniz…</option>
+                                @if (personnels != null)
                                 {
-                                    <option value="@p.Id" data-dept="@p.Dept">@p.Name</option>
+                                    foreach (dynamic p in personnels)
+                                    {
+                                        <option value="@p.Id" data-dept="@p.Dept">@p.Name</option>
+                                    }
                                 }
+                            </select>
+                            @if (requesterLocked && curPersonnelId == null)
+                            {
+                                <small class="text-warning ms-1" title="Hesabınıza bağlı personel kaydı bulunamadı.">⚠ Personel kaydı yok</small>
                             }
-                        </select>
-                        @if (requesterLocked && curPersonnelId == null)
+                        </div>
+                        @if (curPersonnelId.HasValue)
                         {
-                            <small class="text-warning ms-1" title="Hesabınıza bağlı personel kaydı bulunamadı.">⚠ Personel kaydı yok</small>
+                            <script>
+                            (function(){
+                                var sel = document.getElementById('sqRequesterId');
+                                if (sel) { sel.value = '@curPersonnelId'; }
+                            })();
+                            </script>
                         }
-                    </div>
-                    @if (curPersonnelId.HasValue)
-                    {
-                        <script>
-                        (function(){
-                            var sel = document.getElementById('sqRequesterId');
-                            if (sel) { sel.value = '@curPersonnelId'; }
-                        })();
-                        </script>
-                    }
 
-                    <div class="sqe-hrow" data-field-key="location">
-                        <label class="sqe-hlabel">Lokasyon</label>
-                        <select id="sqLocationId" class="form-select form-select-sm sqe-hinput" onchange="sqPropagateHeaderLocation()">
-                            <option value="">Seçiniz…</option>
-                            @if (locationList != null)
-                            {
-                                foreach (dynamic loc in locationList)
+                        <div class="sqe-hrow" data-field-key="location">
+                            <label class="sqe-hlabel">Lokasyon</label>
+                            <select id="sqLocationId" class="form-select form-select-sm sqe-hinput" onchange="sqPropagateHeaderLocation()">
+                                <option value="">Seçiniz…</option>
+                                @if (locationList != null)
                                 {
-                                    <option value="@loc.Id">@loc.LocationName</option>
+                                    foreach (dynamic loc in locationList)
+                                    {
+                                        <option value="@loc.Id">@loc.LocationName</option>
+                                    }
                                 }
-                            }
-                        </select>
-                    </div>
-                    @if (curLocationId.HasValue)
-                    {
-                        <script>
-                        (function(){
-                            var sel = document.getElementById('sqLocationId');
-                            if (sel) { sel.value = '@curLocationId'; }
-                        })();
-                        </script>
+                            </select>
+                        </div>
+                        @if (curLocationId.HasValue)
+                        {
+                            <script>
+                            (function(){
+                                var sel = document.getElementById('sqLocationId');
+                                if (sel) { sel.value = '@curLocationId'; }
+                            })();
+                            </script>
+                        }
                     }
-                }
+                </div>
             </div>
         </div>
 
@@ -3563,6 +3588,57 @@
         }
         run();
     })();
+
+    // ── Üst-bilgi "Kimlik + Şerit" alan dağılımı (2026-08-19) ─────────────
+    // Markup varsayılan olarak Kimlik(0)/Şerit1(1)/Şerit2(2) grupları halinde
+    // render edilir (bkz. .sqe-ident-row / .sqe-strip[data-sqe-section]).
+    // Backend /api/form-behavior/{formCode} yanıtına her alan için cardSection
+    // (int|null) eklendiğinde bu alanları ilgili şerit kutusuna TAŞIR — kendi
+    // bağımsız (formBehavior.js'ten ayrı) fetch'i, o dosyaya dokunmadan çalışır.
+    // FAIL-OPEN: istek başarısız / cardSection alanı yok / API henüz güncel
+    // değil → hiçbir şey yapılmaz, yukarıdaki varsayılan gruplama aynen kalır.
+    (function initCardSections() {
+        function applySections(sectionByKey) {
+            var hform = document.querySelector('.sqe-hform');
+            if (!hform) return;
+            Object.keys(sectionByKey).forEach(function (key) {
+                var section = sectionByKey[key];
+                if (section === null || section === undefined || !isFinite(section)) return;
+                var container = hform.querySelector('[data-field-key="' + key + '"]');
+                if (!container) return; // bu belge tipinde render edilmemis alan
+                // Kimlik alanları (0) .sqe-ident-fields İÇİNE, şerit alanları (1,2,…) .sqe-strip İÇİNE girer.
+                var target;
+                if (section === 0) {
+                    target = hform.querySelector('.sqe-ident-row .sqe-ident-fields');
+                } else {
+                    target = hform.querySelector('.sqe-strip[data-sqe-section="' + section + '"]');
+                    if (!target) {
+                        target = document.createElement('div');
+                        target.className = 'sqe-strip';
+                        target.setAttribute('data-sqe-section', String(section));
+                        hform.appendChild(target);
+                    }
+                }
+                if (target) target.appendChild(container);
+            });
+        }
+        fetch('/api/form-behavior/' + encodeURIComponent('@headerFormCode'), { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                if (!data || data.ok !== true || !Array.isArray(data.fields)) return;
+                var sectionByKey = {};
+                var any = false;
+                data.fields.forEach(function (f) {
+                    if (f && f.key && f.cardSection !== null && f.cardSection !== undefined) {
+                        var n = parseInt(f.cardSection, 10);
+                        if (isFinite(n)) { sectionByKey[f.key] = n; any = true; }
+                    }
+                });
+                if (any) applySections(sectionByKey);
+            })
+            .catch(function (e) { try { console.warn('[CardSections] yükleme hatası (fail-open):', e && e.message) } catch (_) {} });
+    })();
+
     // Liste ekranlarindaki "Islemler" menusunden gelen derin-link: ?autoAction=costs|approval|status.
     // Yalnizca MEVCUT kayitta (currentQuoteId dolu) gecerlidir; belge+kalem gridi TAM
     // yuklendikten sonra sqLoadQuote icinde TEK SEFER tetiklenir (bkz. sqRunAutoAction).
@@ -4777,6 +4853,18 @@
         document.getElementById('sqLineDiscountAmount').textContent = formatMoney(lineDiscountTotal);
         document.getElementById('sqDiscountAmount').textContent     = formatMoney(globalDiscAmount);
         document.getElementById('sqGrandTotal').textContent         = formatMoney(grandTotal);
+
+        // 2026-08-19: Genel Bilgiler kimlik satırındaki salt-okunur toplam AYNASI
+        // (#sqGrandTotal'in kopyası değil, ek gösterim) — Kalem Bilgileri sekmesindeki
+        // asıl footer'a dokunulmadı. Element yoksa (İhtiyaç Kaydı) sessizce atlanır.
+        (function () {
+            var mirrorWrap = document.getElementById('sqIdentGrandTotalWrap');
+            var mirrorVal  = document.getElementById('sqGrandTotalIdentMirror');
+            if (mirrorWrap && mirrorVal) {
+                mirrorVal.textContent = formatMoney(grandTotal);
+                mirrorWrap.classList.add('is-visible');
+            }
+        })();
 
         // Seq 1067: belge dövizi TRY değilse Genel Toplam'ın TL karşılığını (kur ile) göster.
         (function () {
