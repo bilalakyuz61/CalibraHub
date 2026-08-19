@@ -524,6 +524,14 @@ export default function CalibraLineItemsGrid(props) {
   var mainFieldColumns = columns.filter(function (c) { return !c.tlMirror })
   var materialCodeCol = mainFieldColumns.find(function (c) { return c.key === 'materialCode' }) || null
   var materialNameCol = mainFieldColumns.find(function (c) { return c.key === 'materialName' }) || null
+  // Satir toplami — VARSAYILAN kart tasariminda (useCustomLayout=false) kimlik
+  // satirinin sag ucunda ayrica gosterilir (referans tasarim 2026-08-19), bu yuzden
+  // strip'teki alan listesinden CIKARILIR (asagida renderFieldsList filterFn ile).
+  // Sadece SalesController grid'i bu kolonu tasir (Ambar/Uretim/Sayim gridlerinde
+  // yok) — null ise ust-sag toplam alani hic render edilmez, mevcut davranis (tum
+  // kolonlar strip'te) degismez. Ozel duzen (useCustomLayout) dalina DOKUNULMAZ —
+  // admin lineTotal'i kendi duzeninde istedigi yere koymus olabilir.
+  var lineTotalCol = mainFieldColumns.find(function (c) { return c.key === 'lineTotal' }) || null
   var cardBodyColumns = mainFieldColumns.filter(function (c) {
     return c !== materialCodeCol && c !== materialNameCol
   })
@@ -1797,7 +1805,7 @@ export default function CalibraLineItemsGrid(props) {
                   kitHeaderIds[Number(r.kitParentLineId)] = true
                 }
               })
-              return visibleRows.map(function(row) {
+              return visibleRows.map(function(row, __rowIdx) {
               var isKitHeader = row.id != null && Number(row.id) > 0 && kitHeaderIds[Number(row.id)] === true
               var isKitComponent = row.kitParentLineId != null && Number(row.kitParentLineId) > 0
               return (

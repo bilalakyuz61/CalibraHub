@@ -636,6 +636,14 @@ export default function WidgetBuilderForm(props) {
       setMaxValue('')
       setNumberFormatPreset('int')
     }
+    // Boolean (Evet/Hayır) alanlarda "Zorunlu" anlamsizdir — deger her zaman
+    // bir secime (true/false) sahiptir, bos state yoktur (WidgetService bos
+    // girdiyi sessizce 'false' yazar, IsRequired kontrolu hicbir zaman
+    // tetiklenmez). Tip boolean'a donuldugunde onceden isaretlenmis
+    // zorunluluk sessizce yanlis izlenim vermesin diye temizlenir.
+    if (dataType === 'boolean' && isRequired) {
+      setIsRequired(false)
+    }
   }, [dataType])
 
   // ── ColSpan auto-suggest ────────────────────────────────────────
@@ -928,7 +936,9 @@ export default function WidgetBuilderForm(props) {
         // isPlainField artik UI'da yok — labelStyle='inline' bayragi yerini aldi.
         // Backend yine de bu alani 'inline' iken true olarak yazip eski DB
         // okuyuculari ile senkron kalir; UI gondermez.
-        isRequired: isRequired,
+        // Boolean tipte "Zorunlu" hicbir zaman etkili olmadigindan (bkz. dataType
+        // effect'indeki not) kaydetme aninda da savunma amacli false'a sabitlenir.
+        isRequired: dataType === 'boolean' ? false : isRequired,
         // 2026-06-08 — Yetkilendirilebilir alan flag'i. Backend WidgetService bunu
         // domain'e (WidgetDefinition.IsPermissionControlled) bag layip discovery'ye taşıyor.
         isPermissionControlled: isPermissionControlled,
@@ -1536,7 +1546,7 @@ export default function WidgetBuilderForm(props) {
           requiredIf kurali tanimliysa toggle disable + turuncu — kural
           override eder, statik IsRequired anlamsiz.
           guide-list: salt okunur, deger yazmaz → required gizli. */}
-      {dataType !== 'group' && dataType !== 'guide-list' && (function() {
+      {dataType !== 'group' && dataType !== 'guide-list' && dataType !== 'boolean' && (function() {
         var hasRequiredRule = !!(ruleRequiredIf && ruleRequiredIf.trim())
         return (
           <div className="flex items-center justify-between py-1.5 px-1">
@@ -1569,6 +1579,24 @@ export default function WidgetBuilderForm(props) {
           </div>
         )
       })()}
+
+      {/* Boolean (Evet/Hayır) alanlarda "Zorunlu Alan" toggle'i yerine
+          devre-disi aciklama gosterilir. Sebep: bos/dokunulmamis switch
+          WidgetService'te sessizce 'false' olarak normalize edilir — deger
+          hicbir zaman "bos" olmaz, dolayisiyla IsRequired kontrolu asla
+          tetiklenmez. Yanlis beklentiyi onlemek icin toggle tamamen
+          gizlenip aciklama metni gosterilir (isaretlenebilir ama etkisiz
+          bir kontrol sunmak yerine). */}
+      {dataType === 'boolean' && (
+        <div className="flex items-center justify-between py-1.5 px-1 gap-3">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            Zorunlu Alan
+          </span>
+          <span className="text-[10px] text-slate-500 dark:text-white/45 text-right max-w-[220px]">
+            Evet/Hayır alanlarında zorunluluk uygulanmaz — değer her zaman bir seçime sahiptir.
+          </span>
+        </div>
+      )}
 
       {/* Yetkilendirilebilir toggle — 2026-06-08 */}
       <div className="flex items-center justify-between py-1.5 px-1 border-t border-slate-200/40 dark:border-white/[0.06]">

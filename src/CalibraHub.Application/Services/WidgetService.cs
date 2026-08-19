@@ -538,7 +538,13 @@ public sealed class WidgetService : IWidgetService
             RulesJson = rulesJson,
             // Eski DB okuyuculari icin senkronize: LabelStyle='inline' ↔ IsPlainField=true.
             IsPlainField = normalizedLabelStyle == "inline",
-            IsRequired = request.IsRequired,
+            // Boolean (Evet/Hayir) alanlarda "Zorunlu" hicbir zaman etkili olamaz:
+            // bos/dokunulmamis switch degeri asagida (CoerceValueForDataType,
+            // "boolean" dalinda) sessizce "false"a normalize edilir, deger hicbir
+            // zaman "bos" olmadigindan IsRequired denetimi tetiklenmez. UI zaten
+            // boolean tipte toggle'i gizler; bu savunma katmani eski/otomasyon
+            // kaynakli request'lerde de tutarliligi garanti eder.
+            IsRequired = dataType == "boolean" ? false : request.IsRequired,
             IsActive = request.IsActive,
             ColorType  = request.ColorType,
             ColorValue = string.IsNullOrWhiteSpace(request.ColorValue) ? null : request.ColorValue.Trim(),
