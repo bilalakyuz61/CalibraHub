@@ -1314,19 +1314,14 @@ export default function CalibraLineItemsGrid(props) {
     }
   }, [])
 
-  // ── Kart duzeni yukle (form bazli, herkese ortak) ──
-  useEffect(function () {
-    if (!__layoutFormCode) return undefined
-    var alive = true
-    fetch('/api/line-card-layout/' + encodeURIComponent(__layoutFormCode), { credentials: 'same-origin' })
-      .then(function (r) { return r.ok ? r.json() : null })
-      .then(function (data) {
-        if (!alive || !data || data.ok !== true) return
-        setCardLayout(Array.isArray(data.items) && data.items.length > 0 ? data.items : null)
-      })
-      .catch(function () { /* sessiz — duzen yoksa varsayilan izgara */ })
-    return function () { alive = false }
-  }, [__layoutFormCode])
+  // ── Kart duzeni (LineCardLayout) DEVRE DISI — 2026-08-08 kullanici karari ──
+  //   "Kart duzeni ayarini kapatalim, standart alanlar ekranini birakalim sadece."
+  //   Ayar ekrani (Alan Yonetimi > Kart Duzeni) kaldirildi; kayitli duzen okunmaya
+  //   devam etseydi kullanicinin ARTIK DUZENLEYEMEDIGI bir ayar kartin gorunumunu
+  //   sessizce belirlemeye devam ederdi. Bu yuzden fetch kaldirildi: kart her zaman
+  //   standart duzende (kimlik satiri + kompakt serit) cizilir.
+  //   Backend (/api/line-card-layout + LineCardLayout tablosu) DORMANT birakildi —
+  //   alan ayarlari Standart Alanlar ekranina tasinirsa yeniden degerlendirilecek.
 
   // ── Form Davranış Katmanı — kalem kolonu davranışları (2026-08-05) ──
   //   Varsayılandan farklı davranışı olan kolonlar döner; fail-open: istek

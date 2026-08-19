@@ -21,7 +21,7 @@ import { CheckCircle, XCircle, Loader2, Search, X, Trash2, Plus, Download, Uploa
 import { resolveIcon, resolveColor } from '../CalibraSmartBoard/DynamicWidgetFactory'
 import WidgetBuilderForm from './WidgetBuilderForm'
 import WidgetRegistryList from './WidgetRegistryList'
-import LineCardLayoutEditor from '../CalibraLineItemsGrid/LineCardLayoutEditor'
+// LineCardLayoutEditor kaldirildi (2026-08-08) — kart duzeni ayari Alan Yonetiminden cikarildi.
 import StandardFieldsEditor from './StandardFieldsEditor'
 import AdminMiniModal from './AdminMiniModal'
 import GroupModal from './GroupModal'
@@ -84,7 +84,6 @@ export default function AdminWidgetRegistryPanel(props) {
   var [pendingDelete, setPendingDelete] = useState(null)   // { id, label } — silme onay modalı
   var [groupModalOpen, setGroupModalOpen] = useState(false)
   // Kart Düzeni editörü (2026-08-05) — yalnizca *_LINES formlarinda acilabilir.
-  var [cardLayoutOpen, setCardLayoutOpen] = useState(false)
   // Standart Alanlar (Form Davranış Katmanı, 2026-08-05) — yalnizca *_EDIT (header) formlarinda.
   var [stdFieldsOpen, setStdFieldsOpen] = useState(false)
   // Tanim transport — { package, fileName } dolu ise onay modalı acik
@@ -927,20 +926,10 @@ export default function AdminWidgetRegistryPanel(props) {
             )}
           </div>
 
-          {/* Kart Düzeni (2026-08-05) — yalnizca kalem (*_LINES) formlarinda.
-              Editor autoLoad ile alan katalogunu + mevcut duzeni kendisi ceker;
-              belge ekranindaki "Kart Düzeni" butonuyla AYNI editordur. */}
-          {/_LINES$/i.test(currentFormCode || '') && (
-            <button
-              type="button"
-              onClick={function() { setCardLayoutOpen(true) }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/60 dark:bg-white/[0.04] hover:bg-white dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.08] text-[11px] font-semibold text-slate-500 dark:text-white/50 hover:text-indigo-600 dark:hover:text-indigo-300 transition-all flex-shrink-0"
-              title="Kart Düzeni — kalem kartındaki alanların konum, genişlik ve başlıklarını düzenle (tüm kullanıcılar için geçerli)"
-            >
-              <LayoutGrid size={13} strokeWidth={2} />
-              Kart Düzeni
-            </button>
-          )}
+          {/* Kart Düzeni editörü KALDIRILDI (2026-08-08, kullanıcı kararı): kalem kartı
+              artık sabit/standart düzende (kimlik satırı + kompakt şerit) render ediliyor;
+              alan ayarları yalnızca "Standart Alanlar" ekranından yapılır. Backend
+              (/api/line-card-layout + LineCardLayout tablosu) dokunulmadan dormant bırakıldı. */}
 
           {/* Standart Alanlar (Form Davranış Katmanı, 2026-08-05) — yalnizca üst
               bilgi (*_EDIT) formlarinda. Görünür/Zorunlu/Varsayılan/Başlık/Kural
@@ -1080,31 +1069,7 @@ export default function AdminWidgetRegistryPanel(props) {
         saving={savingGlobal}
       />
 
-      {/* ── Kart Düzeni editörü (2026-08-05) — autoLoad modu ─────────── */}
-      {cardLayoutOpen && (
-        <LineCardLayoutEditor
-          formCode={currentFormCode}
-          /* Rozet metni: "Satış Teklifi · Kalem Bilgisi" — formName tek basina
-             ("Kalem Bilgisi") hangi belge turu oldugunu soylemiyor. */
-          formLabel={(function () {
-            var f = forms.find(function (x) { return x.formCode === currentFormCode }) || {}
-            var parts = []
-            if (f.subModule) parts.push(f.subModule)
-            if (f.formName && f.formName !== f.subModule) parts.push(f.formName)
-            return parts.length ? parts.join(' · ') : null
-          })()}
-          autoLoad
-          onClose={function() { setCardLayoutOpen(false) }}
-          onSaved={function() {
-            setCardLayoutOpen(false)
-            showToast('success', 'Kart düzeni kaydedildi')
-          }}
-          onReset={function() {
-            setCardLayoutOpen(false)
-            showToast('success', 'Kart düzeni varsayılana döndürüldü')
-          }}
-        />
-      )}
+      {/* Kart Düzeni editörü kaldırıldı (2026-08-08) — bkz. yukarıdaki not. */}
 
       {/* ── Standart Alanlar davranış editörü (2026-08-05) ───────────── */}
       {stdFieldsOpen && (
