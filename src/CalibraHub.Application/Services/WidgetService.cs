@@ -1616,6 +1616,16 @@ public sealed class WidgetService : IWidgetService
             {
                 if (rawValue is bool b) return b ? "true" : "false";
                 var s = Convert.ToString(rawValue, CultureInfo.InvariantCulture) ?? string.Empty;
+                // BOS DEGER = kapali (false), hata DEGIL. Bu koruma yalnizca boolean
+                // dalinda eksikti: text/numeric/date/multi-select/attachment dallarinin
+                // hepsi bos degeri zaten null'a ceviriyordu. Renderer hic dokunulmamis
+                // bir switch icin '' gonderdiginden, formda kapali bir boolean widget
+                // varsa TUM kaydetme "gecerli bir dogru/yanlis degeri olmali" ile
+                // patliyordu (Satis Teklifi 'Doviz Fiyat Girilsin'). null yerine false
+                // secildi: (1) CoerceForRuleScope bos boolean'i zaten false sayiyor,
+                // (2) switch UI'inin "atanmamis" gorunumu yok - kapali gorunuyor,
+                // (3) null olsaydi ZORUNLU bir boolean kapaliyken kaydedilemezdi.
+                if (string.IsNullOrWhiteSpace(s)) return "false";
                 if (bool.TryParse(s, out var b2)) return b2 ? "true" : "false";
                 if (s == "1" || s.Equals("true", StringComparison.OrdinalIgnoreCase)) return "true";
                 if (s == "0" || s.Equals("false", StringComparison.OrdinalIgnoreCase)) return "false";
