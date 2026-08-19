@@ -2149,40 +2149,56 @@ export default function CalibraLineItemsGrid(props) {
                   <div className="p-2.5 sm:p-3 flex flex-col gap-2.5">
                     <div className="min-w-0">
                       <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-baseline gap-2 min-w-0 flex-1">
-                          <span className="clc-ident-num flex-shrink-0" title={'Kalem sirasi #' + (__rowIdx + 1)}>{'#' + (__rowIdx + 1)}</span>
+                        {/* 2026-08-19 (kullanici istegi): kimlik alanlarinin da serit
+                            hucreleri gibi SOL USTUNDE basligi olur — ayni etiket stili
+                            (calibra-line-card-label), boylece kart dili tutarli. */}
+                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                          <span className="clc-ident-num flex-shrink-0 mt-[15px]" title={'Kalem sirasi #' + (__rowIdx + 1)}>{'#' + (__rowIdx + 1)}</span>
                           {materialCodeCol && (
-                            <div
-                              data-cell-key={materialCodeCol.key}
-                              className="clc-ident-code clc-cell-underline flex-shrink-0 max-w-[220px]"
-                              style={isRowLocked(row) ? { opacity: 0.75, pointerEvents: 'none' } : {}}
-                            >
-                              <LineGridCell
-                                column={materialCodeCol}
-                                row={row}
-                                value={tlCellValue(materialCodeCol, row)}
-                                onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
-                                siblingColumns={allColumns}
-                              />
+                            <div className="flex-shrink-0 max-w-[220px] min-w-0">
+                              <div className="calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide mb-0.5 text-slate-500 dark:text-white/45">
+                                {materialCodeCol.label || 'Malzeme Kodu'}
+                                {(materialCodeCol.required || materialCodeCol.requirePositive) && (
+                                  <span className="text-rose-500 dark:text-rose-400 select-none">*</span>
+                                )}
+                              </div>
+                              <div
+                                data-cell-key={materialCodeCol.key}
+                                className="clc-ident-code clc-cell-underline"
+                                style={isRowLocked(row) ? { opacity: 0.75, pointerEvents: 'none' } : {}}
+                              >
+                                <LineGridCell
+                                  column={materialCodeCol}
+                                  row={row}
+                                  value={tlCellValue(materialCodeCol, row)}
+                                  onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                                  siblingColumns={allColumns}
+                                />
+                              </div>
                             </div>
                           )}
-                          {materialCodeCol && (materialCodeCol.required || materialCodeCol.requirePositive) && (
-                            <span className="text-rose-500 dark:text-rose-400 text-[11px] leading-none select-none flex-shrink-0">*</span>
-                          )}
                           {showIdentityName && (
-                            <div data-cell-key={materialNameCol.key} className="clc-ident-name clc-cell-underline min-w-0 flex-1">
-                              <LineGridCell
-                                column={materialNameCol}
-                                row={row}
-                                value={tlCellValue(materialNameCol, row)}
-                                onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
-                                siblingColumns={allColumns}
-                              />
+                            <div className="min-w-0 flex-1">
+                              <div className="calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide mb-0.5 text-slate-500 dark:text-white/45">
+                                {materialNameCol.label || 'Malzeme Adı'}
+                              </div>
+                              <div data-cell-key={materialNameCol.key} className="clc-ident-name clc-cell-underline min-w-0">
+                                <LineGridCell
+                                  column={materialNameCol}
+                                  row={row}
+                                  value={tlCellValue(materialNameCol, row)}
+                                  onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                                  siblingColumns={allColumns}
+                                />
+                              </div>
                             </div>
                           )}
                         </div>
                         {showIdentityTotal && (
                           <div className="flex-shrink-0 text-right">
+                            <div className="calibra-line-card-label flex items-center justify-end gap-1 text-[10px] font-bold tracking-wide mb-0.5 text-slate-500 dark:text-white/45">
+                              {lineTotalCol.label || 'Satır Toplamı'}
+                            </div>
                             <div className="clc-ident-total-value">{TR_FMT(tlCellValue(lineTotalCol, row), lineTotalCol.precision)}</div>
                             {showTlColumns && tlMirrorBySource[lineTotalCol.key] && (
                               <div className="clc-ident-total-tl">₺ {TR_FMT(tlCellValue(tlMirrorBySource[lineTotalCol.key], row), tlMirrorBySource[lineTotalCol.key].precision)}</div>
