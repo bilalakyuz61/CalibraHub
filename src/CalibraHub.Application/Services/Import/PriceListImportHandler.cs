@@ -179,14 +179,22 @@ public sealed class PriceListImportHandler : RowImportHandlerBase
         if (currency is null) return (false, $"Döviz bulunamadı: '{cKey}'", null);
 
         var priceType = ResolvePriceType(Get(d, "PriceType"));
-        var price = ImportParse.ParseDecimal(Get(d, "Price")) ?? 0m;
         var validFrom = ImportParse.ParseDate(Get(d, "ValidFrom")) ?? DateTime.Today;
+        // Eşlenmemiş = null: aşağıda mevcut kaydın değeriyle harmanlanır.
+        // NOT: priceType/validFrom doğal anahtarın parçasıdır (FindActiveDuplicateAsync
+        // ikisini de TAM eşleştirir) → update dalında zaten mevcut değere eşittirler,
+        // geri yazmak no-op'tur. price/validTo ise anahtar DIŞINDADIR: eşlenmemişken
+        // eskiden fiyat 0'a, bitiş tarihi null'a çekiliyordu. (2026-08-18)
+        var price = ImportParse.ParseDecimal(Get(d, "Price"));
         var validTo = ImportParse.ParseDate(Get(d, "ValidTo"));
 
         // action=update ise mevcut kaydın Id'si geçirilir → servis günceller (mükerrer açmaz).
         var entryId = action == "update" && existingId is > 0 ? existingId : null;
+        PriceList? existing = entryId is > 0 ? await _priceRepo.GetEntryByIdAsync(entryId.Value, ct) : null;
+
         var (ok, err, id) = await _priceService.SaveEntryAsync(
-            new SavePriceListRequest(entryId, group.Id, item.Id, configId, currency.Id, priceType, price, validFrom, validTo, true), ct);
+            new SavePriceListRequest(entryId, group.Id, item.Id, configId, currency.Id, priceType,
+                price ?? existing?.Price ?? 0m, validFrom, validTo ?? existing?.ValidTo, true), ct);
         return (ok, err, id);
     }
 

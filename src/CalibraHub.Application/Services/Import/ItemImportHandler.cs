@@ -197,7 +197,9 @@ public sealed class ItemImportHandler : RowImportHandlerBase
         int? userId, HashSet<string> usedCodes, CancellationToken ct)
     {
         var name = Get(d, "Name")!.Trim();
-        var taxRate = ParseDecimal(Get(d, "TaxRate")) ?? 20m;
+        // Eşlenmemiş = null (20 DEĞİL): güncellemede kartın mevcut KDV'si korunur.
+        // Eskiden TaxRate eşlenmediğinde %1/%10'luk kartlar sessizce %20'ye çekiliyordu.
+        var taxRate = ParseDecimal(Get(d, "TaxRate"));
         var tracking = ResolveTracking(Get(d, "TrackingType"));
         var typeId = ResolveMaterialTypeId(Get(d, "MaterialType"));
         var unitId = ResolveUnitId(Get(d, "Unit"));
@@ -219,7 +221,7 @@ public sealed class ItemImportHandler : RowImportHandlerBase
                 typeId ?? ex?.TypeId,
                 unitId ?? ex?.UnitId,
                 string.IsNullOrWhiteSpace(combinationsRaw) ? (ex?.Combinations ?? false) : ParseBool(combinationsRaw),
-                taxRate,
+                taxRate ?? ex?.TaxRate ?? 20m,
                 tracking ?? ex?.TrackingType ?? "None",
                 minStock ?? ex?.MinStock ?? 0m,
                 string.IsNullOrWhiteSpace(autoSerialRaw) ? (ex?.AutoSerial ?? false) : ParseBool(autoSerialRaw),
@@ -241,7 +243,7 @@ public sealed class ItemImportHandler : RowImportHandlerBase
         var code = await DeriveUniqueCodeAsync(Get(d, "Code"), name, usedCodes, ct);
         await _logistics.CreateItemAsync(new CreateItemRequest(
             code, name, typeId, unitId,
-            ParseBool(combinationsRaw), taxRate, tracking ?? "None",
+            ParseBool(combinationsRaw), taxRate ?? 20m, tracking ?? "None",
             minStock ?? 0m, ParseBool(autoSerialRaw),
             string.IsNullOrWhiteSpace(barcode) ? null : barcode), ct);
 

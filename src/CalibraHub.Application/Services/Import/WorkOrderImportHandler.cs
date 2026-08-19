@@ -101,28 +101,33 @@ public sealed class WorkOrderImportHandler : RowImportHandlerBase
         var item = await ResolveItemAsync(itemCode, ct);
         if (item is null) return (false, $"Ürün bulunamadı: '{itemCode}'.", null);
 
-        var qty = ParseDecimal(Get(d, "PlannedQuantity")) ?? 0m;
+        // Eşlenmemiş = null (0 DEĞİL): güncellemede mevcut miktar korunur, eklemede 0'a düşer.
+        var qty = ParseDecimal(Get(d, "PlannedQuantity"));
         var start = ImportParse.ParseDate(Get(d, "PlannedStartDate"));
         var end = ImportParse.ParseDate(Get(d, "PlannedEndDate"));
         var notes = Get(d, "Notes")?.Trim();
 
         if (action == "update" && existingId is > 0)
         {
-            var orders = await EnsureOrdersAsync(ct);
-            var ex = orders.FirstOrDefault(o => o.Id == existingId.Value);
+            // DETAY DTO'su okunur (liste DTO'su DEĞİL): WorkOrderListItemDto lokasyon/rota/
+            // makine/not/AR-GE proje alanlarını taşımaz. Bu alanlar burada sabit null
+            // geçildiği ve repo UPDATE'i tüm kolonları koşulsuz yazdığı için HER aktarımda
+            // siliniyordu — eşleştirilebilir alan olmadıkları hâlde. (2026-08-18)
+            var ex = await _workOrders.GetAsync(existingId.Value, ct);
 
             var req = new UpdateWorkOrderRequest(
-                PlannedQuantity: qty,
+                PlannedQuantity: qty ?? ex?.PlannedQuantity ?? 0m,
                 UnitId: ex?.UnitId,
                 PlannedStartDate: start ?? ex?.PlannedStartDate,
                 PlannedEndDate: end ?? ex?.PlannedEndDate,
                 Priority: ResolvePriority(Get(d, "Priority")) ?? ex?.Priority ?? WorkOrderPriority.Medium,
                 AssignedUserId: ex?.AssignedUserId,
-                WarehouseLocationId: null,
-                RoutingId: null,
-                DefaultMachineId: null,
+                WarehouseLocationId: ex?.WarehouseLocationId,
+                RoutingId: ex?.RoutingId,
+                DefaultMachineId: ex?.DefaultMachineId,
                 AssignedPersonnelId: ex?.AssignedPersonnelId,
-                Notes: notes);
+                Notes: notes ?? ex?.Notes,
+                ArgeProjectId: ex?.ArgeProjectId);
 
             await _workOrders.UpdateAsync(existingId.Value, req, ct);
             _orders = null;
@@ -132,7 +137,7 @@ public sealed class WorkOrderImportHandler : RowImportHandlerBase
         var createReq = new CreateWorkOrderRequest(
             ItemId: item.Id,
             ConfigId: null,
-            PlannedQuantity: qty,
+            PlannedQuantity: qty ?? 0m,
             UnitId: null,
             PlannedStartDate: start,
             PlannedEndDate: end,
