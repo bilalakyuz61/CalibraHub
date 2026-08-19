@@ -22,6 +22,7 @@ import {
   Plus, Trash2, Pencil, Calculator, StickyNote, Lock, Pin, PinOff,
   Settings, X as XIcon, GitBranch, History, AlertTriangle,
   MoreHorizontal, ExternalLink, ChevronRight, Layers,
+  LayoutGrid, Table2,
 } from 'lucide-react'
 import { Parser as ExprParser } from 'expr-eval'
 import { navigateInWorkspace } from '../../utils/workspaceNav'

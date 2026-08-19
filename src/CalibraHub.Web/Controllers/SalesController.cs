@@ -43,6 +43,7 @@ public sealed class SalesController : Controller
     private readonly IPriceListService _priceListService;
     private readonly IStockReservationRepository _stockReservationRepo;
     private readonly ILogger<SalesController> _logger;
+    private readonly IUserSettingRepository _userSettings;
     private readonly IFormFieldBehaviorRepository? _formBehaviorRepo;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _schema;
@@ -82,6 +83,7 @@ public sealed class SalesController : Controller
         ILogger<SalesController> logger,
         SqlServerConnectionFactory connectionFactory,
         CalibraDatabaseOptions dbOptions,
+        IUserSettingRepository userSettings,
         // Form Davranış Katmanı (2026-08-05) — opsiyonel: kayıt yoksa fail-open.
         IFormFieldBehaviorRepository? formBehaviorRepo = null)
     {
@@ -106,6 +108,7 @@ public sealed class SalesController : Controller
         _stockReservationRepo = stockReservationRepo;
         _logger = logger;
         _connectionFactory = connectionFactory;
+        _userSettings = userSettings;
         _formBehaviorRepo = formBehaviorRepo;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
@@ -114,6 +117,27 @@ public sealed class SalesController : Controller
     {
         var raw = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return int.TryParse(raw, out var id) ? id : 0;
+    }
+
+    /// <summary>
+    /// Belge kalem listesi görünüm modu (KART/DATAGRID) — kullanıcı bazlı tercih
+    /// (UiConfigController.LineViewMode ile kaydedilir). Kayıt yoksa/okunamazsa
+    /// "card" varsayılanına düşülür — mevcut davranış korunur (fail-open).
+    /// </summary>
+    private async Task<string> GetLineViewModeAsync(CancellationToken ct)
+    {
+        var userId = GetUserId();
+        if (userId <= 0) return CalibraHub.Application.Constants.UiConfigKeys.ViewModeCard;
+        try
+        {
+            var raw = await _userSettings.GetAsync(userId, CalibraHub.Application.Constants.UiConfigKeys.LineGridViewMode, ct);
+            return CalibraHub.Application.Constants.UiConfigKeys.NormalizeViewMode(raw);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Kalem görünüm modu okunamadı (userId={UserId}) — 'card' varsayılana düşüldü.", userId);
+            return CalibraHub.Application.Constants.UiConfigKeys.ViewModeCard;
+        }
     }
 
     /// <summary>Yazma (olusturma/duzenleme) icin yeterli sayilan izin kodlari.</summary>
@@ -1045,7 +1069,8 @@ public sealed class SalesController : Controller
         var _orderSerialTracking = string.Equals(typeCode, "satis_siparisi", StringComparison.OrdinalIgnoreCase)
             && (await _companyParams.GetBoolAsync(StockParameters.FormCode, StockParameters.SalesOrderAffectsStockKey, ct) ?? false)
             && (await _companyParams.GetBoolAsync(StockParameters.FormCode, StockParameters.OrderSerialTrackingKey, ct) ?? false);
-        var lineGridConfig = BuildDocumentLineGridConfig(bindings, lineFormCode, hidePricing, typeCode, id, _orderSerialTracking);
+        var lineViewMode = await GetLineViewModeAsync(ct);
+        var lineGridConfig = BuildDocumentLineGridConfig(bindings, lineFormCode, hidePricing, typeCode, id, _orderSerialTracking, lineViewMode);
         var jsonOpts = new System.Text.Json.JsonSerializerOptions
         {
             PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
@@ -1198,7 +1223,8 @@ public sealed class SalesController : Controller
         bool hidePricing = false,
         string? documentTypeCode = null,
         int? documentId = null,
-        bool orderSerialTracking = false)
+        bool orderSerialTracking = false,
+        string? viewMode = null)
     {
         // Binding sözlüğü: fieldKey → (guideCode, isRequired, filterJson)
         var bindingMap = (bindings ?? [])
@@ -1323,6 +1349,9 @@ public sealed class SalesController : Controller
         return new
         {
             schemaVersion = "v1",
+            // Kalem listesi görünüm modu (KART/DATAGRID) — kullanıcı bazlı tercih
+            // (UiConfigController.LineViewMode). Kayıt yoksa "card" (mevcut davranış).
+            viewMode = CalibraHub.Application.Constants.UiConfigKeys.NormalizeViewMode(viewMode),
             columns = cols,
             rows = System.Array.Empty<object>(),     // Baslangic bos — mevcut teklif yuklenirken JS bridge doldurur
             labels = new

@@ -33,6 +33,8 @@ public sealed class WarehouseController : Controller
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly IAuditTrailService _audit;
     private readonly IPermissionService _permService;
+    private readonly IUserSettingRepository _userSettings;
+    private readonly ILogger<WarehouseController> _logger;
     private readonly string _schema;
 
     private static readonly JsonSerializerOptions BoardJsonOpts = new()
@@ -55,6 +57,8 @@ public sealed class WarehouseController : Controller
         SqlServerConnectionFactory connectionFactory,
         IAuditTrailService audit,
         IPermissionService permService,
+        IUserSettingRepository userSettings,
+        ILogger<WarehouseController> logger,
         CalibraDatabaseOptions dbOptions)
     {
         _stockDocRepo = stockDocRepo;
@@ -69,11 +73,34 @@ public sealed class WarehouseController : Controller
         _connectionFactory = connectionFactory;
         _audit = audit;
         _permService = permService;
+        _userSettings = userSettings;
+        _logger = logger;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
     private string CurrentUser() => User.FindFirstValue(ClaimTypes.Name) ?? "system";
     private int? CurrentUserId() => int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+
+    /// <summary>
+    /// Belge kalem listesi görünüm modu (KART/DATAGRID) — kullanıcı bazlı tercih
+    /// (UiConfigController.LineViewMode ile kaydedilir). Kayıt yoksa/okunamazsa
+    /// "card" varsayılanına düşülür — mevcut davranış korunur (fail-open).
+    /// </summary>
+    private async Task<string> GetLineViewModeAsync(CancellationToken ct)
+    {
+        var userId = CurrentUserId();
+        if (userId is null) return CalibraHub.Application.Constants.UiConfigKeys.ViewModeCard;
+        try
+        {
+            var raw = await _userSettings.GetAsync(userId.Value, CalibraHub.Application.Constants.UiConfigKeys.LineGridViewMode, ct);
+            return CalibraHub.Application.Constants.UiConfigKeys.NormalizeViewMode(raw);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Kalem görünüm modu okunamadı (userId={UserId}) — 'card' varsayılana düşüldü.", userId);
+            return CalibraHub.Application.Constants.UiConfigKeys.ViewModeCard;
+        }
+    }
 
     // ── İşlem logu (audit trail) yardımcıları ──────────────────────────────
     // Depo belgelerinin audit entity kodu = DocumentType.Code (SqlStockDocRepository.TypeCodeFor
@@ -327,7 +354,8 @@ public sealed class WarehouseController : Controller
         Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
         Response.Headers["Pragma"] = "no-cache";
         var bindings = await GetLineGuideBindingsAsync(FormCodes.TransferLines, ct);
-        var gridConfig = BuildLineGridConfig("TRANSFER", bindings);
+        var viewMode = await GetLineViewModeAsync(ct);
+        var gridConfig = BuildLineGridConfig("TRANSFER", bindings, viewMode);
         var vm = new StockDocEditViewModel
         {
             DocId   = id,
@@ -372,7 +400,8 @@ public sealed class WarehouseController : Controller
         Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
         Response.Headers["Pragma"] = "no-cache";
         var bindings = await GetLineGuideBindingsAsync("INVENTORY_COUNT_LINES", ct);
-        var gridConfig = BuildInventoryLineGridConfig(bindings);
+        var viewMode = await GetLineViewModeAsync(ct);
+        var gridConfig = BuildInventoryLineGridConfig(bindings, viewMode);
         var vm = new InventoryEditViewModel
         {
             DocId              = id,
@@ -765,7 +794,8 @@ public sealed class WarehouseController : Controller
 
         var lineFormCode = docType == "STOCK_OUT" ? FormCodes.StockOutLines : FormCodes.StockInLines;
         var bindings = await GetLineGuideBindingsAsync(lineFormCode, ct);
-        var gridConfig = BuildLineGridConfig(docType, bindings);
+        var viewMode = await GetLineViewModeAsync(ct);
+        var gridConfig = BuildLineGridConfig(docType, bindings, viewMode);
         var vm = new StockDocEditViewModel
         {
             DocId   = id,
@@ -1458,7 +1488,7 @@ public sealed class WarehouseController : Controller
 
     // internal: ProductionController üretim sarfı modalı aynı STOCK_OUT kolon setini
     // (lookup + kombinasyon + seri-pick + lot + miktar) yeniden kullanır (2026-07-10).
-    internal static object BuildLineGridConfig(string docType, IReadOnlyCollection<FieldGuideBindingDto>? bindings = null)
+    internal static object BuildLineGridConfig(string docType, IReadOnlyCollection<FieldGuideBindingDto>? bindings = null, string? viewMode = null)
     {
         var isTransfer = docType == "TRANSFER";
         var bindingMap = (bindings ?? [])
@@ -1627,6 +1657,9 @@ public sealed class WarehouseController : Controller
             // sayılıyordu — "sessiz kırık"). InventoryEdit deseniyle aynı: kökü
             // (NormalizeFormCode ile STOCK_IN/OUT/TRANSFER) çözecek şekilde açıkça ver.
             decimalFormCode = lineFormCode,
+            // Kalem listesi görünüm modu (KART/DATAGRID) — kullanıcı bazlı tercih
+            // (UiConfigController.LineViewMode). Kayıt yoksa "card" (mevcut davranış).
+            viewMode = CalibraHub.Application.Constants.UiConfigKeys.NormalizeViewMode(viewMode),
             columns = locationCols.Concat(baseCols).ToArray(),
         };
     }
@@ -1706,7 +1739,7 @@ public sealed class WarehouseController : Controller
         };
     }
 
-    private static object BuildInventoryLineGridConfig(IReadOnlyCollection<FieldGuideBindingDto>? bindings = null)
+    private static object BuildInventoryLineGridConfig(IReadOnlyCollection<FieldGuideBindingDto>? bindings = null, string? viewMode = null)
     {
         var bindingMap = (bindings ?? [])
             .ToDictionary(b => b.FieldKey, b => b, StringComparer.OrdinalIgnoreCase);
@@ -1718,6 +1751,9 @@ public sealed class WarehouseController : Controller
             // Ondalık: lineFormCode yok — sayım ailesinin kök kodu açıkça verilmezse
             // grid SALES_QUOTE_LINES varsayılanına düşer (yanlış aile).
             decimalFormCode = FormCodes.InventoryCount,
+            // Kalem listesi görünüm modu (KART/DATAGRID) — kullanıcı bazlı tercih
+            // (UiConfigController.LineViewMode). Kayıt yoksa "card" (mevcut davranış).
+            viewMode = CalibraHub.Application.Constants.UiConfigKeys.NormalizeViewMode(viewMode),
             columns = new object[]
             {
             new
