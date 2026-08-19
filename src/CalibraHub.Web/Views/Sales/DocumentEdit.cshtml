@@ -3215,6 +3215,21 @@
         setTimeout(function() { sel.focus(); }, 50);
     }
 
+    // Zorunlu ust bilgi (widget) alanlari icin UYARI-ONLY kontrol. Hicbir seyi
+    // engellemez; renderer.validate() eksikleri isaretler ve toast gosterir.
+    // Renderer henuz mount olmadiysa veya formda hic widget yoksa sessizce cikar
+    // (fail-open: kontrol edilemiyorsa kullanicinin onunu kesme).
+    function sqWarnMissingHeaderWidgets() {
+        try {
+            var r = window._sqDynRenderer;
+            if (!r || typeof r.validate !== 'function') return;
+            if (typeof r.getHasWidgets === 'function' && !r.getHasWidgets()) return;
+            r.validate();
+        } catch (e) {
+            console.warn('[SQ] zorunlu ek alan uyarisi atlandi:', e);
+        }
+    }
+
     function sqActivateTab(tabKey) {
         document.querySelectorAll('[data-sqe-tab-btn]').forEach(function(btn) {
             btn.classList.toggle('is-active', btn.getAttribute('data-sqe-tab-btn') === tabKey);
@@ -3227,6 +3242,15 @@
 
     window.sqSwitchTab = function(tabKey) {
         sqActivateTab(tabKey);
+        // ── Kalem Bilgileri'ne gecerken zorunlu UST BILGI ek alanlarini UYAR ──
+        // (2026-08-19 kullanici karari: "uyar ama engelleme")
+        // Bolge gibi belge-bazinda zorunlu bir ek alan, kalem girisine baslamadan
+        // once fark edilmeli; aksi halde kullanici tum kalemleri girip ancak
+        // Kaydet'te ogreniyor. Gecis ENGELLENMEZ — kullanici kalemlere goz atmak
+        // isteyebilir; kesin engel acik "Kaydet"te (sqSave({validate:true})).
+        // validate() zaten eksik alanlari kirmizi isaretler + kendi toast'ini
+        // gosterir; burada sadece tetikliyoruz, donen degeri yok sayiyoruz.
+        if (tabKey === 'lines') sqWarnMissingHeaderWidgets();
         if (tabKey === 'attachments') sqAttLoad();
         if (tabKey === 'lineage') sqLineageLoad();
         // Notlar sekmesi ilk kez acildiginda textarea gizliyken scrollHeight=0
