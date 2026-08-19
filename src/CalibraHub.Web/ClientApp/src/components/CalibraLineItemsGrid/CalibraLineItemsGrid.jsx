@@ -40,7 +40,7 @@ import { loadDecimalSettings, resolveColumnDecimals, roundTo, onDecimalSettingsC
    gorunmek zorunda, iki kopya ayrisirsa WYSIWYG sessizce bozuluyordu. */
 import {
   ICON_MAP, resolveIcon, CARD_GRID_UNITS, CARD_LABEL_COLOR_CLS,
-  CARD_ROW_HEIGHT, resolvePlacements,
+  resolvePlacements,
 } from './cardLayoutTokens'
 
 /* ── Form Davranış Katmanı — satır-scope kural değerlendirme (2026-08-05) ──
@@ -1940,17 +1940,28 @@ export default function CalibraLineItemsGrid(props) {
                       var mirror = col.__isWidget ? null : tlMirrorBySource[col.key]
                       var showMirror = mirror && showTlColumns
                       var cellStyle = Object.assign({}, lockedStyle)
-                      if (useCustomLayout) {
-                        var __span = Math.min(Math.max(item.span || 12, 1), CARD_GRID_UNITS)
-                        // Serbest yerlesim: duzende satir/sutun varsa hucre TAM O
-                        // konuma oturur (aradaki bosluklar korunur). Yoksa akis.
-                        cellStyle.gridColumn = item.placeCol ? (item.placeCol + ' / span ' + __span) : ('span ' + __span)
-                        if (item.placeRow) cellStyle.gridRow = String(item.placeRow)
-                      } else if (showMirror) {
-                        cellStyle.gridColumn = 'span 2'
+                      // Kompakt bolmeli serit (referans tasarim duzeltmesi, 2026-08-19):
+                      // hucreler CSS-grid DEGIL flex-wrap akisinda dizilir (bkz. asagidaki
+                      // renderFieldsList cagrisi + .clc-fields-row/.clc-field-cell CSS).
+                      // Ozel kart duzeni (LineCardLayoutEditor) artik YALNIZCA sira,
+                      // gorunurluk ve etiket belirler — admin'in verdigi span/placeRow/
+                      // placeCol grid konumu olarak KULLANILMAZ (bosluk/hiza sorunu buradan
+                      // geliyordu). span, goreli genislik agirligi (flex-grow) olarak
+                      // yorumlanir: genis tutulan alan burada da orantili genis kalir, ama
+                      // sabit 48-birim izgara + serbest satir/sutun yerlesimi tamamen kalkar.
+                      var __flexGrow = useCustomLayout
+                        ? Math.min(Math.max(item.span || 12, 1), CARD_GRID_UNITS)
+                        : 12
+                      cellStyle.flex = __flexGrow + ' 1 116px'
+                      cellStyle.minWidth = 96
+                      if (showMirror) {
+                        cellStyle.flex = (__flexGrow * 2) + ' 1 200px'
+                        cellStyle.minWidth = 168
                       } else if (col.type === 'percent') {
                         // Seq 1085: İskonto/KDV % alanları en fazla 3 karakter (0-100) — ayrılan
-                        // alan gereksiz genişti; dar tutulur (custom layout'ta admin span'i geçerli).
+                        // alan gereksiz genişti; dar tutulur (custom layout'ta da sabit dar kalir).
+                        cellStyle.flex = '0 0 88px'
+                        cellStyle.minWidth = 72
                         cellStyle.maxWidth = 104
                       }
                       // Widget hucre degeri: __extras (bekleyen edit) > __widgetValues (server)
@@ -1996,7 +2007,7 @@ export default function CalibraLineItemsGrid(props) {
                         </>
                       )
                       return (
-                        <div key={col.key} data-cell-key={col.key} style={cellStyle} className={labelMode === 'inline' ? 'flex items-center gap-2' : undefined}>
+                        <div key={col.key} data-cell-key={col.key} style={cellStyle} className={'clc-field-cell' + (labelMode === 'inline' ? ' flex items-center gap-2' : '')}>
                           {/* standard: etiket ustte · inline (Sade): etiket solda ·
                               modern: etiket kutunun ust kenarinda yuzer (asagida). */}
                           {labelMode === 'standard' && (
@@ -2201,22 +2212,15 @@ export default function CalibraLineItemsGrid(props) {
                       <div className="clc-strip-actions flex items-center gap-1 px-1.5 py-1.5 flex-shrink-0">
                         {renderActionButtons()}
                       </div>
+                      {/* Kompakt bolmeli hucre satiri (referans PlanetCS tasarimi,
+                          2026-08-19): CSS-grid DEGIL flex-wrap — bosluk/hiza sorunu
+                          eden 48-birim grid + serbest satir/sutun tamamen kalkti.
+                          Her hucre kendi border-left'i ile dikey ayrac cizer
+                          (bkz. .clc-fields-row / .clc-field-cell CSS), sigmayan
+                          alanlar alt satira sarar (bos hucre/sutun olusmaz). */}
                       {renderFieldsList(
-                        useCustomLayout
-                          ? {
-                              display: 'grid',
-                              gridTemplateColumns: 'repeat(' + CARD_GRID_UNITS + ', minmax(0, 1fr))',
-                              gridAutoRows: 'minmax(' + CARD_ROW_HEIGHT + 'px, auto)',
-                              columnGap: 12, rowGap: 10, alignItems: 'end',
-                              padding: '10px 12px', flex: 1, minWidth: 0,
-                            }
-                          : {
-                              display: 'grid',
-                              gridTemplateColumns: 'repeat(auto-fill, minmax(126px, 1fr))',
-                              columnGap: 12, rowGap: 10, alignItems: 'end',
-                              padding: '10px 12px', flex: 1, minWidth: 0,
-                            },
-                        isKitComponent ? 'opacity-90' : '',
+                        { display: 'flex', flexWrap: 'wrap', alignItems: 'stretch', flex: 1, minWidth: 0 },
+                        'clc-fields-row' + (isKitComponent ? ' opacity-90' : ''),
                         function(item) { return !__isIdentityCol(item.col) }
                       )}
                     </div>

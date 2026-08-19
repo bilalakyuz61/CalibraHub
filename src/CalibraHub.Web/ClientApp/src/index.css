@@ -3363,6 +3363,19 @@ body.app-theme-dark .clc-strip {
   border-right: 1px solid var(--clc-strip-border);
 }
 
+/* Alan hücreleri — kompakt bölmeli satır (referans PlanetCS düzeltmesi,
+   2026-08-19). Önceden CSS-grid (48 birim + admin span/satır-sütun) idi; bu
+   serbest yerleşim çoğu düzende geniş boş hücreler bırakıyordu. Artık
+   flex-wrap: hücreler yan yana dizilir, her biri kendi sol kenarlığıyla dikey
+   ayraç çizer (bkz. CalibraLineItemsGrid.jsx renderFieldsList çağrısı — özel
+   kart düzeni artık yalnız sıra/görünürlük/etiket, span flex-grow ağırlığı). */
+.clc-fields-row { align-content: flex-start; }
+.clc-field-cell {
+  padding: 6px 10px;
+  border-left: 1px solid var(--clc-strip-border);
+}
+.clc-field-cell:first-child { border-left: none; }
+
 /* CalibraLineItemsGrid — Kur (döviz kuru) input'u, grid footer (PageComment Seq 1083).
    Native input color-scheme sinyali olmadan light modda bile beyaz/light render
    olabilir (bkz. CLAUDE.md "color-scheme zorunluluğu") — light default, dark override. */
