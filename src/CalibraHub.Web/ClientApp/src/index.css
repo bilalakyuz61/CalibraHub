@@ -4259,8 +4259,15 @@ body.app-theme-dark .calibra-line-grid--table {
 body.app-theme-dark .clg-table-head {
   background: rgba(255,255,255,0.05) !important;
 }
-body.app-theme-dark .clg-table-row:hover {
+body.app-theme-dark .clg-table-row:hover:not(.is-kit-component) {
   background: rgba(255,255,255,0.03) !important;
+}
+/* Kit bileşeni satırı (2026-08-19 review bulgu 7) — yukarıdaki genel hover
+   override'ı satırın indigo tonunu (dark:bg-indigo-500/[0.03]) eziyordu, hover'da
+   kit rengi kayboluyordu. Kit satırına ÖZEL hover tonu: aynı indigo aile, biraz
+   daha belirgin. */
+body.app-theme-dark .clg-table-row.is-kit-component:hover {
+  background: rgba(99,102,241,0.07) !important;
 }
 /* Görünüm seçici (Kart/Tablo) — aktif sekme zemini de aynı utility bug'ına tabi. */
 body.app-theme-dark .clg-view-btn.is-active {

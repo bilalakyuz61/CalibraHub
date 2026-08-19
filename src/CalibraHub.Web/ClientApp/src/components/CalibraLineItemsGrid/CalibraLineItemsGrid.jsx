@@ -177,7 +177,23 @@ export default function CalibraLineItemsGrid(props) {
   //   guncellenir (UI beklemeden gecer) hem de kalici hale getirilir; kaydetme
   //   basarisiz olsa bile gecis calismaya devam eder (sessiz-kirik degil,
   //   kullaniciya toast ile bildirilir — asagida persistViewMode).
+  //   2026-08-19 review bulgu 3: bazi ekranlar (orn. InventoryEdit.cshtml raf/
+  //   hucre degisince) bu bileseni UNMOUNT+REMOUNT eder — useState initializer
+  //   yalniz mount ANINDAKI config.viewMode'a bakiyordu, kullanicinin oturum
+  //   icinde sectigi mod remount'ta geri aliniyordu. window.CalibraHub.lineViewMode
+  //   sayfa-omrunce kalici bir bellek noktasi olarak eklendi: initializer ONCE
+  //   buna, yoksa config.viewMode'a bakar. .cshtml'e DOKUNULMADI — cozum bilesende.
+  function readLastViewMode() {
+    return (typeof window !== 'undefined' && window.CalibraHub && window.CalibraHub.lineViewMode) || null
+  }
+  function writeLastViewMode(mode) {
+    if (typeof window === 'undefined') return
+    window.CalibraHub = window.CalibraHub || {}
+    window.CalibraHub.lineViewMode = mode
+  }
   var [viewMode, setViewMode] = useState(function () {
+    var last = readLastViewMode()
+    if (last === 'card' || last === 'grid') return last
     return config.viewMode === 'grid' ? 'grid' : 'card'
   })
   function persistViewMode(mode) {
@@ -202,7 +218,16 @@ export default function CalibraLineItemsGrid(props) {
   function handleViewModeChange(mode) {
     if (mode !== 'card' && mode !== 'grid') return
     if (mode === viewMode) return
+    // 2026-08-19 review bulgu 8: kart/tablo iki ayri JSX agaci — toggle TUM
+    // hucreleri unmount eder. Odakli input'ta commit edilmemis (henuz blur
+    // olmamis) bir taslak varsa React unmount sirasinda onChange/onBlur'u
+    // tetiklemeyebilir → deger sessizce kaybolabilir. Once blur() cagirarak
+    // input'un kendi onBlur/commit akisini calistiriyoruz, SONRA gecis yapiyoruz.
+    if (typeof document !== 'undefined' && document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur()
+    }
     setViewMode(mode)
+    writeLastViewMode(mode)
     persistViewMode(mode)
   }
 
@@ -2335,7 +2360,10 @@ export default function CalibraLineItemsGrid(props) {
                       exit={{ opacity: 0 }}
                       transition={{ duration: 0.15 }}
                       className={'clg-table-row border-b border-slate-100 hover:bg-slate-50/70 dark:border-white/[0.05] dark:hover:bg-white/[0.02] transition-colors' +
-                        (isKitComponent ? ' bg-indigo-50/40 dark:bg-indigo-500/[0.03]' : '')}
+                        // is-kit-component: dark hover !important override'ının (index.css)
+                        // kit satırının indigo tonunu ezmesini engellemek icin (2026-08-19
+                        // review bulgu 7) — CSS'te .clg-table-row.is-kit-component:hover ayrica ele alınır.
+                        (isKitComponent ? ' bg-indigo-50/40 dark:bg-indigo-500/[0.03] is-kit-component' : '')}
                       style={{ position: 'relative' }}
                     >
                       <div className="flex items-stretch" style={{ position: 'relative' }}>
@@ -2446,15 +2474,25 @@ export default function CalibraLineItemsGrid(props) {
                           </button>
                         </div>
                         {columns.map(function (col) {
+                          // ── Form Davranış Katmanı: satır-scope kurallar (2026-08-19 review
+                          //   bulgu 1 — kart dalıyla PAYLAŞILAN evalCellBehavior). visibleIf
+                          //   false → hücre boş/atlanmış gösterilir (kolon hizası bozulmasın
+                          //   diye wrapper YİNE render edilir, içerik gizlenir — kartta gizli
+                          //   bir alan tabloda düzenlenebilir olmasın). requiredIf true →
+                          //   köşede kırmızı yıldız + kırmızı alt çizgi (behInvalid).
+                          var __cellBeh = evalCellBehavior(col, row)
                           var lockedStyle = isRowLocked(row) ? { opacity: 0.75, pointerEvents: 'none' } : {}
                           var isMaterialCell = col.key === 'materialCode'
                           return (
                             <div
                               key={col.key}
                               data-cell-key={col.key}
-                              className={'flex items-center border-r border-slate-100 last:border-r-0 dark:border-white/[0.04]' +
+                              className={'flex items-center border-r border-slate-100 last:border-r-0 dark:border-white/[0.04] clc-cell-underline' +
                                 (isKitComponent ? ' opacity-80' : '')}
-                              style={Object.assign({}, widthCss(col), { position: 'relative' }, lockedStyle)}
+                              style={Object.assign({}, widthCss(col), { position: 'relative' },
+                                __cellBeh.behInvalid ? { borderBottomColor: '#ef4444', boxShadow: '0 1px 0 0 #ef4444', backgroundColor: 'rgba(239,68,68,0.05)' } : {},
+                                lockedStyle)}
+                              title={__cellBeh.behInvalid ? 'Bu alan zorunlu' : undefined}
                             >
                               {isMaterialCell && isKitComponent && (
                                 <span
@@ -2470,13 +2508,60 @@ export default function CalibraLineItemsGrid(props) {
                                   title="Kit — bilesenleri asagida listelenir"
                                 >KİT</span>
                               )}
-                              <LineGridCell
-                                column={col}
-                                row={row}
-                                value={tlCellValue(col, row)}
-                                onChange={function (k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
-                                siblingColumns={allColumns}
-                              />
+                              {__cellBeh.behReqNow && !__cellBeh.hidden && (
+                                <span
+                                  className="absolute left-0.5 top-0.5 text-[11px] font-bold leading-none text-rose-500 dark:text-rose-400 pointer-events-none select-none"
+                                  style={{ zIndex: 2 }}
+                                  title="Bu alan zorunlu"
+                                >*</span>
+                              )}
+                              {__cellBeh.hidden ? (
+                                <span className="px-2.5 text-[12px] text-slate-300 dark:text-white/15 select-none">—</span>
+                              ) : (
+                                <LineGridCell
+                                  column={col}
+                                  row={row}
+                                  value={tlCellValue(col, row)}
+                                  onChange={function (k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                                  siblingColumns={allColumns}
+                                />
+                              )}
+                            </div>
+                          )
+                        })}
+                        {widgetCardColumns.map(function (col) {
+                          // ── Kartta gösterilen özel widget alanları — tabloda da AYNI kolon
+                          //   seti (2026-08-19 review bulgu 2). Değer çözümü kartla birebir
+                          //   aynı: __extras (bekleyen edit) > __widgetValues (server). ──
+                          var wc = col.__widgetCode
+                          var widgetValue = (row.__extras && (wc in row.__extras))
+                            ? row.__extras[wc]
+                            : ((row.__widgetValues || {})[wc])
+                          var lockedStyleW = isRowLocked(row) ? { opacity: 0.75, pointerEvents: 'none' } : {}
+                          return (
+                            <div
+                              key={col.key}
+                              data-cell-key={col.key}
+                              className={'flex items-center border-r border-slate-100 last:border-r-0 dark:border-white/[0.04] clc-cell-underline' +
+                                (isKitComponent ? ' opacity-80' : '')}
+                              style={Object.assign({}, widthCss(col), { position: 'relative' }, lockedStyleW)}
+                            >
+                              {col.__widgetType === 'date' ? (
+                                <input
+                                  type="date"
+                                  data-native-date
+                                  value={widgetValue == null ? '' : String(widgetValue)}
+                                  onChange={function (e) { handleWidgetValueChange(row._uid, wc, e.target.value) }}
+                                  className="w-full h-full bg-transparent border-0 outline-none px-2.5 py-2 text-[13px] text-slate-800 dark:text-white/85 transition-colors"
+                                />
+                              ) : (
+                                <LineGridCell
+                                  column={col}
+                                  row={row}
+                                  value={widgetValue}
+                                  onChange={function (k, v) { handleWidgetValueChange(row._uid, wc, v) }}
+                                />
+                              )}
                             </div>
                           )
                         })}
