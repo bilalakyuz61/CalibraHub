@@ -1729,7 +1729,7 @@ export default function CalibraLineItemsGrid(props) {
             onClick={function () { handleViewModeChange('card') }}
             className={'clg-view-btn flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-semibold transition-colors ' + (
               viewMode === 'card'
-                ? 'is-active bg-white text-indigo-600 shadow-sm dark:bg-indigo-500/20 dark:text-indigo-200'
+                ? 'is-active bg-[#fff] text-indigo-600 shadow-sm dark:bg-indigo-500/20 dark:text-indigo-200'
                 : 'text-slate-500 hover:text-slate-700 dark:text-white/45 dark:hover:text-white/70'
             )}
             title="Kart Görünümü"
@@ -1744,7 +1744,7 @@ export default function CalibraLineItemsGrid(props) {
             onClick={function () { handleViewModeChange('grid') }}
             className={'clg-view-btn flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-semibold transition-colors ' + (
               viewMode === 'grid'
-                ? 'is-active bg-white text-indigo-600 shadow-sm dark:bg-indigo-500/20 dark:text-indigo-200'
+                ? 'is-active bg-[#fff] text-indigo-600 shadow-sm dark:bg-indigo-500/20 dark:text-indigo-200'
                 : 'text-slate-500 hover:text-slate-700 dark:text-white/45 dark:hover:text-white/70'
             )}
             title="Tablo Görünümü"
@@ -2104,7 +2104,7 @@ export default function CalibraLineItemsGrid(props) {
                   exit={{ opacity: 0, y: -4, height: 0 }}
                   transition={{ duration: 0.18 }}
                   className={'calibra-line-card relative rounded-xl border overflow-hidden transition-colors ' +
-                    'border-slate-200 bg-white hover:border-indigo-200/70 dark:border-white/10 dark:bg-white/[0.025] dark:hover:border-indigo-400/25' +
+                    'border-slate-200 bg-[#fff] hover:border-indigo-200/70 dark:border-white/10 dark:bg-white/[0.025] dark:hover:border-indigo-400/25' +
                     (isKitComponent ? ' bg-indigo-50/40 dark:bg-indigo-500/[0.04]' : '')}
                   style={{ position: 'relative' }}
                 >
@@ -2707,7 +2707,11 @@ export default function CalibraLineItemsGrid(props) {
             style={{ background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}
           >
             <div
-              className="w-full max-w-[380px] rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-[#171c2a] overflow-hidden"
+              /* bg-[#fff] (bg-white DEGIL): Bootstrap .bg-white{...!important} tanimlar ve
+                 Tailwind'in dark:bg-* varyantini yener -> koyu temada kart BEYAZ kalirdi.
+                 dark:text-white ise (.dark\:text-white ayri sinif) uygulanip yaziyi beyaza
+                 cevirdigi icin sonuc beyaz-uzerine-beyaz, okunamaz bir modaldi. (2026-08-19) */
+              className="w-full max-w-[380px] rounded-2xl border border-slate-200 bg-[#fff] shadow-2xl dark:border-white/10 dark:bg-[#171c2a] overflow-hidden"
               onClick={function (e) { e.stopPropagation() }}
             >
               <div className="p-5 flex flex-col items-center text-center gap-3">

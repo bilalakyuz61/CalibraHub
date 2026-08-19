@@ -2181,7 +2181,10 @@
     body.app-theme-dark .sqe-ident-total-value { color: rgba(255,255,255,.92); }
 
     .sqe-strip {
-        display: flex; align-items: stretch; flex-wrap: wrap;
+        /* 2026-08-19: align-items flex-start (stretch DEĞİL) — bir hücre (ör. Teslim
+           Gun/Tarih iki input) diğerlerinden uzun olsa da diğer hücreler tam yükseklige
+           gerilip devasa bosluk birakmiyor; her hucre kendi icerigi kadar yer kaplar. */
+        display: flex; align-items: flex-start; flex-wrap: wrap;
         border: 1px solid var(--sqe-strip-border, #e2e8f0);
         border-radius: 10px;
         background: var(--sqe-strip-bg, #f8fafc);
@@ -2924,24 +2927,32 @@
                                 })(this)">
                             <option value="1" data-code="TRY">TRY</option>
                         </select>
-                        @* Seq 1084: kur, para biriminin HEMEN YANINDA (ayrı satır değil); "1 GBP = ? TL"
-                           ipucu kaldırıldı. TRY seçiliyken gizli — sq:currency event'i show/hide eder. *@
-                        <input id="sqExchangeRate" type="number" class="form-control form-control-sm sqe-hinput sq-no-spinner sq-no-negative"
-                               @* Seq 1094: alan daraltildi + deger saga yasli (sayisal alan okunurlugu) *@
-                               style="max-width:88px; margin-left:10px; display:none; text-align:right;" value="1" min="0" step="0.000001"
-                               title="Kur — 1 birim belge dövizinin TL karşılığı"
-                               oninput="sqRecalc()" onchange="(function(el){var v=parseFloat(el.value);if(!isFinite(v)||v<=0)el.value=1;sqRecalc();})(this)" />
-                        @* 2026-08-06: Kur tarihi — seçilen günün kurunu (SALES_QUOTE "Kur Tipi" parametresine
-                           göre Satış/Alış/Efektif) getirir. Kur alanıyla birlikte göster/gizle. Flatpickr
-                           enhance altInput'u bu span İÇİNE ekler → span'i toggle etmek native+altInput'u
+                    </div>
+                    @if (!isPurchaseRequest)
+                    {
+                        @* 2026-08-19: Kur — Para Birimi'nden ayrı KENDİ hücresi (data-field-key="exchangeRate"),
+                           Standart Alanlar'dan bağımsız Bölüm/sıra atanabilir. TRY seçiliyken gizli —
+                           sq:currency event'i HÜCREYİ (wrapper) show/hide eder, artık yalnız input'u değil;
+                           böylece kart düzeninde tek hücreye sıkışıp alt alta dizilmezler. *@
+                        <div class="sqe-hrow" id="sqExchangeRateWrap" data-field-key="exchangeRate" style="display:none;">
+                            <label class="sqe-hlabel">Kur</label>
+                            <input id="sqExchangeRate" type="number" class="form-control form-control-sm sqe-hinput sq-no-spinner sq-no-negative"
+                                   @* Seq 1094: deger saga yasli (sayisal alan okunurlugu) *@
+                                   style="max-width:88px; text-align:right;" value="1" min="0" step="0.000001"
+                                   title="Kur — 1 birim belge dövizinin TL karşılığı"
+                                   oninput="sqRecalc()" onchange="(function(el){var v=parseFloat(el.value);if(!isFinite(v)||v<=0)el.value=1;sqRecalc();})(this)" />
+                        </div>
+                        @* 2026-08-06/2026-08-19: Kur tarihi — seçilen günün kurunu (SALES_QUOTE "Kur Tipi"
+                           parametresine göre Satış/Alış/Efektif) getirir. Kur hücresiyle birlikte göster/gizle.
+                           Kendi hrow'u = flatpickr altInput'u da bu div İÇİNE eklenir, toggle native+altInput'u
                            birlikte gizler. Değeri programatik: window.sqSetDateValue('sqRateDate', iso). *@
-                        <span id="sqRateDateWrap" style="display:none; align-items:center; gap:6px; margin-left:12px;">
-                            <span style="font-size:.72rem; color:var(--app-text-muted,#94a3b8); white-space:nowrap;">Kur tarihi</span>
-                            <input id="sqRateDate" type="date" class="form-control form-control-sm"
+                        <div class="sqe-hrow" id="sqRateDateWrap" data-field-key="rateDate" style="display:none;">
+                            <label class="sqe-hlabel">Kur Tarihi</label>
+                            <input id="sqRateDate" type="date" class="form-control form-control-sm sqe-hinput"
                                    title="Kur tarihi — seçilen günün kurunu getirir"
                                    onchange="sqRateDateChanged()" />
-                        </span>
-                    </div>
+                        </div>
+                    }
                     @if (!isPurchaseRequest)
                     {
                         @* Seq 1068: KDV Dahil switch — aktifse girilen birim fiyat KDV dahil kabul edilir. *@
@@ -4321,21 +4332,21 @@
     }
     window.sqSetCurrencyById = sqSetCurrencyById;
 
-    // Seq 1067/1084: belge dövizi değişince Kur alanını (para biriminin yanında) göster/gizle.
-    // TRY=gizli+kur 1, diğerleri=görünür. Seq 1084: ayrı "1 GBP = ? TL" ipucu KALDIRILDI.
+    // Seq 1067/1084/2026-08-19: belge dövizi değişince Kur + Kur Tarihi HÜCRELERİNİ
+    // (artık Para Birimi'nden ayrı kendi .sqe-hrow'ları — #sqExchangeRateWrap /
+    // #sqRateDateWrap) göster/gizle. TRY=gizli+kur 1, diğerleri=görünür.
     window.addEventListener('sq:currency', function (e) {
         var code = (e && e.detail && e.detail.code) || 'TRY';
         var id   = (e && e.detail && e.detail.id) || 1;
         var isForeign = (String(code).toUpperCase() !== 'TRY') && (id !== 1);
         var rateEl = document.getElementById('sqExchangeRate');
-        if (rateEl) {
-            rateEl.style.display = isForeign ? '' : 'none';
-            if (!isForeign) rateEl.value = 1;   // TRY belge → kur 1
-        }
-        // 2026-08-06: Kur tarihi alanı da kur ile birlikte göster/gizle. Döviz seçilince
+        if (rateEl && !isForeign) rateEl.value = 1;   // TRY belge → kur 1
+        var rateElWrap = document.getElementById('sqExchangeRateWrap');
+        if (rateElWrap) rateElWrap.style.display = isForeign ? '' : 'none';
+        // 2026-08-06: Kur tarihi hücresi de kur ile birlikte göster/gizle. Döviz seçilince
         // kur tarihi boşsa belge tarihini varsayılan yap (kullanıcı ayrı gün seçebilir).
         var rateWrap = document.getElementById('sqRateDateWrap');
-        if (rateWrap) rateWrap.style.display = isForeign ? 'inline-flex' : 'none';
+        if (rateWrap) rateWrap.style.display = isForeign ? '' : 'none';
         if (isForeign) {
             var _rdEl = document.getElementById('sqRateDate');
             var _qdEl = document.getElementById('sqQuoteDate');
