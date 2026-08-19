@@ -3363,6 +3363,18 @@ body.app-theme-dark .clc-strip {
   border-right: 1px solid var(--clc-strip-border);
 }
 
+/* 2026-08-19 (kullanıcı isteği): işlem butonları şeridin içinde yatay değil,
+   KARTIN SOLUNDA DİKEY sütun. İçerikten ince bir ayraçla ayrılır; kart yüksekliği
+   boyunca üstten hizalı (uzun kartta butonlar ortada asılı kalmasın). */
+.clc-card-actions {
+  padding-right: 8px;
+  border-right: 1px solid var(--clc-strip-border, #e2e8f0);
+  align-self: stretch;
+  justify-content: flex-start;
+  padding-top: 2px;
+}
+body.app-theme-dark .clc-card-actions { --clc-strip-border: rgba(255,255,255,0.08); }
+
 /* Alan hücreleri — kompakt bölmeli satır (referans PlanetCS düzeltmesi,
    2026-08-19). Önceden CSS-grid (48 birim + admin span/satır-sütun) idi; bu
    serbest yerleşim çoğu düzende geniş boş hücreler bırakıyordu. Artık

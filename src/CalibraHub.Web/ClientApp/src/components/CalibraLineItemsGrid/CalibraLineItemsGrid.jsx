@@ -2146,7 +2146,13 @@ export default function CalibraLineItemsGrid(props) {
                         şeridin İÇİNDEKİ alan ızgarasının stilini (span/sıra/serbest satır-
                         sütun) belirler — dış iskelet (kimlik/rozet/şerit/aksiyon grubu)
                         değişmez. */}
-                  <div className="p-2.5 sm:p-3 flex flex-col gap-2.5">
+                  {/* 2026-08-19 (kullanici istegi): islem butonlari serit icinde YATAY
+                      degil, KARTIN SOLUNDA DIKEY sutun. DOM sirasi icerikten SONRA
+                      degil ONCE degil — gorsel sol sutun, ama Enter-nav'in veri
+                      alanlarini once gezmesi icin butonlar DOM'da icerikten SONRA
+                      geliyor ve sol konum `order:-1` ile veriliyor. */}
+                  <div className="p-2.5 sm:p-3 flex items-stretch gap-2.5">
+                    <div className="flex flex-col gap-2.5 min-w-0 flex-1">
                     <div className="min-w-0">
                       <div className="flex items-start justify-between gap-3">
                         {/* 2026-08-19 (kullanici istegi): kimlik alanlarinin da serit
@@ -2220,9 +2226,6 @@ export default function CalibraLineItemsGrid(props) {
                     </div>
 
                     <div className="clc-strip flex items-stretch">
-                      <div className="clc-strip-actions flex items-center gap-1 px-1.5 py-1.5 flex-shrink-0">
-                        {renderActionButtons()}
-                      </div>
                       {/* Kompakt bolmeli hucre satiri (referans PlanetCS tasarimi,
                           2026-08-19): CSS-grid DEGIL flex-wrap — bosluk/hiza sorunu
                           eden 48-birim grid + serbest satir/sutun tamamen kalkti.
@@ -2234,6 +2237,13 @@ export default function CalibraLineItemsGrid(props) {
                         'clc-fields-row' + (isKitComponent ? ' opacity-90' : ''),
                         function(item) { return !__isIdentityCol(item.col) }
                       )}
+                    </div>
+                    </div>
+                    <div
+                      className="clc-card-actions flex flex-col items-center gap-1 flex-shrink-0"
+                      style={{ order: -1 }}
+                    >
+                      {renderActionButtons()}
                     </div>
                   </div>
 
