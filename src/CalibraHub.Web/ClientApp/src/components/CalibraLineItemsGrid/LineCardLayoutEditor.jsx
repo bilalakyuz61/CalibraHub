@@ -1,40 +1,50 @@
 /**
  * LineCardLayoutEditor — belge kalem KARTI duzen editoru.
- * Yeniden tasarim: 2026-08-06 (cok-ajanli tasarim paneli → "Kademeli Derinlik").
  *
- * TASARIM ILKESI — tuvalde kalici editor kromu YOK:
- *   Onceki surumde her alan kutusunun ustunde tutamak + "10/48" rozeti + goz
- *   ikonu, her satirin ustunde ilerleme rayi vardi. Alan sayisi kadar tekrar eden
- *   bu gostergeler hem ekrani yoruyor hem de WYSIWYG'i bozuyordu (gercek kartta
- *   bunlarin hicbiri yok). Simdi: tuval = gercek kartin aynasi; tutamak/isaret
- *   yalnizca hover/secim/surukleme aninda ve hucrenin GEOMETRISINE DOKUNMAYAN
- *   negatif inset'li overlay katmaninda belirir. Tum ayarlar sagdaki 296px sabit
- *   denetim rayinda (LineCardInspector) — ray hep mount oldugu icin alan secmek
- *   sifir layout shift uretir.
+ * 2026-08-19 SADELESTIRME (referans tasarim goc): gercek kart artik CSS-grid
+ * (48-birim izgara + serbest satir/sutun konumlandirma) DEGIL, flex-wrap
+ * KOMPAKT BIR SERIT olarak render ediliyor (bkz. CalibraLineItemsGrid.jsx
+ * renderFieldsList + .clc-strip/.clc-field-cell CSS, index.css). Onceki surumun
+ * 48-birimlik surukle-birak/boyutlandirma tuvali artik GERCEKLE ORTUSMUYORDU
+ * (yaniltici onizleme) — tamamen kaldirildi.
  *
- * Form bazli ORTAK duzen (admin tasarlar, herkes ayni karti gorur):
- *   - Surukle-birak ile alan SIRALAMA (HTML5 drag — ek bagimlilik yok)
- *   - Sag kenardan cekerek GENISLIK (48 birimlik izgara span'i)
- *   - Rayda switch ile GORUNURLUK (zorunlu alanlar kilitli — gizlenemez;
- *     CLAUDE.md sessiz-kirik kurali 3: veri girisi sessizce kaybolmasin)
+ * Editor artik yalniz GERCEKTEN calisan uc ayari sunar:
+ *   - Sira    — surukle-birak VEYA yukari/asagi dugmeleri (FieldRow, LineCardInspector.jsx)
+ *   - Gorunurluk — switch (CLAUDE.md: checkbox degil switch)
+ *   - Genislik   — Dar/Normal/Genis segment (arka planda span'e — flex-grow
+ *                  agirligina — eslenir; ham 1-48 sayi/piksel-surukleme YOK)
+ * + (korunan) Baslik override — metin/stil/boyut/kalinlik/renk (yalniz serit
+ *   alanlarinda anlamli; kimlik alanlarinda gercek kart bu override'lari hic
+ *   OKUMAZ — bkz. asagidaki "Kimlik" notu).
+ *
+ * KIMLIK ALANLARI (malzeme kodu/adi, satir toplami) kartin UST kimlik satirinda
+ * SABITTIR — surukle-birak/genislik/baslik override'i onlar icin ANLAMSIZ
+ * (gercek kart bunlari `materialCodeCol`/`materialNameCol`/`lineTotalCol`
+ * uzerinden DOGRUDAN, cardItems sirasindan BAGIMSIZ cizer). Editorde ayri,
+ * salt "Gorunurluk" anahtarli bir bolumde listelenir (malzeme kodu kilitli —
+ * veri girisinin kapisi, asla gizlenemez).
+ *
+ * Onizleme artik GERCEK kart CSS siniflarini (.clc-strip, .clc-field-cell,
+ * .clc-ident-*, .clc-cell-underline — index.css) YENIDEN KULLANIR (CardPreview,
+ * bu dosyada) — WYSIWYG artik gercekten dogru.
  *
  * Kalicilik: POST /api/line-card-layout/save (admin-only, CSRF). Sifirla →
- * POST /api/line-card-layout/reset — grid varsayilan auto-fill izgarasina doner.
- * Kaydedilen duzen additive-safe'tir: duzende olmayan yeni kolonlar runtime'da
- * varsayilan genislikle sona eklenir (CalibraLineItemsGrid.cardItems).
+ * POST /api/line-card-layout/reset. Kaydedilen duzen additive-safe'tir: duzende
+ * olmayan yeni kolonlar runtime'da varsayilan genislikle sona eklenir
+ * (CalibraLineItemsGrid.jsx cardItems). Eski kayitlardaki row/col (v1/v2/v3
+ * serbest yerlesim) alanlari YUKLEME sirasinda sessizce OKUNMAZ/yok sayilir;
+ * yeni editor bu alanlari hic YAZMAZ (backend DTO'sunda hala opsiyonel/nullable
+ * — kayit/yukleme HATA VERMEZ).
  */
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  LayoutGrid, GripVertical, X as XIcon, RotateCcw, AlertTriangle,
+  LayoutGrid, X as XIcon, RotateCcw, AlertTriangle, Lock,
   MoreHorizontal, Layers, Settings, Trash2,
 } from 'lucide-react'
-import LineCardInspector from './LineCardInspector'
+import FieldRow, { SwitchToggle } from './LineCardInspector'
 import {
-  resolveIcon, CARD_LABEL_COLOR_CLS, CARD_GRID_UNITS, MIN_SPAN,
-  CARD_COLUMN_GAP, CARD_ROW_GAP, CARD_FIELD_HEIGHT, CARD_ROW_HEIGHT,
-  WIDTH_PRESETS, spanLabel, clampSpan, snapSpan, unitStep,
-  resolvePlacements, findFreeSlot, buildOccupancy, maxSpanAt,
+  resolveIcon, CARD_LABEL_COLOR_CLS, CARD_GRID_UNITS, clampSpan,
 } from './cardLayoutTokens'
 // NOT: Bu modal BILEREK top govdesine (getTopBody) portallanmaz. Top'a
 // portallanirsa `fixed inset-0` perdesi ust menu seridini de kaplar ve modal
@@ -54,13 +64,23 @@ function readCsrfToken() {
   }
 }
 
+/* Kartin UST kimlik satirinda sabit alanlar — gercek kartta cardItems sirasindan
+   BAGIMSIZ, dogrudan materialCodeCol/materialNameCol/lineTotalCol uzerinden
+   cizilirler (bkz. CalibraLineItemsGrid.jsx). Editorde surukle-birak/genislik/
+   baslik-override SUNULMAZ — yaniltici olurdu. */
+var IDENTITY_ORDER = { materialCode: 0, materialName: 1, lineTotal: 2 }
+/* İskonto %/KDV % gercek kartta HER ZAMAN dar (col.type==='percent' ozel-durumu,
+   bkz. CalibraLineItemsGrid.jsx cellStyle). Editorde bu iki alan icin genislik
+   kontrolu yaniltici olacagindan gizlenir; "Her zaman dar" notu gosterilir. */
+var PERCENT_LOCKED_KEYS = ['discountRate', 'taxRate']
+
 function normalizeEditorItems(arr) {
   return (arr || []).map(function (it) {
     return {
       key: it.key,
       label: it.label || it.key,
       icon: it.icon || null,
-      span: (typeof it.span === 'number' && it.span >= 1 && it.span <= CARD_GRID_UNITS) ? it.span : 12,
+      span: (typeof it.span === 'number' && it.span >= 1 && it.span <= CARD_GRID_UNITS) ? it.span : 16,
       visible: it.visible !== false,
       locked: it.locked === true,
       isWidget: it.isWidget === true,
@@ -69,41 +89,31 @@ function normalizeEditorItems(arr) {
       labelSize: it.labelSize || null,
       labelWeight: it.labelWeight || null,
       labelColor: CARD_LABEL_COLOR_CLS[it.labelColor] ? it.labelColor : null,
-      // Alan Yonetimi sozlugu: null=Standart, 'modern'=Modern, 'inline'=Sade
       labelStyle: (it.labelStyle === 'modern' || it.labelStyle === 'inline') ? it.labelStyle : null,
-      // Serbest yerlesim (v3): null → akistan turetilir (v1/v2 uyumu)
-      row: (typeof it.row === 'number' && it.row >= 1) ? it.row : null,
-      col: (typeof it.col === 'number' && it.col >= 1) ? it.col : null,
+      // row/col (v1/v2/v3 serbest yerlesim) BILEREK okunmuyor — bkz. dosya basi notu.
     }
   })
 }
 
-/**
- * Yuklemede TUM gorunur alanlarin (row, col) koordinatini sabitler.
- *
- * Neden zorunlu (2026-08-06 kullanici bildirimi): koordinati olmayan ogeler her
- * render'da AKISTAN turetilir. Kullanici tek bir alani asagi tasidiginda o alan
- * koordinat kazaniyor, digerleri hala akista oldugu icin bosalan yeri dolduruyor
- * ve "dikeyde otomatik yerlesme" olusuyordu. Koordinatlar bastan sabitlenince
- * bir alani tasimak diger alanlari ASLA oynatmaz.
- */
-function freezePlacements(list) {
-  var visible = list.filter(function (it) { return it.visible })
-  var pl = resolvePlacements(visible.map(function (it) {
-    return { key: it.key, span: it.span, row: it.row, col: it.col }
-  }))
-  var byKey = {}
-  pl.forEach(function (p) { byKey[p.key] = p })
-  return list.map(function (it) {
-    var p = byKey[it.key]
-    return p ? Object.assign({}, it, { row: p.row, col: p.col }) : it
+/* Katalogu iki gruba ayirir: Kimlik (kart basliginda sabit) + Serit (siralanabilir). */
+function splitItems(raw) {
+  var norm = normalizeEditorItems(raw)
+  var identity = []
+  var strip = []
+  norm.forEach(function (it) {
+    if (Object.prototype.hasOwnProperty.call(IDENTITY_ORDER, it.key)) identity.push(it)
+    else strip.push(it)
   })
+  identity.sort(function (a, b) { return IDENTITY_ORDER[a.key] - IDENTITY_ORDER[b.key] })
+  return { identity: identity, strip: strip }
 }
 
 /* Kaydet payload'i — dirty karsilastirmasi da bunun uzerinden yapilir ki
-   "degisti mi" sorusu SUNUCUYA GIDECEK veriyle ayni tanima sahip olsun. */
-function buildPayloadItems(items) {
-  return items.map(function (it, i) {
+   "degisti mi" sorusu SUNUCUYA GIDECEK veriyle ayni tanima sahip olsun.
+   row/col ARTIK GONDERILMEZ (backend DTO'sunda opsiyonel/nullable — eksik
+   olmasi hataya yol acmaz, sunucuda null olarak kalir). */
+function buildPayloadItems(identityList, stripList) {
+  return identityList.concat(stripList).map(function (it, i) {
     return {
       key: it.key, span: it.span, order: i, visible: it.visible,
       label: (it.labelText && it.labelText.trim()) ? it.labelText.trim() : null,
@@ -111,8 +121,6 @@ function buildPayloadItems(items) {
       labelWeight: it.labelWeight || null,
       labelColor: it.labelColor || null,
       labelStyle: it.labelStyle || null,
-      row: it.row || null,
-      col: it.col || null,
     }
   })
 }
@@ -161,6 +169,157 @@ function ConfirmDialog(props) {
   )
 }
 
+/* ── Onizleme — GERCEK kart CSS siniflarini yeniden kullanir (WYSIWYG) ────── */
+var PREVIEW_SAMPLE = {
+  materialCode: 'ÖRN-001',
+  materialName: 'Örnek Malzeme Adı',
+  unitId: 'Adet',
+  quantity: '10',
+  unitPrice: '125,00',
+  discountRate: '10',
+  taxRate: '20',
+  lineTotal: '1.250,00',
+}
+
+function PreviewInput(props) {
+  return (
+    <input
+      type="text"
+      readOnly
+      tabIndex={-1}
+      value={props.value || ''}
+      placeholder={props.placeholder || ''}
+      className={props.className || 'w-full h-full bg-transparent border-0 outline-none px-2.5 py-2 text-[13px] text-slate-800 dark:text-white/85'}
+    />
+  )
+}
+
+function PreviewFieldCell(props) {
+  var it = props.item
+  var Icon = resolveIcon(it.icon)
+  var widthLocked = PERCENT_LOCKED_KEYS.indexOf(it.key) >= 0
+  var cellStyle = widthLocked
+    ? { flex: '0 0 88px', minWidth: 72, maxWidth: 104 }
+    : { flex: clampSpan(it.span) + ' 1 116px', minWidth: 96 }
+  var labelMode = (it.labelStyle === 'modern' || it.labelStyle === 'inline') ? it.labelStyle : 'standard'
+  var labelColorCls = it.labelColor ? CARD_LABEL_COLOR_CLS[it.labelColor] : 'text-slate-500 dark:text-white/45'
+  var labelStyleOv = {}
+  if (it.labelSize) labelStyleOv.fontSize = it.labelSize
+  if (it.labelWeight) labelStyleOv.fontWeight = it.labelWeight
+  if (labelMode === 'modern') cellStyle = Object.assign({}, cellStyle, { position: 'relative' })
+  var labelText = (it.labelText && it.labelText.trim()) ? it.labelText.trim() : it.label
+  var labelInner = (
+    <>
+      {Icon && <Icon size={10} strokeWidth={1.8} className="text-slate-400 dark:text-white/35 flex-shrink-0" />}
+      <span className="truncate">{labelText}</span>
+      {it.locked && <span className="text-rose-500 dark:text-rose-400">*</span>}
+    </>
+  )
+  return (
+    <div className={'clc-field-cell' + (labelMode === 'inline' ? ' flex items-center gap-2' : '')} style={cellStyle}>
+      {labelMode === 'standard' && (
+        <div className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide mb-0.5 ' + labelColorCls} style={labelStyleOv}>{labelInner}</div>
+      )}
+      {labelMode === 'inline' && (
+        <div className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide flex-shrink-0 max-w-[45%] ' + labelColorCls} style={labelStyleOv}>{labelInner}</div>
+      )}
+      {labelMode === 'modern' && (
+        <div className={'calibra-line-card-label absolute flex items-center gap-1 text-[9.5px] font-bold tracking-wide ' + labelColorCls} style={Object.assign({ top: -1, left: 10, zIndex: 2, lineHeight: '12px' }, labelStyleOv)}>{labelInner}</div>
+      )}
+      <div className={'clc-cell-underline' + (labelMode === 'inline' ? ' flex-1 min-w-0' : '') + (labelMode === 'modern' ? ' mt-1.5' : '')}>
+        <PreviewInput value={PREVIEW_SAMPLE[it.key]} placeholder={it.isWidget ? 'Örnek' : ''} />
+      </div>
+    </div>
+  )
+}
+
+/* Kart iskeleti CalibraLineItemsGrid.jsx'teki markup'un sadelestirilmis, TEK
+   ornek satirlik aynasidir — ayni CSS siniflari (.calibra-line-card, .clc-strip,
+   .clc-field-cell, .clc-ident-*) kullanildigi icin renk/aralik/tipografi
+   otomatik birebir eslenir (iki kopya CSS DEGERI YOK — yalniz markup tekrari,
+   DRY siniri CSS tarafinda zaten korunuyor). */
+function CardPreview(props) {
+  var identityItems = props.identityItems || []
+  var stripItems = props.stripItems || []
+  var materialCode = identityItems.filter(function (it) { return it.key === 'materialCode' })[0] || null
+  var materialName = identityItems.filter(function (it) { return it.key === 'materialName' })[0] || null
+  var lineTotal = identityItems.filter(function (it) { return it.key === 'lineTotal' })[0] || null
+  var showName = !!materialName && materialName.visible
+  var showTotal = !!lineTotal && lineTotal.visible
+  var visibleStrip = stripItems.filter(function (it) { return it.visible })
+
+  return (
+    <div aria-hidden="true" className="calibra-line-card rounded-xl border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.025] overflow-hidden">
+      <div className="p-2.5 sm:p-3 flex flex-col gap-2.5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-baseline gap-2 min-w-0 flex-1">
+            <span className="clc-ident-num flex-shrink-0">#1</span>
+            {materialCode && (
+              <div className="clc-ident-code clc-cell-underline flex-shrink-0 max-w-[220px]">
+                <PreviewInput value={PREVIEW_SAMPLE.materialCode} className="w-full bg-transparent border-0 outline-none px-1 py-1 text-[13.5px]" />
+              </div>
+            )}
+            {showName && (
+              <div className="clc-ident-name clc-cell-underline min-w-0 flex-1">
+                <PreviewInput value={PREVIEW_SAMPLE.materialName} className="w-full bg-transparent border-0 outline-none px-1 py-1 text-[13px]" />
+              </div>
+            )}
+          </div>
+          {showTotal && (
+            <div className="flex-shrink-0 text-right">
+              <div className="clc-ident-total-value">{PREVIEW_SAMPLE.lineTotal}</div>
+            </div>
+          )}
+        </div>
+
+        <div className="clc-strip flex items-stretch">
+          <div aria-hidden="true" className="clc-strip-actions flex items-center gap-1 px-1.5 py-1.5 flex-shrink-0" style={{ opacity: 0.55 }}>
+            {[MoreHorizontal, Layers, Settings, Trash2].map(function (I, i) {
+              return (
+                <span key={i} className="w-6 h-6 rounded-lg flex items-center justify-center bg-slate-100 text-slate-300 dark:bg-white/[0.06] dark:text-white/20">
+                  <I size={12} strokeWidth={2} />
+                </span>
+              )
+            })}
+          </div>
+          <div className="clc-fields-row" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'stretch', flex: 1, minWidth: 0 }}>
+            {visibleStrip.length
+              ? visibleStrip.map(function (it) { return <PreviewFieldCell key={it.key} item={it} /> })
+              : <div className="px-2.5 py-3 text-[11px] text-slate-400 dark:text-white/35">Şeritte gösterilecek alan yok.</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* Kimlik satirindaki TEK alan — surukle/genislik/baslik YOK, yalniz gorunurluk
+   (materialCode kilitli: veri girisinin kapisi, asla gizlenemez). */
+function IdentityRow(props) {
+  var it = props.item
+  var Icon = resolveIcon(it.icon)
+  return (
+    <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50/60 dark:bg-white/[0.02]">
+      {Icon && <Icon size={13} strokeWidth={1.8} className="text-slate-400 dark:text-white/35 flex-shrink-0" />}
+      <span className="text-[12.5px] text-slate-700 dark:text-white/80 flex-1 min-w-0 truncate">{it.label}</span>
+      {it.locked ? (
+        <span className="flex items-center gap-1 text-[10.5px] text-rose-500/80 dark:text-rose-300/70 flex-shrink-0">
+          <Lock size={11} strokeWidth={2} /> Zorunlu · her zaman görünür
+        </span>
+      ) : (
+        <SwitchToggle
+          checked={it.visible}
+          disabled={!props.canEdit}
+          ariaLabel={it.label + ' kart başlığında görünsün'}
+          onChange={function () { props.onToggle(it.key) }}
+          onClass="bg-emerald-500"
+          offClass="bg-rose-400 dark:bg-rose-500/60"
+        />
+      )}
+    </div>
+  )
+}
+
 export default function LineCardLayoutEditor(props) {
   var formCode = props.formCode
   var onClose = props.onClose
@@ -170,9 +329,14 @@ export default function LineCardLayoutEditor(props) {
   // /api/line-card-layout/{formCode}/fields endpoint'inden cekilir.
   var autoLoad = props.autoLoad === true
 
-  // Calisma kopyasi — Kaydet'e basilana kadar grid'e dokunulmaz.
-  var [items, setItems] = useState(function () {
-    return autoLoad ? [] : freezePlacements(normalizeEditorItems(props.items))
+  // Calisma kopyasi — Kaydet'e basilana kadar disariya dokunulmaz. Kimlik
+  // (kart basligi) ve Serit (siralanabilir) ayri state'ler: gercek kartta
+  // ikisinin davranisi tamamen farkli (bkz. dosya basi notu).
+  var [identityItems, setIdentityItems] = useState(function () {
+    return autoLoad ? [] : splitItems(props.items).identity
+  })
+  var [stripItems, setStripItems] = useState(function () {
+    return autoLoad ? [] : splitItems(props.items).strip
   })
   var [hasCustomLayout, setHasCustomLayout] = useState(props.hasCustomLayout === true)
   var [loading, setLoading] = useState(autoLoad)
@@ -182,20 +346,17 @@ export default function LineCardLayoutEditor(props) {
   var [unsupported, setUnsupported] = useState(false)
   // confirm: null | 'reset' | 'close'
   var [confirm, setConfirm] = useState(null)
-  // Secili alan — key ile izlenir ki surukle-birak sonrasi secim kaybolmasin.
-  var [selectedKey, setSelectedKey] = useState(null)
+  // Serit sirasi surukleme — index bazli (drop hedefiyle konum degisimi).
+  var dragIndexRef = useRef(null)
+  var [draggingKey, setDraggingKey] = useState(null)
 
   var modalRef = useRef(null)
   var baselineRef = useRef(null)
 
-  /* Dokunmatik / dar ekran — hover'a bagli her sey icin fallback sinyali. */
-  var [coarse] = useState(function () {
-    try { return window.matchMedia('(pointer: coarse)').matches } catch (e) { return false }
-  })
-
   useEffect(function () {
     if (!autoLoad) {
-      baselineRef.current = JSON.stringify(buildPayloadItems(freezePlacements(normalizeEditorItems(props.items))))
+      var split0 = splitItems(props.items)
+      baselineRef.current = JSON.stringify(buildPayloadItems(split0.identity, split0.strip))
       return undefined
     }
     var alive = true
@@ -208,13 +369,12 @@ export default function LineCardLayoutEditor(props) {
           setUnsupported(true)
           return
         }
-        // Koordinatlari HEMEN sabitle: aksi halde akistaki (row/col'suz) alanlar
-        // baska bir alan tasinip yer acildiginda oraya kayiyordu.
-        var next = freezePlacements(normalizeEditorItems(data.items))
-        setItems(next)
+        var split = splitItems(data.items)
+        setIdentityItems(split.identity)
+        setStripItems(split.strip)
         setHasCustomLayout(data.hasCustomLayout === true)
         if (data.canEdit === false) setCanEdit(false)
-        baselineRef.current = JSON.stringify(buildPayloadItems(next))
+        baselineRef.current = JSON.stringify(buildPayloadItems(split.identity, split.strip))
       })
       .catch(function (e) { if (alive) setError('Hata: ' + (e && e.message ? e.message : String(e))) })
       .then(function () { if (alive) setLoading(false) })
@@ -222,210 +382,68 @@ export default function LineCardLayoutEditor(props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoLoad, formCode])
 
-  var dirty = baselineRef.current != null && JSON.stringify(buildPayloadItems(items)) !== baselineRef.current
+  var dirty = baselineRef.current != null &&
+    JSON.stringify(buildPayloadItems(identityItems, stripItems)) !== baselineRef.current
 
-  function patchItem(key, patch) {
-    setItems(function (prev) {
+  function patchStripItem(key, patch) {
+    setStripItems(function (prev) {
+      return prev.map(function (it) { return it.key === key ? Object.assign({}, it, patch) : it })
+    })
+  }
+  function toggleStripVisible(key) {
+    setStripItems(function (prev) {
       return prev.map(function (it) {
-        return it.key === key ? Object.assign({}, it, patch) : it
+        if (it.key !== key || it.locked) return it
+        return Object.assign({}, it, { visible: !it.visible })
       })
     })
   }
-
-  // ── Sutun genisligi islemleri ──
-  /* Genisletme komsuya kadar SINIRLIDIR — serbest yerlesimde bir alanin
-     buyumesi baska bir alani itmemeli (2026-08-06 kullanici bildirimi). */
-  function spanCeiling(key) {
-    var p = placeByKey[key]
-    if (!p) return CARD_GRID_UNITS
-    return maxSpanAt(buildOccupancy(placements, key), p.row, p.col)
-  }
-  function setSpan(key, span) {
-    patchItem(key, { span: Math.min(clampSpan(span), spanCeiling(key)) })
-  }
-  /* Satirdaki alanlari 48 birime esit boler; artan birim (48 % n) soldan
-     dagitilir. Alan sayisi cok fazlaysa (MIN_SPAN'in altina duserdi) buton
-     RAYDA zaten pasiftir ve gerekcesi yazilidir — sessiz no-op YOK. */
-  function distributeRow(rowPls) {
-    var n = (rowPls || []).length
-    if (!n) return
-    var base = Math.floor(CARD_GRID_UNITS / n)
-    if (base < MIN_SPAN) return
-    var extra = CARD_GRID_UNITS - base * n
-    // Serbest yerlesimde "esit dagit" hem genisligi hem SUTUNU yeniden kurar:
-    // satir soldan itibaren bosluksuz doldurulur.
-    var patch = {}
-    var cursor = 1
-    rowPls.forEach(function (p, i) {
-      var s = base + (i < extra ? 1 : 0)
-      patch[p.key] = { span: s, col: cursor, row: p.row }
-      cursor += s
-    })
-    setItems(function (prev) {
+  function toggleIdentityVisible(key) {
+    setIdentityItems(function (prev) {
       return prev.map(function (it) {
-        return patch[it.key] ? Object.assign({}, it, patch[it.key]) : it
+        if (it.key !== key || it.locked) return it
+        return Object.assign({}, it, { visible: !it.visible })
       })
     })
   }
-  /* Satirin SAGINDAKI bos birimleri en sagdaki alana ekler. */
-  function fillRow(rowPls) {
-    if (!rowPls || !rowPls.length) return
-    var last = rowPls[rowPls.length - 1]
-    var free = CARD_GRID_UNITS - (last.col - 1 + last.span)
-    if (free <= 0) return
-    patchItem(last.key, { span: clampSpan(last.span + free) })
+  function setStripSpan(key, span) {
+    patchStripItem(key, { span: span })
   }
-  /* Serbest yerlesimde "sira degistirme" yerine KONUM kaydirma: alani bir birim
-     saga/sola veya bir satir yukari/asagi tasir. Hedef doluysa en yakin bos
-     yuvaya oturur (ust uste binme yok). */
-  function nudge(key, dRow, dCol) {
-    var p = placeByKey[key]
-    var it = items.find(function (x) { return x.key === key })
-    if (!p || !it) return
-    var span = clampSpan(it.span)
-    var row = Math.max(1, p.row + dRow)
-    var col = Math.min(Math.max(p.col + dCol, 1), CARD_GRID_UNITS - span + 1)
-    var slot = findFreeSlot(buildOccupancy(placements, key), row, col, span)
-    patchItem(key, { row: slot.row, col: slot.col })
-  }
-  function toggleVisible(key) {
-    setItems(function (prev) {
-      var i = prev.findIndex(function (x) { return x.key === key })
-      if (i < 0 || prev[i].locked) return prev
+  function moveStripItem(index, dir) {
+    setStripItems(function (prev) {
+      var to = index + dir
+      if (to < 0 || to >= prev.length) return prev
       var next = prev.slice()
-      next[i] = Object.assign({}, next[i], { visible: !next[i].visible })
+      var tmp = next[index]; next[index] = next[to]; next[to] = tmp
       return next
     })
-    // Secim KORUNUR: gizlenen alanin switch'i kirmizi olarak gorunur kalsin ki
-    // yanlislikla gizlendiginde tek tikla geri acilabilsin (2026-08-06).
   }
-  function showHidden(key) {
-    setItems(function (prev) {
-      return prev.map(function (it) { return it.key === key ? Object.assign({}, it, { visible: true }) : it })
+  function reorderStrip(fromIndex, toIndex) {
+    if (fromIndex === toIndex) return
+    setStripItems(function (prev) {
+      if (fromIndex < 0 || fromIndex >= prev.length) return prev
+      var next = prev.slice()
+      var moved = next.splice(fromIndex, 1)[0]
+      next.splice(toIndex, 0, moved)
+      return next
     })
   }
 
-  /* ── Surukle-birak: SERBEST yerlesim (2026-08-06 kullanici istegi) ─────
-     Alanlar artik sola/uste yigilmak zorunda degil; birakildigi IZGARA
-     KONUMUNA (satir + sutun) oturur, aradaki bosluk korunur. Konum yalniz
-     birakma aninda yazilir; surukleme boyunca tuval sabit kalir ve hedef yuva
-     kesikli bir hayaletle gosterilir (eski canli-siralama titremesi bu yuzden
-     geri gelmez). Dolu bir yuvaya birakilirsa en yakin bos yuvaya kayar. */
-  var dragKeyRef = useRef(null)
-  var [draggingKey, setDraggingKey] = useState(null)
-  var [dropSlot, setDropSlot] = useState(null)   // { row, col, span }
-
-  /* Fare noktasindan izgara yuvasi. Satir yuksekligi sabit varsayilir
-     (CARD_ROW_HEIGHT + CARD_ROW_GAP) — tuvalde tum satirlar `gridAutoRows` ile
-     bu tabana oturdugu icin hesap tutarlidir. */
-  function slotFromPoint(clientX, clientY, span, offCols) {
-    if (!gridRef.current) return null
-    var rect = gridRef.current.getBoundingClientRect()
-    if (rect.width <= 0) return null
-    var step = unitStep(rect.width)
-    // offCols: alani ORTASINDAN tuttuysan hedef, tuttugun noktadan degil alanin
-    // SOL kenarindan hesaplanmali — aksi halde hayalet saga kayik durur.
-    var col = Math.floor((clientX - rect.left) / step) + 1 - (offCols || 0)
-    var rowH = CARD_ROW_HEIGHT + CARD_ROW_GAP
-    var row = Math.floor((clientY - rect.top) / rowH) + 1
-    col = Math.min(Math.max(col, 1), CARD_GRID_UNITS - span + 1)
-    row = Math.min(Math.max(row, 1), 500)
-    return { row: row, col: col, span: span }
-  }
-
-  function handleDragStart(e, key, span, cellEl) {
-    var offCols = 0
-    try {
-      var r = cellEl.getBoundingClientRect()
-      if (gridRef.current) {
-        var step = unitStep(gridRef.current.getBoundingClientRect().width)
-        offCols = Math.max(0, Math.min(span - 1, Math.floor((e.clientX - r.left) / step)))
-      }
-      // Tarayicinin varsayilan surukleme kopyasi hucreye TAM hizalanir; boylece
-      // "ucuncu hayalet" izlenimi ve kayik gorunum kalkar.
-      e.dataTransfer.setDragImage(cellEl, e.clientX - r.left, e.clientY - r.top)
-    } catch (_) {}
-    dragKeyRef.current = { key: key, span: span, offCols: offCols }
+  function handleRowDragStart(e, key, index) {
+    dragIndexRef.current = index
     setDraggingKey(key)
-    try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', key) } catch (_) {}
+    try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(index)) } catch (_) {}
   }
-  function handleCanvasDragOver(e) {
-    var st = dragKeyRef.current
-    if (!st) return
-    e.preventDefault()
-    try { e.dataTransfer.dropEffect = 'move' } catch (_) {}
-    var slot = slotFromPoint(e.clientX, e.clientY, st.span, st.offCols)
-    if (!slot) return
-    if (!dropSlot || dropSlot.row !== slot.row || dropSlot.col !== slot.col) setDropSlot(slot)
-  }
-  function handleCanvasDrop(e) {
-    var st = dragKeyRef.current
-    if (!st) return
-    e.preventDefault()
-    var slot = slotFromPoint(e.clientX, e.clientY, st.span, st.offCols)
-    if (slot) {
-      // Hedef doluysa en yakin bos yuvaya kaydir (ust uste binme YOK).
-      var occ = buildOccupancy(placements, st.key)
-      var free = findFreeSlot(occ, slot.row, slot.col, st.span)
-      patchItem(st.key, { row: free.row, col: free.col })
-    }
-    handleDragEnd()
-  }
-  function handleDragEnd() {
-    dragKeyRef.current = null
+  function handleRowDrop(index) {
+    var from = dragIndexRef.current
+    dragIndexRef.current = null
     setDraggingKey(null)
-    setDropSlot(null)
+    if (from == null) return
+    reorderStrip(from, index)
   }
-
-  // ── Sag kenardan genislik (span) cekme ──
-  //   Pointer Events: mouse + touch + pen tek API. Olcek `unitStep` ile alinir —
-  //   ham `width / 48` bosluklari saymadigi icin sistematik kayma uretiyordu.
-  var gridRef = useRef(null)
-  var resizeRef = useRef(null) // { key, startX, startSpan, cellStep }
-  var [resizingKey, setResizingKey] = useState(null)
-
-  function handleResizeStart(e, key) {
-    if (!gridRef.current) return
-    var it = items.find(function (x) { return x.key === key })
-    if (!it) return
-    var rect = gridRef.current.getBoundingClientRect()
-    resizeRef.current = {
-      key: key,
-      startX: e.clientX,
-      startSpan: it.span,
-      cellStep: unitStep(rect.width),
-      // Komsuya kadar olan tavan surukleme BASINDA olculur — her karede yeniden
-      // hesaplansa kendi yeni genisligi tavani da buyutup kayma uretirdi.
-      ceiling: spanCeiling(key),
-    }
-    setResizingKey(key)
-    try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
-    e.preventDefault()
-    e.stopPropagation()
-  }
-  function handleResizeMove(e) {
-    var st = resizeRef.current
-    if (!st || !e.currentTarget.hasPointerCapture || !e.currentTarget.hasPointerCapture(e.pointerId)) return
-    e.preventDefault()
-    var deltaSpan = Math.round((e.clientX - st.startX) / Math.max(st.cellStep, 4))
-    // Shift = serbest (yapismasiz) hassas surukleme.
-    var raw = clampSpan(st.startSpan + deltaSpan)
-    var nextSpan = e.shiftKey ? raw : clampSpan(snapSpan(raw))
-    if (st.ceiling) nextSpan = Math.min(nextSpan, st.ceiling)
-    setItems(function (prev) {
-      var i = prev.findIndex(function (x) { return x.key === st.key })
-      if (i < 0 || prev[i].span === nextSpan) return prev
-      var next = prev.slice()
-      next[i] = Object.assign({}, next[i], { span: nextSpan })
-      return next
-    })
-  }
-  function handleResizeEnd(e) {
-    try {
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
-    } catch (_) {}
-    resizeRef.current = null
-    setResizingKey(null)
+  function handleRowDragEnd() {
+    dragIndexRef.current = null
+    setDraggingKey(null)
   }
 
   function requestClose() {
@@ -434,12 +452,11 @@ export default function LineCardLayoutEditor(props) {
     onClose()
   }
 
-  /* Klavye haritasi — Esc kademeli (once secim, sonra modal), Alt/Ctrl ok
-     tuslariyla hassas ayar, Ctrl+S kaydet, Delete ile gizle. */
+  /* Klavye haritasi — Esc (once onay modali kendi Esc'ini isler, sonra kapat),
+     Ctrl+S kaydet. Hucre-secim/nudge kalkti (canvas kalmadigi icin gerek yok). */
   function handleModalKeyDown(e) {
     if (e.key === 'Escape') {
-      if (confirm) return           // onay modali kendi Esc'ini isler
-      if (selectedKey) { setSelectedKey(null); return }
+      if (confirm) return
       requestClose()
       return
     }
@@ -447,48 +464,6 @@ export default function LineCardLayoutEditor(props) {
     if (mod && (e.key === 's' || e.key === 'S')) {
       e.preventDefault()
       if (canEdit && !saving && !loading) handleSave()
-      return
-    }
-    if (!selectedKey || !canEdit) return
-    var idx = items.findIndex(function (x) { return x.key === selectedKey })
-    if (idx < 0) return
-    var it = items[idx]
-    var isInput = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')
-
-    if ((e.key === 'Delete' || e.key === 'Backspace') && !isInput) {
-      // Ek alanlar burada gizlenemez — gorunurlukleri Alan Yonetimi'ndeki
-      // "Kartta Göster" ile yonetilir (rayda da switch gosterilmez).
-      if (it.locked || it.isWidget) return
-      e.preventDefault()
-      toggleVisible(it.key)
-      return
-    }
-    var isLeft = e.key === 'ArrowLeft'
-    var isRight = e.key === 'ArrowRight'
-    var isUp = e.key === 'ArrowUp'
-    var isDown = e.key === 'ArrowDown'
-    // Ctrl/Cmd + ok: KONUM (serbest yerlesim) — satir/sutun kaydirma
-    if (mod && (isLeft || isRight || isUp || isDown)) {
-      e.preventDefault()
-      nudge(it.key, isDown ? 1 : (isUp ? -1 : 0), isRight ? 1 : (isLeft ? -1 : 0))
-      return
-    }
-    if (!isLeft && !isRight) return
-    if (e.altKey) {
-      e.preventDefault()
-      if (e.shiftKey) {
-        // Hazir genislikler arasinda atla
-        var spans = WIDTH_PRESETS.map(function (p) { return p.span })
-        var target = null
-        if (isRight) {
-          for (var i = 0; i < spans.length; i++) { if (spans[i] > it.span) { target = spans[i]; break } }
-        } else {
-          for (var j = spans.length - 1; j >= 0; j--) { if (spans[j] < it.span) { target = spans[j]; break } }
-        }
-        if (target != null) setSpan(it.key, target)
-      } else {
-        setSpan(it.key, it.span + (isRight ? 1 : -1))
-      }
     }
   }
 
@@ -497,7 +472,7 @@ export default function LineCardLayoutEditor(props) {
     setSaving(true)
     setError(null)
     try {
-      var payload = { formCode: formCode, items: buildPayloadItems(items) }
+      var payload = { formCode: formCode, items: buildPayloadItems(identityItems, stripItems) }
       var resp = await fetch('/api/line-card-layout/save', {
         method: 'POST',
         credentials: 'same-origin',
@@ -553,208 +528,7 @@ export default function LineCardLayoutEditor(props) {
     }
   }
 
-  // ── Turetilmis veri ──
-  var visibleEntries = []
-  items.forEach(function (it, idx) { if (it.visible) visibleEntries.push({ it: it, idx: idx }) })
-  var hiddenItems = items.filter(function (it) { return !it.visible })
-
-  /* Kesin yerlesim: koordinati olanlar oldugu yerde, olmayanlar (v1/v2 kayitlari
-     ve yeni eklenen alanlar) akistan turetilir. Cakisma varsa en yakin bos
-     yuvaya kaydirilir — iki alan asla ust uste binmez. */
-  var placements = resolvePlacements(visibleEntries.map(function (en) {
-    return { key: en.it.key, span: en.it.span, row: en.it.row, col: en.it.col }
-  }))
-  var placeByKey = {}
-  placements.forEach(function (p) { placeByKey[p.key] = p })
-
-  var selected = selectedKey ? items.find(function (x) { return x.key === selectedKey }) : null
-  var selPlace = selected ? placeByKey[selected.key] : null
-  var rowPlacements = selPlace
-    ? placements.filter(function (p) { return p.row === selPlace.row }).sort(function (a, b) { return a.col - b.col })
-    : []
-  var rowUsed = rowPlacements.reduce(function (a, p) { return a + p.span }, 0)
-  var rowInfo = selPlace ? {
-    index: selPlace.row - 1,
-    used: rowUsed,
-    free: CARD_GRID_UNITS - rowUsed,
-    count: rowPlacements.length,
-    canDistribute: rowPlacements.length > 0 && Math.floor(CARD_GRID_UNITS / rowPlacements.length) >= MIN_SPAN,
-  } : null
-
-  // ── Tuval hucresi ────────────────────────────────────────────────────────
-  function renderCell(en, place) {
-    var it = en.it
-    var Icon = resolveIcon(it.icon)
-    var isSelected = selectedKey === it.key
-    var isResizing = resizingKey === it.key
-    var isBeingDragged = draggingKey === it.key
-    var labelText = (it.labelText && it.labelText.trim()) ? it.labelText.trim() : it.label
-    /* Onizlemede etiket HER ZAMAN standart modda cizilir (2026-08-06 kullanici
-       istegi): Modern (yuzer) ve Sade (yan yana) stilleri hucre yuksekligini/
-       hizasini degistirip duzen ayarlarken tuvali karistiriyordu. Secilen stil
-       kaydedilir ve GERCEK kartta uygulanir; editorde yalniz rayda ozet olarak
-       gorunur. */
-    var mode = 'standard'
-    // Ek alan (widget) sinyali: eskiden her hucrede tekrar eden "EK" rozetiydi —
-    // kalabalik yapiyordu. Simdi ozel renk secilmemisse etiket METNI + ikonu sky
-    // tonunda; acik "Ek Alan" rozeti yalniz alan seciliyken sag rayda gorunur.
-    var colorCls = it.labelColor
-      ? CARD_LABEL_COLOR_CLS[it.labelColor]
-      : (it.isWidget ? 'text-sky-600 dark:text-sky-300' : 'text-slate-500 dark:text-white/45')
-    var labelStyleOv = {}
-    if (it.labelSize) labelStyleOv.fontSize = it.labelSize
-    if (it.labelWeight) labelStyleOv.fontWeight = it.labelWeight
-
-    // Alt cizgi — dinlenmede yari opak (gercek kartta cizgi hover/odakta belirir),
-    // hover/secimde gercek kartin hover degerine cikar.
-    // Yukseklik gercek karttaki giris alaniyla ayni (CARD_FIELD_HEIGHT) — sabit
-    // sinif yerine token, cunku 34px kullanildiginda satirlar gercekten yuksek cikiyordu.
-    var underlineCls = 'border-b transition-colors ' + (
-      (isSelected || isResizing)
-        ? 'border-slate-200 dark:border-white/[0.12]'
-        : 'border-slate-200/50 dark:border-white/[0.06] group-hover:border-slate-200 dark:group-hover:border-white/[0.12]'
-    )
-
-    var labelInner = (
-      <>
-        {/* Icon null olabilir — ikonu bilerek bos birakilan alanlar (Iskonto %/KDV %) */}
-        {Icon && (
-          <Icon
-            size={10}
-            strokeWidth={1.8}
-            className={(it.isWidget ? 'text-sky-500 dark:text-sky-300' : 'text-slate-400 dark:text-white/35') + ' flex-shrink-0'}
-          />
-        )}
-        <span className="truncate">{labelText}</span>
-        {it.locked && <span className="text-rose-500 dark:text-rose-400">*</span>}
-      </>
-    )
-
-    return (
-      <div
-        key={it.key}
-        data-key={it.key}
-        data-row={place.row}
-        data-col={place.col}
-        tabIndex={0}
-        role="button"
-        aria-pressed={isSelected}
-        aria-label={labelText + ' alanı, satır ' + place.row + ', sütun ' + place.col + ', genişlik ' + it.span + '/' + CARD_GRID_UNITS + (it.locked ? ', zorunlu' : '')}
-        draggable={canEdit && !saving}
-        onDragStart={function (e) { handleDragStart(e, it.key, clampSpan(it.span), e.currentTarget) }}
-        onDragEnd={handleDragEnd}
-        onClick={function () { setSelectedKey(isSelected ? null : it.key) }}
-        onKeyDown={function (e) {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedKey(isSelected ? null : it.key) }
-        }}
-        className={'group relative outline-none ' + (canEdit ? 'cursor-grab active:cursor-grabbing ' : '') + (mode === 'inline' ? 'flex items-center gap-2 ' : '')}
-        style={{
-          // Serbest yerlesim: hucre TAM konumuna oturur (aradaki bosluk korunur).
-          gridColumn: place.col + ' / span ' + clampSpan(it.span),
-          gridRow: String(place.row),
-          alignSelf: 'end',
-          opacity: isBeingDragged ? 0.4 : 1,
-          transition: 'opacity .12s ease',
-        }}
-      >
-        {/* Alan kutucugu + secim/hover katmani. Kesik cizgili cerceve alanin
-            sinirlarini gorsel olarak belli eder (2026-08-06 kullanici istegi);
-            `absolute` + negatif inset oldugu icin hucre GENISLIGINE DOKUNMAZ —
-            border/ring hucreye verilseydi izgara oranlari kayardi. */}
-        <div
-          aria-hidden="true"
-          /* border-[1px]: Bootstrap'in `.border{border:1px solid ...!important}`
-             utility'si Tailwind'in `border` sinifini eziyor (kesikli cerceve
-             solid'e donuyordu) — cakismayan arbitrary deger kullanilir. */
-          className={'absolute rounded-lg transition-colors border-[1px] border-dashed ' + (
-            isSelected
-              ? 'border-indigo-400/80 bg-indigo-100/60 dark:border-indigo-400/60 dark:bg-indigo-500/[0.12]'
-              : 'border-slate-300/60 dark:border-white/[0.12] group-hover:border-indigo-300 group-hover:bg-indigo-50/40 dark:group-hover:border-indigo-400/40 dark:group-hover:bg-indigo-500/[0.08]'
-          )}
-          style={Object.assign(
-            { top: -4, bottom: -4, left: -2, right: -2, zIndex: 1, pointerEvents: 'none' },
-            isSelected ? { outline: '1px solid rgba(99,102,241,.55)' } : null,
-            null
-          )}
-        />
-        {/* Tutamak — yalniz hover/secim */}
-        {canEdit && (
-          <GripVertical
-            size={11}
-            strokeWidth={2}
-            aria-hidden="true"
-            className={'absolute text-slate-400 dark:text-white/35 transition-opacity pointer-events-none ' + (
-              isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-            )}
-            style={{ top: -3, left: -3, zIndex: 2 }}
-          />
-        )}
-
-        {/* Etiket — gercek kartin uc modu (standard / modern / inline) */}
-        {mode === 'standard' && (
-          <div
-            className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide mb-0.5 relative z-[2] ' + colorCls}
-            style={labelStyleOv}
-          >{labelInner}</div>
-        )}
-        {mode === 'inline' && (
-          <div
-            className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide flex-shrink-0 max-w-[45%] relative z-[2] ' + colorCls}
-            style={labelStyleOv}
-          >{labelInner}</div>
-        )}
-        {mode === 'modern' ? (
-          <div className="relative mt-1.5 w-full">
-            <div
-              className={'calibra-line-card-label absolute flex items-center gap-1 text-[9.5px] font-bold tracking-wide ' + colorCls}
-              style={Object.assign({ top: -1, left: 10, zIndex: 2, lineHeight: '12px' }, labelStyleOv)}
-            >{labelInner}</div>
-            <div className={underlineCls} style={{ height: CARD_FIELD_HEIGHT }} />
-          </div>
-        ) : (
-          <div
-            className={underlineCls + (mode === 'inline' ? ' flex-1 min-w-0' : '')}
-            style={{ height: CARD_FIELD_HEIGHT }}
-          />
-        )}
-
-        {/* Canli genislik rozeti — tuvaldeki TEK sayi, yalniz boyutlandirirken */}
-        {isResizing && (
-          <div
-            className="absolute px-1.5 py-0.5 rounded text-[11px] font-mono tabular-nums font-bold bg-indigo-500 text-[#fff]"
-            style={{ top: -18, right: 0, zIndex: 3 }}
-          >{spanLabel(it.span) + ' · ' + it.span + '/' + CARD_GRID_UNITS}</div>
-        )}
-
-        {/* Resize kolu — hover/secim/dokunmatik */}
-        {canEdit && (
-          <div
-            onPointerDown={function (e) { handleResizeStart(e, it.key) }}
-            onPointerMove={handleResizeMove}
-            onPointerUp={handleResizeEnd}
-            onPointerCancel={handleResizeEnd}
-            onClick={function (e) { e.stopPropagation() }}
-            title="Genişliği ayarlamak için çekin (Shift: serbest)"
-            className={'absolute flex items-center justify-center transition-opacity ' + (
-              (isSelected || isResizing || coarse) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-            )}
-            style={{ right: -3, top: 0, bottom: 0, width: coarse ? 20 : 10, cursor: 'ew-resize', touchAction: 'none', zIndex: 3 }}
-          >
-            <span className="w-[2px] h-4 rounded-full bg-indigo-400/70 dark:bg-indigo-400/50" />
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  /* Satir sonu boslugu icin tuvalde GOSTERGE YOK (2026-08-06 kullanici
-     bildirimi): kesikli cerceveli "hayalet blok" denendi, ama kullanicilar onu
-     Miktar/Parti No gibi alanlarin yanindaki fazladan bir KUTU sandi. Bosluk
-     bilgisi ve "Boşluğu Doldur" eylemi yalniz sag rayin "Satır" bolumunde. */
-  var canvasChildren = visibleEntries.map(function (en) {
-    var p = placeByKey[en.it.key]
-    return p ? renderCell(en, p) : null
-  })
+  var visibleStripCount = stripItems.filter(function (it) { return it.visible }).length
 
   return createPortal(
     <div
@@ -769,14 +543,13 @@ export default function LineCardLayoutEditor(props) {
       <div
         ref={modalRef}
         className="w-full flex flex-col overflow-hidden rounded-2xl border shadow-2xl border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-slate-900 [color-scheme:light] dark:[color-scheme:dark]"
-        /* SABIT olcu (2026-08-06 kullanici istegi): genislik VE yukseklik icerige
-           gore degismez — alan secildikce sag rayin icerigi degisiyor ve modal
-           buyuyup kuculuyordu. Tuval genisligi de bilerek genis: gercek kart
-           ~1000px, ray 296px → tuval ~1050px ile onizleme gercek kartla ayni
-           OLCEKTE gorunur (WYSIWYG; dar tuvalde alanlar orantisiz genis duruyordu). */
+        /* SABIT olcu — genislik VE yukseklik icerige gore degismez (CLAUDE.md
+           "Modal boyut sabitliği"). Canvas kalkinca gercek kart genisligiyle
+           orantili kompakt bir liste yeterli — eski 1400px tuval genisligine
+           gerek kalmadi. */
         style={{
-          maxWidth: 'min(1400px, calc(100vw - 96px))',
-          height: 'min(760px, calc(100vh - 64px))',
+          maxWidth: 'min(760px, calc(100vw - 96px))',
+          height: 'min(720px, calc(100vh - 64px))',
         }}
         role="dialog"
         aria-modal="true"
@@ -790,8 +563,6 @@ export default function LineCardLayoutEditor(props) {
           <div className="flex-1 min-w-0">
             <div className="text-[14px] font-bold text-slate-800 dark:text-white/90 flex items-center gap-2">
               <span>Kart Düzeni</span>
-              {/* Hangi ekranin duzeni duzenleniyor — admin belge turleri
-                  arasinda gezerken karisiklik olmasin. */}
               <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 text-indigo-600 border border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-400/30 truncate">
                 {props.formLabel || formCode}
               </span>
@@ -816,138 +587,97 @@ export default function LineCardLayoutEditor(props) {
           </button>
         </div>
 
-        {/* ── Govde: tuval + denetim rayi ── */}
-        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_296px]">
-          {/* Tuval */}
-          <div className="overflow-y-auto px-5 py-4">
-            {unsupported ? (
-              <div className="py-10 text-center text-[12px] text-slate-500 dark:text-white/45">
-                {error || 'Bu form için kart düzeni desteklenmiyor.'}
-              </div>
-            ) : (
-              <div className="rounded-xl border overflow-hidden border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.025]">
-                <div
-                  className="p-3"
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'auto 1fr',
-                    gridTemplateAreas: '"actions fields"',
-                    columnGap: CARD_COLUMN_GAP,
-                    rowGap: CARD_ROW_GAP,
-                    alignItems: 'start',
-                  }}
-                >
-                  {/* Gercek kartta aksiyonlar SOL kenarda dikey serittir ve alan
-                      izgarasi o kadar daralir — onizleme ayni payi birakmazsa
-                      genislikler gercekle ortusmez. */}
-                  <div
-                    aria-hidden="true"
-                    title="Kart aksiyon şeridi — sabittir, düzenlenemez"
-                    className="flex flex-col items-center gap-1 flex-shrink-0 justify-self-start pointer-events-none select-none"
-                    style={{ gridArea: 'actions', alignSelf: 'start', opacity: 0.55 }}
-                  >
-                    {[MoreHorizontal, Layers, Settings, Trash2].map(function (I, i) {
-                      return (
-                        <span key={i} className="w-7 h-7 rounded-lg flex items-center justify-center bg-slate-100 text-slate-300 dark:bg-white/[0.06] dark:text-white/20">
-                          <I size={13} strokeWidth={2} />
-                        </span>
-                      )
-                    })}
-                  </div>
-
-                  {/* Alan izgarasi — TEK 48 kolonluk grid; sarmayi tarayici yapar */}
-                  <div
-                    ref={gridRef}
-                    onClick={function (e) { if (e.target === e.currentTarget) setSelectedKey(null) }}
-                    onDragOver={handleCanvasDragOver}
-                    onDrop={handleCanvasDrop}
-                    style={{
-                      gridArea: 'fields',
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(' + CARD_GRID_UNITS + ', minmax(0, 1fr))',
-                      // Serbest yerlesim: bos birakilan satirlar da yukseklik alir,
-                      // yoksa "ustte bosluk birakma" gorsel olarak coker.
-                      gridAutoRows: 'minmax(' + CARD_ROW_HEIGHT + 'px, auto)',
-                      columnGap: CARD_COLUMN_GAP,
-                      rowGap: CARD_ROW_GAP,
-                      alignItems: 'end',
-                      position: 'relative',
-                    }}
-                  >
-                    {/* Kilavuz — yalniz boyutlandirma sirasinda, 1/4 adim */}
-                    {resizingKey && (
-                      <div
-                        aria-hidden="true"
-                        className="absolute inset-0 pointer-events-none"
-                        style={{
-                          zIndex: 0,
-                          backgroundImage: 'repeating-linear-gradient(to right, rgba(99,102,241,.14) 0 1px, transparent 1px 25%)',
-                        }}
-                      />
-                    )}
-
-                    {/* Birakma hedefi hayaleti — alanin hangi satir/sutuna
-                        oturacagini surukleme sirasinda gosterir. */}
-                    {dropSlot && draggingKey && (
-                      <div
-                        aria-hidden="true"
-                        style={{
-                          gridColumn: dropSlot.col + ' / span ' + dropSlot.span,
-                          gridRow: String(dropSlot.row),
-                          alignSelf: 'end',
-                          height: CARD_FIELD_HEIGHT,
-                          border: '2px dashed #6366f1',
-                          borderRadius: 8,
-                          background: 'rgba(99,102,241,0.12)',
-                          pointerEvents: 'none',
-                          zIndex: 4,
-                        }}
-                      />
-                    )}
-
-                    {loading
-                      ? [0, 1, 2].map(function (i) {
-                          return (
-                            <div key={'sk-' + i} style={{ gridColumn: 'span 16' }}>
-                              <div className="rounded-md bg-slate-100 dark:bg-white/[0.05] animate-pulse" style={{ height: CARD_FIELD_HEIGHT }} />
-                            </div>
-                          )
-                        })
-                      : canvasChildren}
-                  </div>
+        {/* ── Govde: tek kolon, kaydirilabilir (modal boyutu sabit kalir) ── */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
+          {unsupported ? (
+            <div className="py-10 text-center text-[12px] text-slate-500 dark:text-white/45">
+              {error || 'Bu form için kart düzeni desteklenmiyor.'}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-5">
+              {/* Onizleme */}
+              <div>
+                <div className="text-[11px] font-semibold text-slate-500 dark:text-white/45 mb-1.5">Önizleme</div>
+                <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/60 dark:bg-white/[0.015] p-3">
+                  {loading ? (
+                    <div className="rounded-xl bg-slate-100 dark:bg-white/[0.05] animate-pulse" style={{ height: 96 }} />
+                  ) : (
+                    <CardPreview identityItems={identityItems} stripItems={stripItems} />
+                  )}
                 </div>
-
-                {!loading && !visibleEntries.length && (
-                  <div className="py-8 text-center text-[11.5px] text-slate-400 dark:text-white/35">
-                    Kartta gösterilecek alan kalmadı — sağdaki Alan Havuzu'ndan geri ekleyin.
-                  </div>
-                )}
               </div>
-            )}
-          </div>
 
-          {/* Denetim rayi — 296px sabit, HER ZAMAN mount (sifir layout shift) */}
-          <div
-            className="overflow-y-auto p-4 border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-white/[0.08]"
-            style={{ scrollbarGutter: 'stable' }}
-          >
-            <LineCardInspector
-              item={selected}
-              place={selPlace}
-              rowInfo={rowInfo}
-              hiddenItems={hiddenItems}
-              canEdit={canEdit && !saving}
-              coarse={coarse}
-              onPatch={patchItem}
-              onSetSpan={setSpan}
-              onDistributeRow={function () { distributeRow(rowPlacements) }}
-              onFillRow={function () { fillRow(rowPlacements) }}
-              onToggleVisible={toggleVisible}
-              onShowHidden={showHidden}
-              onNudge={function (dRow, dCol) { if (selectedKey) nudge(selectedKey, dRow, dCol) }}
-              onClearSelection={function () { setSelectedKey(null) }}
-            />
-          </div>
+              {/* Kimlik (kart başlığında sabit) */}
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-[12px] font-semibold text-slate-700 dark:text-white/80">Kimlik (Kart Başlığı)</span>
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-white/45 mb-2">
+                  Sırası ve konumu sabittir (malzeme kodu solda, adı yanında, satır toplamı sağda) — yalnız görünürlük ayarlanır.
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {!loading && identityItems.map(function (it) {
+                    return <IdentityRow key={it.key} item={it} canEdit={canEdit && !saving} onToggle={toggleIdentityVisible} />
+                  })}
+                  {!loading && !identityItems.length && (
+                    <div className="text-[11px] text-slate-400 dark:text-white/35 px-1">Bu form için kimlik alanı yok.</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Şerit alanları */}
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span className="text-[12px] font-semibold text-slate-700 dark:text-white/80">Şerit Alanları</span>
+                  {!loading && (
+                    <span className="text-[10.5px] font-mono tabular-nums text-slate-400 dark:text-white/35 flex-shrink-0">
+                      {visibleStripCount}/{stripItems.length} görünür
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-white/45 mb-2">
+                  Sürükleyip bırakın veya ok düğmeleriyle sıralayın; genişlik, görünürlük ve başlık her satırda ayarlanır.
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {loading
+                    ? [0, 1, 2].map(function (i) {
+                        return <div key={'sk-' + i} className="rounded-lg bg-slate-100 dark:bg-white/[0.05] animate-pulse" style={{ height: 38 }} />
+                      })
+                    : stripItems.map(function (it, idx) {
+                        return (
+                          <FieldRow
+                            key={it.key}
+                            item={it}
+                            isFirst={idx === 0}
+                            isLast={idx === stripItems.length - 1}
+                            canEdit={canEdit && !saving}
+                            isDragging={draggingKey === it.key}
+                            dragDisabled={saving}
+                            widthLocked={PERCENT_LOCKED_KEYS.indexOf(it.key) >= 0}
+                            onDragStart={function (e) { handleRowDragStart(e, it.key, idx) }}
+                            onDrop={function () { handleRowDrop(idx) }}
+                            onDragEnd={handleRowDragEnd}
+                            onMoveUp={function () { moveStripItem(idx, -1) }}
+                            onMoveDown={function () { moveStripItem(idx, 1) }}
+                            onSetSpan={setStripSpan}
+                            onToggleVisible={toggleStripVisible}
+                            onPatch={patchStripItem}
+                          />
+                        )
+                      })}
+                  {!loading && !stripItems.length && (
+                    <div className="text-[11px] text-slate-400 dark:text-white/35 px-1">Bu form için düzenlenebilir alan yok.</div>
+                  )}
+                </div>
+              </div>
+
+              {!canEdit && (
+                <div className="text-[11px] text-amber-600 dark:text-amber-300">
+                  Bu düzeni değiştirme yetkiniz yok — yalnızca görüntülüyorsunuz.
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── Hata seridi ── */}
@@ -1010,7 +740,7 @@ export default function LineCardLayoutEditor(props) {
         <ConfirmDialog
           icon={RotateCcw}
           title="Varsayılan Düzene Dön"
-          message="Bu belge türü için kayıtlı kart düzeni silinecek ve kart varsayılan ızgaraya dönecek. Bu işlem geri alınamaz."
+          message="Bu belge türü için kayıtlı kart düzeni silinecek ve kart varsayılan görünüme dönecek. Bu işlem geri alınamaz."
           dangerLabel="Sıfırla"
           onCancel={function () { setConfirm(null) }}
           onConfirm={handleReset}

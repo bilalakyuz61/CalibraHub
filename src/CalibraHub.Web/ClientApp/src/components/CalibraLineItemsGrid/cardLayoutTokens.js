@@ -1,14 +1,18 @@
 /**
- * cardLayoutTokens — kalem KARTI duzeni icin paylasilan sabitler (2026-08-06).
+ * cardLayoutTokens — kalem KARTI duzeni icin paylasilan sabitler.
  *
- * Bu bloklar daha once hem CalibraLineItemsGrid.jsx (gercek kart render'i) hem
- * LineCardLayoutEditor.jsx (duzen editoru) icinde KOPYA duruyordu. Editorun
- * onizlemesi gercek kartla birebir ayni gorunmek zorunda oldugu icin iki kopyanin
- * ayrisması dogrudan WYSIWYG bozulmasi demek — DRY kurali geregi tek kaynak.
+ * 2026-08-19 SADELESTIRME: gercek kart artik CSS-grid/48-birim izgara DEGIL,
+ * flex-wrap kompakt bir SERIT (bkz. CalibraLineItemsGrid.jsx renderFieldsList).
+ * `span`, hucrenin GORELI GENISLIK AGIRLIGI (flex-grow) olarak yorumlanir; serbest
+ * satir/sutun konumlandirma (row/col) runtime'da KULLANILMAZ. Duzen editoru buna
+ * gore sadelestirildi (LineCardLayoutEditor.jsx): Sira + Gorunurluk + Genislik
+ * (Dar/Normal/Genis) — ham 1-48 sayi/piksel-surukleme YOK.
  *
- * DIKKAT: Buradaki degerler server sozlesmesiyle baglidir
- * (LineCardLayoutController.GridUnits = 48, LayoutItemDto whitelist'leri).
- * Degistirmeden once server tarafina bak.
+ * DIKKAT: `CARD_GRID_UNITS` server sozlesmesiyle baglidir
+ * (LineCardLayoutController.GridUnits = 48, LayoutItemDto Span 1-48 whitelist'i).
+ * resolvePlacements CalibraLineItemsGrid.jsx tarafindan hala import edilir
+ * (eski v1/v2 kayitlarin row/col alanlarini sessizce yok saymak icin) — bu
+ * dosyaya DOKUNMADAN once orayi kontrol et.
  */
 import {
   Hash, FileText, Ruler, Sigma, DollarSign, Percent, Calculator, StickyNote,
@@ -31,8 +35,8 @@ export var ICON_MAP = {
 }
 /**
  * Ikon adi → bilesen. Bos/null ad = "bu alanda ikon ISTENMIYOR" → null doner
- * (2026-08-06: Iskonto/KDV basliklarinda zaten "%" var, bir de yuzde ikonu
- * tekrar oluyordu). Cagiranlar null'a karsi guard etmelidir.
+ * (Iskonto/KDV basliklarinda zaten "%" var, bir de yuzde ikonu tekrar oluyordu).
+ * Cagiranlar null'a karsi guard etmelidir.
  */
 export function resolveIcon(name) {
   if (name == null || name === '') return null
@@ -64,82 +68,48 @@ export var LABEL_COLOR_NAMES = {
 }
 
 /* Izgara cozunurlugu — server GridUnits ile ayni (48; v1'de 24'tu, eski
-   kayitlari server okuma yolunda x2 olcekleyip normalize eder). */
+   kayitlari server okuma yolunda x2 olcekleyip normalize eder). Artik
+   pozisyon degil, `span`in ust siniri (goreli genislik agirligi) olarak
+   kullanilir. */
 export var CARD_GRID_UNITS = 48
-export var MIN_SPAN = 3
-/* Gercek kartin alan izgarasi bosluklari (CalibraLineItemsGrid kart render'i) —
-   editor onizlemesi ayni degerleri kullanmak zorunda, yoksa oranlar kayar. */
-export var CARD_COLUMN_GAP = 12
-export var CARD_ROW_GAP = 10
-/* Gercek karttaki giris alaninin yuksekligi — LineGridCell input'u
-   (`px-2.5 py-2 text-[13px]`) canli olcumde 29-30px veriyor. Editor onizlemesi
-   bu degeri kullanmak ZORUNDA: 34px kullanildiginda satir basina ~4px fazla
-   yukseklik olusuyordu ve "ayar ekranindaki satirlar gercekten daha yuksek"
-   sikayeti dogdu (2026-08-06 kullanici bildirimi). */
-export var CARD_FIELD_HEIGHT = 30
-
-/* ── Sutun genisligi altyapisi ─────────────────────────────────────────────
-   Ham 48'lik birim kullaniciya "18/48" olarak degil KESIR olarak gosterilir
-   (1/4, 1/3, 1/2 …) — premium form tasarimcilarinin dili. Birim hassasiyeti
-   korunur: preset disi degerler "n/48" olarak gosterilir. */
-export var WIDTH_PRESETS = [
-  { span: 8,  label: '1/6' },
-  { span: 12, label: '1/4' },
-  { span: 16, label: '1/3' },
-  { span: 24, label: '1/2' },
-  { span: 32, label: '2/3' },
-  { span: 36, label: '3/4' },
-  { span: 48, label: 'Tam' },
-]
-export function spanLabel(span) {
-  for (var i = 0; i < WIDTH_PRESETS.length; i++) {
-    if (WIDTH_PRESETS[i].span === span) return WIDTH_PRESETS[i].label
-  }
-  return span + '/' + CARD_GRID_UNITS
-}
 export function clampSpan(span) {
-  return Math.min(CARD_GRID_UNITS, Math.max(MIN_SPAN, span))
+  return Math.min(CARD_GRID_UNITS, Math.max(1, span))
 }
-/* Surukleme sirasinda yaygin kesirlere yapisma (1 birim tolerans) — serbest
-   suruklemede 23/48 gibi "neredeyse yarim" degerler olusmasin. */
-export function snapSpan(span) {
-  for (var i = 0; i < WIDTH_PRESETS.length; i++) {
-    if (Math.abs(WIDTH_PRESETS[i].span - span) <= 1) return WIDTH_PRESETS[i].span
+
+/* ── Genislik kontrolü (2026-08-19 sadelestirme) ───────────────────────────
+   Editorde ham "n/48" sayisi/piksel-surukleme YERINE 3 anlasilir secenek:
+   Dar / Normal / Genis. Deger, gercek kartta flex-grow agirligi olarak
+   yorumlanan `span`e eslenir. Kayitli span bu ucunden birine tam denk
+   gelmeyebilir (eski kayitlar / gelecekte elle JSON) — `widthValueForSpan`
+   en yakinini secer, kullanici degistirmedikce span DEGISTIRILMEZ. */
+export var WIDTH_OPTIONS = [
+  { value: 'narrow', span: 8,  label: 'Dar' },
+  { value: 'normal', span: 16, label: 'Normal' },
+  { value: 'wide',   span: 28, label: 'Geniş' },
+]
+export function widthValueForSpan(span) {
+  var best = WIDTH_OPTIONS[1]
+  var bestDist = Infinity
+  WIDTH_OPTIONS.forEach(function (o) {
+    var d = Math.abs(o.span - span)
+    if (d < bestDist) { bestDist = d; best = o }
+  })
+  return best.value
+}
+export function spanForWidthValue(value) {
+  for (var i = 0; i < WIDTH_OPTIONS.length; i++) {
+    if (WIDTH_OPTIONS[i].value === value) return WIDTH_OPTIONS[i].span
   }
-  return span
+  return 16
 }
 
-/* CSS grid'in satir sarma davranisinin aynisi: alan mevcut satira sigmiyorsa
-   yeni satira akar (kalan bosluk bos kalir). Editordeki satir bilgisi ve
-   "satiri doldur / esit dagit" araclari bu paketlemeden beslenir. */
-export function packRows(entries) {
-  var rows = []
-  var cur = []
-  var used = 0
-  for (var i = 0; i < entries.length; i++) {
-    var s = clampSpan(entries[i].it.span)
-    if (cur.length && used + s > CARD_GRID_UNITS) {
-      rows.push({ entries: cur, used: used })
-      cur = []
-      used = 0
-    }
-    cur.push(entries[i])
-    used += s
-  }
-  if (cur.length) rows.push({ entries: cur, used: used })
-  return rows
-}
-
-/* Serbest yerlesimde bir satirin taban yuksekligi (etiket 15 + mb 2 + alan 30).
-   `gridAutoRows` bu degeri kullanir — aksi halde BOS birakilan satirlar 0px olur
-   ve "ustte bosluk birakma" ozelligi calismaz. */
-export var CARD_ROW_HEIGHT = 47
-
-/* ── Serbest yerlesim (v3, 2026-08-06) ─────────────────────────────────────
-   Alanlar artik yalniz siraya gore sola/uste yigilmaz; her ogenin row/col'u
-   olabilir. Asagidaki yardimcilar cakismalari cozer ve koordinati olmayan
-   (v1/v2) ogeleri ESKI AKIS semantigiyle yerlestirir — boylece mevcut
-   duzenlerin gorunumu birebir korunur. */
+/* ── Serbest yerlesim uyumluluk katmani (v1/v2/v3 kayitlari) ──────────────
+   Gercek kart artik row/col KULLANMIYOR (bkz. CalibraLineItemsGrid.jsx
+   yorum satiri "span, goreli genislik agirligi"). Ancak fonksiyon
+   CalibraLineItemsGrid.jsx icinde HALA cagriliyor (o dosyaya bu gorevde
+   DOKUNULMUYOR) — kaldirilamaz. Eski kayitlardaki row/col alanlari burada
+   sessizce tuketilir (okunur ama ciktida artik hicbir yerde render
+   pozisyonu olarak kullanilmaz), yeni editor bu alanlari hic YAZMAZ. */
 function occupy(map, row, col, span) {
   for (var c = col; c < col + span; c++) map[row + ':' + c] = 1
 }
@@ -148,9 +118,7 @@ function slotFree(map, row, col, span) {
   for (var c = col; c < col + span; c++) { if (map[row + ':' + c]) return false }
   return true
 }
-/* Verilen konumdan baslayarak ilk uygun yuvayi bulur: once ayni satirda saga,
-   sigmazsa bir alt satirin basindan devam. */
-export function findFreeSlot(map, startRow, startCol, span) {
+function findFreeSlot(map, startRow, startCol, span) {
   var row = Math.max(1, startRow || 1)
   var col = Math.max(1, startCol || 1)
   for (var guard = 0; guard < 5000; guard++) {
@@ -161,10 +129,10 @@ export function findFreeSlot(map, startRow, startCol, span) {
   return { row: row, col: 1 }
 }
 /**
- * Item listesine kesin (row, col) atar.
- *   1) Koordinati olanlar once yerlesir (cakisirsa en yakin bos yuvaya kayar).
- *   2) Koordinatsizlar (v1/v2 kayitlari, yeni eklenen alanlar) siradan akar.
- * Girdi mutasyona ugramaz; { key, span, row, col } listesi doner.
+ * Item listesine kesin (row, col) atar (bkz. CalibraLineItemsGrid.jsx
+ * kullanim yeri — sonuc artik render pozisyonu olarak KULLANILMIYOR, yalniz
+ * geriye donuk uyumluluk icin hesaplaniyor). Girdi mutasyona ugramaz;
+ * { key, span, row, col } listesi doner.
  */
 export function resolvePlacements(items) {
   var map = {}
@@ -195,41 +163,4 @@ export function resolvePlacements(items) {
     flowCol += p.span
   })
   return out
-}
-/**
- * Bir yuvadan saga dogru KESINTISIZ bos birim sayisi — genisletmenin ust siniri.
- * Serbest yerlesimde bir alani genisletirken komsusunu ITMEK yerine sinira
- * dayanmasi beklenir (2026-08-06 kullanici bildirimi: "yatayda da otomatik
- * yerlestirme olmayacakti"). `map` genisleyen ogeyi ICERMEMELIDIR.
- */
-export function maxSpanAt(map, row, col) {
-  var span = 0
-  for (var c = col; c <= CARD_GRID_UNITS; c++) {
-    if (map[row + ':' + c]) break
-    span++
-  }
-  return span > 0 ? span : MIN_SPAN
-}
-
-/* Yerlesim listesinden isgal haritasi — bir ogeyi disarida birakabilir
-   (surukledigimiz ogeyi kendi eski yerine carptirmamak icin). */
-export function buildOccupancy(placements, exceptKey) {
-  var map = {}
-  ;(placements || []).forEach(function (p) {
-    if (exceptKey && p.key === exceptKey) return
-    occupy(map, p.row, p.col, p.span)
-  })
-  return map
-}
-
-/**
- * Bir izgara biriminin piksel karsiligi — SURUKLEYEREK GENISLETMENIN olcegi.
- *
- * Naif `width / 48` YANLIS: 48 kolonun arasinda 47 adet CARD_COLUMN_GAP vardir
- * ve bosluklar toplam genisligin buyuk kismini tutar (48 birimlik izgarada ~%60).
- * Dogru turetme: W = 48c + 47g  →  c + g = (W + g) / 48. Sürükleme mesafesi
- * "birim + bosluk" adimlariyla ilerledigi icin bolen bu degerdir.
- */
-export function unitStep(gridWidth) {
-  return (gridWidth + CARD_COLUMN_GAP) / CARD_GRID_UNITS
 }
