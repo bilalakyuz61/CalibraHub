@@ -65,11 +65,17 @@ workflows:
     integrations:
       app_store_connect: CalibraHub ASC
     environment:
-      # Xcode SABITLENDI (16.4). `xcode: latest` = Xcode 26.4.1 -> Kotlin/Native 2.1.0'in
-      # urettigi nesne dosyalari Xcode 26'nin yeni linker'iyla cakisip LINKER CRASH veriyordu
-      # (Ld iosApp -> "clang: PLEASE ATTACH ... linker snapshot"). Kotlin 2.1.0 Xcode 16.x ile
-      # uyumludur. Kotlin surumu yukseltilirse bu pin gozden gecirilebilir.
-      xcode: 16.4
+      # Xcode 26.4'e YUKSELTILDI (2026-08-20) — App Store Connect artik yukleme icin iOS 26 SDK
+      # (Xcode 26+) ZORUNLU kiliyor ("built with iOS 18.5 SDK... must be built with iOS 26 SDK").
+      # Onceki pin (16.4) tam da bu yuzden Apple'in yeni kuraliyla CELISIYORDU. Daha once
+      # `xcode: latest` (=26.4.1) ile eski Kotlin 2.1.0 arasinda LINKER CRASH vardi (Ld iosApp ->
+      # clang "PLEASE ATTACH ... linker snapshot") — kok neden Kotlin/Native 2.1.0'in Xcode 26'nin
+      # yeni linker toolchain'iyla uyumsuzlugu idi, Xcode surumu DEGIL. Kotlin gradle/libs.versions.toml'da
+      # 2.2.21'e yukseltildi (JetBrains resmi compat tablosunda Xcode 26.0 destegi ilk kez bu
+      # surumde listelenir) -> linker crash kok nedeninden cozuldu, artik Xcode 26 GEREKLI ve
+      # GUVENLI. "latest" yerine somut "26.4" pinlendi (bu projenin disiplini: gelecekte Codemagic
+      # yeni bir Xcode majorune atlarsa sessiz kirilma yerine acikca guncellenmesi gerekir).
+      xcode: 26.4
       # ELLE saglanan imzalama: sertifika+profil BIZ olusturduk (openssl CSR -> Apple Distribution
       # cert -> .p12 + App Store provisioning profil). Codemagic'in otomatik cert olusturma sorununu
       # tamamen atlar. "ios_signing" grubundaki secret'lardan gelir (Codemagic UI'da eklenir):

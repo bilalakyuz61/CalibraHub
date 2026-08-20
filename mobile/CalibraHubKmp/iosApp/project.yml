@@ -23,7 +23,15 @@ targets:
         CFBundleDisplayName: CalibraHub KMP
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
+        # App Store yukleme dogrulamasi (altool) icin ZORUNLU — asset catalog'daki AppIcon
+        # appiconset ile eslesir (bkz. ASSETCATALOG_COMPILER_APPICON_NAME asagida). Eksikse
+        # "Missing Info.plist value ... CFBundleIconName" hatasi verir.
+        CFBundleIconName: AppIcon
         UILaunchScreen: {}
+        # Uygulama portrait-kilitli tasarlandi (bkz. AppNavHost/ekranlar — yatay layout YOK).
+        # TARGETED_DEVICE_FAMILY = "1" (yalniz iPhone) oldugu icin iPad multitasking'in
+        # zorunlu kildigi 4 yonelim (Portrait+PortraitUpsideDown+LandscapeLeft+LandscapeRight)
+        # GEREKMEZ — yalniz Portrait yeterli ve dogru (iPad hedeflenmiyor).
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         # Geliştirme backend'i HTTP (cleartext) → ATS gevşetildi. PRODUCTION'da KALDIR.
@@ -38,6 +46,15 @@ targets:
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.0"
+        # App Store yukleme dogrulamasi — asset catalog'daki AppIcon.appiconset'i (tek 1024x1024
+        # "universal" kaynak, iosApp/Assets.xcassets) app icon olarak kullan. Xcode gerekli tum
+        # rasterize boyutlari (120x120 iPhone, 152x152 iPad vb.) bu tek kaynaktan turetir.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Uygulama portrait-kilitli + iPad hedeflenmiyor (bkz. yukarida orientation notu) →
+        # yalniz iPhone ("1"). Bu, iPad icon (152x152) + iPad multitasking yonelim zorunlulugunu
+        # (Portrait,PortraitUpsideDown,LandscapeLeft,LandscapeRight) tamamen ortadan kaldirir —
+        # App Store Connect yukleme dogrulamasindaki 2 hatanin (icon 152x152 + yonelim) kok nedeni.
+        TARGETED_DEVICE_FAMILY: "1"
         # Manuel imzalama (Codemagic use-profiles provisioning profil'i buraya ekler).
         # DEVELOPMENT_TEAM = Apple Team ID (BILAL AKYUZ). Codemagic archive CODE_SIGN_STYLE=Manual
         # ile calisiyor; team + manuel stil ayari olmadan "requires a provisioning profile" verir.

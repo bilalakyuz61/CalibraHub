@@ -17,8 +17,15 @@ kotlin {
         }
     }
 
+    // iosX64 (Intel simulator) 2026-08-20'de KALDIRILDI — Kotlin 2.2.20 whatsnew'de macosX64/iosX64
+    // support tier-2'ye demote edildi (bkz. gradle/libs.versions.toml kotlin yorumu) VE Compose
+    // Multiplatform 1.11.1'in cekirdek kutuphaneleri (runtime/foundation/ui/components-resources)
+    // artik iosX64 icin klib YAYINLAMIYOR — `kmpPartiallyResolvedDependenciesChecker` build'i
+    // "KMP Dependencies Resolution Failure" ile durduruyordu (appleMain/nativeMain 'Unresolved
+    // platforms: [iosX64]'). Codemagic mac_mini_m2 (Apple Silicon) kullaniyor; iosX64 zaten hicbir
+    // CI script'inde referans edilmiyor (iosArm64=cihaz, iosSimulatorArm64=Apple Silicon simulator
+    // yeterli) — kaldirilmasi davranis kaybi degil.
     listOf(
-        iosX64(),
         iosArm64(),
         iosSimulatorArm64(),
     ).forEach { iosTarget ->
@@ -47,6 +54,7 @@ kotlin {
             implementation(libs.ktor.client.okhttp)
             implementation(libs.androidx.datastore.preferences)
             implementation(libs.zxing.android.embedded)
+            implementation(libs.androidx.activity.compose) // PlatformBackHandler (androidx.activity BackHandler)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)

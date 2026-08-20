@@ -1,21 +1,46 @@
 [versions]
-kotlin = "2.1.0"
+# 2026-08-20 — Xcode 26 yukseltmesi (App Store Connect yukleme dogrulamasi "This app was built
+# with the iOS 18.5 SDK. All iOS and iPadOS apps must be built with the iOS 26 SDK" hatasi):
+# Kotlin 2.2.20 whatsnew'de "Support for Xcode 26" basligiyla duyuruldu, ANCAK JetBrains'in resmi
+# "Compatibility guide for Kotlin Multiplatform" tablosunda (kotlinlang.org/docs/multiplatform-
+# compatibility-guide.html, 2026-08-20 sorgulandi) Xcode 26.0 UYUMLULUGU ilk kez Kotlin 2.2.21
+# satirinda listeleniyor (2.2.20 satiri hala Xcode 16.4 gosteriyor) — yani 2.2.21 bug-fix patch'i
+# Xcode 26 destegini RESMEN dogrulanmis kilan surum. Ayni tabloda 2.2.21 icin Gradle 7.6.3-8.14 ve
+# AGP 7.3.1-8.11.1 destekleniyor — projenin mevcut Gradle 8.11.1 + AGP 8.7.3 degismeden UYUMLU
+# kaliyor (bump gerekmedi). Daha once `xcode: latest` (=26.4.1) ile Kotlin 2.1.0 arasinda yasanan
+# LINKER CRASH (Ld iosApp -> clang "PLEASE ATTACH ... linker snapshot") bu yukseltmeyle kok
+# nedeninden cozulur (bkz. codemagic.yaml ios-testflight yorumu).
+kotlin = "2.2.21"
 agp = "8.7.3"
-compose-multiplatform = "1.7.3"
-ktor = "3.0.3"
+# Compose Multiplatform resmi Kotlin uyumluluk sayfasi (jetbrains.com/help/kotlin-multiplatform-dev/
+# compose-compatibility-and-versioning.html): "latest CMP her zaman latest Kotlin ile uyumlu" +
+# "iOS/web gibi hizli evrilen platformlar icin Kotlin 2.2.20'ye yukselt" acik tavsiyesi. 1.11.1
+# (2026-05-13 yayinlandi) CMP'nin en son STABIL surumu; Compose Compiler Gradle plugin'i (kotlin-
+# compose alias'i) YINE `kotlin` version.ref'i ile ayni tutulur (CMP'nin zorunlu kildigi esleme).
+compose-multiplatform = "1.11.1"
+# Ktor 3.0.3 -> 3.5.2: buyuk Kotlin siramasinda (2.1.0->2.2.21) klib/metadata guncelligini
+# korumak icin en son kararli 3.x patch'ine tasindi; ktor-client-* API'lerinde davranissal
+# degisiklik YOK (yalnizca additive/bugfix sürümler), androidApp derlemesiyle dogrulandi.
+ktor = "3.5.2"
 coroutines = "1.9.0"
 activity-compose = "1.9.3"
 datastore-preferences = "1.1.1"
 # JetBrains'in gercek multiplatform (Android+iOS+desktop) navigation-compose fork'u — Google'in
 # resmi androidx.navigation:navigation-compose'u (2.9.x dahil) YALNIZ android+jvmstubs+linuxx64stubs
 # variant'lari yayinliyor (iOS klib YOK, ios hedefinde derleme cozulemez); org.jetbrains.androidx.navigation
-# grubu ise uikitarm64/uikitsimarm64/uikitx64 klib'lerini de yayinliyor (dogrulandi: Maven Central
-# .module dosyasi, 2026-08-04). 2.8.0-alpha10 JetBrains'in resmi Compose Multiplatform Navigation
-# dokumantasyonunda "minimum desteklenen surum" olarak belirtilir ve minimum gereksinimleri
-# (compose.ui >=1.7.0-beta02, kotlin-stdlib-common >=1.9.24) projedeki 1.7.3/2.1.0 ile UYUMLUDUR.
-navigation-compose = "2.8.0-alpha10"
+# grubu ise uikitarm64/uikitsimarm64/uikitx64 klib'lerini de yayinliyor. 2026-08-20 guncellemesi:
+# eski 2.8.0-alpha10 (o zamanki "minimum desteklenen surum") yerine JetBrains'in guncel Compose
+# Multiplatform Navigation dokumantasyonunda (compose-navigation-routing.html) ornek bagimlilik
+# olarak gosterilen ILK STABIL surum 2.9.2 kullanilir — NavHost/composable/popUpTo/rememberNavController
+# API yuzeyi AppNavHost.kt'de degismedi (bkz. o dosyadaki navigasyon davranis notlari, dokunulmadi).
+navigation-compose = "2.9.2"
 zxing-android-embedded = "4.3.0"
-compileSdk = "34"
+# 34 -> 35: Compose Multiplatform 1.11.1'in Android artifact'lari (androidx.compose.ui/runtime/
+# lifecycle-*-android, androidx.core 1.16.0 vb.) compileSdk >= 35 zorunlu kilar (Gradle build
+# hatasi: "requires libraries and applications that depend on it to compile against version 35
+# or later"). AGP 8.7.3 compileSdk 35'i zaten destekler, ek AGP bump gerekmedi. targetSdk BILINCLI
+# 34'te birakildi (yalniz derleme hedefi degisti, runtime davranis degisikligi kapsam disi).
+compileSdk = "35"
 minSdk = "26"
 targetSdk = "34"
 
