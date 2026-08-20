@@ -40,6 +40,12 @@ targets:
         # Faz 3 — AVFoundation kamera erişimi (barkod tarama). Bu anahtar olmadan
         # AVCaptureDevice/AVCaptureSession ilk kullanımda uygulamayı çökertir (iOS zorunlu kılar).
         NSCameraUsageDescription: "Barkod okutmak için kamera erişimi gerekir."
+        # Export compliance: uygulama KENDI sifreleme algoritmasini uygulamaz; yalniz Apple
+        # isletim sistemindeki HTTPS/TLS (NSURLSession uzerinden Ktor Darwin) kullanilir ->
+        # ihracat kisitlamasi muafiyeti gecerli. Bu anahtar olmadan App Store Connect her yeni
+        # build icin "Missing Compliance / App Encryption Documentation" sorusunu ELLE sorar ve
+        # build yanitlanana kadar testerlara dagitilamaz. false = "non-exempt sifreleme YOK".
+        ITSAppUsesNonExemptEncryption: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.calibrahub.mobile
