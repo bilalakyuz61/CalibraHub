@@ -74,7 +74,13 @@ targets:
         script: |
           export JAVA_HOME=$(/usr/libexec/java_home -v 17)
           cd "$SRCROOT/.."
-          ./gradlew :shared:embedAndSignAppleFrameworkForXcode
+          # Heap AYRICA komut satirindan veriliyor: Kotlin/Native Release link adimi
+          # (linkReleaseFrameworkIosArm64) 2 GB ile OOM oluyordu. gradle.properties'teki
+          # org.gradle.jvmargs, CI imajinin ~/.gradle/gradle.properties'i tarafindan EZILEBILIR
+          # (home dizini proje dosyasindan onceliklidir) — komut satiri argumani ise her ikisini de
+          # ezer, yani bellek ayarinin uygulanmasi GARANTI olur.
+          ./gradlew -Dorg.gradle.jvmargs="-Xmx6144m -XX:MaxMetaspaceSize=1024m" \
+            :shared:embedAndSignAppleFrameworkForXcode
 schemes:
   iosApp:
     build:
