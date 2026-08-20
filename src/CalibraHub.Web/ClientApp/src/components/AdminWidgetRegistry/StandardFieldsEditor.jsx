@@ -14,6 +14,15 @@
  * dönmüyorsa (paralel geliştirme) `cardSection` undefined gelir → burada "Varsayılan"
  * (null) sayılır, hata verilmez.
  *
+ * Bölüm İÇİ sıralama (2026-08-20): her alan `cardOrder` (int|null) taşır — aynı
+ * `cardSection` içindeki sıra (küçük önce). Sürükle-bırak YOK (kullanıcı tercihi);
+ * her satırda yukarı/aşağı ok düğmesi var. Bir grup içinde sıra her değiştiğinde
+ * (taşıma veya bölüm değişimi) o grubun TÜM alanları 0,1,2… olacak şekilde
+ * yeniden numaralandırılır (kararlı, boşluksuz). Bölüm değişince alan hedef
+ * grubun SONUNA eklenir, hem eski hem yeni grup yeniden numaralandırılır.
+ * `cardOrder` backend'den henüz dönmüyorsa `undefined` → `null` (varsayılan sıra,
+ * katalog sırası korunur).
+ *
  * Ekran markup'ı SABİTTİR — burada yalnızca davranış metadata'sı düzenlenir
  * (GET/POST /api/form-behavior). Fail-open: hiçbir davranış tanımlanmamışsa ekran
  * bugünkü haliyle çalışır. Kilitli alanlar (belge no, tarih, cari, para birimi)
@@ -52,6 +61,27 @@ function normalizeCardSection(v) {
     if (n >= 0) return n
   }
   return null
+}
+
+// cardOrder da aynı gerekçeyle normalize edilir (paralel backend string/integer
+// her ikisini de dönebilir) — tanınmayan/eksik değer null (sıra ayarlanmamış).
+function normalizeCardOrder(v) {
+  if (typeof v === 'number' && Number.isFinite(v)) return Math.floor(v)
+  if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) return Math.floor(Number(v))
+  return null
+}
+
+// Bölüm içi sıralama karşılaştırıcısı: cardOrder küçük önce, null olanlar en
+// sona. Eşit (veya iki null) durumda dizideki mevcut konum korunur (Array.sort
+// stabil) — bu da katalog sırasına denk gelir çünkü `fields` state'i kendi
+// dizi konumunu asla değiştirmez (yalnız cardOrder/cardSection değerleri mutasyona uğrar).
+function compareByCardOrder(a, b) {
+  var ao = (typeof a.cardOrder === 'number') ? a.cardOrder : null
+  var bo = (typeof b.cardOrder === 'number') ? b.cardOrder : null
+  if (ao === null && bo === null) return 0
+  if (ao === null) return 1
+  if (bo === null) return -1
+  return ao - bo
 }
 
 function Switch(props) {
@@ -158,19 +188,23 @@ var ruleInputCls = inputCls + ' font-mono'
 // tek sekme olduğundan gösterilmez).
 var tabLabels = { general: 'Genel Bilgiler', lines: 'Kalem Bilgileri', conditions: 'Koşullar', notes: 'Notlar' }
 
-/** Alanları cardSection'a göre grupla: Kimlik(0) → Şerit 1..N → Varsayılan(null) en sonda. */
+/**
+ * Alanları cardSection'a göre grupla: Kimlik(0) → Şerit 1..N → Varsayılan(null) en
+ * sonda. Her grup içi ayrıca cardOrder'a göre sıralanır (bkz. compareByCardOrder).
+ */
 function buildSectionGroups(fields, maxStrip) {
+  function bySection(sec) {
+    return fields.filter(function (f) { return f.cardSection === sec }).slice().sort(compareByCardOrder)
+  }
   var groups = []
-  groups.push({ key: 'section-0', label: 'Kimlik', hint: 'Kart başlığı', kind: 'identity',
-    fields: fields.filter(function (f) { return f.cardSection === 0 }) })
+  groups.push({ key: 'section-0', label: 'Kimlik', hint: 'Kart başlığı', kind: 'identity', fields: bySection(0) })
   for (var i = 1; i <= maxStrip; i++) {
     (function (n) {
-      groups.push({ key: 'section-' + n, label: 'Şerit ' + n, hint: null, kind: 'strip',
-        fields: fields.filter(function (f) { return f.cardSection === n }) })
+      groups.push({ key: 'section-' + n, label: 'Şerit ' + n, hint: null, kind: 'strip', fields: bySection(n) })
     })(i)
   }
   groups.push({ key: 'section-null', label: 'Varsayılan (Ayarlanmamış)', hint: 'Belge ekranı kendi varsayılan dağılımını uygular',
-    kind: 'default', fields: fields.filter(function (f) { return f.cardSection === null }) })
+    kind: 'default', fields: bySection(null) })
   return groups
 }
 
@@ -207,6 +241,7 @@ export default function StandardFieldsEditor(props) {
             visibleIf: f.visibleIf || '',
             requiredIf: f.requiredIf || '',
             cardSection: normalizeCardSection(f.cardSection),
+            cardOrder: normalizeCardOrder(f.cardOrder),
           }
         })
         setFields(loadedFields)
@@ -250,6 +285,57 @@ export default function StandardFieldsEditor(props) {
     setMaxStrip(function (prev) { return Math.min(MAX_STRIPS, prev + 1) })
   }
 
+  /**
+   * Aynı cardSection grubu içinde bir alanı bir konum yukarı/aşağı taşır.
+   * Grup, ekranda gösterildiği sırayla (compareByCardOrder) yeniden hesaplanır,
+   * iki eleman yer değiştirir, ardından TÜM grup 0..n-1 olacak şekilde
+   * yeniden numaralandırılır (boşluksuz, kararlı).
+   */
+  function moveFieldInSection(key, dir) {
+    setFields(function (prev) {
+      var field = prev.find(function (f) { return f.key === key })
+      if (!field) return prev
+      var section = field.cardSection
+      var groupFields = prev.filter(function (f) { return f.cardSection === section }).slice().sort(compareByCardOrder)
+      var idx = groupFields.findIndex(function (f) { return f.key === key })
+      var to = idx + dir
+      if (idx < 0 || to < 0 || to >= groupFields.length) return prev
+      var reordered = groupFields.slice()
+      var tmp = reordered[idx]; reordered[idx] = reordered[to]; reordered[to] = tmp
+      var orderMap = {}
+      reordered.forEach(function (f, i) { orderMap[f.key] = i })
+      return prev.map(function (f) {
+        return Object.prototype.hasOwnProperty.call(orderMap, f.key)
+          ? Object.assign({}, f, { cardOrder: orderMap[f.key] })
+          : f
+      })
+    })
+  }
+
+  /**
+   * Bir alanın bölümünü değiştirir. Alan hedef grubun SONUNA eklenir; hem eski
+   * (kaynak) hem yeni (hedef) grup 0..n-1 olacak şekilde yeniden numaralandırılır.
+   */
+  function changeFieldSection(key, newSection) {
+    setFields(function (prev) {
+      var field = prev.find(function (f) { return f.key === key })
+      if (!field || field.cardSection === newSection) return prev
+      var oldSection = field.cardSection
+      var sourceFields = prev.filter(function (f) { return f.cardSection === oldSection && f.key !== key }).slice().sort(compareByCardOrder)
+      var destFields = prev.filter(function (f) { return f.cardSection === newSection }).slice().sort(compareByCardOrder)
+      var orderMap = {}
+      sourceFields.forEach(function (f, i) { orderMap[f.key] = i })
+      destFields.forEach(function (f, i) { orderMap[f.key] = i })
+      orderMap[key] = destFields.length
+      return prev.map(function (f) {
+        if (f.key === key) return Object.assign({}, f, { cardSection: newSection, cardOrder: orderMap[key] })
+        return Object.prototype.hasOwnProperty.call(orderMap, f.key)
+          ? Object.assign({}, f, { cardOrder: orderMap[f.key] })
+          : f
+      })
+    })
+  }
+
   async function handleSave() {
     if (saving) return
     setSaving(true)
@@ -268,6 +354,7 @@ export default function StandardFieldsEditor(props) {
             visibleIf: f.visibleIf.trim() || null,
             requiredIf: f.requiredIf.trim() || null,
             cardSection: (typeof f.cardSection === 'number') ? f.cardSection : null,
+            cardOrder: (typeof f.cardOrder === 'number') ? f.cardOrder : null,
           }
         }),
         tabs: tabs.map(function (t, i) {
@@ -441,9 +528,33 @@ export default function StandardFieldsEditor(props) {
                       {group.hint && <span className="text-[10px] text-slate-400 dark:text-white/40">{group.hint}</span>}
                     </div>
                     <div className="flex flex-col gap-1.5">
-                      {group.fields.map(function (f) {
+                      {group.fields.map(function (f, fIdx) {
+                        var canMoveUp = fIdx > 0
+                        var canMoveDown = fIdx < group.fields.length - 1
                         return (
-                          <div key={f.key} className="rounded-lg border border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.03] px-2.5 py-2 flex flex-col gap-1.5">
+                          <div key={f.key} className="rounded-lg border border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.03] px-2.5 py-2 flex items-stretch gap-2">
+                            {/* Bölüm içi sıra — sürükle-bırak yok, ok düğmeleriyle taşınır */}
+                            <div className="flex flex-col gap-0.5 justify-center flex-shrink-0">
+                              <button
+                                type="button"
+                                onClick={function () { moveFieldInSection(f.key, -1) }}
+                                disabled={!canMoveUp}
+                                title="Yukarı taşı"
+                                className="text-slate-500 hover:text-indigo-600 dark:text-white/55 dark:hover:text-indigo-300 disabled:opacity-25 disabled:cursor-not-allowed"
+                              >
+                                <ArrowUp size={11} strokeWidth={2.2} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={function () { moveFieldInSection(f.key, 1) }}
+                                disabled={!canMoveDown}
+                                title="Aşağı taşı"
+                                className="text-slate-500 hover:text-indigo-600 dark:text-white/55 dark:hover:text-indigo-300 disabled:opacity-25 disabled:cursor-not-allowed"
+                              >
+                                <ArrowDown size={11} strokeWidth={2.2} />
+                              </button>
+                            </div>
+                            <div className="flex-1 min-w-0 flex flex-col gap-1.5">
                             {/* Satır 1: alan adı + bağlam rozeti + Görünür/Zorunlu + Bölüm */}
                             <div className="flex items-center gap-2 flex-wrap">
                               <div className="flex items-center gap-1.5 min-w-0">
@@ -480,7 +591,7 @@ export default function StandardFieldsEditor(props) {
                                 <SectionSegmented
                                   value={f.cardSection}
                                   maxStrip={maxStrip}
-                                  onChange={function (v) { patchField(f.key, { cardSection: v }) }}
+                                  onChange={function (v) { changeFieldSection(f.key, v) }}
                                 />
                               </div>
                             </div>

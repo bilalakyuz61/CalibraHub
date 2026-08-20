@@ -3696,14 +3696,52 @@
     // FAIL-OPEN: istek başarısız / cardSection alanı yok / API henüz güncel
     // değil → hiçbir şey yapılmaz, yukarıdaki varsayılan gruplama aynen kalır.
     (function initCardSections() {
-        function applySections(sectionByKey) {
+        // fields: API'den gelen tam liste ({key, cardSection, cardOrder, ...}).
+        // Yalnizca cardSection'i ACIKCA ayarli alanlar tasinir/siralanir; digerleri
+        // markup'taki yerinde kalir (fail-open, alan bazinda).
+        function applySections(fields) {
             var hform = document.querySelector('.sqe-hform');
             if (!hform) return;
-            Object.keys(sectionByKey).forEach(function (key) {
-                var section = sectionByKey[key];
-                if (section === null || section === undefined || !isFinite(section)) return;
-                var container = hform.querySelector('[data-field-key="' + key + '"]');
+            // Tasima ONCESI markup sirasi — cardOrder=null alanlar bu sirayi korur.
+            var domOrder = {};
+            Array.prototype.forEach.call(hform.querySelectorAll('[data-field-key]'), function (el, idx) {
+                var k = el.getAttribute('data-field-key');
+                if (k && !(k in domOrder)) domOrder[k] = idx;
+            });
+            // section -> [{key, container, order, domIndex}]
+            var bySection = {};
+            fields.forEach(function (f) {
+                if (!f || !f.key) return;
+                if (f.cardSection === null || f.cardSection === undefined) return;
+                var section = parseInt(f.cardSection, 10);
+                if (!isFinite(section)) return;
+                var container = hform.querySelector('[data-field-key="' + f.key + '"]');
                 if (!container) return; // bu belge tipinde render edilmemis alan
+                var order = null;
+                if (f.cardOrder !== null && f.cardOrder !== undefined) {
+                    var n = parseInt(f.cardOrder, 10);
+                    if (isFinite(n)) order = n;
+                }
+                (bySection[section] = bySection[section] || []).push({
+                    container: container,
+                    order: order,
+                    domIndex: domOrder[f.key] !== undefined ? domOrder[f.key] : 1e9
+                });
+            });
+            Object.keys(bySection).forEach(function (sectionKey) {
+                var section = parseInt(sectionKey, 10);
+                var entries = bySection[sectionKey];
+                // cardOrder'i olanlar once (kucukten buyuge), null'lar SONRA ve kendi
+                // aralarinda markup sirasini koruyarak (kararli siralama).
+                entries.sort(function (a, b) {
+                    if (a.order !== null && b.order !== null) {
+                        if (a.order !== b.order) return a.order - b.order;
+                        return a.domIndex - b.domIndex;
+                    }
+                    if (a.order !== null) return -1;
+                    if (b.order !== null) return 1;
+                    return a.domIndex - b.domIndex;
+                });
                 // Kimlik alanları (0) .sqe-ident-fields İÇİNE, şerit alanları (1,2,…) .sqe-strip İÇİNE girer.
                 var target;
                 if (section === 0) {
@@ -3719,22 +3757,18 @@
                         (hform.querySelector('.sqe-strips') || hform).appendChild(target);
                     }
                 }
-                if (target) target.appendChild(container);
+                if (!target) return;
+                entries.forEach(function (entry) { target.appendChild(entry.container); });
             });
         }
         fetch('/api/form-behavior/' + encodeURIComponent('@headerFormCode'), { credentials: 'same-origin' })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (data) {
                 if (!data || data.ok !== true || !Array.isArray(data.fields)) return;
-                var sectionByKey = {};
-                var any = false;
-                data.fields.forEach(function (f) {
-                    if (f && f.key && f.cardSection !== null && f.cardSection !== undefined) {
-                        var n = parseInt(f.cardSection, 10);
-                        if (isFinite(n)) { sectionByKey[f.key] = n; any = true; }
-                    }
+                var any = data.fields.some(function (f) {
+                    return f && f.key && f.cardSection !== null && f.cardSection !== undefined;
                 });
-                if (any) applySections(sectionByKey);
+                if (any) applySections(data.fields);
             })
             .catch(function (e) { try { console.warn('[CardSections] yükleme hatası (fail-open):', e && e.message) } catch (_) {} });
     })();
