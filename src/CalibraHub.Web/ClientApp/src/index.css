@@ -3385,7 +3385,10 @@ body.app-theme-dark .clc-card-actions { --clc-strip-border: rgba(255,255,255,0.0
    hizalı çıkar çünkü template tüm şeritlerde birebir aynıdır. */
 .clc-fields-row {
   align-content: flex-start;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
+  /* 2026-08-20: sutun sayisi ARTIK SABIT DEGIL — ilk seridin alan sayisindan
+     gelir ve JS `--clc-cols` degiskeniyle bildirir (bkz. renderFieldsList).
+     Fallback 12: degisken gelmezse eski davranis birebir korunur. */
+  grid-template-columns: repeat(var(--clc-cols, 12), minmax(0, 1fr));
   /* Dikey ayraçlar — hücre border'ı YERİNE konteyner arka planında 1/12
      aralıklarla tekrarlayan çizgi. Gerekçe: hücre span'ı admin'e göre
      değiştiği için "bu hücre satırın ilk hücresi mi" hesabı (nth-child)
@@ -3397,25 +3400,18 @@ body.app-theme-dark .clc-card-actions { --clc-strip-border: rgba(255,255,255,0.0
   background-image: repeating-linear-gradient(
     to right,
     transparent 0,
-    transparent calc(100% / 12 - 1px),
-    var(--clc-strip-border) calc(100% / 12 - 1px),
-    var(--clc-strip-border) calc(100% / 12)
+    transparent calc(100% / var(--clc-cols, 12) - 1px),
+    var(--clc-strip-border) calc(100% / var(--clc-cols, 12) - 1px),
+    var(--clc-strip-border) calc(100% / var(--clc-cols, 12))
   );
 }
 /* Dar konteyner (<640px, ResizeObserver — bkz. gridNarrow) — 12 sütun
    sığmadığından 6'ya düşülür; yatay taşma/kaydırma oluşmaz, hücreler
    yalnızca göreli olarak biraz genişler (span değeri clamp edilir, oranlı
    yeniden ölçeklenmez — basit ve öngörülebilir). */
-.clc-fields-row--narrow {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  background-image: repeating-linear-gradient(
-    to right,
-    transparent 0,
-    transparent calc(100% / 6 - 1px),
-    var(--clc-strip-border) calc(100% / 6 - 1px),
-    var(--clc-strip-border) calc(100% / 6)
-  );
-}
+/* Dar konteynerde sutun sayisi JS'te clamp'lenir (gridNarrow → en fazla 3) ve
+   ayni `--clc-cols` degiskeniyle gelir; bu yuzden buradaki sablon/gradyan
+   ezmesi KALDIRILDI — iki yerde ayri sayi tutmak kaymaya yol aciyordu. */
 .clc-field-cell { padding: 6px 10px; }
 
 /* CalibraLineItemsGrid — Kur (döviz kuru) input'u, grid footer (PageComment Seq 1083).

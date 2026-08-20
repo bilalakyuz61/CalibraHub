@@ -563,20 +563,20 @@ export default function CalibraLineItemsGrid(props) {
     return (typeof b.cardOrder === 'number' && isFinite(b.cardOrder)) ? b.cardOrder : null
   }
   function isIdentityCol(col) { return resolvedCardSection(col) === 0 }
-  // Serit hucresinin 12(6 dar ekranda)-sutunluk ORTAK izgaradaki genisligi
-  // (2026-08-20 kullanici istegi: "seritler tablo gibi hizalansin"). Oncelik:
-  // alan-bazinda cardWidth > form-seviye defaultCardWidth > 3 (backend
-  // sozlesmesiyle ayni fallback — bkz. FormBehaviorController). GRID_COLS ile
-  // clamp caginin sorumlulugu cagiran tarafta (dar ekranda 6'yi asmasin).
+  /* Serit hucresinin ORTAK izgaradaki genisligi (kac sutun kaplar).
+     2026-08-20 kullanici karari: izgaranin sutun sayisi = ilk seridin alan
+     sayisi oldugundan VARSAYILAN span 1'dir — her alan bir sutun. Alan bazinda
+     cardWidth ACIKCA verilmisse o kazanir (bir alani iki sutuna yaymak icin).
+     Form-seviye defaultCardWidth artik varsayilan span olarak KULLANILMAZ:
+     eski 12-sutunluk modelde anlamliydi, yeni modelde her alan zaten bir sutun.
+     Clamp cagiran tarafta (STRIP_GRID_COLS'u asmasin). */
   function resolvedCardWidth(col) {
     var raw = null
     if (lineBehaviors) {
       var b = lineBehaviors[col.key]
       if (b && typeof b.cardWidth === 'number' && isFinite(b.cardWidth)) raw = b.cardWidth
     }
-    if (raw === null) {
-      raw = (typeof lineDefaultCardWidth === 'number' && isFinite(lineDefaultCardWidth)) ? lineDefaultCardWidth : 3
-    }
+    if (raw === null) return 1
     return Math.min(Math.max(Math.round(raw), 1), 12)
   }
 
@@ -704,12 +704,21 @@ export default function CalibraLineItemsGrid(props) {
   })
   var stripSections = Object.keys(__stripSectionSet).map(Number).sort(function (a, b) { return a - b })
   if (stripSections.length === 0) stripSections = [1] // ayar yoksa TEK serit, bugunku gorunum
-  // Serit izgarasinin ORTAK sutun sayisi — tum seritler AYNI degeri kullanir,
-  // boylece hangi seritte olursa olsun ayni cardWidth'e sahip hucreler alt alta
-  // hizalanir (2026-08-20). Dar konteynerde (bkz. gridNarrow ResizeObserver,
-  // <640px) 12 sutun sigmadigindan 6'ya dusulur — yatay tasma/kaydirma olmaz,
-  // hucreler yalnizca goreceli olarak biraz genisler (span clamp, oranti degil).
-  var STRIP_GRID_COLS = gridNarrow ? 6 : 12
+
+  /* Serit izgarasinin ORTAK sutun sayisi (2026-08-20 kullanici karari):
+     ILK SERIDIN ALAN SAYISI belirler. Boylece ilk serit HER ZAMAN tek satira
+     sigar ve diger seritler ayni sutunlara hizalanir — "seritler tablo gibi
+     hizalansin" istegi. Onceki model sabit 12 sutundu ve her hucre varsayilan
+     3-4 sutun kapladigi icin 6 alanli bir serit 2 satira boluniyordu.
+     Dar konteynerde (gridNarrow, <640px) 3'e clamp'lenir — yatay tasma olmaz. */
+  var __firstStripCount = cardItems.filter(function (item) {
+    if (isIdentityCol(item.col)) return false
+    var sec = resolvedCardSection(item.col)
+    if (!isFinite(sec) || sec < 1) sec = 1
+    return sec === stripSections[0]
+  }).length
+  var STRIP_GRID_COLS = Math.max(1, __firstStripCount)
+  if (gridNarrow) STRIP_GRID_COLS = Math.min(STRIP_GRID_COLS, 3)
 
   // ── Satir kisayol menusu (•••) ───────────────────────────
   //   Aksiyon seridinin basindaki MoreHorizontal butonuna basilinca acilan liste.
@@ -2024,8 +2033,15 @@ export default function CalibraLineItemsGrid(props) {
                  cagrisi) ESKI flex-grow davranisi aynen korunur — kimlik satiri
                  izgaraya girmez. */
               function renderFieldsList(containerStyle, containerClassName, filterFn, gridCols) {
+                // Sutun sayisini CSS'e `--clc-cols` ile bildir: hem grid-template-columns
+                // hem dikey ayrac gradyani AYNI degiskenden beslenir (index.css
+                // .clc-fields-row) — ikisi ayri sayi tutarsa ayraclar hucre sinirlarindan
+                // kayardi.
+                var __containerStyle = gridCols
+                  ? Object.assign({}, containerStyle, { '--clc-cols': String(gridCols) })
+                  : containerStyle
                 return (
-                  <div style={containerStyle} className={containerClassName}>
+                  <div style={__containerStyle} className={containerClassName}>
                     {cardItems.map(function(item) {
                       var col = item.col
                       if (!item.visible) return null
