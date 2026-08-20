@@ -641,6 +641,7 @@ export default function StandardFieldsEditor(props) {
                                 className={ruleInputCls}
                               />
                             </div>
+                            </div>
                           </div>
                         )
                       })}
