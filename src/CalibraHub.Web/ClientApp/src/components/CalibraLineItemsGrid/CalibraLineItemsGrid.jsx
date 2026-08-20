@@ -163,6 +163,10 @@ export default function CalibraLineItemsGrid(props) {
   // Form Davranış Katmanı — kalem kolonu davranışları (key → {isVisible, isRequired,
   // defaultValue, visibleIf, requiredIf}). Kayıt yoksa null = bugünkü davranış.
   var [lineBehaviors, setLineBehaviors] = useState(null)
+  // Serit hucre genisligi — Standart Alanlar'in form-seviye varsayilani
+  // (defaultCardWidth, 1..12). null = alan bazinda cardWidth de yoksa 3 kullanilir
+  // (bkz. resolvedCardWidth, 2026-08-20 "seritler tablo gibi hizalansin" istegi).
+  var [lineDefaultCardWidth, setLineDefaultCardWidth] = useState(null)
   // NOT: Kart Düzeni editörü grid'den kaldırıldı (2026-08-05) — düzen yönetimi
   // yalnızca Alan Yönetimi → "Kart Düzeni" üzerinden; grid düzeni yalnız UYGULAR.
   // Dar konteynerde (tablet dikey / bolunmus ekran) 24-kolon span'lar okunmaz
@@ -559,6 +563,22 @@ export default function CalibraLineItemsGrid(props) {
     return (typeof b.cardOrder === 'number' && isFinite(b.cardOrder)) ? b.cardOrder : null
   }
   function isIdentityCol(col) { return resolvedCardSection(col) === 0 }
+  // Serit hucresinin 12(6 dar ekranda)-sutunluk ORTAK izgaradaki genisligi
+  // (2026-08-20 kullanici istegi: "seritler tablo gibi hizalansin"). Oncelik:
+  // alan-bazinda cardWidth > form-seviye defaultCardWidth > 3 (backend
+  // sozlesmesiyle ayni fallback — bkz. FormBehaviorController). GRID_COLS ile
+  // clamp caginin sorumlulugu cagiran tarafta (dar ekranda 6'yi asmasin).
+  function resolvedCardWidth(col) {
+    var raw = null
+    if (lineBehaviors) {
+      var b = lineBehaviors[col.key]
+      if (b && typeof b.cardWidth === 'number' && isFinite(b.cardWidth)) raw = b.cardWidth
+    }
+    if (raw === null) {
+      raw = (typeof lineDefaultCardWidth === 'number' && isFinite(lineDefaultCardWidth)) ? lineDefaultCardWidth : 3
+    }
+    return Math.min(Math.max(Math.round(raw), 1), 12)
+  }
 
   // ── Kart duzeni uygulamasi (2026-08-05) ───────────────────────────────────
   //   Duzenlenebilir ogeler = kimlik kolonlari (materialCode/materialName) +
@@ -684,6 +704,12 @@ export default function CalibraLineItemsGrid(props) {
   })
   var stripSections = Object.keys(__stripSectionSet).map(Number).sort(function (a, b) { return a - b })
   if (stripSections.length === 0) stripSections = [1] // ayar yoksa TEK serit, bugunku gorunum
+  // Serit izgarasinin ORTAK sutun sayisi — tum seritler AYNI degeri kullanir,
+  // boylece hangi seritte olursa olsun ayni cardWidth'e sahip hucreler alt alta
+  // hizalanir (2026-08-20). Dar konteynerde (bkz. gridNarrow ResizeObserver,
+  // <640px) 12 sutun sigmadigindan 6'ya dusulur — yatay tasma/kaydirma olmaz,
+  // hucreler yalnizca goreceli olarak biraz genisler (span clamp, oranti degil).
+  var STRIP_GRID_COLS = gridNarrow ? 6 : 12
 
   // ── Satir kisayol menusu (•••) ───────────────────────────
   //   Aksiyon seridinin basindaki MoreHorizontal butonuna basilinca acilan liste.
@@ -1409,8 +1435,9 @@ export default function CalibraLineItemsGrid(props) {
         data.fields.forEach(function (f) {
           var hasCardSection = f.cardSection !== null && f.cardSection !== undefined
           var hasCardOrder = f.cardOrder !== null && f.cardOrder !== undefined
+          var hasCardWidth = typeof f.cardWidth === 'number' && isFinite(f.cardWidth)
           var hasBehavior = f.isVisible === false || f.isRequired === true
-            || f.defaultValue || f.visibleIf || f.requiredIf || hasCardSection || hasCardOrder
+            || f.defaultValue || f.visibleIf || f.requiredIf || hasCardSection || hasCardOrder || hasCardWidth
           if (!hasBehavior) return
           any = true
           map[f.key] = {
@@ -1421,9 +1448,13 @@ export default function CalibraLineItemsGrid(props) {
             requiredIf: f.requiredIf || null,
             cardSection: hasCardSection ? f.cardSection : null,
             cardOrder: hasCardOrder ? f.cardOrder : null,
+            cardWidth: hasCardWidth ? f.cardWidth : null,
           }
         })
         setLineBehaviors(any ? map : null)
+        // Form-seviye varsayilan hucre genisligi — alan bazinda cardWidth
+        // atanmamis alanlar bunu kullanir (yoksa 3'e duser, bkz. resolvedCardWidth).
+        setLineDefaultCardWidth((typeof data.defaultCardWidth === 'number' && isFinite(data.defaultCardWidth)) ? data.defaultCardWidth : null)
       })
       .catch(function () { /* sessiz — fail-open */ })
     return function () { alive = false }
@@ -1987,8 +2018,12 @@ export default function CalibraLineItemsGrid(props) {
                  filtrelemesi farklidir (lineTotal ust-sag kimlik alaninda ayrica
                  gosterilir — bkz. asagidaki kimlik blogu). filterFn verilirse o
                  kolonlari listeden CIKARIR (custom layout'ta filterFn=null → hicbir
-                 sey degismez, admin duzeni birebir korunur). */
-              function renderFieldsList(containerStyle, containerClassName, filterFn) {
+                 sey degismez, admin duzeni birebir korunur). gridCols verilirse (serit
+                 cagrisi) hucreler ORTAK N-sutunluk CSS-grid'e gore genislik alir
+                 (cardWidth/defaultCardWidth, 2026-08-20); verilmezse (kimlik-ek-alan
+                 cagrisi) ESKI flex-grow davranisi aynen korunur — kimlik satiri
+                 izgaraya girmez. */
+              function renderFieldsList(containerStyle, containerClassName, filterFn, gridCols) {
                 return (
                   <div style={containerStyle} className={containerClassName}>
                     {cardItems.map(function(item) {
@@ -2010,29 +2045,41 @@ export default function CalibraLineItemsGrid(props) {
                       var mirror = col.__isWidget ? null : tlMirrorBySource[col.key]
                       var showMirror = mirror && showTlColumns
                       var cellStyle = Object.assign({}, lockedStyle)
-                      // Kompakt bolmeli serit (referans tasarim duzeltmesi, 2026-08-19):
-                      // hucreler CSS-grid DEGIL flex-wrap akisinda dizilir (bkz. asagidaki
-                      // renderFieldsList cagrisi + .clc-fields-row/.clc-field-cell CSS).
-                      // Ozel kart duzeni (LineCardLayoutEditor) artik YALNIZCA sira,
-                      // gorunurluk ve etiket belirler — admin'in verdigi span/placeRow/
-                      // placeCol grid konumu olarak KULLANILMAZ (bosluk/hiza sorunu buradan
-                      // geliyordu). span, goreli genislik agirligi (flex-grow) olarak
-                      // yorumlanir: genis tutulan alan burada da orantili genis kalir, ama
-                      // sabit 48-birim izgara + serbest satir/sutun yerlesimi tamamen kalkar.
-                      var __flexGrow = useCustomLayout
-                        ? Math.min(Math.max(item.span || 12, 1), CARD_GRID_UNITS)
-                        : 12
-                      cellStyle.flex = __flexGrow + ' 1 116px'
-                      cellStyle.minWidth = 96
-                      if (showMirror) {
-                        cellStyle.flex = (__flexGrow * 2) + ' 1 200px'
-                        cellStyle.minWidth = 168
-                      } else if (col.type === 'percent') {
-                        // Seq 1085: İskonto/KDV % alanları en fazla 3 karakter (0-100) — ayrılan
-                        // alan gereksiz genişti; dar tutulur (custom layout'ta da sabit dar kalir).
-                        cellStyle.flex = '0 0 88px'
-                        cellStyle.minWidth = 72
-                        cellStyle.maxWidth = 104
+                      if (gridCols) {
+                        // Serit hucresi — ORTAK N-sutunluk CSS-grid (2026-08-20 kullanici
+                        // istegi: "seritler tablo gibi hizalansin"). Genislik SADECE
+                        // Standart Alanlar'in cardWidth/defaultCardWidth degerinden gelir
+                        // (resolvedCardWidth, fail-open varsayilan 3) — satir/sutun konumu
+                        // VERILMEZ, alanlar sirayla akar (bos hucre olusmaz). TL mirror
+                        // (KDV/tutar yaninda TL karsiligi) iki deger gosterdigi icin
+                        // genisligi 2 katina cikarir (eski flex-grow*2 davranisiyla ayni
+                        // fikir, grid'e tasindi). Eski "percent tipi sabit dar" ozel-durumu
+                        // KALDIRILDI — artik admin percent alanina Standart Alanlar'dan
+                        // istedigi dar cardWidth'i (ör. 1-2) verebilir; hucre siniri da
+                        // tablo hizasina uyar (onceki sabit 104px, span'dan bagimsizdi).
+                        var __rawW = resolvedCardWidth(col)
+                        var __effW = showMirror ? __rawW * 2 : __rawW
+                        __effW = Math.min(Math.max(__effW, 1), gridCols)
+                        cellStyle.gridColumn = 'span ' + __effW
+                        cellStyle.minWidth = 0
+                      } else {
+                        // Kimlik satirina tasinan alanlar (cardSection=0) — ESKI flex-grow
+                        // davranisi AYNEN korunur, bu satir izgaraya girmez.
+                        var __flexGrow = useCustomLayout
+                          ? Math.min(Math.max(item.span || 12, 1), CARD_GRID_UNITS)
+                          : 12
+                        cellStyle.flex = __flexGrow + ' 1 116px'
+                        cellStyle.minWidth = 96
+                        if (showMirror) {
+                          cellStyle.flex = (__flexGrow * 2) + ' 1 200px'
+                          cellStyle.minWidth = 168
+                        } else if (col.type === 'percent') {
+                          // Seq 1085: İskonto/KDV % alanları en fazla 3 karakter (0-100) — ayrılan
+                          // alan gereksiz genişti; dar tutulur (custom layout'ta da sabit dar kalir).
+                          cellStyle.flex = '0 0 88px'
+                          cellStyle.minWidth = 72
+                          cellStyle.maxWidth = 104
+                        }
                       }
                       // Widget hucre degeri: __extras (bekleyen edit) > __widgetValues (server)
                       var widgetValue = null
@@ -2305,21 +2352,27 @@ export default function CalibraLineItemsGrid(props) {
                     </div>
 
                     {/* Kompakt bolmeli hucre seridi/seritleri (referans PlanetCS tasarimi,
-                        2026-08-19; 2026-08-20 Standart Alanlar cardSection ile COK
-                        SERITLI hale getirildi): CSS-grid DEGIL flex-wrap — bosluk/hiza
-                        sorunu eden 48-birim grid + serbest satir/sutun tamamen kalkti.
-                        Her hucre kendi border-left'i ile dikey ayrac cizer (bkz.
-                        .clc-fields-row / .clc-field-cell CSS), sigmayan alanlar alt
-                        satira sarar (bos hucre/sutun olusmaz). Ayar yoksa stripSections
+                        2026-08-19; 2026-08-20 Standart Alanlar cardWidth ile ORTAK
+                        12(6 dar ekranda)-sutunlu CSS-grid'e gecirildi — "seritler tablo
+                        gibi hizalansin" istegi). Tum seritler AYNI STRIP_GRID_COLS
+                        sablonunu kullandigindan ayni cardWidth'e sahip hucreler farkli
+                        seritlerde de ALT ALTA hizalanir. Satir/sutun konumu VERILMEZ,
+                        yalniz span — auto-flow alanlari sirayla dizer, bos hucre
+                        olusmaz. Dikey ayraclar hucre border'i yerine .clc-fields-row
+                        arka planinda tekrarlayan gradient ile cizilir (span'a gore
+                        degisen "ilk hucre" hesabini nth-child'la guvenilir yapmak
+                        zordu — gradient, grid sablonuyla matematiksel olarak hizali
+                        kalir, bkz. index.css .clc-fields-row). Ayar yoksa stripSections
                         hep [1] → bugunkuyle BIREBIR tek serit. Aksiyon sutunu (soldaki
                         dikey buton grubu) seritlerin DISINDA, tek yerde — tekrarlanmaz. */}
                     {stripSections.map(function (sec) {
                       return (
                         <div className="clc-strip flex items-stretch" key={'clc-strip-' + sec}>
                           {renderFieldsList(
-                            { display: 'flex', flexWrap: 'wrap', alignItems: 'stretch', flex: 1, minWidth: 0 },
-                            'clc-fields-row' + (isKitComponent ? ' opacity-90' : ''),
-                            function (item) { return !isIdentityCol(item.col) && resolvedCardSection(item.col) === sec }
+                            { display: 'grid', alignItems: 'stretch', flex: 1, minWidth: 0 },
+                            'clc-fields-row' + (isKitComponent ? ' opacity-90' : '') + (gridNarrow ? ' clc-fields-row--narrow' : ''),
+                            function (item) { return !isIdentityCol(item.col) && resolvedCardSection(item.col) === sec },
+                            STRIP_GRID_COLS
                           )}
                         </div>
                       )

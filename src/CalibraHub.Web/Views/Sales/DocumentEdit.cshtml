@@ -2216,11 +2216,47 @@
         --sqe-strip-bg: rgba(255,255,255,.025);
         --sqe-strip-border: rgba(255,255,255,.08);
     }
+    /* 2026-08-20 (kullanıcı isteği): "şerit hücreleri iki satır da olsa tablo
+       mantığında aynı genişlikte olmalı, alt alta hizalı" — flex-wrap İÇERİK
+       genişliğine göre dizdiği için alt alta gelen şeritlerdeki hücreler
+       hizalanmıyordu. Artık ORTAK 12(6 dar ekranda)-sütunlu CSS-grid: her
+       .sqe-hrow yalnızca `grid-column: span N` alır (satır/sütun konumu
+       VERİLMEZ — auto-flow alanları sırayla akıtır, boş hücre oluşmaz),
+       N = cardWidth (Standart Alanlar, initCardWidths() ile uygulanır) ??
+       defaultCardWidth ?? 3 (CSS varsayılanı — JS hiç çalışmasa/hata verse
+       bile FAIL-OPEN: her hücre 3 sütun alır, düzen bozulmaz). Aynı N'e sahip
+       hücreler farklı şeritlerde de tam hizalı çıkar çünkü template tüm
+       şeritlerde birebir aynıdır (kalem kartıyla aynı desen — bkz.
+       CalibraLineItemsGrid.jsx .clc-fields-row). */
     .sqe-strip {
-        /* align-items flex-start (stretch DEĞİL) — bir hücre (ör. Teslim Gun/Tarih iki
-           input) diğerlerinden uzun olsa da diğerleri gerilip boşluk bırakmıyor. */
-        display: flex; align-items: flex-start; flex-wrap: wrap;
-        justify-content: flex-start;
+        display: grid;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        align-items: stretch;
+        /* Dikey ayraçlar — hücre border'ı YERİNE konteyner arka planında 1/12
+           aralıklarla tekrarlayan çizgi (span'a göre değişen "satırın ilk
+           hücresi" hesabını nth-child ile güvenilir yapmak zordu; gradient
+           grid şablonuyla matematiksel olarak birebir hizalı kalır, JS
+           gerektirmez — bkz. .clc-fields-row aynı desen). Kabul edilen küçük
+           kozmetik ödünleşim: son çizgi konteyner sağ kenarına denk gelir,
+           .sqe-strips'in kendi 1px kenarlığıyla çakışabilir (göz ardı
+           edilebilir düzeyde). */
+        background-image: repeating-linear-gradient(
+            to right,
+            transparent 0,
+            transparent calc(100% / 12 - 1px),
+            var(--sqe-strip-border, #e2e8f0) calc(100% / 12 - 1px),
+            var(--sqe-strip-border, #e2e8f0) calc(100% / 12)
+        );
+    }
+    .sqe-strip--narrow {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        background-image: repeating-linear-gradient(
+            to right,
+            transparent 0,
+            transparent calc(100% / 6 - 1px),
+            var(--sqe-strip-border, #e2e8f0) calc(100% / 6 - 1px),
+            var(--sqe-strip-border, #e2e8f0) calc(100% / 6)
+        );
     }
     .sqe-strip + .sqe-strip { border-top: 1px solid var(--sqe-strip-border, #e2e8f0); }
     .sqe-strip:empty { display: none; }
@@ -2233,9 +2269,14 @@
         flex-direction: column; align-items: flex-start; gap: 4px; min-height: auto;
     }
     .sqe-hform .sqe-strip .sqe-hrow {
-        flex: 0 0 auto;
+        /* grid-column: span 3 → FAIL-OPEN varsayılan (backend'in defaultCardWidth
+           varsayılanıyla aynı, bkz. FormBehaviorController). initCardWidths()
+           (aşağıda) /api/form-behavior yanıtı geldiğinde bunu inline stille
+           cardWidth/defaultCardWidth'e göre override eder; istek düşerse/API
+           eski ise bu CSS değeri kalır — hiçbir alan kaybolmaz/hizasız kalmaz. */
+        grid-column: span 3;
         padding: 8px 14px;
-        border-left: 1px solid var(--sqe-strip-border, #e2e8f0);
+        min-width: 0;
     }
     /* 2026-08-19: tarih hücreleri daralsın — "19.08.2026 📅" için 176px fazlaydı
        (Seq 1065/1059 genel 176px kuralı kart düzeninde gereksiz genişlik yapıyordu).
@@ -2259,7 +2300,6 @@
     .sqe-hform .sqe-strip .sqe-hrow > * { margin-top: 0; margin-bottom: 0; }
     .sqe-hform .sqe-strip .sqe-hrow .form-control,
     .sqe-hform .sqe-strip .sqe-hrow .form-select { padding-top: 4px; padding-bottom: 4px; }
-    .sqe-hform .sqe-strip .sqe-hrow:first-child { border-left: none; }
     .sqe-hform .sqe-ident-row .sqe-hlabel,
     .sqe-hform .sqe-strip .sqe-hlabel {
         flex: 0 0 auto;
@@ -3761,6 +3801,45 @@
                 entries.forEach(function (entry) { target.appendChild(entry.container); });
             });
         }
+        // ── Şerit hücre genişliği (cardWidth, 2026-08-20) ──────────────────
+        // Kalem kartıyla AYNI sözleşme: alan başına cardWidth (1..12|null),
+        // yanıt kökünde defaultCardWidth (1..12|null, null → 3). CSS zaten
+        // `.sqe-hform .sqe-strip .sqe-hrow { grid-column: span 3; }` ile
+        // FAIL-OPEN varsayılanı taşıyor — bu fonksiyon yalnızca veri VARSA
+        // inline stille override eder; istek düşer/API eski olursa hiçbir
+        // şey yapmaz, CSS varsayılanı aynen kalır (düzen bozulmaz).
+        function applyCardWidths(fields, defaultCardWidth) {
+            var hform = document.querySelector('.sqe-hform');
+            if (!hform) return;
+            var defW = (typeof defaultCardWidth === 'number' && isFinite(defaultCardWidth)) ? defaultCardWidth : 3;
+            defW = Math.min(12, Math.max(1, Math.round(defW)));
+            fields.forEach(function (f) {
+                if (!f || !f.key) return;
+                var row = hform.querySelector('.sqe-strip [data-field-key="' + f.key + '"]');
+                if (!row) return; // kimlik satırındaki alan veya bu belge tipinde render edilmeyen alan — ızgaraya girmez
+                var w = (typeof f.cardWidth === 'number' && isFinite(f.cardWidth)) ? f.cardWidth : defW;
+                w = Math.min(12, Math.max(1, Math.round(w)));
+                row.style.gridColumn = 'span ' + w;
+            });
+        }
+        // ── Dar konteyner — 12 sütun sığmayan genişlikte 6'ya düşülür (yatay
+        // taşma/kaydırma olmasın; ör. bölünmüş ekran/tablet dikey). Kalem
+        // kartındaki ResizeObserver (gridNarrow) ile aynı fikir, bağımsız
+        // uygulaması — bu sayfa React kullanmıyor. Fetch'ten SONRA (fail-open
+        // dahil, .finally) çağrılır ki applySections() sonradan yeni .sqe-strip
+        // yaratmışsa o da izlemeye girsin.
+        function initStripNarrowWatch() {
+            var strips = document.querySelectorAll('.sqe-strip');
+            if (!strips.length || typeof ResizeObserver === 'undefined') return;
+            var ro = new ResizeObserver(function (entries) {
+                entries.forEach(function (entry) {
+                    var el = entry.target;
+                    var w = entry.contentRect ? entry.contentRect.width : 0;
+                    el.classList.toggle('sqe-strip--narrow', w > 0 && w < 480);
+                });
+            });
+            strips.forEach(function (el) { ro.observe(el); });
+        }
         fetch('/api/form-behavior/' + encodeURIComponent('@headerFormCode'), { credentials: 'same-origin' })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (data) {
@@ -3769,8 +3848,10 @@
                     return f && f.key && f.cardSection !== null && f.cardSection !== undefined;
                 });
                 if (any) applySections(data.fields);
+                applyCardWidths(data.fields, data.defaultCardWidth);
             })
-            .catch(function (e) { try { console.warn('[CardSections] yükleme hatası (fail-open):', e && e.message) } catch (_) {} });
+            .catch(function (e) { try { console.warn('[CardSections] yükleme hatası (fail-open):', e && e.message) } catch (_) {} })
+            .then(initStripNarrowWatch, initStripNarrowWatch);
     })();
 
     // Liste ekranlarindaki "Islemler" menusunden gelen derin-link: ?autoAction=costs|approval|status.

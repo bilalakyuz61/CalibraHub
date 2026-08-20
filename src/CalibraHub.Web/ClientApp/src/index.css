@@ -3373,18 +3373,50 @@ body.app-theme-dark .clc-strip {
 }
 body.app-theme-dark .clc-card-actions { --clc-strip-border: rgba(255,255,255,0.08); }
 
-/* Alan hücreleri — kompakt bölmeli satır (referans PlanetCS düzeltmesi,
-   2026-08-19). Önceden CSS-grid (48 birim + admin span/satır-sütun) idi; bu
-   serbest yerleşim çoğu düzende geniş boş hücreler bırakıyordu. Artık
-   flex-wrap: hücreler yan yana dizilir, her biri kendi sol kenarlığıyla dikey
-   ayraç çizer (bkz. CalibraLineItemsGrid.jsx renderFieldsList çağrısı — özel
-   kart düzeni artık yalnız sıra/görünürlük/etiket, span flex-grow ağırlığı). */
-.clc-fields-row { align-content: flex-start; }
-.clc-field-cell {
-  padding: 6px 10px;
-  border-left: 1px solid var(--clc-strip-border);
+/* Alan hücreleri — ORTAK 12(6 dar ekranda)-sütunlu CSS-grid (2026-08-20
+   kullanıcı isteği: "şerit hücreleri tablo gibi hizalansın"). Önceden
+   flex-wrap idi — içerik genişliğine göre dizildiği için alt alta gelen
+   şeritlerdeki hücreler hizalanmıyordu. Artık her .clc-strip'teki
+   .clc-fields-row AYNI şablonu kullanır (grid-template-columns), hücreler
+   yalnızca `grid-column: span N` alır (satır/sütun konumu VERİLMEZ — auto-flow
+   alanları sırayla akıtır, boş hücre oluşmaz); N = cardWidth (Standart
+   Alanlar) ?? defaultCardWidth ?? 3 (bkz. CalibraLineItemsGrid.jsx
+   resolvedCardWidth). Aynı N'e sahip hücreler farklı şeritlerde de tam
+   hizalı çıkar çünkü template tüm şeritlerde birebir aynıdır. */
+.clc-fields-row {
+  align-content: flex-start;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  /* Dikey ayraçlar — hücre border'ı YERİNE konteyner arka planında 1/12
+     aralıklarla tekrarlayan çizgi. Gerekçe: hücre span'ı admin'e göre
+     değiştiği için "bu hücre satırın ilk hücresi mi" hesabı (nth-child)
+     güvenilir değildir (aynı DOM sırası, farklı görsel satır başlangıçları);
+     gradient yaklaşımı grid şablonuyla matematiksel olarak birebir hizalı
+     kalır ve JS gerektirmez. Kabul edilen küçük kozmetik ödünleşim: son
+     çizgi konteyner sağ kenarına denk gelir, .clc-strip'in kendi 1px
+     kenarlığıyla çakışabilir — göz ardı edilebilir düzeyde (bkz. rapor). */
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(100% / 12 - 1px),
+    var(--clc-strip-border) calc(100% / 12 - 1px),
+    var(--clc-strip-border) calc(100% / 12)
+  );
 }
-.clc-field-cell:first-child { border-left: none; }
+/* Dar konteyner (<640px, ResizeObserver — bkz. gridNarrow) — 12 sütun
+   sığmadığından 6'ya düşülür; yatay taşma/kaydırma oluşmaz, hücreler
+   yalnızca göreli olarak biraz genişler (span değeri clamp edilir, oranlı
+   yeniden ölçeklenmez — basit ve öngörülebilir). */
+.clc-fields-row--narrow {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(100% / 6 - 1px),
+    var(--clc-strip-border) calc(100% / 6 - 1px),
+    var(--clc-strip-border) calc(100% / 6)
+  );
+}
+.clc-field-cell { padding: 6px 10px; }
 
 /* CalibraLineItemsGrid — Kur (döviz kuru) input'u, grid footer (PageComment Seq 1083).
    Native input color-scheme sinyali olmadan light modda bile beyaz/light render
