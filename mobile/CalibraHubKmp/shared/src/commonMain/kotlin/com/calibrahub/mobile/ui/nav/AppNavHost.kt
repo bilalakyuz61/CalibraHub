@@ -9,6 +9,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -44,6 +46,7 @@ import com.calibrahub.mobile.ui.warehouse.StockDocMode
 import com.calibrahub.mobile.ui.warehouse.StockDocScreen
 import com.calibrahub.mobile.ui.warehouse.StockQueryScreen
 import com.calibrahub.mobile.ui.warehouse.TransferScreen
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -73,6 +76,7 @@ fun AppNavHost(session: SessionManager) {
     val navController = rememberNavController()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var startRoute by remember { mutableStateOf<String?>(null) }
 
@@ -208,6 +212,7 @@ fun AppNavHost(session: SessionManager) {
             )
         },
     ) {
+        Box(modifier = Modifier.fillMaxSize()) {
         NavHost(navController = navController, startDestination = startRoute!!) {
             composable("login") {
                 LoginScreen(
@@ -220,6 +225,19 @@ fun AppNavHost(session: SessionManager) {
                 )
             }
             composable(AppRoutes.HOME) {
+                // Ana sayfada çift-geri ile çıkış: ilk geri uyarı gösterir + ~2sn "silahlanır";
+                // bu pencerede ikinci geri BackHandler'ı DEVRE DIŞI bulur → sistem geri'sine düşer
+                // (NavHost kök ekranda bir şey pop'lamaz) → uygulama çıkar. Kaza sonucu çıkışı önler.
+                // (iOS'ta kök ekranda geri-jesti zaten no-op; bu mantık zararsızdır.)
+                var backArmed by remember { mutableStateOf(false) }
+                PlatformBackHandler(enabled = !backArmed) {
+                    backArmed = true
+                    scope.launch { snackbarHostState.showSnackbar("Çıkmak için tekrar geri'ye basın") }
+                    scope.launch {
+                        delay(2000)
+                        backArmed = false
+                    }
+                }
                 HomeScreen(
                     session = session,
                     displayName = displayName,
@@ -344,6 +362,11 @@ fun AppNavHost(session: SessionManager) {
                     )
                 }
             }
+        }
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
         }
     }
 }
