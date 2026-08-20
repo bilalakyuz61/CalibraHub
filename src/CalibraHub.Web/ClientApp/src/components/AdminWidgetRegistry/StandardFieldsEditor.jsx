@@ -33,8 +33,16 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import FieldBehaviorModal from './FieldBehaviorModal'
 import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors, useDroppable,
+} from '@dnd-kit/core'
+import {
+  SortableContext, useSortable, verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import {
   SlidersHorizontal, X as XIcon, Eye, EyeOff, Lock, ArrowUp, ArrowDown,
   AlertTriangle, Plus, LayoutGrid, Settings2, Trash2,
+  GripVertical, ChevronDown, ChevronRight, Search, RotateCcw,
 } from 'lucide-react'
 // Top govdesine portallanmaz — bkz. LineCardLayoutEditor'daki ayni not: tam ekran
 // perde ust menu seridini kilitliyordu. iframe'in kendi body'sine portallanir.
@@ -233,6 +241,13 @@ export default function StandardFieldsEditor(props) {
   var [maxStrip, setMaxStrip] = useState(3)
   // Davranis modali acik olan alanin key'i (null = kapali)
   var [behaviorKey, setBehaviorKey] = useState(null)
+  // Sifirla — yuklenen (kaydedilmis) hale donus icin anlik goruntu
+  var [initialFields, setInitialFields] = useState([])
+  // Arama kutusu (Sutun Ayarlari paneliyle ayni etkilesim dili)
+  var [search, setSearch] = useState('')
+  // Katlanir satirlar: acik olanlarin key seti. Varsayilan KAPALI — liste kisa
+  // kalsin, detay istenince acilsin.
+  var [expanded, setExpanded] = useState({})
 
   useEffect(function () {
     var alive = true
@@ -259,6 +274,8 @@ export default function StandardFieldsEditor(props) {
           }
         })
         setFields(loadedFields)
+        // Sifirla icin baslangic anlik goruntusu (kaydedilmis son hal)
+        setInitialFields(loadedFields)
         setTabs((data.tabs || []).map(function (t) {
           return {
             key: t.key, label: t.label, locked: t.locked === true,
@@ -295,6 +312,92 @@ export default function StandardFieldsEditor(props) {
       var tmp = next[idx]; next[idx] = next[to]; next[to] = tmp
       return next
     })
+  }
+
+  /* ── Surukle-birak (2026-08-20) ─────────────────────────────────────────────
+     Sutun Ayarlari panelindeki etkilesim dili buraya tasindi, ama ANLIK KAYIT
+     ALINMADI (kullanici karari): burada yazilan ayar FormFieldBehavior'a gider ve
+     formun TUM kullanicilarini baglar — kazara bir surukleme herkesi etkilerdi.
+     Bu yuzden surukleme yalnizca yerel state'i degistirir, kalici yazma acik
+     "Kaydet" ile olur.
+
+     Sutun panelinden farki: orada tek boyutlu bir liste var, burada IKI boyut —
+     alan hangi BOLUMDE (Kimlik/Serit N/Varsayilan) ve o bolum icinde kacinci
+     sirada. Bu yuzden cok-kapli (multi-container) surukleme kuruldu; eski
+     "Bolum" buton grubu ve yukari/asagi oklari kaldirildi. */
+  var dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+
+  /** Droppable id <-> cardSection donusumu ("sec:0" | "sec:3" | "sec:null") */
+  function sectionFromDroppableId(id) {
+    var m = /^sec:(.+)$/.exec(String(id))
+    if (!m) return undefined
+    return m[1] === 'null' ? null : parseInt(m[1], 10)
+  }
+
+  /**
+   * Alani hedef bolume (ve o bolumde hedef indekse) tasir. Hem kaynak hem hedef
+   * grup 0..n-1 olacak sekilde yeniden numaralandirilir — bosluksuz, kararli
+   * (moveFieldInSection ile ayni ilke).
+   */
+  function moveFieldTo(key, targetSection, targetIndex) {
+    setFields(function (prev) {
+      var moving = prev.find(function (f) { return f.key === key })
+      if (!moving) return prev
+      var sourceSection = moving.cardSection
+      // Hedef gruptaki mevcut sira (tasinan haric)
+      var target = prev.filter(function (f) {
+        return f.cardSection === targetSection && f.key !== key
+      }).slice().sort(compareByCardOrder)
+      var idx = (targetIndex == null || targetIndex < 0 || targetIndex > target.length)
+        ? target.length : targetIndex
+      target.splice(idx, 0, moving)
+      var orderInTarget = {}
+      target.forEach(function (f, i) { orderInTarget[f.key] = i })
+      // Kaynak grup (bolum degistiyse) yeniden numaralandirilir
+      var orderInSource = {}
+      if (sourceSection !== targetSection) {
+        prev.filter(function (f) { return f.cardSection === sourceSection && f.key !== key })
+            .slice().sort(compareByCardOrder)
+            .forEach(function (f, i) { orderInSource[f.key] = i })
+      }
+      return prev.map(function (f) {
+        if (f.key === key) {
+          return Object.assign({}, f, { cardSection: targetSection, cardOrder: orderInTarget[f.key] })
+        }
+        if (orderInTarget[f.key] != null) return Object.assign({}, f, { cardOrder: orderInTarget[f.key] })
+        if (orderInSource[f.key] != null) return Object.assign({}, f, { cardOrder: orderInSource[f.key] })
+        return f
+      })
+    })
+  }
+
+  function handleDragEnd(event) {
+    var active = event.active, over = event.over
+    if (!active || !over || active.id === over.id) return
+    var key = String(active.id)
+    var overId = String(over.id)
+
+    // Bos bir bolume birakildi (droppable kabin kendisi)
+    var secFromZone = sectionFromDroppableId(overId)
+    if (secFromZone !== undefined) { moveFieldTo(key, secFromZone, null); return }
+
+    // Baska bir alanin uzerine birakildi → o alanin bolumu + sirasi
+    var overField = fields.find(function (f) { return f.key === overId })
+    if (!overField) return
+    var groupFields = fields.filter(function (f) {
+      return f.cardSection === overField.cardSection && f.key !== key
+    }).slice().sort(compareByCardOrder)
+    var at = groupFields.findIndex(function (f) { return f.key === overId })
+    moveFieldTo(key, overField.cardSection, at < 0 ? null : at)
+  }
+
+  /** Kaydedilmis son hale don — kaydetmez, yalniz yerel degisiklikleri atar. */
+  function resetChanges() {
+    setFields(initialFields)
+    var maxAssigned = initialFields.reduce(function (acc, f) {
+      return (typeof f.cardSection === 'number' && f.cardSection > acc) ? f.cardSection : acc
+    }, 0)
+    setMaxStrip(Math.max(1, Math.min(MAX_STRIPS, maxAssigned)))
   }
 
   function addStrip() {
