@@ -32,23 +32,37 @@ public sealed partial class FormBehaviorController : Controller
     private static readonly HashSet<string> AllowedLabelStyles =
         new(StringComparer.OrdinalIgnoreCase) { "standard", "modern", "inline" };
 
+    /// <summary>
+    /// Form başına genel hücre genişliği (defaultCardWidth) rezerve satırın FieldKey'i.
+    /// Yeni tablo açılmadı — CardWidth kolonu bu satırda tekil form-seviye değeri taşır.
+    /// Katalogda karşılığı olmadığından GET'teki fields[] merge döngüsüne hiç girmez.
+    /// </summary>
+    private const string DefaultCardWidthFieldKey = "__card";
+
     private readonly IFormFieldBehaviorRepository _repository;
     private readonly IAuditTrailService? _audit;
+    private readonly ILogger<FormBehaviorController> _logger;
 
-    public FormBehaviorController(IFormFieldBehaviorRepository repository, IAuditTrailService? audit = null)
+    public FormBehaviorController(
+        IFormFieldBehaviorRepository repository,
+        ILogger<FormBehaviorController> logger,
+        IAuditTrailService? audit = null)
     {
         _repository = repository;
+        _logger = logger;
         _audit = audit;
     }
 
     public sealed record FieldBehaviorDto(
         string Key, bool IsVisible = true, bool IsRequired = false,
         string? DefaultValue = null, string? LabelText = null, string? LabelStyle = null,
-        string? VisibleIf = null, string? RequiredIf = null, int? CardSection = null, int? CardOrder = null);
+        string? VisibleIf = null, string? RequiredIf = null, int? CardSection = null, int? CardOrder = null,
+        int? CardWidth = null);
 
     public sealed record TabBehaviorDto(string Key, bool IsVisible = true, int SortOrder = 0, string? LabelText = null);
 
-    public sealed record SaveBehaviorRequest(string FormCode, List<FieldBehaviorDto>? Fields, List<TabBehaviorDto>? Tabs);
+    public sealed record SaveBehaviorRequest(
+        string FormCode, List<FieldBehaviorDto>? Fields, List<TabBehaviorDto>? Tabs, int? DefaultCardWidth = null);
 
     private sealed record CatalogItem(string Key, string Label, string Tab, string DataType, bool Locked);
 
@@ -106,8 +120,12 @@ public sealed partial class FormBehaviorController : Controller
                 requiredIf = rules.RequiredIf,
                 cardSection = b?.CardSection,
                 cardOrder = b?.CardOrder,
+                cardWidth = b?.CardWidth,
             };
         }).ToArray();
+
+        byKey.TryGetValue(DefaultCardWidthFieldKey, out var cardDefaultRow);
+        var defaultCardWidth = cardDefaultRow?.CardWidth;
 
         // Sekme yönetimi yalnız header formlarda — kalem formunda boş liste döner.
         object[] tabs = Array.Empty<object>();
@@ -128,7 +146,7 @@ public sealed partial class FormBehaviorController : Controller
             }).OrderBy(t => t.sortOrder).Cast<object>().ToArray();
         }
 
-        return Json(new { ok = true, formCode, canEdit = IsAdmin(), fields, tabs });
+        return Json(new { ok = true, formCode, canEdit = IsAdmin(), fields, tabs, defaultCardWidth });
     }
 
     [HttpPost("/api/form-behavior/save")]
@@ -170,6 +188,7 @@ public sealed partial class FormBehaviorController : Controller
                     ? f.LabelStyle.Trim().ToLowerInvariant() : null;
                 var defaultValue = string.IsNullOrWhiteSpace(f.DefaultValue) ? null : f.DefaultValue.Trim();
                 if (defaultValue is { Length: > 400 }) defaultValue = defaultValue[..400];
+                var cardWidth = ClampCardWidth(f.CardWidth, $"field[{key}]");
 
                 string? rulesJson = null;
                 if (visibleIf is not null || requiredIf is not null)
@@ -184,7 +203,7 @@ public sealed partial class FormBehaviorController : Controller
                 // fail-open semantiği net olur (satır yok = bugünkü davranış).
                 var isDefault = isVisible && !f.IsRequired && defaultValue is null
                     && labelText is null && labelStyle is null && rulesJson is null
-                    && f.CardSection is null && f.CardOrder is null;
+                    && f.CardSection is null && f.CardOrder is null && cardWidth is null;
                 if (isDefault) continue;
 
                 rows.Add(new FormFieldBehavior
@@ -200,6 +219,21 @@ public sealed partial class FormBehaviorController : Controller
                     SortOrder = 0,
                     CardSection = f.CardSection,
                     CardOrder = f.CardOrder,
+                    CardWidth = cardWidth,
+                    CreatedById = GetUserId(),
+                    CreatedBy = User?.Identity?.Name,
+                });
+            }
+
+            var defaultCardWidth = ClampCardWidth(request.DefaultCardWidth, "defaultCardWidth");
+            if (defaultCardWidth is not null)
+            {
+                rows.Add(new FormFieldBehavior
+                {
+                    FormCode = formCode,
+                    FieldKey = DefaultCardWidthFieldKey,
+                    IsVisible = true,
+                    CardWidth = defaultCardWidth,
                     CreatedById = GetUserId(),
                     CreatedBy = User?.Identity?.Name,
                 });
@@ -257,8 +291,24 @@ public sealed partial class FormBehaviorController : Controller
     private static object ToAuditShape(FormFieldBehavior r) => new
     {
         r.FieldKey, r.IsVisible, r.IsRequired, r.DefaultValue, r.LabelText, r.LabelStyle, r.RulesJson, r.SortOrder,
-        r.CardSection, r.CardOrder,
+        r.CardSection, r.CardOrder, r.CardWidth,
     };
+
+    /// <summary>
+    /// 12-sütunlu ızgara sınırı — 1..12 dışı değer REDDEDİLMEZ, sessizce en yakın
+    /// sınıra clamp'lenir ve sunucu loguna düşer (bkz. CLAUDE.md "sessiz kırık"
+    /// kural #2 ruhu: bozuk girdi sessizce yutulmaz, iz bırakır).
+    /// </summary>
+    private int? ClampCardWidth(int? value, string context)
+    {
+        if (value is null) return null;
+        var clamped = Math.Clamp(value.Value, 1, 12);
+        if (clamped != value.Value)
+            _logger.LogWarning(
+                "CardWidth 1..12 dışında, clamp uygulandı: {Context} original={Original} clamped={Clamped}",
+                context, value.Value, clamped);
+        return clamped;
+    }
 
     private static string SerializeForAudit(IEnumerable<object> rows) =>
         JsonSerializer.Serialize(rows, new JsonSerializerOptions(JsonSerializerDefaults.Web));

@@ -107,6 +107,7 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                 ins.Parameters.Add(new SqlParameter("@SortOrder", row.SortOrder));
                 ins.Parameters.Add(new SqlParameter("@CardSection", (object?)row.CardSection ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@CardOrder", (object?)row.CardOrder ?? DBNull.Value));
+                ins.Parameters.Add(new SqlParameter("@CardWidth", (object?)row.CardWidth ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@CreatedById", (object?)row.CreatedById ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@CreatedBy", (object?)row.CreatedBy ?? DBNull.Value));
                 await ins.ExecuteNonQueryAsync(ct);

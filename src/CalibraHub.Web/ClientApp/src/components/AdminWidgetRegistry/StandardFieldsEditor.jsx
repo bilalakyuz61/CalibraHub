@@ -23,6 +23,13 @@
  * `cardOrder` backend'den henüz dönmüyorsa `undefined` → `null` (varsayılan sıra,
  * katalog sırası korunur).
  *
+ * Hücre genişliği (2026-08-20): şeritler 12 sütunluk ORTAK ızgara olarak çizilir
+ * (tüm şeritlerdeki hücreler alt alta hizalanır). Her alan `cardWidth` (1..12|null)
+ * taşır — `null` = form varsayılanını kullan. Form varsayılanı `defaultCardWidth`
+ * (kök seviyede, GET yanıtının/POST gövdesinin dışında değil KÖKÜNDE) — `null`
+ * gelirse 3 kabul edilir. İkisi de backend henüz dönmüyorsa (paralel geliştirme)
+ * sessizce 3'e düşer, hata vermez.
+ *
  * Ekran markup'ı SABİTTİR — burada yalnızca davranış metadata'sı düzenlenir
  * (GET/POST /api/form-behavior). Fail-open: hiçbir davranış tanımlanmamışsa ekran
  * bugünkü haliyle çalışır. Kilitli alanlar (belge no, tarih, cari, para birimi)
@@ -80,6 +87,21 @@ function normalizeCardOrder(v) {
   return null
 }
 
+// cardWidth (alan başına hücre genişliği, 1..12) — aynı normalize deseni; aralık
+// dışı/tanınmayan değer null (form varsayılanını kullan). 12 sütunluk ortak ızgara
+// sözleşmesi backend ile SABİT (bkz. CLAUDE.md).
+var CARD_WIDTH_MIN = 1
+var CARD_WIDTH_MAX = 12
+function normalizeCardWidth(v) {
+  var n = null
+  if (typeof v === 'number' && Number.isFinite(v)) n = Math.floor(v)
+  else if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) n = Math.floor(Number(v))
+  if (n === null) return null
+  if (n < CARD_WIDTH_MIN) return CARD_WIDTH_MIN
+  if (n > CARD_WIDTH_MAX) return CARD_WIDTH_MAX
+  return n
+}
+
 // Bölüm içi sıralama karşılaştırıcısı: cardOrder küçük önce, null olanlar en
 // sona. Eşit (veya iki null) durumda dizideki mevcut konum korunur (Array.sort
 // stabil) — bu da katalog sırasına denk gelir çünkü `fields` state'i kendi
@@ -113,6 +135,67 @@ function Switch(props) {
         style={{ left: on ? 18 : 2 }}
       />
     </button>
+  )
+}
+
+/**
+ * Hücre genişliği kontrolü (2026-08-20) — 12 sütunluk ortak ızgarada 1..12 arası
+ * adım. Native `<select>` DEĞİL (kullanıcı isteği): "－ / N/12 / ＋" küçük stepper.
+ * `allowClear` true ise (alan bazlı kullanım) değer null'a dönebilir → "Varsayılan
+ * (N)" olarak gösterilir; genel ayar (form varsayılanı) için allowClear kapalı,
+ * her zaman somut bir sayı taşır.
+ */
+function WidthStepper(props) {
+  var value = (typeof props.value === 'number') ? props.value : null
+  var fallback = props.fallback
+  var allowClear = props.allowClear === true
+  var onChange = props.onChange
+  var display = (value !== null) ? value : fallback
+  function step(delta) {
+    var next = Math.max(CARD_WIDTH_MIN, Math.min(CARD_WIDTH_MAX, display + delta))
+    onChange(next)
+  }
+  return (
+    <div className="flex items-center gap-1 flex-shrink-0">
+      <div className="flex items-center rounded-md border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.04] overflow-hidden">
+        <button
+          type="button"
+          onClick={function () { step(-1) }}
+          disabled={display <= CARD_WIDTH_MIN}
+          title="Bir sütun daralt"
+          className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:bg-slate-50 dark:text-white/55 dark:hover:text-indigo-300 dark:hover:bg-white/[0.08] disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          <Minus size={11} strokeWidth={2.4} />
+        </button>
+        <span
+          className={'px-1.5 text-[10.5px] font-bold tabular-nums text-center whitespace-nowrap ' + (
+            value !== null ? 'text-slate-700 dark:text-white/85' : 'text-slate-400 italic dark:text-white/40'
+          )}
+          title={value !== null ? (value + ' / 12 sütun') : ('Ayarlanmamış — form varsayılanı: ' + fallback + ' / 12')}
+        >
+          {value !== null ? (value + '/12') : ('Varsayılan (' + fallback + ')')}
+        </span>
+        <button
+          type="button"
+          onClick={function () { step(1) }}
+          disabled={display >= CARD_WIDTH_MAX}
+          title="Bir sütun genişlet"
+          className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:bg-slate-50 dark:text-white/55 dark:hover:text-indigo-300 dark:hover:bg-white/[0.08] disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          <Plus size={11} strokeWidth={2.4} />
+        </button>
+      </div>
+      {allowClear && value !== null && (
+        <button
+          type="button"
+          onClick={function () { onChange(null) }}
+          title="Varsayılana dön"
+          className="text-slate-400 hover:text-indigo-600 dark:text-white/35 dark:hover:text-indigo-300"
+        >
+          <RotateCcw size={11} strokeWidth={2.2} />
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -209,6 +292,11 @@ export default function StandardFieldsEditor(props) {
   var [fields, setFields] = useState([])
   var [tabs, setTabs] = useState([])
   var [maxStrip, setMaxStrip] = useState(3)
+  // Form varsayılan hücre genişliği (1..12) — genişliği ayarlanmamış (cardWidth=null)
+  // alanlar bunu kullanır. Backend henüz dönmüyorsa/null ise sözleşme gereği 3 kabul
+  // edilir (bkz. dosya başı not) — state her zaman somut bir sayı taşır.
+  var [defaultCardWidth, setDefaultCardWidth] = useState(3)
+  var [initialDefaultCardWidth, setInitialDefaultCardWidth] = useState(3)
   // Davranis modali acik olan alanin key'i (null = kapali)
   var [behaviorKey, setBehaviorKey] = useState(null)
   // Sifirla — yuklenen (kaydedilmis) hale donus icin anlik goruntu
@@ -241,11 +329,17 @@ export default function StandardFieldsEditor(props) {
             requiredIf: f.requiredIf || '',
             cardSection: normalizeCardSection(f.cardSection),
             cardOrder: normalizeCardOrder(f.cardOrder),
+            cardWidth: normalizeCardWidth(f.cardWidth),
           }
         })
         setFields(loadedFields)
         // Sifirla icin baslangic anlik goruntusu (kaydedilmis son hal)
         setInitialFields(loadedFields)
+        // Form varsayilan hucre genisligi — kokte gelir, null/eksikse 3 (sozlesme).
+        var loadedDefaultCardWidth = normalizeCardWidth(data.defaultCardWidth)
+        var resolvedDefaultCardWidth = loadedDefaultCardWidth === null ? 3 : loadedDefaultCardWidth
+        setDefaultCardWidth(resolvedDefaultCardWidth)
+        setInitialDefaultCardWidth(resolvedDefaultCardWidth)
         setTabs((data.tabs || []).map(function (t) {
           return {
             key: t.key, label: t.label, locked: t.locked === true,
@@ -364,6 +458,7 @@ export default function StandardFieldsEditor(props) {
   /** Kaydedilmis son hale don — kaydetmez, yalniz yerel degisiklikleri atar. */
   function resetChanges() {
     setFields(initialFields)
+    setDefaultCardWidth(initialDefaultCardWidth)
     var maxAssigned = initialFields.reduce(function (acc, f) {
       return (typeof f.cardSection === 'number' && f.cardSection > acc) ? f.cardSection : acc
     }, 0)
@@ -401,6 +496,7 @@ export default function StandardFieldsEditor(props) {
     try {
       var payload = {
         formCode: formCode,
+        defaultCardWidth: (typeof defaultCardWidth === 'number') ? defaultCardWidth : null,
         fields: fields.map(function (f) {
           return {
             key: f.key,
@@ -413,6 +509,7 @@ export default function StandardFieldsEditor(props) {
             requiredIf: f.requiredIf.trim() || null,
             cardSection: (typeof f.cardSection === 'number') ? f.cardSection : null,
             cardOrder: (typeof f.cardOrder === 'number') ? f.cardOrder : null,
+            cardWidth: (typeof f.cardWidth === 'number') ? f.cardWidth : null,
           }
         }),
         tabs: tabs.map(function (t, i) {
@@ -544,6 +641,21 @@ export default function StandardFieldsEditor(props) {
                 </div>
               </div>
               )}
+
+              {/* ── Varsayılan Hücre Genişliği (2026-08-20) — form genelinde 12 sütunluk
+                  ortak ızgarada, genişliği ayarlanmamış alanların kullanacağı değer. ── */}
+              <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.03] px-3 py-2.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <LayoutGrid size={13} className="text-slate-500 dark:text-white/55 flex-shrink-0" />
+                  <span className="text-[11.5px] font-bold text-slate-700 dark:text-white/80">Varsayılan Hücre Genişliği</span>
+                  <div className="flex-1" />
+                  <WidthStepper value={defaultCardWidth} fallback={3} allowClear={false}
+                    onChange={function (v) { setDefaultCardWidth(v) }} />
+                </div>
+                <div className="text-[10px] text-slate-500 dark:text-white/50 mt-1">
+                  Genişliği ayarlanmamış alanlar bu değeri kullanır (12 sütunluk şerit ızgarası).
+                </div>
+              </div>
 
               {/* ── Bölüm şeridi araç çubuğu ── */}
               <div className="flex items-center gap-2 mb-2">
@@ -678,6 +790,15 @@ export default function StandardFieldsEditor(props) {
                                   color="bg-red-500/70"
                                   title="Zorunlu — boş bırakılırsa kayıt engellenir"
                                   onToggle={function () { patchField(f.key, { isRequired: !f.isRequired }) }}
+                                />
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[9.5px] font-semibold text-slate-500 dark:text-white/50">Genişlik</span>
+                                <WidthStepper
+                                  value={f.cardWidth}
+                                  fallback={defaultCardWidth}
+                                  allowClear={true}
+                                  onChange={function (v) { patchField(f.key, { cardWidth: v }) }}
                                 />
                               </div>
                               {/* Bolum artik SURUKLEYEREK degistirilir — buton grubu kalkti.
