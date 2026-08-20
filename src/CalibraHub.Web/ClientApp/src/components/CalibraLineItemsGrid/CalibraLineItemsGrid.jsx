@@ -2229,7 +2229,6 @@ export default function CalibraLineItemsGrid(props) {
                             hucreleri gibi SOL USTUNDE basligi olur — ayni etiket stili
                             (calibra-line-card-label), boylece kart dili tutarli. */}
                         <div className="flex items-start gap-3 min-w-0 flex-1">
-                          <span className="clc-ident-num flex-shrink-0 mt-[15px]" title={'Kalem sirasi #' + (__rowIdx + 1)}>{'#' + (__rowIdx + 1)}</span>
                           {materialCodeCol && (
                             <div className="flex-shrink-0 max-w-[220px] min-w-0">
                               <div className="calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide mb-0.5 text-slate-500 dark:text-white/45">

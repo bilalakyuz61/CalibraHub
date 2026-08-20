@@ -3285,19 +3285,17 @@ body.app-theme-dark .clc-cell-underline:focus-within {
    (referans uyarlaması, 2026-08-19). Yalnız useCustomLayout=false dalında
    kullanılır — admin Kart Düzeni tanımlıysa bu sınıflar hiç render edilmez.
    Light default → body.app-theme-dark override (CLAUDE.md "Light = default"). */
-.clc-ident-num {
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 11px;
-  color: #94a3b8;
-  line-height: 1;
-}
-body.app-theme-dark .clc-ident-num { color: rgba(255,255,255,0.35); }
-
 /* Malzeme kodu — kalın + vurgulu renk (referans "başlık" hissi). İç <input>
    GuideLookupCell/TextLookupCell farklı bileşenlerde satır-içi stille (inline
    style / Tailwind utility) geliyor — !important bu farklı yollardan gelen
    stilleri tutarlı biçimde ezmek için gerekli (bkz. .cb-invalid-shake ile aynı
    proje deseni). */
+/* 2026-08-20 (kullanici istegi): Malzeme Kodu ile Malzeme Adi degerleri AYNI
+   hizada olsun. Kod input'u 13.5px/700, ad input'u 13px — farkli yukseklikler
+   uretip degerleri birkac px kaydiriyordu. Iki deger kutusuna ORTAK min-height
+   verip icerigi dikeyde ortaliyoruz (etiketler zaten hizali). */
+.clc-ident-code,
+.clc-ident-name { min-height: 28px; display: flex; align-items: center; }
 .clc-ident-code { --clc-ident-accent: #4338ca; }
 body.app-theme-dark .clc-ident-code { --clc-ident-accent: #a5b4fc; }
 .clc-ident-code input {

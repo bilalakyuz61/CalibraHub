@@ -253,7 +253,6 @@ function CardPreview(props) {
       <div className="p-2.5 sm:p-3 flex flex-col gap-2.5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-baseline gap-2 min-w-0 flex-1">
-            <span className="clc-ident-num flex-shrink-0">#1</span>
             {materialCode && (
               <div className="clc-ident-code clc-cell-underline flex-shrink-0 max-w-[220px]">
                 <PreviewInput value={PREVIEW_SAMPLE.materialCode} className="w-full bg-transparent border-0 outline-none px-1 py-1 text-[13.5px]" />
