@@ -66,9 +66,6 @@ workflows:
       app_store_connect: CalibraHub ASC
     environment:
       xcode: latest
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.calibrahub.mobile   # Apple Developer'da kayitli olmali
       vars:
         KMP_DIR: "mobile/CalibraHubKmp"
     scripts:
@@ -86,8 +83,18 @@ workflows:
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUMBER:-1}" iosApp/Info.plist
       - name: gradlew calistirilabilir yap
         script: chmod +x "$KMP_DIR/gradlew"
-      - name: Kod imzalama profillerini uygula
-        script: xcode-project use-profiles
+      - name: Kod imzalama (sertifika + provisioning profil OLUSTUR/getir)
+        script: |
+          # Apple hesabinda App Store dagitim sertifikasi + provisioning profili YOKSA
+          # OLUSTURUR (--create). "CalibraHub ASC" entegrasyonu API kimligini env ile saglar.
+          # Onceki "No matching profiles found ... app_store" hatasi bu adimin eksikligindendi
+          # (eski `xcode-project use-profiles` yalniz VAR OLAN profili arar, olusturmazdi).
+          keychain initialize
+          app-store-connect fetch-signing-files "com.calibrahub.mobile" \
+            --type IOS_APP_STORE \
+            --create
+          keychain add-certificates
+          xcode-project use-profiles
       - name: IPA derle (imzali)
         script: |
           cd "$KMP_DIR/iosApp"
