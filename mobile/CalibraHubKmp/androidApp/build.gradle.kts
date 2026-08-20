@@ -1,8 +1,19 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.compose.multiplatform)
+}
+
+// Kotlin 2.3'te `android { kotlinOptions { jvmTarget = "17" } }` DSL'i KALDIRILDI (hata veriyor:
+// "Using 'jvmTarget: String' is an error. Please migrate to the compilerOptions DSL").
+// Karsiligi bu top-level blok (shared modulu zaten androidTarget.compilerOptions ile ayni deseni kullaniyor).
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
 }
 
 android {
@@ -29,10 +40,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
     }
 
     buildFeatures {

@@ -10,7 +10,16 @@
 # kaliyor (bump gerekmedi). Daha once `xcode: latest` (=26.4.1) ile Kotlin 2.1.0 arasinda yasanan
 # LINKER CRASH (Ld iosApp -> clang "PLEASE ATTACH ... linker snapshot") bu yukseltmeyle kok
 # nedeninden cozulur (bkz. codemagic.yaml ios-testflight yorumu).
-kotlin = "2.2.21"
+#
+# 2.2.21 -> 2.3.20 (2026-08-20, Codemagic iOS derlemesinden gelen KESIN kanit):
+#   "KLIB resolver: Skipping .../components-resources-iosArm64/1.11.1/...klib having incompatible
+#    ABI version '2.3.0'. The library was produced by '2.3.20' compiler."
+# Compose Multiplatform 1.11.1 KOTLIN 2.3.20 ile derlenmis; klib ABI surumu Kotlin 2.2.21 derleyicisi
+# tarafindan REDDEDILIYOR -> Kotlin, CMP'yi ureten derleyiciyle AYNI surume cekildi.
+# DERS: Android artifact'leri JVM bytecode oldugu icin klib ABI kontrolune girmez — bu yuzden
+# Kotlin 2.2.21 ile Android build YESIL geciyordu ama iOS/native derleme patliyordu.
+# "Android yesil != iOS yesil": KMP'de native klib ABI eslesmesi AYRICA dogrulanmali.
+kotlin = "2.3.20"
 agp = "8.7.3"
 # Compose Multiplatform resmi Kotlin uyumluluk sayfasi (jetbrains.com/help/kotlin-multiplatform-dev/
 # compose-compatibility-and-versioning.html): "latest CMP her zaman latest Kotlin ile uyumlu" +
