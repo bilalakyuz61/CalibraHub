@@ -30,7 +30,7 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT [Id],[FormCode],[FieldKey],[IsVisible],[IsRequired],[DefaultValue],
-                   [LabelText],[LabelStyle],[RulesJSON],[SortOrder],[CardSection],[IsActive],
+                   [LabelText],[LabelStyle],[RulesJSON],[SortOrder],[CardSection],[CardOrder],[IsActive],
                    [CreatedById],[CreatedBy],[Created],[UpdatedById],[UpdatedBy],[Updated]
             FROM {_table}
             WHERE [FormCode]=@FormCode AND [IsActive]=1
@@ -54,13 +54,14 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                 RulesJson = r.IsDBNull(8) ? null : r.GetString(8),
                 SortOrder = r.GetInt32(9),
                 CardSection = r.IsDBNull(10) ? null : r.GetInt32(10),
-                IsActive = r.GetBoolean(11),
-                CreatedById = r.IsDBNull(12) ? null : r.GetInt32(12),
-                CreatedBy = r.IsDBNull(13) ? null : r.GetString(13),
-                Created = r.GetDateTime(14),
-                UpdatedById = r.IsDBNull(15) ? null : r.GetInt32(15),
-                UpdatedBy = r.IsDBNull(16) ? null : r.GetString(16),
-                Updated = r.IsDBNull(17) ? null : r.GetDateTime(17),
+                CardOrder = r.IsDBNull(11) ? null : r.GetInt32(11),
+                IsActive = r.GetBoolean(12),
+                CreatedById = r.IsDBNull(13) ? null : r.GetInt32(13),
+                CreatedBy = r.IsDBNull(14) ? null : r.GetString(14),
+                Created = r.GetDateTime(15),
+                UpdatedById = r.IsDBNull(16) ? null : r.GetInt32(16),
+                UpdatedBy = r.IsDBNull(17) ? null : r.GetString(17),
+                Updated = r.IsDBNull(18) ? null : r.GetDateTime(18),
             });
         }
         return list;
@@ -87,11 +88,11 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                 ins.CommandText = $"""
                     INSERT INTO {_table}
                         ([FormCode],[FieldKey],[IsVisible],[IsRequired],[DefaultValue],
-                         [LabelText],[LabelStyle],[RulesJSON],[SortOrder],[CardSection],[IsActive],
+                         [LabelText],[LabelStyle],[RulesJSON],[SortOrder],[CardSection],[CardOrder],[IsActive],
                          [CreatedById],[CreatedBy])
                     VALUES
                         (@FormCode,@FieldKey,@IsVisible,@IsRequired,@DefaultValue,
-                         @LabelText,@LabelStyle,@RulesJson,@SortOrder,@CardSection,1,
+                         @LabelText,@LabelStyle,@RulesJson,@SortOrder,@CardSection,@CardOrder,1,
                          @CreatedById,@CreatedBy);
                     """;
                 ins.Parameters.Add(new SqlParameter("@FormCode", formCode));
@@ -104,6 +105,7 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                 ins.Parameters.Add(new SqlParameter("@RulesJson", (object?)row.RulesJson ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@SortOrder", row.SortOrder));
                 ins.Parameters.Add(new SqlParameter("@CardSection", (object?)row.CardSection ?? DBNull.Value));
+                ins.Parameters.Add(new SqlParameter("@CardOrder", (object?)row.CardOrder ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@CreatedById", (object?)row.CreatedById ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@CreatedBy", (object?)row.CreatedBy ?? DBNull.Value));
                 await ins.ExecuteNonQueryAsync(ct);

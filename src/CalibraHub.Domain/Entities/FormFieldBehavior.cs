@@ -34,6 +34,12 @@ public sealed class FormFieldBehavior
     /// backend yalnız taşır/saklar.
     /// </summary>
     public int? CardSection { get; set; }
+    /// <summary>
+    /// Kart düzeninde aynı CardSection içindeki görüntülenme sırası (2026-08-20):
+    /// küçük önce. null = ayarlanmamış — varsayılan sıralama (katalog sırası)
+    /// FRONTEND'de yorumlanır, backend yalnız taşır/saklar.
+    /// </summary>
+    public int? CardOrder { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
     public int? CreatedById { get; init; }
