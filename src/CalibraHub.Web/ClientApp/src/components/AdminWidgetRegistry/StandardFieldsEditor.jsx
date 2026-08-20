@@ -116,76 +116,6 @@ function Switch(props) {
   )
 }
 
-/**
- * Bölüm seçici — native <select> DEĞİL (koyu temada beyaz render sorunu, bkz.
- * CLAUDE.md CSS kuralları). LineCardInspector.jsx'teki SegmentedControl deseniyle
- * aynı mantık (buton grubu, klavye ok tuşlarıyla gezinme) — cross-file import
- * yerine burada bağımsız kopya (bu dosya + CalibraLineItemsGrid paralel değişiyor).
- */
-function SectionSegmented(props) {
-  var value = props.value // null | 0 | 1..N
-  var maxStrip = props.maxStrip
-  var disabled = props.disabled === true
-
-  var options = [{ value: null, label: 'Varsayılan', title: 'Ayarlanmamış — belge ekranı varsayılan dağılımı uygular' }]
-  options.push({ value: 0, label: 'Kimlik', title: 'Kart başlığı (kimlik satırı)' })
-  for (var i = 1; i <= maxStrip; i++) {
-    options.push({ value: i, label: 'Ş' + i, title: 'Şerit ' + i })
-  }
-
-  function pick(v) { if (!disabled && typeof props.onChange === 'function') props.onChange(v) }
-  function handleKeyDown(e) {
-    var idx = options.findIndex(function (o) { return o.value === value })
-    if (idx < 0) idx = 0
-    var next = null
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (idx + 1) % options.length
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (idx - 1 + options.length) % options.length
-    if (next == null) return
-    e.preventDefault()
-    e.stopPropagation()
-    pick(options[next].value)
-  }
-
-  function classesFor(o) {
-    var on = o.value === value
-    if (!on) {
-      return 'border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600 ' +
-        'dark:border-white/10 dark:text-white/55 dark:hover:border-indigo-400/40 dark:hover:text-indigo-300'
-    }
-    if (o.value === null) return 'bg-slate-400 text-[#fff] border-slate-400 dark:bg-white/25 dark:border-white/25'
-    if (o.value === 0) return 'bg-indigo-500 text-[#fff] border-indigo-500'
-    return 'bg-violet-500 text-[#fff] border-violet-500'
-  }
-
-  return (
-    <div
-      role="radiogroup"
-      aria-label="Bölüm"
-      onKeyDown={handleKeyDown}
-      className={'flex flex-wrap items-stretch gap-1 ' + (disabled ? 'opacity-45 pointer-events-none' : '')}
-    >
-      {options.map(function (o) {
-        var on = o.value === value
-        return (
-          <button
-            key={String(o.value)}
-            type="button"
-            role="radio"
-            aria-checked={on}
-            tabIndex={on ? 0 : -1}
-            disabled={disabled}
-            onClick={function () { pick(o.value) }}
-            title={o.title}
-            className={'h-[22px] min-w-[26px] px-1.5 rounded-md text-[10px] font-bold border transition-colors ' + classesFor(o)}
-          >
-            {o.label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
 /* bg-[#fff]: Bootstrap'in .bg-white{...!important} utility'si Tailwind dark:
    varyantini eziyordu (karanlik temada beyaz bloklar) — ayni gorunum, cakismayan ad. */
 var inputCls = 'w-full px-2 py-1 rounded-md text-[11.5px] border border-slate-200 bg-[#fff] text-slate-700 ' +
@@ -377,7 +307,7 @@ export default function StandardFieldsEditor(props) {
   /**
    * Alani hedef bolume (ve o bolumde hedef indekse) tasir. Hem kaynak hem hedef
    * grup 0..n-1 olacak sekilde yeniden numaralandirilir — bosluksuz, kararli
-   * (moveFieldInSection ile ayni ilke).
+   * (bosluksuz, kararli yeniden numaralandirma).
    */
   function moveFieldTo(key, targetSection, targetIndex) {
     setFields(function (prev) {
@@ -462,57 +392,6 @@ export default function StandardFieldsEditor(props) {
       })
     })
     setMaxStrip(function (prev) { return Math.max(1, prev - 1) })
-  }
-
-  /**
-   * Aynı cardSection grubu içinde bir alanı bir konum yukarı/aşağı taşır.
-   * Grup, ekranda gösterildiği sırayla (compareByCardOrder) yeniden hesaplanır,
-   * iki eleman yer değiştirir, ardından TÜM grup 0..n-1 olacak şekilde
-   * yeniden numaralandırılır (boşluksuz, kararlı).
-   */
-  function moveFieldInSection(key, dir) {
-    setFields(function (prev) {
-      var field = prev.find(function (f) { return f.key === key })
-      if (!field) return prev
-      var section = field.cardSection
-      var groupFields = prev.filter(function (f) { return f.cardSection === section }).slice().sort(compareByCardOrder)
-      var idx = groupFields.findIndex(function (f) { return f.key === key })
-      var to = idx + dir
-      if (idx < 0 || to < 0 || to >= groupFields.length) return prev
-      var reordered = groupFields.slice()
-      var tmp = reordered[idx]; reordered[idx] = reordered[to]; reordered[to] = tmp
-      var orderMap = {}
-      reordered.forEach(function (f, i) { orderMap[f.key] = i })
-      return prev.map(function (f) {
-        return Object.prototype.hasOwnProperty.call(orderMap, f.key)
-          ? Object.assign({}, f, { cardOrder: orderMap[f.key] })
-          : f
-      })
-    })
-  }
-
-  /**
-   * Bir alanın bölümünü değiştirir. Alan hedef grubun SONUNA eklenir; hem eski
-   * (kaynak) hem yeni (hedef) grup 0..n-1 olacak şekilde yeniden numaralandırılır.
-   */
-  function changeFieldSection(key, newSection) {
-    setFields(function (prev) {
-      var field = prev.find(function (f) { return f.key === key })
-      if (!field || field.cardSection === newSection) return prev
-      var oldSection = field.cardSection
-      var sourceFields = prev.filter(function (f) { return f.cardSection === oldSection && f.key !== key }).slice().sort(compareByCardOrder)
-      var destFields = prev.filter(function (f) { return f.cardSection === newSection }).slice().sort(compareByCardOrder)
-      var orderMap = {}
-      sourceFields.forEach(function (f, i) { orderMap[f.key] = i })
-      destFields.forEach(function (f, i) { orderMap[f.key] = i })
-      orderMap[key] = destFields.length
-      return prev.map(function (f) {
-        if (f.key === key) return Object.assign({}, f, { cardSection: newSection, cardOrder: orderMap[key] })
-        return Object.prototype.hasOwnProperty.call(orderMap, f.key)
-          ? Object.assign({}, f, { cardOrder: orderMap[f.key] })
-          : f
-      })
-    })
   }
 
   async function handleSave() {
