@@ -217,15 +217,55 @@ function buildSectionGroups(fields, maxStrip) {
     return fields.filter(function (f) { return f.cardSection === sec }).slice().sort(compareByCardOrder)
   }
   var groups = []
-  groups.push({ key: 'section-0', label: 'Kimlik', hint: 'Kart başlığı', kind: 'identity', fields: bySection(0) })
+  groups.push({ key: 'section-0', section: 0, label: 'Kimlik', hint: 'Kart başlığı', kind: 'identity', fields: bySection(0) })
   for (var i = 1; i <= maxStrip; i++) {
     (function (n) {
-      groups.push({ key: 'section-' + n, label: 'Şerit ' + n, hint: null, kind: 'strip', fields: bySection(n) })
+      groups.push({ key: 'section-' + n, section: n, label: 'Şerit ' + n, hint: null, kind: 'strip', fields: bySection(n) })
     })(i)
   }
-  groups.push({ key: 'section-null', label: 'Varsayılan (Ayarlanmamış)', hint: 'Belge ekranı kendi varsayılan dağılımını uygular',
+  groups.push({ key: 'section-null', section: null, label: 'Varsayılan (Ayarlanmamış)', hint: 'Belge ekranı kendi varsayılan dağılımını uygular',
     kind: 'default', fields: bySection(null) })
   return groups
+}
+
+/** Bolum kabi — bos olsa bile birakma hedefi olur (alan surukleyip birakilabilsin). */
+function SectionDropZone(props) {
+  var over = useDroppable({ id: 'sec:' + (props.section === null ? 'null' : props.section) })
+  return (
+    <div
+      ref={over.setNodeRef}
+      className={'rounded-lg transition-colors ' + (over.isOver
+        ? 'bg-indigo-50/70 outline outline-1 outline-dashed outline-indigo-300 dark:bg-indigo-500/10 dark:outline-indigo-400/40'
+        : '')}
+    >
+      {props.children}
+    </div>
+  )
+}
+
+/** Surukleneble alan satiri — tutamak yalnizca GripVertical, govde tiklanabilir kalir. */
+function SortableRow(props) {
+  var sortable = useSortable({ id: props.id })
+  var style = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.45 : 1,
+  }
+  return (
+    <div ref={sortable.setNodeRef} style={style}
+         className="rounded-lg border border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.03] px-2.5 py-2 flex items-start gap-2">
+      <button
+        type="button"
+        {...sortable.attributes}
+        {...sortable.listeners}
+        title="Sürükleyerek sırala veya başka bölüme taşı"
+        className="flex-shrink-0 mt-0.5 p-0.5 rounded text-slate-400 hover:text-indigo-600 dark:text-white/35 dark:hover:text-indigo-300 cursor-grab active:cursor-grabbing"
+      >
+        <GripVertical size={13} strokeWidth={2} />
+      </button>
+      <div className="flex-1 min-w-0 flex flex-col gap-1.5">{props.children}</div>
+    </div>
+  )
 }
 
 export default function StandardFieldsEditor(props) {
@@ -670,14 +710,38 @@ export default function StandardFieldsEditor(props) {
                 </button>
               </div>
 
-              {/* Alan detay kolonlarının ortak başlığı (her grupta tekrarlanmaz) */}
-              <div className="hidden lg:grid grid-cols-[1fr_100px_1.2fr] gap-2 px-2.5 pb-1 text-[9.5px] font-semibold text-slate-500 dark:text-white/55">
-                <span>Başlık Metni</span><span>Başlık Stili</span><span>Davranış</span>
+              {/* Arama — alan sayisi arttikca liste uzuyor (Sutun Ayarlari paneliyle ayni desen) */}
+              <div className="flex items-center gap-2 mb-2 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.04]">
+                <Search size={13} strokeWidth={2} className="flex-shrink-0 text-slate-400 dark:text-white/35" />
+                <input
+                  type="text"
+                  value={search}
+                  placeholder="Alan ara…"
+                  onChange={function (e) { setSearch(e.target.value) }}
+                  className="flex-1 min-w-0 bg-transparent outline-none text-[11.5px] text-slate-700 dark:text-white/80"
+                />
+                {search && (
+                  <button type="button" onClick={function () { setSearch('') }} title="Aramayı temizle"
+                          className="flex-shrink-0 text-slate-400 hover:text-slate-600 dark:text-white/35 dark:hover:text-white/70">
+                    <XIcon size={12} strokeWidth={2.2} />
+                  </button>
+                )}
               </div>
 
-              {/* ── Alanlar (bölüme göre gruplu: Kimlik / Şerit 1.. / Varsayılan) ── */}
+              {/* ── Alanlar: bölüme göre gruplu, bölümler arası SÜRÜKLENEBİLİR ──
+                  Bos bolumler de render edilir — birakma hedefi olmalari icin. */}
+              <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               {sectionGroups.map(function (group) {
-                if (group.fields.length === 0) return null
+                var visibleFields = search
+                  ? group.fields.filter(function (f) {
+                      var q = search.toLocaleLowerCase('tr')
+                      return String(f.label || '').toLocaleLowerCase('tr').indexOf(q) >= 0 ||
+                             String(f.key || '').toLocaleLowerCase('tr').indexOf(q) >= 0
+                    })
+                  : group.fields
+                // Arama aktifken bos gruplari gizle; arama yokken bos gruplar
+                // birakma hedefi olarak KALIR.
+                if (search && visibleFields.length === 0) return null
                 return (
                   <div key={group.key} className="mb-4">
                     <div className="flex items-center gap-1.5 mb-1.5">
@@ -691,35 +755,21 @@ export default function StandardFieldsEditor(props) {
                         {group.label}
                       </span>
                       {group.hint && <span className="text-[10px] text-slate-400 dark:text-white/40">{group.hint}</span>}
+                      <span className="text-[10px] text-slate-400 dark:text-white/35">({visibleFields.length})</span>
                     </div>
-                    <div className="flex flex-col gap-1.5">
-                      {group.fields.map(function (f, fIdx) {
-                        var canMoveUp = fIdx > 0
-                        var canMoveDown = fIdx < group.fields.length - 1
+                    <SectionDropZone section={group.section}>
+                    <SortableContext items={visibleFields.map(function (f) { return f.key })}
+                                     strategy={verticalListSortingStrategy}>
+                    <div className="flex flex-col gap-1.5 min-h-[34px]">
+                      {visibleFields.length === 0 && (
+                        <div className="text-[10.5px] text-slate-400 dark:text-white/30 px-2.5 py-2 border border-dashed border-slate-200 dark:border-white/10 rounded-lg">
+                          Boş — alan sürükleyip bırakabilirsiniz
+                        </div>
+                      )}
+                      {visibleFields.map(function (f) {
+                        var isOpen = expanded[f.key] === true
                         return (
-                          <div key={f.key} className="rounded-lg border border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.03] px-2.5 py-2 flex items-stretch gap-2">
-                            {/* Bölüm içi sıra — sürükle-bırak yok, ok düğmeleriyle taşınır */}
-                            <div className="flex flex-col gap-0.5 justify-center flex-shrink-0">
-                              <button
-                                type="button"
-                                onClick={function () { moveFieldInSection(f.key, -1) }}
-                                disabled={!canMoveUp}
-                                title="Yukarı taşı"
-                                className="text-slate-500 hover:text-indigo-600 dark:text-white/55 dark:hover:text-indigo-300 disabled:opacity-25 disabled:cursor-not-allowed"
-                              >
-                                <ArrowUp size={11} strokeWidth={2.2} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={function () { moveFieldInSection(f.key, 1) }}
-                                disabled={!canMoveDown}
-                                title="Aşağı taşı"
-                                className="text-slate-500 hover:text-indigo-600 dark:text-white/55 dark:hover:text-indigo-300 disabled:opacity-25 disabled:cursor-not-allowed"
-                              >
-                                <ArrowDown size={11} strokeWidth={2.2} />
-                              </button>
-                            </div>
-                            <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                          <SortableRow key={f.key} id={f.key}>
                             {/* Satır 1: alan adı + bağlam rozeti + Görünür/Zorunlu + Bölüm */}
                             <div className="flex items-center gap-2 flex-wrap">
                               <div className="flex items-center gap-1.5 min-w-0">
@@ -751,17 +801,28 @@ export default function StandardFieldsEditor(props) {
                                   onToggle={function () { patchField(f.key, { isRequired: !f.isRequired }) }}
                                 />
                               </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[9.5px] font-semibold text-slate-500 dark:text-white/50">Bölüm</span>
-                                <SectionSegmented
-                                  value={f.cardSection}
-                                  maxStrip={maxStrip}
-                                  onChange={function (v) { changeFieldSection(f.key, v) }}
-                                />
-                              </div>
+                              {/* Bolum artik SURUKLEYEREK degistirilir — buton grubu kalkti.
+                                  Yerine detaylari acan katlama dugmesi. */}
+                              <button
+                                type="button"
+                                onClick={function () {
+                                  setExpanded(function (prev) {
+                                    var next = Object.assign({}, prev)
+                                    if (next[f.key]) delete next[f.key]; else next[f.key] = true
+                                    return next
+                                  })
+                                }}
+                                title={isOpen ? 'Detayları gizle' : 'Başlık, stil ve davranış ayarları'}
+                                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-semibold text-slate-500 hover:text-indigo-600 dark:text-white/50 dark:hover:text-indigo-300"
+                              >
+                                {isOpen ? <ChevronDown size={12} strokeWidth={2.2} /> : <ChevronRight size={12} strokeWidth={2.2} />}
+                                Detay
+                              </button>
                             </div>
 
-                            {/* Satır 2: mevcut detay ayarları (aynen korunur) */}
+                            {/* Satır 2: detaylar — yalnizca satir ACIKKEN. Kapaliyken
+                                liste kisa kalir (Sutun Ayarlari panelindeki desen). */}
+                            {isOpen && (
                             <div className="grid grid-cols-1 lg:grid-cols-[1fr_100px_1.2fr] gap-2 items-center">
                               <input
                                 type="text"
@@ -798,14 +859,17 @@ export default function StandardFieldsEditor(props) {
                                 <span className="truncate">{describeBehavior(f)}</span>
                               </button>
                             </div>
-                            </div>
-                          </div>
+                            )}
+                          </SortableRow>
                         )
                       })}
                     </div>
+                    </SortableContext>
+                    </SectionDropZone>
                   </div>
                 )
               })}
+              </DndContext>
 
               <div className="text-[10.5px] text-slate-500 dark:text-white/55">
                 Koşul ifadelerinde kullanılabilir alanlar: <span className="font-mono">{scopeKeys}</span>.
