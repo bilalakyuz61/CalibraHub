@@ -66,13 +66,15 @@ workflows:
       app_store_connect: CalibraHub ASC
     environment:
       xcode: latest
-      # Codemagic YONETILEN imzalama: ios_signing + CalibraHub ASC entegrasyonu ile gerekli
-      # dagitim sertifikasi + App Store provisioning profili OTOMATIK olusturulur/getirilir VE
-      # Codemagic'te SAKLANIR (sonraki build'ler tekrar kullanir). Bu, manuel fetch-signing-files
-      # yolunun "ozel anahtar yok / profil olusmadi" sorununu cozer.
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.calibrahub.mobile
+      # ELLE saglanan imzalama: sertifika+profil BIZ olusturduk (openssl CSR -> Apple Distribution
+      # cert -> .p12 + App Store provisioning profil). Codemagic'in otomatik cert olusturma sorununu
+      # tamamen atlar. "ios_signing" grubundaki secret'lardan gelir (Codemagic UI'da eklenir):
+      #   CM_CERTIFICATE           = base64 .p12
+      #   CM_CERTIFICATE_PASSWORD  = .p12 sifresi
+      #   CM_PROVISIONING_PROFILE  = base64 .mobileprovision
+      # (CalibraHub ASC entegrasyonu yalniz TestFlight YUKLEME icin — publishing bolumu.)
+      groups:
+        - ios_signing
       vars:
         KMP_DIR: "mobile/CalibraHubKmp"
     scripts:
@@ -90,11 +92,15 @@ workflows:
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUMBER:-1}" iosApp/Info.plist
       - name: gradlew calistirilabilir yap
         script: chmod +x "$KMP_DIR/gradlew"
-      - name: Kod imzalama profillerini uygula (Codemagic yonetilen)
+      - name: Kod imzalama (elle saglanan sertifika + profil)
         script: |
-          # ios_signing blogu (environment) + CalibraHub ASC entegrasyonu, gerekli sertifika +
-          # profili build ONCESI otomatik hazirlar. use-profiles bunlari iosApp.xcodeproj'a uygular
-          # (ic ice proje oldugu icin iosApp'e gir).
+          # Elle saglanan .p12 + .mobileprovision'i keychain'e/profil klasorune kur, projeye uygula.
+          keychain initialize
+          echo "$CM_CERTIFICATE" | base64 --decode > /tmp/dist_cert.p12
+          keychain add-certificates --certificate /tmp/dist_cert.p12 --certificate-password "$CM_CERTIFICATE_PASSWORD"
+          PROFILES_HOME="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILES_HOME"
+          echo "$CM_PROVISIONING_PROFILE" | base64 --decode > "$PROFILES_HOME/CalibraHub_App_Store.mobileprovision"
           cd "$KMP_DIR/iosApp"
           xcode-project use-profiles
       - name: IPA derle (imzali)
