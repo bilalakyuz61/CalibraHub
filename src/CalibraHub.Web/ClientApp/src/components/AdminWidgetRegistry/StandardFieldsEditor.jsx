@@ -156,6 +156,11 @@ function WidthStepper(props) {
     onChange(next)
   }
   return (
+    /* 2026-08-20 (kullanici istegi): SABIT olculer. Etiket "Varsayilan (3)" (uzun)
+       ile "3/12" (kisa) arasinda gidip geldigi ve temizle butonu gelip gittigi icin
+       adimlayicinin genisligi degisiyor, bu da satirdaki Gorunur/Zorunlu
+       switch'lerini kaydiriyordu. Hem etikete min-width hem temizle yuvasina sabit
+       yer verildi (buton yokken yuva GORUNMEZ ama yer kaplar). */
     <div className="flex items-center gap-1 flex-shrink-0">
       <div className="flex items-center rounded-md border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.04] overflow-hidden">
         <button
@@ -168,6 +173,7 @@ function WidthStepper(props) {
           <Minus size={11} strokeWidth={2.4} />
         </button>
         <span
+          style={{ minWidth: 78 }}
           className={'px-1.5 text-[10.5px] font-bold tabular-nums text-center whitespace-nowrap ' + (
             value !== null ? 'text-slate-700 dark:text-white/85' : 'text-slate-400 italic dark:text-white/40'
           )}
@@ -185,12 +191,16 @@ function WidthStepper(props) {
           <Plus size={11} strokeWidth={2.4} />
         </button>
       </div>
-      {allowClear && value !== null && (
+      {allowClear && (
         <button
           type="button"
-          onClick={function () { onChange(null) }}
+          onClick={function () { if (value !== null) onChange(null) }}
+          disabled={value === null}
+          aria-hidden={value === null}
+          tabIndex={value === null ? -1 : 0}
           title="Varsayılana dön"
-          className="text-slate-400 hover:text-indigo-600 dark:text-white/35 dark:hover:text-indigo-300"
+          style={{ width: 13, visibility: value === null ? 'hidden' : 'visible' }}
+          className="flex-shrink-0 text-slate-400 hover:text-indigo-600 dark:text-white/35 dark:hover:text-indigo-300"
         >
           <RotateCcw size={11} strokeWidth={2.2} />
         </button>
@@ -543,9 +553,6 @@ export default function StandardFieldsEditor(props) {
   var scopeKeys = fields.map(function (f) { return f.key }).join(', ')
   var showTabBadge = tabs.length > 0
   var sectionGroups = buildSectionGroups(fields, maxStrip)
-  // Son seritteki alan sayisi — "Serit Sil" butonunun kosulu
-  var lastStripFieldCount = fields.filter(function (f) { return f.cardSection === maxStrip }).length
-  var canRemoveStrip = maxStrip > 1 && lastStripFieldCount === 0
   var behaviorField = behaviorKey ? fields.find(function (f) { return f.key === behaviorKey }) : null
 
   return createPortal(
@@ -676,29 +683,6 @@ export default function StandardFieldsEditor(props) {
                 >
                   <Plus size={12} strokeWidth={2.4} /> Yeni Şerit Ekle
                 </button>
-                {/* 2026-08-20 (kullanici istegi): fazla seritler silinebilsin.
-                    Yalnizca SON serit ve yalnizca BOSSA silinir — dolu bir seridi
-                    silmek alanlari sessizce "Varsayilan"a dusururdu (CLAUDE.md
-                    "sessiz continue" yasagi ayni ruh). Alan varsa buton pasif ve
-                    title kullaniciya ne yapmasi gerektigini soyler. */}
-                <button
-                  type="button"
-                  onClick={function () { if (canRemoveStrip) removeStrip(maxStrip) }}
-                  disabled={!canRemoveStrip}
-                  title={
-                    maxStrip <= 1 ? 'En az bir şerit kalmalı'
-                      : (lastStripFieldCount > 0
-                          ? ('Şerit ' + maxStrip + ' içinde ' + lastStripFieldCount + ' alan var — önce onları başka bölüme taşıyın')
-                          : ('Şerit ' + maxStrip + ' sil (boş)'))
-                  }
-                  className={'flex items-center gap-1 px-2.5 py-1 rounded-md text-[10.5px] font-semibold border transition-colors ' + (
-                    canRemoveStrip
-                      ? 'text-rose-600 border-rose-200 bg-rose-50 hover:bg-rose-100 dark:text-rose-300 dark:border-rose-400/30 dark:bg-rose-500/10 dark:hover:bg-rose-500/20'
-                      : 'text-slate-300 border-slate-200 cursor-not-allowed dark:text-white/25 dark:border-white/10'
-                  )}
-                >
-                  <Trash2 size={12} strokeWidth={2.4} /> Şerit Sil
-                </button>
               </div>
 
               {/* Arama — alan sayisi arttikca liste uzuyor (Sutun Ayarlari paneliyle ayni desen) */}
@@ -747,6 +731,34 @@ export default function StandardFieldsEditor(props) {
                       </span>
                       {group.hint && <span className="text-[10px] text-slate-400 dark:text-white/40">{group.hint}</span>}
                       <span className="text-[10px] text-slate-400 dark:text-white/35">({visibleFields.length})</span>
+                      {/* 2026-08-20 (kullanici istegi): silme butonu SERIDIN YANINDA.
+                          Yalnizca serit gruplarinda ve yalnizca serit BOSSA aktif —
+                          dolu bir seridi silmek alanlari sessizce "Varsayilan"a
+                          dusururdu. Silinince ustundeki seritler bir asagi kayar
+                          (removeStrip yeniden numaralandirir). */}
+                      {group.kind === 'strip' && (function () {
+                        var canDelete = maxStrip > 1 && group.fields.length === 0
+                        return (
+                          <button
+                            type="button"
+                            onClick={function () { if (canDelete) removeStrip(group.section) }}
+                            disabled={!canDelete}
+                            title={
+                              maxStrip <= 1 ? 'En az bir şerit kalmalı'
+                                : (group.fields.length > 0
+                                    ? (group.label + ' içinde ' + group.fields.length + ' alan var — önce onları başka bölüme taşıyın')
+                                    : (group.label + ' sil'))
+                            }
+                            className={'flex items-center justify-center w-5 h-5 rounded transition-colors ' + (
+                              canDelete
+                                ? 'text-rose-500 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-500/15'
+                                : 'text-slate-300 cursor-not-allowed dark:text-white/20'
+                            )}
+                          >
+                            <Trash2 size={11} strokeWidth={2.2} />
+                          </button>
+                        )
+                      })()}
                     </div>
                     <SectionDropZone section={group.section}>
                     <SortableContext items={visibleFields.map(function (f) { return f.key })}
