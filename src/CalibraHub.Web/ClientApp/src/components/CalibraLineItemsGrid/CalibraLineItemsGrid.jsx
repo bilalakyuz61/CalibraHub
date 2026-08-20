@@ -21,7 +21,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus, Trash2, Pencil, Calculator, StickyNote, Lock, Pin, PinOff,
   Settings, X as XIcon, GitBranch, History, AlertTriangle,
-  MoreHorizontal, ExternalLink, ChevronRight, Layers,
+  MoreHorizontal, ExternalLink, Layers,
   LayoutGrid, Table2,
 } from 'lucide-react'
 import { Parser as ExprParser } from 'expr-eval'
@@ -3296,9 +3296,6 @@ export default function CalibraLineItemsGrid(props) {
           var __sepColor   = 'var(--app-border)'
           var __textColor      = 'var(--app-text)'
           var __textColorDis   = 'var(--app-text-muted)'
-          var __hintColor      = 'var(--app-text-muted)'
-          var __hintColorDis   = 'var(--app-text-muted)'
-          var __chevronColor   = 'var(--app-text-muted)'
 
           return (
             <>
@@ -3328,10 +3325,10 @@ export default function CalibraLineItemsGrid(props) {
                 style={{
                   position: 'fixed',
                   top: pos.top, left: pos.left,
-                  minWidth: Math.max(pos.width, 240),
+                  minWidth: Math.max(pos.width, 200),
                   zIndex: 9999,
-                  borderRadius: 14,
-                  padding: 6,
+                  borderRadius: 10,
+                  padding: 5,
                   // Glassmorphism — tema-bagli zemin + ic isik + cam efekti
                   background: __menuBg,
                   border: __menuBorder,
@@ -3375,19 +3372,19 @@ export default function CalibraLineItemsGrid(props) {
                         role="menuitem"
                         disabled={!!it.disabled}
                         onClick={it.onClick}
-                        title={it.disabled ? (it.disabledTitle || '') : (it.title || '')}
+                        title={it.disabled ? (it.disabledTitle || '') : (it.title || it.hint || '')}
                         initial={{ opacity: 0, x: -6 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.04 * idx + 0.06, duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
                         whileHover={!it.disabled ? { x: 2 } : {}}
                         whileTap={!it.disabled ? { scale: 0.985 } : {}}
                         style={{
-                          display: 'flex', alignItems: 'center', gap: 11,
-                          padding: '8px 10px 8px 8px',
-                          fontSize: 12.75, fontWeight: 600, letterSpacing: '-0.005em',
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '8px 10px',
+                          fontSize: 12.5, fontWeight: 500, letterSpacing: '-0.005em',
                           color: it.disabled ? __textColorDis : __textColor,
                           background: 'transparent', border: 'none',
-                          borderRadius: 9,
+                          borderRadius: 7,
                           cursor: it.disabled ? 'not-allowed' : 'pointer',
                           textAlign: 'left',
                           transition: 'background .14s ease, box-shadow .14s ease, color .14s ease',
@@ -3405,42 +3402,20 @@ export default function CalibraLineItemsGrid(props) {
                           e.currentTarget.style.color = it.disabled ? __textColorDis : __textColor
                         }}
                       >
-                        {/* Icon pill — accent renkli kucuk yuvarlak kare */}
-                        <span style={{
+                        {/* 2026-08-19 (kullanici istegi): kompakt gorunum — Islemler menusu
+                            (.sqe-actions-item) ile ayni dil. Accent renkli 26px ikon pill'i
+                            kaldirildi, yerine duz ikon; hover vurgusu accent'i zaten tasiyor. */}
+                        <Icon size={15} strokeWidth={1.9} style={{
                           flexShrink: 0,
-                          width: 26, height: 26,
-                          borderRadius: 8,
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          background: it.disabled ? (__isLight ? 'rgba(148,163,184,0.18)' : 'rgba(148,163,184,0.10)') : pal.bg,
+                          opacity: it.disabled ? 0.45 : 0.8,
                           color: it.disabled ? __textColorDis : pal.text,
-                          border: '1px solid ' + (it.disabled ? (__isLight ? 'rgba(148,163,184,0.20)' : 'rgba(148,163,184,0.10)') : 'transparent'),
-                          transition: 'transform .14s ease',
-                        }}>
-                          <Icon size={14} strokeWidth={1.9} />
+                        }} />
+                        {/* Tek satir label — ikinci satirdaki ipucu (it.hint) kaldirildi,
+                            metin title attribute'una tasindi (bilgi kaybolmuyor). Chevron da
+                            kaldirildi: dekoratifti, gercek bir alt menu acmiyordu. */}
+                        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {it.label}
                         </span>
-                        {/* Label + opsiyonel ipucu metni */}
-                        <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {it.label}
-                          </span>
-                          {it.hint && (
-                            <span style={{
-                              fontSize: 10, fontWeight: 500, letterSpacing: '.02em',
-                              color: it.disabled ? __hintColorDis : __hintColor,
-                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                            }}>
-                              {it.hint}
-                            </span>
-                          )}
-                        </span>
-                        {/* Sag chevron — navigasyon item'larini isaret eder */}
-                        {it.hasArrow && !it.disabled && (
-                          <ChevronRight size={13} strokeWidth={2} style={{
-                            flexShrink: 0,
-                            color: __chevronColor,
-                            transition: 'transform .14s ease, color .14s ease',
-                          }} />
-                        )}
                       </motion.button>
                     </span>
                   )
