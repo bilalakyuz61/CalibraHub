@@ -125,4 +125,11 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        submit_to_testflight: true
+        # false = IPA yalnizca YUKLENIR (App Store Connect isler, build TestFlight'ta hazir olur).
+        # true iken Codemagic HARICI (external) beta incelemesine gonderiyordu ve Apple
+        # "Beta App Information: Feedback Email" + "Beta App Review Information: First/Last Name,
+        # Phone, Email" zorunlu kildigi icin adim KIRMIZI oluyordu. Bizim ihtiyacimiz DAHILI
+        # (internal) test: App Store Connect > TestFlight > Internal Testing grubuna tester eklemek
+        # yeterli, beta incelemesi ve bu formlar GEREKMEZ. Ileride harici testere acilirsa
+        # once test-info doldurulup bu true yapilir.
+        submit_to_testflight: false
