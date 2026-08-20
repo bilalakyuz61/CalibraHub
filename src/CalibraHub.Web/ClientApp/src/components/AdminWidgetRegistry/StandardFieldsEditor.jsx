@@ -887,6 +887,18 @@ export default function StandardFieldsEditor(props) {
 
         {/* Footer */}
         <div className="flex items-center gap-2 px-5 py-3.5 border-t border-slate-200 dark:border-white/[0.08] bg-slate-50/60 dark:bg-white/[0.02] flex-shrink-0">
+          {/* Sifirla — kaydedilmis son hale doner. KAYDETMEZ; kalici yazma hala
+              "Kaydet" ile. (Sutun Ayarlari panelindeki Sifirla ile ayni jest, ama
+              orasi anlik kaydeder, burasi ETMEZ — form geneli yonetisim.) */}
+          <button
+            type="button"
+            onClick={function () { if (!saving) resetChanges() }}
+            disabled={saving || loading}
+            title="Kaydedilmiş son hale dön (kaydetmez)"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors bg-[#fff] text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-white/[0.04] dark:text-white/70 dark:border-white/10 dark:hover:bg-white/[0.08] disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <RotateCcw size={12} strokeWidth={2.2} /> Sıfırla
+          </button>
           <div className="flex-1" />
           <button
             type="button"
