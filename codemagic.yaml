@@ -65,7 +65,11 @@ workflows:
     integrations:
       app_store_connect: CalibraHub ASC
     environment:
-      xcode: latest
+      # Xcode SABITLENDI (16.4). `xcode: latest` = Xcode 26.4.1 -> Kotlin/Native 2.1.0'in
+      # urettigi nesne dosyalari Xcode 26'nin yeni linker'iyla cakisip LINKER CRASH veriyordu
+      # (Ld iosApp -> "clang: PLEASE ATTACH ... linker snapshot"). Kotlin 2.1.0 Xcode 16.x ile
+      # uyumludur. Kotlin surumu yukseltilirse bu pin gozden gecirilebilir.
+      xcode: 16.4
       # ELLE saglanan imzalama: sertifika+profil BIZ olusturduk (openssl CSR -> Apple Distribution
       # cert -> .p12 + App Store provisioning profil). Codemagic'in otomatik cert olusturma sorununu
       # tamamen atlar. "ios_signing" grubundaki secret'lardan gelir (Codemagic UI'da eklenir):
