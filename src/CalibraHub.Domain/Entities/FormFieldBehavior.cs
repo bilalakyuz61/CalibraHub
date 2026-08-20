@@ -40,6 +40,19 @@ public sealed class FormFieldBehavior
     /// FRONTEND'de yorumlanır, backend yalnız taşır/saklar.
     /// </summary>
     public int? CardOrder { get; set; }
+    /// <summary>
+    /// 12-sütunlu ortak ızgarada alanın kapladığı sütun sayısı (2026-08-20):
+    /// 1..12. null = ayarlanmamış — formun `defaultCardWidth`'i (veya frontend
+    /// varsayılanı) kullanılır. Saklarken 1..12 aralığına clamp'lenir (bkz.
+    /// FormBehaviorController.ClampCardWidth) — sessiz bozuk değer yazılmaz,
+    /// clamp uygulanırsa sunucu loguna düşer.
+    /// FormKey = "__card" REZERVE satırı: bu satırda CardWidth alanı tek başına
+    /// formun `defaultCardWidth` değerini taşır (yeni tablo açılmadı); bu satır
+    /// alan kataloğunda karşılığı olmadığından GET /api/form-behavior yanıtındaki
+    /// fields[] dizisine hiç girmez (controller yalnız katalog anahtarlarını
+    /// map'ler), kökte ayrı bir "defaultCardWidth" alanı olarak döner.
+    /// </summary>
+    public int? CardWidth { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
     public int? CreatedById { get; init; }

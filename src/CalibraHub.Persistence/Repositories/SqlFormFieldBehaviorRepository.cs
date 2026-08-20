@@ -30,7 +30,7 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT [Id],[FormCode],[FieldKey],[IsVisible],[IsRequired],[DefaultValue],
-                   [LabelText],[LabelStyle],[RulesJSON],[SortOrder],[CardSection],[CardOrder],[IsActive],
+                   [LabelText],[LabelStyle],[RulesJSON],[SortOrder],[CardSection],[CardOrder],[CardWidth],[IsActive],
                    [CreatedById],[CreatedBy],[Created],[UpdatedById],[UpdatedBy],[Updated]
             FROM {_table}
             WHERE [FormCode]=@FormCode AND [IsActive]=1
