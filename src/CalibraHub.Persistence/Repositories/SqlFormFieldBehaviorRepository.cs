@@ -55,13 +55,14 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                 SortOrder = r.GetInt32(9),
                 CardSection = r.IsDBNull(10) ? null : r.GetInt32(10),
                 CardOrder = r.IsDBNull(11) ? null : r.GetInt32(11),
-                IsActive = r.GetBoolean(12),
-                CreatedById = r.IsDBNull(13) ? null : r.GetInt32(13),
-                CreatedBy = r.IsDBNull(14) ? null : r.GetString(14),
-                Created = r.GetDateTime(15),
-                UpdatedById = r.IsDBNull(16) ? null : r.GetInt32(16),
-                UpdatedBy = r.IsDBNull(17) ? null : r.GetString(17),
-                Updated = r.IsDBNull(18) ? null : r.GetDateTime(18),
+                CardWidth = r.IsDBNull(12) ? null : r.GetInt32(12),
+                IsActive = r.GetBoolean(13),
+                CreatedById = r.IsDBNull(14) ? null : r.GetInt32(14),
+                CreatedBy = r.IsDBNull(15) ? null : r.GetString(15),
+                Created = r.GetDateTime(16),
+                UpdatedById = r.IsDBNull(17) ? null : r.GetInt32(17),
+                UpdatedBy = r.IsDBNull(18) ? null : r.GetString(18),
+                Updated = r.IsDBNull(19) ? null : r.GetDateTime(19),
             });
         }
         return list;
@@ -88,11 +89,11 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                 ins.CommandText = $"""
                     INSERT INTO {_table}
                         ([FormCode],[FieldKey],[IsVisible],[IsRequired],[DefaultValue],
-                         [LabelText],[LabelStyle],[RulesJSON],[SortOrder],[CardSection],[CardOrder],[IsActive],
+                         [LabelText],[LabelStyle],[RulesJSON],[SortOrder],[CardSection],[CardOrder],[CardWidth],[IsActive],
                          [CreatedById],[CreatedBy])
                     VALUES
                         (@FormCode,@FieldKey,@IsVisible,@IsRequired,@DefaultValue,
-                         @LabelText,@LabelStyle,@RulesJson,@SortOrder,@CardSection,@CardOrder,1,
+                         @LabelText,@LabelStyle,@RulesJson,@SortOrder,@CardSection,@CardOrder,@CardWidth,1,
                          @CreatedById,@CreatedBy);
                     """;
                 ins.Parameters.Add(new SqlParameter("@FormCode", formCode));

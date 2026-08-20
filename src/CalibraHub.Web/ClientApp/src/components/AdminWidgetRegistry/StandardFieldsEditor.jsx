@@ -41,7 +41,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import {
   SlidersHorizontal, X as XIcon, Eye, EyeOff, Lock, ArrowUp, ArrowDown,
-  AlertTriangle, Plus, LayoutGrid, Settings2, Trash2,
+  AlertTriangle, Plus, Minus, LayoutGrid, Settings2, Trash2,
   GripVertical, ChevronDown, ChevronRight, Search, RotateCcw,
 } from 'lucide-react'
 // Top govdesine portallanmaz — bkz. LineCardLayoutEditor'daki ayni not: tam ekran
