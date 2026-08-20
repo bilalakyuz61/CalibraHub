@@ -14124,6 +14124,7 @@ END;";
                     [SortOrder]    INT            NOT NULL CONSTRAINT [DF_FormFieldBehavior_Sort] DEFAULT 0,
                     [CardSection]  INT            NULL,
                     [CardOrder]    INT            NULL,
+                    [CardWidth]    INT            NULL,
                     [IsActive]     BIT            NOT NULL CONSTRAINT [DF_FormFieldBehavior_IsActive] DEFAULT 1,
                     [CreatedById]  INT            NULL,
                     [CreatedBy]    NVARCHAR(120)  NULL,
@@ -14142,6 +14143,8 @@ END;";
                     ALTER TABLE [{s}].[FormFieldBehavior] ADD [CardSection] INT NULL;
                 IF COL_LENGTH(N'{sl}.FormFieldBehavior', N'CardOrder') IS NULL
                     ALTER TABLE [{s}].[FormFieldBehavior] ADD [CardOrder] INT NULL;
+                IF COL_LENGTH(N'{sl}.FormFieldBehavior', N'CardWidth') IS NULL
+                    ALTER TABLE [{s}].[FormFieldBehavior] ADD [CardWidth] INT NULL;
             END;
             """;
         await using var cmd = connection.CreateCommand();
