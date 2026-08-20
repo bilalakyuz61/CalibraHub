@@ -928,7 +928,7 @@ export default function AdminWidgetRegistryPanel(props) {
 
           {/* Kart Düzeni editörü KALDIRILDI (2026-08-08, kullanıcı kararı): kalem kartı
               artık sabit/standart düzende (kimlik satırı + kompakt şerit) render ediliyor;
-              alan ayarları yalnızca "Standart Alanlar" ekranından yapılır. Backend
+              alan ayarları yalnızca "Alan Düzeni" ekranından yapılır. Backend
               (/api/line-card-layout + LineCardLayout tablosu) dokunulmadan dormant bırakıldı. */}
 
           {/* Standart Alanlar (Form Davranış Katmanı, 2026-08-05) — yalnizca üst
@@ -940,10 +940,10 @@ export default function AdminWidgetRegistryPanel(props) {
               type="button"
               onClick={function() { setStdFieldsOpen(true) }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/60 dark:bg-white/[0.04] hover:bg-white dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.08] text-[11px] font-semibold text-slate-500 dark:text-white/50 hover:text-indigo-600 dark:hover:text-indigo-300 transition-all flex-shrink-0"
-              title="Standart Alanlar — üst bilgi sabit alanlarının görünürlük, zorunluluk, varsayılan değer, başlık ve koşullu kurallarını yönet"
+              title="Alan Düzeni — sabit alanların görünürlük, zorunluluk, varsayılan değer, başlık ve koşullu kurallarını yönet"
             >
               <SlidersHorizontal size={13} strokeWidth={2} />
-              Standart Alanlar
+              Alan Düzeni
             </button>
           )}
 

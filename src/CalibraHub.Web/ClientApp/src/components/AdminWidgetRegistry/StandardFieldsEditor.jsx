@@ -440,7 +440,7 @@ export default function StandardFieldsEditor(props) {
         className="w-full max-w-[1060px] flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-[#fff] shadow-2xl dark:border-white/10 dark:bg-slate-900"
         style={{ height: 'min(880px, calc(100vh - 64px))' }}
         role="dialog"
-        aria-label="Standart Alanlar"
+        aria-label="Alan Düzeni"
       >
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-200 dark:border-white/[0.08] flex-shrink-0">
@@ -448,7 +448,7 @@ export default function StandardFieldsEditor(props) {
             <SlidersHorizontal size={17} strokeWidth={1.9} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[14px] font-bold text-slate-800 dark:text-white/90">Standart Alanlar — Davranış</div>
+            <div className="text-[14px] font-bold text-slate-800 dark:text-white/90">Alan Düzeni</div>
             <div className="text-[11px] text-slate-600 dark:text-white/60">
               Görünürlük, zorunluluk, varsayılan değer, başlık, koşullu kurallar ve kart Bölümü bu formun tüm kullanıcıları için geçerlidir.
             </div>
