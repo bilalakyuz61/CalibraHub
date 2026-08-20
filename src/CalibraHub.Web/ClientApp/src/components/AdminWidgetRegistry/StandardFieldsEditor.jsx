@@ -31,9 +31,10 @@
  */
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import FieldBehaviorModal from './FieldBehaviorModal'
 import {
   SlidersHorizontal, X as XIcon, Eye, EyeOff, Lock, ArrowUp, ArrowDown,
-  AlertTriangle, Plus, LayoutGrid,
+  AlertTriangle, Plus, LayoutGrid, Settings2, Trash2,
 } from 'lucide-react'
 // Top govdesine portallanmaz — bkz. LineCardLayoutEditor'daki ayni not: tam ekran
 // perde ust menu seridini kilitliyordu. iframe'in kendi body'sine portallanir.
@@ -182,7 +183,18 @@ function SectionSegmented(props) {
 var inputCls = 'w-full px-2 py-1 rounded-md text-[11.5px] border border-slate-200 bg-[#fff] text-slate-700 ' +
   'placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-400 ' +
   'dark:border-white/[0.14] dark:bg-slate-900/60 dark:text-white/85 dark:placeholder:text-white/45'
-var ruleInputCls = inputCls + ' font-mono'
+
+/**
+ * "Ayarla" butonunun etiketi — hangi davranislarin tanimli oldugunu tek bakista
+ * gosterir. Hicbiri yoksa notr "Ayarla" yazar (kullanici neyin bos oldugunu bilir).
+ */
+function describeBehavior(f) {
+  var parts = []
+  if (f.defaultValue) parts.push('varsayılan: ' + f.defaultValue)
+  if (f.visibleIf) parts.push('koşullu görünür')
+  if (f.requiredIf) parts.push('koşullu zorunlu')
+  return parts.length ? parts.join(' · ') : 'Ayarla'
+}
 
 // Sekme key'ine göre bağlam rozeti (yalnız üst bilgi formunda; kalem formunda
 // tek sekme olduğundan gösterilmez).
@@ -219,6 +231,8 @@ export default function StandardFieldsEditor(props) {
   var [fields, setFields] = useState([])
   var [tabs, setTabs] = useState([])
   var [maxStrip, setMaxStrip] = useState(3)
+  // Davranis modali acik olan alanin key'i (null = kapali)
+  var [behaviorKey, setBehaviorKey] = useState(null)
 
   useEffect(function () {
     var alive = true
@@ -257,7 +271,9 @@ export default function StandardFieldsEditor(props) {
         var maxAssigned = loadedFields.reduce(function (acc, f) {
           return (typeof f.cardSection === 'number' && f.cardSection > acc) ? f.cardSection : acc
         }, 0)
-        setMaxStrip(Math.max(3, Math.min(MAX_STRIPS, maxAssigned)))
+        // Taban 1 (eskiden 3): 3 olsaydi kullanici seridi silip kaydetse bile
+        // yeniden acilista bos seritler geri gelirdi — silme kalici olmazdi.
+        setMaxStrip(Math.max(1, Math.min(MAX_STRIPS, maxAssigned)))
       })
       .catch(function (e) { if (alive) setError('Hata: ' + (e && e.message ? e.message : String(e))) })
       .then(function () { if (alive) setLoading(false) })
@@ -283,6 +299,26 @@ export default function StandardFieldsEditor(props) {
 
   function addStrip() {
     setMaxStrip(function (prev) { return Math.min(MAX_STRIPS, prev + 1) })
+  }
+
+  /**
+   * Bir seridi kaldirir (2026-08-20 kullanici istegi: "fazla seritler silinebilmeli").
+   * Serit sayisi kalici bir ayar DEGIL — kayittaki cardSection atamalarindan turetilir.
+   * Bu yuzden silmek = o seridin alanlarini "Varsayilan"a dusurmek + ustundeki
+   * seritleri bir asagi kaydirmak (numaralandirma bosluksuz kalsin). Aksi halde
+   * kaydet/yeniden-ac dongusunde silinen serit geri gelirdi.
+   */
+  function removeStrip(n) {
+    setFields(function (prev) {
+      return prev.map(function (f) {
+        if (f.cardSection === n) return Object.assign({}, f, { cardSection: null, cardOrder: null })
+        if (typeof f.cardSection === 'number' && f.cardSection > n) {
+          return Object.assign({}, f, { cardSection: f.cardSection - 1 })
+        }
+        return f
+      })
+    })
+    setMaxStrip(function (prev) { return Math.max(1, prev - 1) })
   }
 
   /**
@@ -388,6 +424,10 @@ export default function StandardFieldsEditor(props) {
   var scopeKeys = fields.map(function (f) { return f.key }).join(', ')
   var showTabBadge = tabs.length > 0
   var sectionGroups = buildSectionGroups(fields, maxStrip)
+  // Son seritteki alan sayisi — "Serit Sil" butonunun kosulu
+  var lastStripFieldCount = fields.filter(function (f) { return f.cardSection === maxStrip }).length
+  var canRemoveStrip = maxStrip > 1 && lastStripFieldCount === 0
+  var behaviorField = behaviorKey ? fields.find(function (f) { return f.key === behaviorKey }) : null
 
   return createPortal(
     <div
@@ -502,12 +542,34 @@ export default function StandardFieldsEditor(props) {
                 >
                   <Plus size={12} strokeWidth={2.4} /> Yeni Şerit Ekle
                 </button>
+                {/* 2026-08-20 (kullanici istegi): fazla seritler silinebilsin.
+                    Yalnizca SON serit ve yalnizca BOSSA silinir — dolu bir seridi
+                    silmek alanlari sessizce "Varsayilan"a dusururdu (CLAUDE.md
+                    "sessiz continue" yasagi ayni ruh). Alan varsa buton pasif ve
+                    title kullaniciya ne yapmasi gerektigini soyler. */}
+                <button
+                  type="button"
+                  onClick={function () { if (canRemoveStrip) removeStrip(maxStrip) }}
+                  disabled={!canRemoveStrip}
+                  title={
+                    maxStrip <= 1 ? 'En az bir şerit kalmalı'
+                      : (lastStripFieldCount > 0
+                          ? ('Şerit ' + maxStrip + ' içinde ' + lastStripFieldCount + ' alan var — önce onları başka bölüme taşıyın')
+                          : ('Şerit ' + maxStrip + ' sil (boş)'))
+                  }
+                  className={'flex items-center gap-1 px-2.5 py-1 rounded-md text-[10.5px] font-semibold border transition-colors ' + (
+                    canRemoveStrip
+                      ? 'text-rose-600 border-rose-200 bg-rose-50 hover:bg-rose-100 dark:text-rose-300 dark:border-rose-400/30 dark:bg-rose-500/10 dark:hover:bg-rose-500/20'
+                      : 'text-slate-300 border-slate-200 cursor-not-allowed dark:text-white/25 dark:border-white/10'
+                  )}
+                >
+                  <Trash2 size={12} strokeWidth={2.4} /> Şerit Sil
+                </button>
               </div>
 
               {/* Alan detay kolonlarının ortak başlığı (her grupta tekrarlanmaz) */}
-              <div className="hidden lg:grid grid-cols-[1fr_1fr_100px_1fr_1fr] gap-2 px-2.5 pb-1 text-[9.5px] font-semibold text-slate-500 dark:text-white/55">
-                <span>Varsayılan Değer</span><span>Başlık Metni</span><span>Başlık Stili</span>
-                <span>Görünürlük Koşulu</span><span>Zorunluluk Koşulu</span>
+              <div className="hidden lg:grid grid-cols-[1fr_100px_1.2fr] gap-2 px-2.5 pb-1 text-[9.5px] font-semibold text-slate-500 dark:text-white/55">
+                <span>Başlık Metni</span><span>Başlık Stili</span><span>Davranış</span>
               </div>
 
               {/* ── Alanlar (bölüme göre gruplu: Kimlik / Şerit 1.. / Varsayılan) ── */}
@@ -597,15 +659,7 @@ export default function StandardFieldsEditor(props) {
                             </div>
 
                             {/* Satır 2: mevcut detay ayarları (aynen korunur) */}
-                            <div className="grid grid-cols-2 lg:grid-cols-[1fr_1fr_100px_1fr_1fr] gap-2 items-center">
-                              <input
-                                type="text"
-                                value={f.defaultValue}
-                                placeholder={f.dataType === 'date' ? 'TODAY()' : '—'}
-                                title="Yeni kayıtta alan boşsa uygulanır. Tarih alanında TODAY() kullanılabilir."
-                                onChange={function (e) { patchField(f.key, { defaultValue: e.target.value }) }}
-                                className={inputCls}
-                              />
+                            <div className="grid grid-cols-1 lg:grid-cols-[1fr_100px_1.2fr] gap-2 items-center">
                               <input
                                 type="text"
                                 value={f.labelText}
@@ -623,23 +677,23 @@ export default function StandardFieldsEditor(props) {
                                 <option value="modern">Modern</option>
                                 <option value="inline">Sade</option>
                               </select>
-                              <input
-                                type="text"
-                                value={f.visibleIf}
-                                disabled={f.locked}
-                                placeholder={f.locked ? '(kilitli)' : "örn: currency != 'TRY'"}
-                                title="Boş = her zaman görünür. İfade false dönerse alan gizlenir."
-                                onChange={function (e) { patchField(f.key, { visibleIf: e.target.value }) }}
-                                className={ruleInputCls + (f.locked ? ' opacity-50 cursor-not-allowed' : '')}
-                              />
-                              <input
-                                type="text"
-                                value={f.requiredIf}
-                                placeholder="örn: vatIncluded == true"
-                                title="İfade true dönerse alan zorunlu olur (statik Zorunlu ayarına EK)."
-                                onChange={function (e) { patchField(f.key, { requiredIf: e.target.value }) }}
-                                className={ruleInputCls}
-                              />
+                              {/* 2026-08-20 (kullanici istegi): Varsayilan Deger / Gorunurluk
+                                  Kosulu / Zorunluluk Kosulu artik satir icinde serbest metin
+                                  DEGIL — tek butonla acilan modalden tanimlanir. Kosullar
+                                  NCalc ifadesi oldugu icin kurucu + gelismis (ham) mod sunar. */}
+                              <button
+                                type="button"
+                                onClick={function () { setBehaviorKey(f.key) }}
+                                title="Varsayılan değer, görünürlük ve zorunluluk koşulunu tanımla"
+                                className={'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors ' + (
+                                  (f.defaultValue || f.visibleIf || f.requiredIf)
+                                    ? 'text-indigo-600 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 dark:text-indigo-300 dark:border-indigo-400/30 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20'
+                                    : 'text-slate-500 border-slate-200 bg-[#fff] hover:bg-slate-50 dark:text-white/55 dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08]'
+                                )}
+                              >
+                                <Settings2 size={12} strokeWidth={2.2} className="flex-shrink-0" />
+                                <span className="truncate">{describeBehavior(f)}</span>
+                              </button>
                             </div>
                             </div>
                           </div>
@@ -689,6 +743,16 @@ export default function StandardFieldsEditor(props) {
           </button>
         </div>
       </div>
+
+      {/* Alan davranisi modali — Varsayilan Deger / Gorunurluk / Zorunluluk.
+          Kendi portal'ini acar (z-[120]), bu modalin USTUNDE durur. Uygula
+          yalnizca yerel state'i gunceller; kalici yazma yine alttaki "Kaydet". */}
+      <FieldBehaviorModal
+        field={behaviorField}
+        fields={fields.map(function (f) { return { key: f.key, label: f.labelText || f.label || f.key } })}
+        onApply={function (patch) { patchField(behaviorKey, patch) }}
+        onClose={function () { setBehaviorKey(null) }}
+      />
     </div>,
     document.body
   )
