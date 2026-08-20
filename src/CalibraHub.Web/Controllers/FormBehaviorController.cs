@@ -42,14 +42,17 @@ public sealed partial class FormBehaviorController : Controller
     private readonly IFormFieldBehaviorRepository _repository;
     private readonly IAuditTrailService? _audit;
     private readonly ILogger<FormBehaviorController> _logger;
+    private readonly CalibraHub.Application.Abstractions.Services.IWidgetService _widgetService;
 
     public FormBehaviorController(
         IFormFieldBehaviorRepository repository,
         ILogger<FormBehaviorController> logger,
+        CalibraHub.Application.Abstractions.Services.IWidgetService widgetService,
         IAuditTrailService? audit = null)
     {
         _repository = repository;
         _logger = logger;
+        _widgetService = widgetService;
         _audit = audit;
     }
 
@@ -72,17 +75,57 @@ public sealed partial class FormBehaviorController : Controller
     /// DocumentLineFieldCatalog'tan gelir; kalem alanları tek "lines" sekmesindedir.
     /// Desteklenmeyen form → null. isHeader: sekme yönetimi yalnız header'da.
     /// </summary>
-    private static (IReadOnlyList<CatalogItem> Items, bool IsHeader)? ResolveCatalog(string formCode)
+    /// <summary>
+    /// Kalem kartinda inline gosterilen widget tipleri — CalibraLineItemsGrid'deki
+    /// INLINE_TYPES ile AYNI kume olmali (yoksa duzenleyicide gorunen alan kartta
+    /// yok, ya da tersi olur).
+    /// </summary>
+    private static readonly HashSet<string> InlineWidgetTypes =
+        new(StringComparer.OrdinalIgnoreCase) { "text", "numeric", "date", "dropdown" };
+
+    private async Task<(IReadOnlyList<CatalogItem> Items, bool IsHeader)?> ResolveCatalogAsync(
+        string formCode, CancellationToken ct)
     {
         var header = DocumentHeaderFieldCatalog.Resolve(formCode);
         if (header is not null)
             return (header.Select(f => new CatalogItem(f.Key, f.Label, f.Tab, f.DataType, f.Locked)).ToList(), true);
 
         var lines = DocumentLineFieldCatalog.Resolve(formCode);
-        if (lines is not null)
-            return (lines.Select(f => new CatalogItem(f.Key, f.Label, "lines", f.DataType, f.Locked)).ToList(), false);
+        if (lines is null) return null;
 
-        return null;
+        var items = lines.Select(f => new CatalogItem(f.Key, f.Label, "lines", f.DataType, f.Locked)).ToList();
+
+        // 2026-08-20 — "Kartta Goster" widget'lari da katalogda. Gerekce: bu alanlar
+        // kalem kartinin izgarasinda GERCEKTEN yer kapliyor (CalibraLineItemsGrid
+        // widgetCardColumns), ama Alan Duzeni'nde gorunmedikleri icin bolum/sira/
+        // genislikleri ayarlanamiyordu — kullanici karttaki "Parti No"yu duzenleyicide
+        // bulamiyordu. Anahtar "w_" + WidgetCode: kart tarafi zaten lineBehaviors[col.key]
+        // ile bu anahtari okuyor, dolayisiyla ek bir cozumleme kodu GEREKMEDI.
+        try
+        {
+            var schema = await _widgetService.GetFormSchemaByCodeAsync(formCode, ct);
+            if (schema?.Widgets is not null)
+            {
+                foreach (var w in schema.Widgets)
+                {
+                    if (!w.ShowOnCard || !w.IsActive) continue;
+                    if (!InlineWidgetTypes.Contains(w.DataType ?? string.Empty)) continue;
+                    var key = "w_" + w.WidgetCode;
+                    if (items.Any(i => string.Equals(i.Key, key, StringComparison.OrdinalIgnoreCase))) continue;
+                    var ruleType = string.Equals(w.DataType, "numeric", StringComparison.OrdinalIgnoreCase)
+                        ? "numeric" : "text";
+                    items.Add(new CatalogItem(key, w.Label ?? w.WidgetCode, "lines", ruleType, false));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Fail-open: widget semasi okunamazsa standart alanlarla devam — duzenleyici
+            // acilmaya devam eder, yalniz widget satirlari listelenmez.
+            _logger.LogWarning(ex, "Alan Düzeni: {FormCode} için widget şeması okunamadı.", formCode);
+        }
+
+        return (items, false);
     }
 
     [HttpGet("/api/form-behavior/{formCode}")]
@@ -92,7 +135,7 @@ public sealed partial class FormBehaviorController : Controller
             return Json(new { ok = false, error = "Geçersiz form kodu." });
         formCode = formCode.Trim();
 
-        var resolved = ResolveCatalog(formCode);
+        var resolved = await ResolveCatalogAsync(formCode, ct);
         if (resolved is null)
             return Json(new { ok = false, error = "Bu form için davranış katmanı desteklenmiyor." });
         var (catalog, isHeader) = resolved.Value;
@@ -159,7 +202,7 @@ public sealed partial class FormBehaviorController : Controller
             return Json(new { ok = false, error = "Geçersiz form kodu." });
 
         var formCode = request.FormCode.Trim();
-        var resolvedCat = ResolveCatalog(formCode);
+        var resolvedCat = await ResolveCatalogAsync(formCode, ct);
         if (resolvedCat is null)
             return Json(new { ok = false, error = "Bu form için davranış katmanı desteklenmiyor." });
         var (catalogItems, isHeaderForm) = resolvedCat.Value;
