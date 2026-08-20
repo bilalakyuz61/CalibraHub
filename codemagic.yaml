@@ -94,6 +94,9 @@ workflows:
             --type IOS_APP_STORE \
             --create
           keychain add-certificates
+          # use-profiles projeyi CWD'den bulur; iosApp.xcodeproj ic ice oldugundan iosApp'e gir
+          # (repo kokunden calisirsa nested projeyi yamayip imzayi bos birakiyordu).
+          cd "$KMP_DIR/iosApp"
           xcode-project use-profiles
       - name: IPA derle (imzali)
         script: |

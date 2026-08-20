@@ -38,6 +38,11 @@ targets:
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.0"
+        # Manuel imzalama (Codemagic use-profiles provisioning profil'i buraya ekler).
+        # DEVELOPMENT_TEAM = Apple Team ID (BILAL AKYUZ). Codemagic archive CODE_SIGN_STYLE=Manual
+        # ile calisiyor; team + manuel stil ayari olmadan "requires a provisioning profile" verir.
+        DEVELOPMENT_TEAM: D74BM279A2
+        CODE_SIGN_STYLE: Manual
         # KMP framework arama yolu (embedAndSignAppleFrameworkForXcode buraya kopyalar).
         FRAMEWORK_SEARCH_PATHS:
           - $(inherited)
