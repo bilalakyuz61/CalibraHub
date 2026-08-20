@@ -536,6 +536,30 @@ export default function CalibraLineItemsGrid(props) {
     return c !== materialCodeCol && c !== materialNameCol
   })
 
+  // ── Kart bölüm/sıra ayarları (Standart Alanlar → cardSection/cardOrder,
+  //    2026-08-20) — kalem formu (*_LINES) için "Standart Alanlar" ekranından
+  //    gelen bölüm/sıra ayarı burada tüketilir (önceden yalnız üst bilgi
+  //    formunda uygulanıyordu, kalem kartında ayar sessizce etkisizdi).
+  //    cardSection: 0=kimlik satırı, 1..N=şerit N. cardOrder: bölüm içi sıra.
+  //    lineBehaviors yoksa veya alanda değer yoksa BUGÜNKÜ sabit düzen aynen
+  //    korunur (fail-open): materialCode/materialName/lineTotal kimlikte,
+  //    geri kalan tek şeritte, orijinal kolon sırasıyla.
+  function resolvedCardSection(col) {
+    if (col === materialCodeCol) return 0 // giris kapisi — SECTION hicbir ayarla degismez
+    var defaultSection = (col === materialNameCol || col === lineTotalCol) ? 0 : 1
+    if (!lineBehaviors) return defaultSection
+    var b = lineBehaviors[col.key]
+    if (!b || b.cardSection === null || b.cardSection === undefined) return defaultSection
+    return (typeof b.cardSection === 'number' && isFinite(b.cardSection)) ? b.cardSection : defaultSection
+  }
+  function resolvedCardOrder(col) {
+    if (!lineBehaviors) return null
+    var b = lineBehaviors[col.key]
+    if (!b || b.cardOrder === null || b.cardOrder === undefined) return null
+    return (typeof b.cardOrder === 'number' && isFinite(b.cardOrder)) ? b.cardOrder : null
+  }
+  function isIdentityCol(col) { return resolvedCardSection(col) === 0 }
+
   // ── Kart duzeni uygulamasi (2026-08-05) ───────────────────────────────────
   //   Duzenlenebilir ogeler = kimlik kolonlari (materialCode/materialName) +
   //   sistem kolonlari (cardBodyColumns) + kartta gosterilen widget'lar.
@@ -558,11 +582,33 @@ export default function CalibraLineItemsGrid(props) {
   var useCustomLayout = hasCustomLayout
   var cardItems = (function () {
     if (!hasCustomLayout) {
-      // Varsayilan gorunum: kimlik kolonlari sabit bolgede cizilir, alan
-      // izgarasina girmez (mevcut davranis birebir korunur).
-      return cardBodyColumns.concat(widgetCardColumns).map(function (c) {
-        return { col: c, span: 12, visible: true }
+      // Varsayilan gorunum: materialCode HARIC tum sistem kolonlari + widget'lar
+      // havuza girer (materialName de dahil — boylece admin cardSection ile onu
+      // seride tasiyabilir/geri getirebilir). isIdentityCol(col) hangi ogenin
+      // kimlik satirinda, hangisinin seritte cizilecegini calisma-zamaninda
+      // belirler (bkz. asagidaki kimlik/serit render blogu). Standart Alanlar'da
+      // ayar YOKSA materialName/lineTotal varsayilan olarak identity(0) sayilir,
+      // digerleri strip(1) — yani mevcut gorunum birebir korunur (fail-open).
+      // Section+order'a gore ONCEDEN siralanir: ayni filterFn'i kullanan
+      // renderFieldsList cagrilari (kimlik-ekstra + her serit) boylece dogru
+      // sirada cizer (cardOrder null olanlar orijinal kolon sirasini korur).
+      var __pool = mainFieldColumns
+        .filter(function (c) { return c !== materialCodeCol })
+        .concat(widgetCardColumns)
+        .map(function (c, idx) {
+          return { col: c, span: 12, visible: true, __sec: resolvedCardSection(c), __ord: resolvedCardOrder(c), __idx: idx }
+        })
+      __pool.sort(function (a, b) {
+        if (a.__sec !== b.__sec) return a.__sec - b.__sec
+        if (a.__ord !== null && b.__ord !== null) {
+          if (a.__ord !== b.__ord) return a.__ord - b.__ord
+          return a.__idx - b.__idx
+        }
+        if (a.__ord !== null) return -1
+        if (b.__ord !== null) return 1
+        return a.__idx - b.__idx
       })
+      return __pool
     }
     var ordered = []
     var seen = {}
@@ -618,6 +664,26 @@ export default function CalibraLineItemsGrid(props) {
     })
     return ordered
   })()
+
+  // ── Kimlik/serit gruplama (Standart Alanlar cardSection/cardOrder, 2026-08-20) ──
+  //   cardItems zaten (section, order) sirasina gore siralanmis geliyor (yukarida,
+  //   yalniz !hasCustomLayout dalinda) — burada sadece gruplanir. materialName/
+  //   lineTotal identity(0) iken kendi sabit kimlik yuvalarinda (bespoke stil)
+  //   kalir; kimlige tasinan DIGER alanlar (ör. Miktar) identityExtraItems ile
+  //   ayni satirda genel hucre goruntusuyle (renderFieldsList) render edilir.
+  var identityExtraItems = cardItems.filter(function (it) {
+    return isIdentityCol(it.col) && it.col !== materialNameCol && it.col !== lineTotalCol
+  })
+  var showIdentityTotal = !!lineTotalCol && isIdentityCol(lineTotalCol)
+  var __stripSectionSet = {}
+  cardItems.forEach(function (item) {
+    if (isIdentityCol(item.col)) return
+    var sec = resolvedCardSection(item.col)
+    if (!isFinite(sec) || sec < 1) sec = 1
+    __stripSectionSet[sec] = true
+  })
+  var stripSections = Object.keys(__stripSectionSet).map(Number).sort(function (a, b) { return a - b })
+  if (stripSections.length === 0) stripSections = [1] // ayar yoksa TEK serit, bugunku gorunum
 
   // ── Satir kisayol menusu (•••) ───────────────────────────
   //   Aksiyon seridinin basindaki MoreHorizontal butonuna basilinca acilan liste.
@@ -1326,6 +1392,11 @@ export default function CalibraLineItemsGrid(props) {
   // ── Form Davranış Katmanı — kalem kolonu davranışları (2026-08-05) ──
   //   Varsayılandan farklı davranışı olan kolonlar döner; fail-open: istek
   //   düşerse / kayıt yoksa davranış katmanı hiç devreye girmez.
+  //   2026-08-20: cardSection/cardOrder (kart Bölüm/Sıra ayarı) da BURADAN
+  //   okunur — önceden yalnız üst bilgi formunda (DocumentEdit) tüketiliyordu,
+  //   kalem kartında hiç uygulanmıyordu (ayar sessizce etkisizdi). hasBehavior
+  //   artik cardSection/cardOrder'i da sayar; yoksa map'e hic girmez (fail-open,
+  //   alan bazinda — bkz. resolvedCardSection/resolvedCardOrder default'lari).
   useEffect(function () {
     if (!__layoutFormCode) return undefined
     var alive = true
@@ -1336,8 +1407,10 @@ export default function CalibraLineItemsGrid(props) {
         var map = {}
         var any = false
         data.fields.forEach(function (f) {
+          var hasCardSection = f.cardSection !== null && f.cardSection !== undefined
+          var hasCardOrder = f.cardOrder !== null && f.cardOrder !== undefined
           var hasBehavior = f.isVisible === false || f.isRequired === true
-            || f.defaultValue || f.visibleIf || f.requiredIf
+            || f.defaultValue || f.visibleIf || f.requiredIf || hasCardSection || hasCardOrder
           if (!hasBehavior) return
           any = true
           map[f.key] = {
@@ -1346,6 +1419,8 @@ export default function CalibraLineItemsGrid(props) {
             defaultValue: f.defaultValue || null,
             visibleIf: f.visibleIf || null,
             requiredIf: f.requiredIf || null,
+            cardSection: hasCardSection ? f.cardSection : null,
+            cardOrder: hasCardOrder ? f.cardOrder : null,
           }
         })
         setLineBehaviors(any ? map : null)
@@ -2080,20 +2155,15 @@ export default function CalibraLineItemsGrid(props) {
                 )
               }
 
-              /* ── Ortak kimlik-satırı görünürlüğü (2026-08-19 — referans tasarım
-                 iki dalda da zorunlu) ────────────────────────────────────────────
+              /* ── Ortak kimlik-satırı görünürlüğü (2026-08-19 referans tasarım,
+                 2026-08-20 Standart Alanlar cardSection ile genelleştirildi) ──
                  materialCode her zaman kimlik satırında (giris kapisi, hicbir
-                 duzenle gizlenemez — locked). materialName/lineTotal icin: ozel
-                 duzen varsa admin'in o alan icin verdigi visible bayragina
-                 saygi duyulur (cardItems icinde bulunur); ozel duzen yoksa (veya
-                 admin'in duzeninde hic yer almiyorsa) eskisi gibi hep gosterilir. */
-              var __identityNameItem = cardItems.find(function (it) { return it.col === materialNameCol }) || null
-              var __identityTotalItem = cardItems.find(function (it) { return it.col === lineTotalCol }) || null
-              var showIdentityName = !!materialNameCol && (!__identityNameItem || __identityNameItem.visible !== false)
-              var showIdentityTotal = !!lineTotalCol && (!__identityTotalItem || __identityTotalItem.visible !== false)
-              // Serit alanlarindan HER ZAMAN cikarilir — kimlik satirinda zaten
-              // gosterilirler (cift-gosterim olmasin, hem varsayilan hem ozel duzen).
-              function __isIdentityCol(col) { return col === materialCodeCol || col === materialNameCol || col === lineTotalCol }
+                 ayarla gizlenemez/tasinamaz — locked). materialName/lineTotal:
+                 cardSection=0 (varsayilan) iken kendi sabit kimlik yuvasinda
+                 (bespoke stil); admin cardSection>=1 verirse seride duser —
+                 bkz. component-level isIdentityCol/showIdentityTotal/
+                 identityExtraItems/stripSections (yukarida, satir-disi). */
+              var showIdentityName = !!materialNameCol && isIdentityCol(materialNameCol)
 
               return (
                 <motion.div
@@ -2199,6 +2269,16 @@ export default function CalibraLineItemsGrid(props) {
                               </div>
                             </div>
                           )}
+                          {/* Kimlige tasinan EK alanlar (Standart Alanlar cardSection=0,
+                              ör. Miktar) — materialCode/materialName'in yaninda, ayni
+                              genel hucre goruntusuyle (renderFieldsList — DRY, TL mirror/
+                              widget/behInvalid mantigi tekrar yazilmaz). Ayar yoksa
+                              identityExtraItems bos → bu blok hic render edilmez. */}
+                          {identityExtraItems.length > 0 && renderFieldsList(
+                            { display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 10, flexShrink: 0 },
+                            'clc-ident-extra-fields',
+                            function (item) { return isIdentityCol(item.col) && item.col !== materialNameCol && item.col !== lineTotalCol }
+                          )}
                         </div>
                         {showIdentityTotal && (
                           <div className="flex-shrink-0 text-right">
@@ -2225,19 +2305,26 @@ export default function CalibraLineItemsGrid(props) {
                       )}
                     </div>
 
-                    <div className="clc-strip flex items-stretch">
-                      {/* Kompakt bolmeli hucre satiri (referans PlanetCS tasarimi,
-                          2026-08-19): CSS-grid DEGIL flex-wrap — bosluk/hiza sorunu
-                          eden 48-birim grid + serbest satir/sutun tamamen kalkti.
-                          Her hucre kendi border-left'i ile dikey ayrac cizer
-                          (bkz. .clc-fields-row / .clc-field-cell CSS), sigmayan
-                          alanlar alt satira sarar (bos hucre/sutun olusmaz). */}
-                      {renderFieldsList(
-                        { display: 'flex', flexWrap: 'wrap', alignItems: 'stretch', flex: 1, minWidth: 0 },
-                        'clc-fields-row' + (isKitComponent ? ' opacity-90' : ''),
-                        function(item) { return !__isIdentityCol(item.col) }
-                      )}
-                    </div>
+                    {/* Kompakt bolmeli hucre seridi/seritleri (referans PlanetCS tasarimi,
+                        2026-08-19; 2026-08-20 Standart Alanlar cardSection ile COK
+                        SERITLI hale getirildi): CSS-grid DEGIL flex-wrap — bosluk/hiza
+                        sorunu eden 48-birim grid + serbest satir/sutun tamamen kalkti.
+                        Her hucre kendi border-left'i ile dikey ayrac cizer (bkz.
+                        .clc-fields-row / .clc-field-cell CSS), sigmayan alanlar alt
+                        satira sarar (bos hucre/sutun olusmaz). Ayar yoksa stripSections
+                        hep [1] → bugunkuyle BIREBIR tek serit. Aksiyon sutunu (soldaki
+                        dikey buton grubu) seritlerin DISINDA, tek yerde — tekrarlanmaz. */}
+                    {stripSections.map(function (sec) {
+                      return (
+                        <div className="clc-strip flex items-stretch" key={'clc-strip-' + sec}>
+                          {renderFieldsList(
+                            { display: 'flex', flexWrap: 'wrap', alignItems: 'stretch', flex: 1, minWidth: 0 },
+                            'clc-fields-row' + (isKitComponent ? ' opacity-90' : ''),
+                            function (item) { return !isIdentityCol(item.col) && resolvedCardSection(item.col) === sec }
+                          )}
+                        </div>
+                      )
+                    })}
                     </div>
                     <div
                       className="clc-card-actions flex flex-col items-center gap-1 flex-shrink-0"
