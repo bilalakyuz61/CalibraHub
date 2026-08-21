@@ -2282,6 +2282,17 @@
     /* Dar konteynerde hucre tasmasin — px degeri korunur ama tavan %100 olur. */
     .sqe-strips--free .sqe-strip--narrow .sqe-hrow { max-width: 100%; }
 
+    /* Baska sekmeden TASINAN blok (2026-08-20). Hedef sekmede hangi bolum oldugu
+       belli olsun diye basliklandirilir; ust sinir cizgisiyle ayrilir. */
+    .sqe-moved-block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--sqe-strip-border, #e2e8f0); }
+    .sqe-moved-block:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+    .sqe-moved-title {
+        font-size: .78rem; font-weight: 600; margin-bottom: 8px;
+        color: var(--app-text-muted, #64748b);
+    }
+    body.app-theme-dark .sqe-moved-block { border-top-color: rgba(255,255,255,.08); }
+    body.app-theme-dark .sqe-moved-title { color: rgba(255,255,255,.55); }
+
     .sqe-strip--narrow {
         grid-template-columns: repeat(6, minmax(0, 1fr));
         background-image: repeating-linear-gradient(
@@ -3927,6 +3938,106 @@
             });
         }
 
+        /* ── Sekme davranisi (2026-08-20, Faz 3) ────────────────────────────────
+           GET /api/form-behavior yaniti `tabs[]` ZATEN donuyordu ve Alan Duzeni'nde
+           duzenleniyordu, ama belge ekrani bunu HIC uygulamiyordu — olu veriydi.
+           Burada uygulanir: gorunurluk, sira, etiket ve icerik TASIMA.
+
+           GATE YOK (bilincli): sekme ayari form koduna bagli veridir; ayar
+           yapilmamis formda `tabs[]` katalog varsayilanini doner ve bu fonksiyon
+           HIC BIR SEY degistirmez (no-op). CSS'teki serbest/izgara gate'i paylasilan
+           stil icindi; burada gerek yok. Aksi halde bir formun sekmesini gizlemek
+           icin o formun TUM gorunumunu 'free'ye cevirmek gerekirdi.
+
+           SIRA: once plan (DOM'a dokunmadan) hesaplanir, guvenlik kontrolleri
+           gecerse uygulanir. Boylece "hicbir sekme kalmadi" durumunda kullanici
+           ekranda kilitlenmez — hicbir degisiklik yapilmaz. */
+        function applyTabs(tabs) {
+            if (!Array.isArray(tabs) || !tabs.length) return;
+            var nav = document.querySelector('.sqe-tab-nav');
+            if (!nav) return;
+
+            var cfg = {};
+            tabs.forEach(function (t) { if (t && t.key) cfg[t.key] = t; });
+
+            function btnOf(k)  { return nav.querySelector('[data-sqe-tab-btn="' + k + '"]'); }
+            function paneOf(k) { return document.querySelector('[data-sqe-pane="' + k + '"]'); }
+
+            // ── 1) Tasima hedeflerini coz (zincir/dongu KORUMASI) ──
+            // Yalniz TEK adim tasima destekli: hedefin kendi hedefi varsa tasima
+            // yapilmaz. Bu, A→B→C zincirini ve A→B / B→A dongusunu tek kuralla keser.
+            var moveTo = {};
+            Object.keys(cfg).forEach(function (k) {
+                var t = cfg[k].targetTabKey;
+                if (!t || t === k || !cfg[t]) return;
+                if (cfg[t].targetTabKey) {
+                    try { console.warn('[Tabs] zincir/dongu — tasima atlandi:', k, '→', t); } catch (_) {}
+                    return;
+                }
+                if (!paneOf(k) || !paneOf(t)) return;
+                moveTo[k] = t;
+            });
+
+            // ── 2) Nihai icerik durumunu DOM'a DOKUNMADAN hesapla ──
+            var receives = {};
+            Object.keys(moveTo).forEach(function (k) { receives[moveTo[k]] = true; });
+
+            var visible = {};
+            Object.keys(cfg).forEach(function (k) {
+                var pane = paneOf(k), btn = btnOf(k);
+                if (!pane || !btn) return;                       // bu belge tipinde render edilmemis
+                var hasOwn = pane.children.length > 0;
+                var finalHas = (moveTo[k] ? false : hasOwn) || !!receives[k];
+                visible[k] = (cfg[k].isVisible !== false) && finalHas;
+            });
+
+            // ── 3) Guvenlik: en az bir sekme gorunur kalmali ──
+            var anyVisible = Object.keys(visible).some(function (k) { return visible[k]; });
+            if (!anyVisible) {
+                try { console.warn('[Tabs] tum sekmeler gizlenecekti — ayar UYGULANMADI.'); } catch (_) {}
+                return;
+            }
+
+            // ── 4) Uygula: tasi ──
+            Object.keys(moveTo).forEach(function (k) {
+                var src = paneOf(k), dst = paneOf(moveTo[k]);
+                if (!src || !dst) return;
+                var block = document.createElement('div');
+                block.className = 'sqe-moved-block';
+                block.setAttribute('data-moved-from', k);
+                var title = document.createElement('div');
+                title.className = 'sqe-moved-title';
+                title.textContent = (cfg[k].labelText || (btnOf(k) && btnOf(k).textContent) || k).trim();
+                block.appendChild(title);
+                while (src.firstChild) block.appendChild(src.firstChild);
+                dst.appendChild(block);
+            });
+
+            // ── 5) Uygula: etiket + gorunurluk ──
+            Object.keys(cfg).forEach(function (k) {
+                var btn = btnOf(k);
+                if (!btn) return;
+                if (cfg[k].labelText) btn.textContent = cfg[k].labelText;
+                btn.style.display = visible[k] ? '' : 'none';
+            });
+
+            // ── 6) Uygula: sira (yalniz gorunurler yeniden dizilir) ──
+            Object.keys(cfg)
+                .filter(function (k) { return visible[k] && btnOf(k); })
+                .sort(function (a, b) { return (cfg[a].sortOrder || 0) - (cfg[b].sortOrder || 0); })
+                .forEach(function (k) { nav.appendChild(btnOf(k)); });
+
+            // ── 7) Aktif sekme gizlendiyse ilk gorunure dus ──
+            var activeBtn = nav.querySelector('.sqe-tab-btn.is-active');
+            var activeKey = activeBtn ? activeBtn.getAttribute('data-sqe-tab-btn') : null;
+            if (!activeKey || !visible[activeKey]) {
+                var first = Object.keys(cfg)
+                    .filter(function (k) { return visible[k] && btnOf(k); })
+                    .sort(function (a, b) { return (cfg[a].sortOrder || 0) - (cfg[b].sortOrder || 0); })[0];
+                if (first && typeof sqActivateTab === 'function') sqActivateTab(first);
+            }
+        }
+
         function applyStripColumns() {
             // Serbest duzende sutun kavrami yok — hucreler kendi px genisliginde akar.
             if (__sqFreeLayout) return;
@@ -3969,6 +4080,11 @@
                 } else {
                     applyCardWidths(data.fields, data.defaultCardWidth);
                 }
+
+                // Sekme gorunurluk / sira / etiket / TASIMA — duzen modundan bagimsiz
+                // (veri form koduna bagli; ayarsiz formda no-op). Alan tasima
+                // (applySections) SONRASINDA calisir ki pane doluluk hesabi dogru olsun.
+                applyTabs(data.tabs);
             })
             .catch(function (e) { try { console.warn('[CardSections] yükleme hatası (fail-open):', e && e.message) } catch (_) {} })
             // Once genislik gozcusu (narrow sinifi yerlesir), SONRA sutun sayisi —

@@ -414,6 +414,7 @@ export default function StandardFieldsEditor(props) {
             key: t.key, label: t.label, locked: t.locked === true,
             isVisible: t.isVisible !== false,
             labelText: t.labelText || '',
+            targetTabKey: t.targetTabKey || '',
           }
         }))
         // Mevcut en yüksek şerit numarasına göre başlangıç şerit sayısı (en az 3,
@@ -583,7 +584,11 @@ export default function StandardFieldsEditor(props) {
           }
         }),
         tabs: tabs.map(function (t, i) {
-          return { key: t.key, isVisible: t.isVisible, sortOrder: i, labelText: t.labelText.trim() || null }
+          return {
+            key: t.key, isVisible: t.isVisible, sortOrder: i,
+            labelText: t.labelText.trim() || null,
+            targetTabKey: t.targetTabKey || null,
+          }
         }),
         // Serit satir yukseklikleri — yalniz DEGER VERILMIS seritler gonderilir;
         // gonderilmeyen serit sunucuda satir acmaz (varsayilan, fail-open).
@@ -693,6 +698,23 @@ export default function StandardFieldsEditor(props) {
                           }}
                           className={inputCls + ' max-w-[220px]'}
                         />
+                        {/* Hedef sekme (2026-08-20): icerigi baska sekmeye tasi.
+                            Kaynak sekme bos kalirsa belge ekraninda otomatik gizlenir —
+                            "Kalem Bilgileri → Genel Bilgiler" secimi tek-ekran demektir. */}
+                        <select
+                          value={t.targetTabKey || ''}
+                          title="İçeriği başka bir sekmeye taşı"
+                          onChange={function (e) {
+                            var v = e.target.value
+                            setTabs(function (prev) { return prev.map(function (x) { return x.key === t.key ? Object.assign({}, x, { targetTabKey: v }) : x }) })
+                          }}
+                          className={inputCls + ' max-w-[170px]'}
+                        >
+                          <option value="">Kendi sekmesi</option>
+                          {tabs.filter(function (o) { return o.key !== t.key }).map(function (o) {
+                            return <option key={o.key} value={o.key}>→ {o.labelText || o.label}</option>
+                          })}
+                        </select>
                         <div className="flex-1" />
                         {t.locked ? (
                           <span title="Bu sekme gizlenemez"><Lock size={12} className="text-slate-400 dark:text-white/45" /></span>
