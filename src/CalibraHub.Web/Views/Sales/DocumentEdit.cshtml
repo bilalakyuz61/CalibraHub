@@ -2396,12 +2396,30 @@
        yuksekti ve degerler birkac px kayiyordu. Deger kutularina ORTAK min-height verip
        icerigi dikeyde ortaliyoruz (etiketler zaten flex-start ile hizali). */
     /* input replaced-element: display:flex UYGULANMAZ — dikey ortalama line-height ile. */
-    .sqe-hform .sqe-ident-row .sqe-hrow > input.sqe-hinput { min-height: 34px; line-height: 1.4; }
+    /* 2026-08-22 DUZELTME: `min-height` yetmiyor — kutular TABANI paylasiyor ama
+       tavani paylasmiyordu. Teklif No (form-control-sm, .95rem) ile Cari Kod
+       (React .gl-card: 28px butonlar + kendi input'u) farkli DOGAL yukseklikler
+       uretiyor; ikisi de 34'un USTUNDE kaldigi icin min-height hicbir seyi
+       esitlemiyor ve merkezleri birkac px kayiyordu (ayni hata kalem kartinin
+       kimlik satirinda da vardi, orada da sabit yukseklikle cozuldu).
+       SABIT ortak yukseklik + ic kontrollerin %100 doldurmasi: her kontrolun
+       dikey dolgusu simetrik oldugundan metin merkezi = kutu merkezi olur,
+       punto farkindan BAGIMSIZ olarak hizalanirlar. */
+    .sqe-hform .sqe-ident-row .sqe-hrow > input.sqe-hinput {
+        height: 36px; min-height: 36px; line-height: 1.4;
+    }
     .sqe-hform .sqe-ident-row .sqe-hrow > .sqe-hcombo,
-    .sqe-hform .sqe-ident-row .sqe-hrow > .gl-wrapper { min-height: 34px; align-items: center; }
+    .sqe-hform .sqe-ident-row .sqe-hrow > .gl-wrapper {
+        height: 36px; min-height: 36px; align-items: center;
+    }
+    .sqe-hform .sqe-ident-row .sqe-hcombo > input.sqe-hinput,
+    .sqe-hform .sqe-ident-row .gl-wrapper > .gl-card,
+    .sqe-hform .sqe-ident-row .gl-wrapper .gl-card__input {
+        height: 100% !important;
+    }
     /* Cari adı: kod input'uyla aynı satırda ve aynı dikey hizada (Seq 1104). */
     .sqe-hform .sqe-ident-row .sqe-hrow[data-field-key="customer"] > .sqe-customer-name {
-        align-self: center; min-height: 34px; display: flex; align-items: center;
+        align-self: center; height: 36px; min-height: 36px; display: flex; align-items: center;
     }
 
     /* 2026-08-19 (kullanici istegi): Temsilci combobox'i dar kaliyordu — sarmalayici

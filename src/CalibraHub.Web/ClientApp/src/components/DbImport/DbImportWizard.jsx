@@ -42,72 +42,16 @@ function qs(name) {
 
 /*
  * Zamanlama modalı, mevcut "Zamanlanmış Görev" ekranını (/Admin/ScheduledTaskEdit)
- * gömülü iframe olarak açar (bkz. yorum aşağıda). O ekran GENEL bir form — 7 farklı
- * görev türünü destekler ve kullanıcı "Görev Türü" sekmesinden serbestçe başka bir
- * türe (SQL Prosedür, HTTP API…) geçebilir ya da "Aktarım İşi" seçicisinden başka
- * bir içe aktarım işini seçebilir. Bu wizard'dan açılan zamanlama HER ZAMAN bu işe
- * (jobId) özeldir — tür veya iş değişirse zamanlama sessizce yanlış/kopuk bir göreve
- * dönüşür. Aynı origin (same-origin) iframe olduğundan, sayfa yüklendikten sonra bu
- * iki alanı DOM üzerinden kilitleriz (görsel + etkileşimsiz); ekranın kendi kaydetme
- * mantığı `.value`'yu okuduğu için değer kaydetme payload'ına doğru gider (disabled
- * olsa da .value okunabilir — form submit değil, fetch ile elle toplanıyor).
- * NOT: Bu, DbImport tarafındaki tek taraflı bir görsel kilittir; sunucu tarafında
- * ScheduledTaskController.ScheduledTaskSave şu an taskType/jobId'yi doğrulamıyor —
- * eski sekme veya elle istekle bu kilit atlatılabilir. Kalıcı çözüm (ScheduledTaskEdit
- * ekranına native `locked=1` desteği + server-side sabitleme) backend/ScheduledTask
- * kapsamındadır, bu görevin sınırları dışında — flag'lendi.
+ * gömülü iframe olarak açar. O ekran GENEL bir form — 7 farklı görev türünü destekler
+ * ve normalde kullanıcı "Görev Türü" sekmesinden serbestçe başka bir türe geçebilir ya
+ * da "Aktarım İşi" seçicisinden başka bir işi seçebilir. Bu wizard'dan açılan zamanlama
+ * HER ZAMAN bu işe (jobId) özeldir — tür veya iş değişirse zamanlama sessizce yanlış/kopuk
+ * bir göreve dönüşür. Kilit artık iframe'e DOM ile müdahale ederek DEĞİL, `lockContext`
+ * query parametresiyle SUNUCU TARAFINDA uygulanır (bkz. ScheduledTaskController.
+ * ScheduledTaskEdit + ScheduledTaskEdit.cshtml `Model.IsLockedContext`) — ekran class/id
+ * adları değişse bile kilit sessizce devre dışı kalmaz, ayrıca ScheduledTaskSave elle
+ * POST ile de aynı kuralı (jobId zorunlu + DB'de gerçekten var olmalı) uygular.
  */
-function lockScheduleIframeToJob(iframeEl, jobId) {
-  try {
-    const doc = iframeEl && iframeEl.contentDocument
-    if (!doc) return
-
-    // 1) Görev Türü kartlarını kilitle — bu zamanlama yalnızca "Veritabanı Aktarımı" türünde kalmalı.
-    const cards = doc.querySelectorAll('.ste-type-card')
-    if (cards.length) {
-      cards.forEach((card) => {
-        const input = card.querySelector('input')
-        const isImportCard = !!input && input.value === '8'
-        card.style.pointerEvents = 'none'
-        card.style.opacity = isImportCard ? '1' : '0.4'
-        card.title = isImportCard
-          ? 'İçe aktarım görevleri için sabittir.'
-          : 'Bu zamanlama bir içe aktarım işine bağlı — görev türü değiştirilemez.'
-      })
-      const typePanel = doc.getElementById('panel-tasktype')
-      if (typePanel && !doc.querySelector('.dbi-schedule-lock-note')) {
-        const note = doc.createElement('div')
-        note.className = 'dbi-schedule-lock-note'
-        note.style.cssText = 'display:flex;align-items:center;gap:8px;margin:0 0 14px;padding:10px 14px;'
-          + 'border-radius:8px;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.35);'
-          + 'color:#a5b4fc;font-size:13px;line-height:1.5;'
-        note.textContent = '🔒 Görev türü ve aktarım işi bu içe aktarım sihirbazından geldiği için sabittir — değiştirilemez.'
-        typePanel.insertBefore(note, typePanel.firstChild)
-      }
-    }
-
-    // 2) Aktarım İşi seçiciyi kilitle — liste iframe içinde async (fetch) doluyor,
-    //    dolana kadar kısa aralıklarla dener (üst sınır ~6 sn).
-    let tries = 0
-    const lockJobSelect = () => {
-      const sel = doc.getElementById('ste-dbimport-job')
-      if (!sel) return
-      if (sel.options.length > 1) {
-        sel.value = String(jobId)
-        sel.disabled = true
-        sel.title = 'Bu zamanlama bu aktarım işine özeldir — iş değiştirilemez.'
-        return
-      }
-      tries += 1
-      if (tries < 40) setTimeout(lockJobSelect, 150)
-    }
-    lockJobSelect()
-  } catch (_) {
-    // Aynı origin değilse veya DOM henüz erişilebilir değilse sessizce geç —
-    // sunucudan gelen prefill (taskType=8&jobId=N) yine de doğru değeri taşır,
-    // yalnızca görsel/etkileşim kilidi uygulanmamış olur.
-  }
-}
 
 /* Kısıt operatörleri — dışa aktarımdaki "Kısıt Kuralları" ile aynı sözlük. */
 const FILTER_OPS = [
@@ -912,8 +856,7 @@ export default function DbImportWizard() {
             <div className="dbi-modal-body" style={{ padding: 0 }}>
               <iframe
                 title="Zamanlanmış Görev"
-                src={`/Admin/ScheduledTaskEdit?taskType=8&jobId=${job.id}&workspace=1`}
-                onLoad={(e) => lockScheduleIframeToJob(e.currentTarget, job.id)}
+                src={`/Admin/ScheduledTaskEdit?taskType=8&jobId=${job.id}&lockContext=dbimport-wizard&workspace=1`}
                 style={{ width: '100%', height: '100%', border: 0, display: 'block' }} />
             </div>
             <div className="dbi-modal-foot">

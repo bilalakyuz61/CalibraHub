@@ -49,10 +49,17 @@ public sealed class ScheduledTaskController : Controller
     /// doldurur. Veritabanı Aktarımı sihirbazı bu ekranı gömülü modalda açar
     /// (<c>?taskType=8&amp;jobId=N&amp;workspace=1</c>) — zamanlama arayüzü tek yerde kalsın,
     /// sihirbaza ikinci kez yazılmasın diye.
+    ///
+    /// <paramref name="lockContext"/> verildiğinde (örn. <c>dbimport-wizard</c>) ve tür
+    /// DataImport ise, görev türü + aktarım işi seçici SUNUCU TARAFINDA kilitli render
+    /// edilir (bkz. ScheduledTaskEdit.cshtml <c>Model.IsLockedContext</c>). Eski DOM-hack
+    /// tabanlı kilit (DbImportWizard.jsx lockScheduleIframeToJob) bunun yerine geçti —
+    /// sunucu render'ı sessizce bozulmaz, ScheduledTaskSave tarafında da ayrıca doğrulanır.
     /// </summary>
     [HttpGet("/Admin/ScheduledTaskEdit")]
     public async Task<IActionResult> ScheduledTaskEdit(int? id, CancellationToken ct,
-        int? taskType = null, int? jobId = null)
+        [FromServices] CalibraHub.Application.Abstractions.Services.IDataImportService dataImportService,
+        int? taskType = null, int? jobId = null, string? lockContext = null)
     {
         if (id.HasValue)
         {
@@ -90,11 +97,30 @@ public sealed class ScheduledTaskController : Controller
         if (prefillType == (int)CalibraHub.Domain.Enums.ScheduledTaskType.DataImport && jobId is > 0)
             prefillParams = $"{{\"jobId\": {jobId.Value}}}";
 
+        // lockContext ile gelen kilit yalnız DataImport türünde ve iş gerçekten mevcutsa uygulanır
+        // (fail-open: iş silinmiş/bulunamıyorsa form normal — kilitsiz — davranır).
+        var isLockedContext = false;
+        string? lockedJobName = null;
+        if (!string.IsNullOrWhiteSpace(lockContext)
+            && prefillType == (int)CalibraHub.Domain.Enums.ScheduledTaskType.DataImport
+            && jobId is > 0)
+        {
+            var job = await dataImportService.GetJobAsync(jobId.Value, ct);
+            if (job is not null)
+            {
+                isLockedContext = true;
+                lockedJobName = job.Name;
+            }
+        }
+
         return View("~/Views/Admin/ScheduledTaskEdit.cshtml", new ScheduledTaskEditViewModel
         {
-            TaskType       = prefillType,
-            ParametersJson = prefillParams,
-            AllTasks       = allTasks.Select(t => (t.Id, t.Name)).ToList(),
+            TaskType         = prefillType,
+            ParametersJson   = prefillParams,
+            AllTasks         = allTasks.Select(t => (t.Id, t.Name)).ToList(),
+            IsLockedContext  = isLockedContext,
+            LockedJobId      = isLockedContext ? jobId : null,
+            LockedJobName    = lockedJobName,
         });
     }
 
@@ -179,7 +205,10 @@ public sealed class ScheduledTaskController : Controller
     /// <summary>Yeni gorev ekle veya mevcut gorevi duzenle.</summary>
     [HttpPost("/Admin/ScheduledTasks/Save")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ScheduledTaskSave([FromBody] ScheduledTaskSaveRequest req, CancellationToken ct)
+    public async Task<IActionResult> ScheduledTaskSave([FromBody] ScheduledTaskSaveRequest req,
+        [FromServices] CalibraHub.Application.Abstractions.Services.IDataImportService dataImportService,
+        [FromServices] ILogger<ScheduledTaskController> logger,
+        CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(req.Name))
             return Json(new { success = false, message = "Gorev adi zorunlu." });
@@ -187,6 +216,40 @@ public sealed class ScheduledTaskController : Controller
         var taskType = (CalibraHub.Domain.Enums.ScheduledTaskType)req.TaskType;
         if (taskType == CalibraHub.Domain.Enums.ScheduledTaskType.Builtin)
             return Json(new { success = false, message = "BUILTIN gorevler UI'dan eklenemez — Worker kodunda tanimlanir." });
+
+        // DataImport görevleri her zaman bir aktarım işine (jobId) bağlıdır — istemci tarafı kilit
+        // (Görev Türü sekmesi + Aktarım İşi seçici) atlatılırsa (elle POST, eski/hazırlanmış istek)
+        // sunucu burada reddeder. Client hack yerine gerçek doğrulama — Seq 1102 sertleştirme.
+        if (taskType == CalibraHub.Domain.Enums.ScheduledTaskType.DataImport)
+        {
+            int? parsedJobId = null;
+            if (!string.IsNullOrWhiteSpace(req.ParametersJson))
+            {
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(req.ParametersJson);
+                    if (doc.RootElement.TryGetProperty("jobId", out var jobIdEl) && jobIdEl.TryGetInt32(out var jid))
+                        parsedJobId = jid;
+                }
+                catch (System.Text.Json.JsonException ex)
+                {
+                    logger.LogWarning(ex, "ScheduledTaskSave: DataImport görevi icin parametersJson ayristirilamadi. Name={Name}", req.Name);
+                }
+            }
+
+            if (parsedJobId is not > 0)
+            {
+                logger.LogWarning("ScheduledTaskSave: DataImport görevi icin jobId eksik. Name={Name}", req.Name);
+                return Json(new { success = false, message = "Veritabanı Aktarımı görevi için geçerli bir aktarım işi seçilmelidir." });
+            }
+
+            var importJob = await dataImportService.GetJobAsync(parsedJobId.Value, ct);
+            if (importJob is null)
+            {
+                logger.LogWarning("ScheduledTaskSave: DataImport görevi jobId={JobId} bulunamadi. Name={Name}", parsedJobId, req.Name);
+                return Json(new { success = false, message = "Seçilen aktarım işi bulunamadı — silinmiş olabilir. Lütfen geçerli bir aktarım işi seçin." });
+            }
+        }
 
         // CompanyId — UI'dan kayit edilen task hangi sirket icin tanimlandiysa o claim'den alinir.
         int? companyId = null;

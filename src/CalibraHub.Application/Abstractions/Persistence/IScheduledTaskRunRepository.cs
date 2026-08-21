@@ -1,4 +1,4 @@
-using CalibraHub.Domain.Entities;
+﻿using CalibraHub.Domain.Entities;
 
 namespace CalibraHub.Application.Abstractions.Persistence;
 
@@ -19,4 +19,11 @@ public interface IScheduledTaskRunRepository
 
     /// <summary>Eski run'lari temizler (ornek son 30 gunden eski).</summary>
     Task PurgeOlderThanAsync(DateTime cutoffUtc, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// "Calisiyor" (Status=2) durumunda asili kalmis run kayitlarini hatali olarak kapatir.
+    /// Sunucu restart'i CompleteAsync'e ulasilmadan kesildiginde kayit sonsuza dek Running
+    /// gorunur; gecmis ekraninda bitmeyen is izlenimi verir. Kapatilan kayit sayisini doner.
+    /// </summary>
+    Task<int> MarkStuckRunsFailedAsync(DateTime startedBeforeUtc, string message, CancellationToken cancellationToken);
 }

@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Persistence.Database;
@@ -91,6 +91,24 @@ public sealed class SqlScheduledTaskRunRepository : IScheduledTaskRunRepository
         cmd.CommandText = $"DELETE FROM {_table} WHERE [StartedAt] < @Cutoff;";
         cmd.Parameters.Add(new SqlParameter("@Cutoff", cutoffUtc));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<int> MarkStuckRunsFailedAsync(DateTime startedBeforeUtc, string message, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            UPDATE {_table}
+               SET [Status] = 1,
+                   [CompletedAt] = GETUTCDATE(),
+                   [Message] = COALESCE([Message] + N' | ', N'') + @Message
+             WHERE [Status] = 2 AND [CompletedAt] IS NULL AND [StartedAt] < @StartedBefore;
+            SELECT @@ROWCOUNT;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@Message",      message));
+        cmd.Parameters.Add(new SqlParameter("@StartedBefore", startedBeforeUtc));
+        var result = await cmd.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(result);
     }
 
     private static ScheduledTaskRun Map(SqlDataReader r) => new()

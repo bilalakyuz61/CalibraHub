@@ -19,4 +19,14 @@ public sealed class ScheduledTaskEditViewModel
     public int?    PrerequisiteTaskId  { get; init; }
     public bool    IsBuiltin           { get; init; }
     public IReadOnlyList<(int Id, string Name)> AllTasks { get; init; } = [];
+
+    /// <summary>
+    /// DbImport sihirbazından (<c>?lockContext=...&amp;taskType=8&amp;jobId=N</c>) açıldığında
+    /// true olur — görev türü ve aktarım işi seçici sunucu tarafında kilitli render edilir.
+    /// Yalnızca <see cref="TaskType"/> DataImport ve ilgili iş DB'de gerçekten bulunuyorsa set edilir
+    /// (fail-open: iş bulunamazsa kilit uygulanmaz, form normal davranır).
+    /// </summary>
+    public bool    IsLockedContext     { get; init; }
+    public int?    LockedJobId         { get; init; }
+    public string? LockedJobName       { get; init; }
 }

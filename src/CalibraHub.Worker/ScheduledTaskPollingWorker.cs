@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Services.Scheduling;
@@ -21,6 +21,9 @@ namespace CalibraHub.Worker;
 public sealed class ScheduledTaskPollingWorker : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(15);
+
+    /// <summary>Bu sureden uzun sure "Calisiyor" kalan run kaydi asili sayilir ve kapatilir.</summary>
+    private static readonly TimeSpan StuckRunThreshold = TimeSpan.FromHours(6);
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ScheduledTaskPollingWorker> _logger;
 
@@ -59,6 +62,15 @@ public sealed class ScheduledTaskPollingWorker : BackgroundService
         var taskRepo = scope.ServiceProvider.GetRequiredService<IScheduledTaskRepository>();
 
         var now = DateTime.UtcNow;
+
+        // 0) Asili kalmis "Calisiyor" run kayitlarini kapat. Sunucu restart'i CompleteAsync'e
+        //    ulasilmadan kesildiginde kayit sonsuza dek Running gorunur (gecmis ekraninda
+        //    bitmeyen is). Esik, en uzun gorev suresinin uzerinde tutuldu.
+        var runRepo = scope.ServiceProvider.GetRequiredService<IScheduledTaskRunRepository>();
+        var stuck = await runRepo.MarkStuckRunsFailedAsync(
+            now.Subtract(StuckRunThreshold), "Sunucu yeniden baslatildi, calisma tamamlanamadi.", ct);
+        if (stuck > 0)
+            _logger.LogWarning("{Count} asili kalmis calisma kaydi hatali olarak kapatildi.", stuck);
 
         // 1) NextRunAt=NULL olan (yeni eklenmis, hic calismamis) gorevleri initialize et
         var all = await taskRepo.GetAllAsync(ct);

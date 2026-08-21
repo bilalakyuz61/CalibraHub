@@ -27,6 +27,18 @@
 }
 body.app-theme-dark .ste-builtin-note { color: #fbbf24; }
 
+/* ── Lock context (DbImport sihirbazından acilan gorev turu + is kilidi) ── */
+.ste-lock-note {
+    margin: 16px 24px 0; padding: 10px 14px; border-radius: 8px; font-size: 13px; line-height: 1.5;
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(99,102,241,.1); color: #4f46e5; border: 1px solid rgba(99,102,241,.25);
+}
+.ste-lock-note svg { flex-shrink: 0; }
+body.app-theme-dark .ste-lock-note { color: #a5b4fc; background: rgba(99,102,241,.14); border-color: rgba(99,102,241,.35); }
+.ste-type-card.locked { pointer-events: none; cursor: not-allowed; opacity: .4; }
+.ste-type-card.locked.selected { opacity: 1; }
+.ste-select.locked { pointer-events: none; cursor: not-allowed; opacity: .7; }
+
 /* ── Tabs (st-modal-body--tabbed pattern) ── */
 .ste-body { display: flex; min-height: 0; }
 .ste-tabs {
@@ -163,8 +175,17 @@ body.app-theme-dark .ste-err { color: #f87171; }
       </div>
     }
 
+    @if (Model.IsLockedContext)
+    {
+      <div class="ste-lock-note">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span>Bu görev Veritabanı Aktarımı sihirbazından açıldı — görev türü ve aktarım işi (<strong>@Model.LockedJobName</strong>) sabittir. Değiştirmek için Zamanlanmış Görevler ekranından ayrı bir görev oluşturun. Zamanlama ve görev adı/açıklama serbestçe düzenlenebilir.</span>
+      </div>
+    }
+
     <input type="hidden" id="ste-id" value="@(Model.Id?.ToString() ?? "")" />
     <input type="hidden" id="ste-is-builtin" value="@(Model.IsBuiltin ? "1" : "0")" />
+    <input type="hidden" id="ste-lock-context" value="@(Model.IsLockedContext ? "1" : "0")" />
 
     <div class="ste-body">
       <!-- Tab list -->
@@ -233,8 +254,12 @@ body.app-theme-dark .ste-err { color: #f87171; }
               }
               @foreach (var (val, icon, label, desc) in types)
               {
-                <label class="ste-type-card @(Model.TaskType == val ? "selected" : "")">
-                  <input type="radio" name="ste-task-type" value="@val" @(Model.TaskType == val ? "checked" : "") />
+                var isSelectedType = Model.TaskType == val;
+                var lockTitle = Model.IsLockedContext
+                    ? (isSelectedType ? "Bu görev Veritabanı Aktarımı sihirbazından sabitlendi." : "Görev türü bu sihirbazdan sabitlendi — değiştirilemez.")
+                    : "";
+                <label class="ste-type-card @(isSelectedType ? "selected" : "") @(Model.IsLockedContext ? "locked" : "")" title="@lockTitle">
+                  <input type="radio" name="ste-task-type" value="@val" @(isSelectedType ? "checked" : "") />
                   <span class="ste-type-icon">@icon</span>
                   <div>
                     <div class="ste-type-label">@label</div>
@@ -323,8 +348,16 @@ body.app-theme-dark .ste-err { color: #f87171; }
             <div id="tp-dbimport" style="display:@(Model.TaskType == 8 ? "block" : "none")">
               <div class="ste-field">
                 <label class="ste-label" for="ste-dbimport-job">Aktarım İşi *</label>
-                <select id="ste-dbimport-job" class="ste-select" style="max-width:320px;">
-                  <option value="">— Yükleniyor… —</option>
+                <select id="ste-dbimport-job" class="ste-select @(Model.IsLockedContext ? "locked" : "")" style="max-width:320px;"
+                        @Html.Raw(Model.IsLockedContext ? " tabindex=\"-1\" aria-disabled=\"true\" title=\"Bu zamanlama bu aktarım işine özeldir — iş değiştirilemez.\"" : "")>
+                  @if (Model.IsLockedContext && Model.LockedJobId is > 0)
+                  {
+                    <option value="@Model.LockedJobId" selected>@Model.LockedJobName</option>
+                  }
+                  else
+                  {
+                    <option value="">— Yükleniyor… —</option>
+                  }
                 </select>
               </div>
               <div class="ste-hint" style="margin-top:8px;">İşin ön/son prosedürleri ve anahtar alan kuralları elle çalıştırmayla aynıdır.</div>

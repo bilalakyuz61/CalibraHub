@@ -1,4 +1,4 @@
-/**
+﻿/**
  * SmartTableRow — SmartTable icin tek satir (<tr>).
  *
  * SmartCard ile ayni entity JSON sozlesmesini kullanir (id, title, widgets,
@@ -401,8 +401,22 @@ export default function SmartTableRow(props) {
     return null
   }
 
+  // ── fetch-modal state ── Sunucudan HTML partial cekip modalda gosteren aksiyon
+  // tipi (ornegin Zamanlanmis Gorevler > "Gecmis"). Bu tip SADECE SmartCard'da
+  // uygulanmisti; tablo gorunumunde aksiyon dispatchActionUrl'e dusuyor ve `url`
+  // olmadigi icin SESSIZCE hicbir sey olmuyordu — kullanici "ekran acilmiyor"
+  // olarak bildirdi (PageComment Seq 1103).
+  var [modalOpen,    setModalOpen]    = useState(false)
+  var [modalHtml,    setModalHtml]    = useState('')
+  var [modalTitle,   setModalTitle]   = useState('')
+  var [modalLoading, setModalLoading] = useState(false)
+  var modalContentRef = useRef(null)
+  var modalPortalRef  = useRef(null)
+
   var [confirmOpen, setConfirmOpen] = useState(false)
   var [confirmMsg, setConfirmMsg] = useState('')
+  // { okLabel, variant } — silme disi onaylarda "Evet, Sil" yazmasin (SmartCard paritesi).
+  var [confirmOpts, setConfirmOpts] = useState(null)
   var [alertOpen, setAlertOpen] = useState(false)
   var [alertMsg, setAlertMsg] = useState('')
   var [busy, setBusy] = useState(false)
@@ -429,6 +443,37 @@ export default function SmartTableRow(props) {
   // ustu portal aciklamasi).
   var confirmPortalRef = useRef(null)
   var alertPortalRef = useRef(null)
+  // Onay modali artik yalnizca "Sil"e degil, confirm tanimli HERHANGI bir menu
+  // aksiyonuna hizmet ediyor — "Evet" tusuna basilinca calisacak isi burada tutar.
+  var confirmCallbackRef = useRef(null)
+
+  // Cekilen HTML'i DOM'a bas ve icindeki <script>'leri calistirilabilir hale getir
+  // (SmartCard ile ayni desen). innerHTML ile eklenen script tarayicida calismaz.
+  useEffect(function () {
+    if (!modalOpen || modalLoading) return
+    var node = modalContentRef.current
+    if (!node) return
+    var hash = String(modalHtml.length + ':' + modalHtml.slice(0, 32))
+    if (node.getAttribute('data-sm-modal-html-hash') === hash) return
+    node.innerHTML = modalHtml
+    node.setAttribute('data-sm-modal-html-hash', hash)
+    node.querySelectorAll('script').forEach(function (oldScript) {
+      var newScript = document.createElement('script')
+      for (var i = 0; i < oldScript.attributes.length; i++) {
+        var attr = oldScript.attributes[i]
+        newScript.setAttribute(attr.name, attr.value)
+      }
+      newScript.textContent = oldScript.textContent
+      oldScript.parentNode.replaceChild(newScript, oldScript)
+    })
+  }, [modalOpen, modalLoading, modalHtml])
+
+  useEffect(function () {
+    if (!modalOpen) return
+    function onKey(e) { if (e.key === 'Escape') setModalOpen(false) }
+    document.addEventListener('keydown', onKey)
+    return function () { document.removeEventListener('keydown', onKey) }
+  }, [modalOpen])
 
   useEffect(function () {
     if (!confirmOpen) return
@@ -451,6 +496,7 @@ export default function SmartTableRow(props) {
   //    hard-navigasyon, (2) Shell sekme/sol menu ile baska tab'a gecis
   //    (iframe display:none olur, portal top dokumaninda gorunur kalirdi). ──
   useClosePortalOnFrameHidden(menuOpen, function () { setMenuOpen(false) }, menuRef)
+  useClosePortalOnFrameHidden(modalOpen, function () { setModalOpen(false) }, modalPortalRef)
   useClosePortalOnFrameHidden(confirmOpen, handleConfirmNo, confirmPortalRef)
   useClosePortalOnFrameHidden(alertOpen, function () { setAlertOpen(false) }, alertPortalRef)
 
@@ -607,8 +653,16 @@ export default function SmartTableRow(props) {
   }
 
   function proceedSecondary() {
-    if (secondaryAction.confirm) { setConfirmMsg(secondaryAction.confirm); setConfirmOpen(true) }
+    if (secondaryAction.confirm) { askConfirm(secondaryAction.confirm, executeSecondary) }
     else executeSecondary()
+  }
+
+  // Ortak onay kapisi: mesaji goster, kullanici onaylarsa callback'i calistir.
+  function askConfirm(message, callback, opts) {
+    confirmCallbackRef.current = callback
+    setConfirmMsg(message)
+    setConfirmOpts(opts || null)
+    setConfirmOpen(true)
   }
 
   function handleSecondary(e) {
@@ -626,8 +680,16 @@ export default function SmartTableRow(props) {
       .catch(function () { proceedSecondary() })
   }
 
-  function handleConfirmYes() { setConfirmOpen(false); executeSecondary() }
-  function handleConfirmNo() { setConfirmOpen(false) }
+  function handleConfirmYes() {
+    setConfirmOpen(false)
+    var cb = confirmCallbackRef.current
+    confirmCallbackRef.current = null
+    if (cb) cb(); else executeSecondary()
+  }
+  function handleConfirmNo() { setConfirmOpen(false); confirmCallbackRef.current = null }
+
+  var confirmIsPrimary = !!(confirmOpts && confirmOpts.variant === 'primary')
+  var confirmOkLabel   = (confirmOpts && confirmOpts.okLabel) || (confirmIsPrimary ? 'Evet, Devam' : 'Evet, Sil')
 
   // Menu'den Sil — mevcut handleSecondary akisini AYNEN tetikler, sadece
   // menuyu de kapatir.
@@ -689,6 +751,45 @@ export default function SmartTableRow(props) {
 
   function dispatchMenuAction(action) {
     if (!action || busy) return
+    // Config'de `confirm` tanimliysa ONAY ZORUNLU. Onceden bu destek yalnizca
+    // Sil/secondaryAction akisinda vardi; menuden calisan extraActions'ta confirm
+    // SESSIZCE yok sayiliyordu — Zamanlanmis Gorevler'de "Sil" (extraAction +
+    // confirm) tablo gorunumunde hicbir sey sormadan siliyordu (PageComment Seq 1101).
+    if (action.confirm) {
+      askConfirm(action.confirm, function () {
+        dispatchMenuAction(Object.assign({}, action, { confirm: null }))
+      }, { okLabel: action.confirmOkLabel, variant: action.confirmVariant })
+      return
+    }
+    // fetch-modal: sunucudan HTML partial cek, modalda goster (SmartCard paritesi).
+    if (action.type === 'fetch-modal') {
+      var fetchUrl = (action.fetchUrl || '').replace('{id}', id)
+      if (!fetchUrl) {
+        if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('Bu islem icin adres tanimli degil.', 'err')
+        return
+      }
+      setModalTitle(action.modalTitle || action.label || '')
+      setModalHtml('')
+      setModalLoading(true)
+      setModalOpen(true)
+      fetch(fetchUrl, { credentials: 'same-origin' })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status)
+          return r.text()
+        })
+        .then(function (html) { setModalHtml(html); setModalLoading(false) })
+        .catch(function (err) {
+          setModalHtml('<div style="padding:24px;text-align:center;color:#dc2626;font-size:13px;">Yüklenemedi: ' + err.message + '</div>')
+          setModalLoading(false)
+        })
+      return
+    }
+    if (action.type === 'download' && action.url) {
+      var dlUrl = String(action.url).replace('{id}', id)
+      var a = document.createElement('a'); a.href = dlUrl; a.download = ''
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      return
+    }
     if (action.apiUrl) { runMenuApiAction(action); return }
     // SmartCard sözleşmesi: extraActions'ta POST `type:'api-post'` + `url` ile de
     // verilebiliyor. Burada tanınmazsa aksiyon SESSİZCE navigasyona düşüyor ve
@@ -922,6 +1023,34 @@ export default function SmartTableRow(props) {
         getTopBody()
       )}
 
+      {modalOpen && createPortal(
+        <div
+          ref={modalPortalRef}
+          style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={function () { setModalOpen(false) }}
+        >
+          <div
+            style={{ background: 'var(--app-surface)', border: '1px solid var(--app-border)', borderRadius: 16, width: '100%', maxWidth: 780, height: 'min(620px, calc(100vh - 96px))', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}
+            onClick={function (e) { e.stopPropagation() }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', borderBottom: '1px solid var(--app-border)' }}>
+              <h3 style={{ fontSize: '.9rem', fontWeight: 700, color: 'var(--app-text)', margin: 0 }}>{modalTitle}</h3>
+              <button type="button" onClick={function () { setModalOpen(false) }}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, borderRadius: 8, display: 'inline-flex' }}
+                aria-label="Kapat">
+                <X size={16} style={{ color: 'var(--app-text-muted)' }} />
+              </button>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 16 }}>
+              {modalLoading
+                ? <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--app-text-muted)', fontSize: '.84rem' }}>Yükleniyor…</div>
+                : <div ref={modalContentRef} data-sm-modal-content />}
+            </div>
+          </div>
+        </div>,
+        getTopBody()
+      )}
+
       {confirmOpen && createPortal(
         <div
           ref={confirmPortalRef}
@@ -932,7 +1061,7 @@ export default function SmartTableRow(props) {
             style={{ background: 'var(--app-surface)', border: '1px solid var(--app-border)', borderRadius: 16, padding: '32px 28px', maxWidth: 380, width: '90vw', boxShadow: '0 24px 64px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}
             onClick={function (e) { e.stopPropagation() }}
           >
-            <Trash2 size={26} style={{ color: '#ef4444' }} />
+            <Trash2 size={26} style={{ color: confirmIsPrimary ? 'var(--app-accent, #6366f1)' : '#ef4444' }} />
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--app-text)', margin: 0 }}>Emin misiniz?</h3>
             <p style={{ fontSize: '.84rem', color: 'var(--app-text-muted)', margin: 0 }}>{confirmMsg}</p>
             <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
@@ -941,8 +1070,8 @@ export default function SmartTableRow(props) {
                 İptal
               </button>
               <button type="button" onClick={handleConfirmYes} autoFocus
-                style={{ padding: '8px 16px', borderRadius: 8, fontSize: '.84rem', fontWeight: 600, background: 'linear-gradient(135deg,#ef4444,#dc2626)', color: '#fff', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <Trash2 size={13} /> Evet, Sil
+                style={{ padding: '8px 16px', borderRadius: 8, fontSize: '.84rem', fontWeight: 600, background: confirmIsPrimary ? 'linear-gradient(135deg,#6366f1,#4f46e5)' : 'linear-gradient(135deg,#ef4444,#dc2626)', color: '#fff', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                {confirmIsPrimary ? null : <Trash2 size={13} />} {confirmOkLabel}
               </button>
             </div>
           </div>
