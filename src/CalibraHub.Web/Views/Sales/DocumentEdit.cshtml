@@ -2372,9 +2372,15 @@
     .sqe-hform .sqe-strip .sqe-hinput {
         flex: 0 0 auto; max-width: 210px; width: auto;
     }
-    /* Belge No — kimlik satırında büyük/vurgulu kalır (inline style zaten
-       font-weight:600; burada yalnız birazcık büyütüyoruz — referans .clc-ident-code). */
-    .sqe-ident-row #sqQuoteNumber { font-size: 1.1rem !important; }
+    /* Belge No — Seq 1104 (kullanıcı isteği): (1) belge numarası her zaman ~15 karakter,
+       bu kadar geniş alan gereksizdi → sabit dar genişlik; (2) değer diğerlerinden BÜYÜK
+       punto olduğu için Teklif No / Cari Kod / Cari Ad metinleri aynı hizada durmuyordu →
+       punto diğer kimlik değerleriyle eşitlendi (vurgu inline font-weight:600 ile kalıyor). */
+    .sqe-ident-row #sqQuoteNumber {
+        font-size: .95rem !important;
+        flex: 0 0 168px !important;
+        max-width: 168px !important;
+    }
     /* Cari adı (badge) kimlik satırında input'un hemen altına iner — satır içi
        değil (label-üstte deseniyle tutarlı). */
     /* 2026-08-19 (kullanici istegi): Cari adi ALTINDA degil, Cari Kod input'unun
@@ -2389,10 +2395,14 @@
        AYNI yatay hizada olmali. #sqQuoteNumber 1.1rem oldugu icin kutusu digerlerinden
        yuksekti ve degerler birkac px kayiyordu. Deger kutularina ORTAK min-height verip
        icerigi dikeyde ortaliyoruz (etiketler zaten flex-start ile hizali). */
-    .sqe-hform .sqe-ident-row .sqe-hrow > input.sqe-hinput { min-height: 38px; }
+    /* input replaced-element: display:flex UYGULANMAZ — dikey ortalama line-height ile. */
+    .sqe-hform .sqe-ident-row .sqe-hrow > input.sqe-hinput { min-height: 34px; line-height: 1.4; }
     .sqe-hform .sqe-ident-row .sqe-hrow > .sqe-hcombo,
-    .sqe-hform .sqe-ident-row .sqe-hrow > .gl-wrapper { min-height: 38px; align-items: center; }
-    .sqe-hform .sqe-ident-row .sqe-hrow[data-field-key="customer"] > .sqe-customer-name { align-self: center; }
+    .sqe-hform .sqe-ident-row .sqe-hrow > .gl-wrapper { min-height: 34px; align-items: center; }
+    /* Cari adı: kod input'uyla aynı satırda ve aynı dikey hizada (Seq 1104). */
+    .sqe-hform .sqe-ident-row .sqe-hrow[data-field-key="customer"] > .sqe-customer-name {
+        align-self: center; min-height: 34px; display: flex; align-items: center;
+    }
 
     /* 2026-08-19 (kullanici istegi): Temsilci combobox'i dar kaliyordu — sarmalayici
        `.sqe-hinput` kuralindan `width:auto` aliyor, panel de `left:0;right:0` ile ona
