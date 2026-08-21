@@ -169,6 +169,9 @@ export default function CalibraLineItemsGrid(props) {
   var [lineDefaultCardWidth, setLineDefaultCardWidth] = useState(null)
   // Serit basina satir yuksekligi (px): { 1: 44, ... }. Bos = kartin kendi olcusu.
   var [lineStripHeights, setLineStripHeights] = useState({})
+  // Duzen modu (2026-08-20 Faz 4): true = serbest akis + alan basina piksel.
+  // Kalem formunun KENDI ayari (SALES_QUOTE_LINES); ust bilgiden bagimsiz.
+  var [lineLayoutFree, setLineLayoutFree] = useState(false)
   // NOT: Kart Düzeni editörü grid'den kaldırıldı (2026-08-05) — düzen yönetimi
   // yalnızca Alan Yönetimi → "Kart Düzeni" üzerinden; grid düzeni yalnız UYGULAR.
   // Dar konteynerde (tablet dikey / bolunmus ekran) 24-kolon span'lar okunmaz
@@ -572,6 +575,24 @@ export default function CalibraLineItemsGrid(props) {
      Form-seviye defaultCardWidth artik varsayilan span olarak KULLANILMAZ:
      eski 12-sutunluk modelde anlamliydi, yeni modelde her alan zaten bir sutun.
      Clamp cagiran tarafta (STRIP_GRID_COLS'u asmasin). */
+  /* Serbest duzende hucrenin PIKSEL genisligi (2026-08-20 Faz 4).
+     Oncelik: alan bazinda cellWidthPx > tip bazli varsayilan.
+     DocumentEdit.cshtml'deki FREE_DEFAULT_W ile ayni fikir; kalem alanlari icin
+     ayri kume (ust bilgi alanlariyla anahtarlari ortusmez). */
+  var FREE_W_LINE = {
+    unitId: 120, quantity: 130, unitPrice: 150,
+    discountRate: 110, taxRate: 100, lineTotal: 160,
+  }
+  function resolvedCellWidthPx(col) {
+    var raw = null
+    if (lineBehaviors) {
+      var b = lineBehaviors[col.key]
+      if (b && typeof b.cellWidthPx === 'number' && isFinite(b.cellWidthPx)) raw = b.cellWidthPx
+    }
+    if (raw === null) raw = col.__isWidget ? 180 : (FREE_W_LINE[col.key] || 160)
+    return Math.min(600, Math.max(60, Math.round(raw)))
+  }
+
   function resolvedCardWidth(col) {
     var raw = null
     if (lineBehaviors) {
@@ -719,6 +740,7 @@ export default function CalibraLineItemsGrid(props) {
     if (!isFinite(sec) || sec < 1) sec = 1
     return sec === stripSections[0]
   }).length
+  // Serbest duzende sutun kavrami yok; deger yalniz izgara yolunda kullanilir.
   var STRIP_GRID_COLS = Math.max(1, __firstStripCount)
   if (gridNarrow) STRIP_GRID_COLS = Math.min(STRIP_GRID_COLS, 3)
 
@@ -1447,8 +1469,13 @@ export default function CalibraLineItemsGrid(props) {
           var hasCardSection = f.cardSection !== null && f.cardSection !== undefined
           var hasCardOrder = f.cardOrder !== null && f.cardOrder !== undefined
           var hasCardWidth = typeof f.cardWidth === 'number' && isFinite(f.cardWidth)
+          // 2026-08-20 Faz 4: cellWidthPx de bir davranistir. Sayilmazsa, TEK ayari
+          // piksel genislik olan alan bu haritaya HIC girmez ve serbest duzende
+          // hep varsayilan genisligi alirdi (sessiz kirik).
+          var hasCellPx = typeof f.cellWidthPx === 'number' && isFinite(f.cellWidthPx)
           var hasBehavior = f.isVisible === false || f.isRequired === true
-            || f.defaultValue || f.visibleIf || f.requiredIf || hasCardSection || hasCardOrder || hasCardWidth
+            || f.defaultValue || f.visibleIf || f.requiredIf || hasCardSection || hasCardOrder
+            || hasCardWidth || hasCellPx
           if (!hasBehavior) return
           any = true
           map[f.key] = {
@@ -1460,6 +1487,7 @@ export default function CalibraLineItemsGrid(props) {
             cardSection: hasCardSection ? f.cardSection : null,
             cardOrder: hasCardOrder ? f.cardOrder : null,
             cardWidth: hasCardWidth ? f.cardWidth : null,
+            cellWidthPx: hasCellPx ? f.cellWidthPx : null,
           }
         })
         setLineBehaviors(any ? map : null)
@@ -1475,6 +1503,7 @@ export default function CalibraLineItemsGrid(props) {
           }
         })
         setLineStripHeights(__sh)
+        setLineLayoutFree(data.layoutMode === 'free')
       })
       .catch(function () { /* sessiz — fail-open */ })
     return function () { alive = false }
@@ -2048,11 +2077,20 @@ export default function CalibraLineItemsGrid(props) {
                 // hem dikey ayrac gradyani AYNI degiskenden beslenir (index.css
                 // .clc-fields-row) — ikisi ayri sayi tutarsa ayraclar hucre sinirlarindan
                 // kayardi.
-                var __containerStyle = gridCols
-                  ? Object.assign({}, containerStyle, { '--clc-cols': String(gridCols) })
-                  : containerStyle
+                var __containerStyle = containerStyle
+                var __containerCls = containerClassName
+                if (gridCols) {
+                  if (lineLayoutFree) {
+                    // Serbest duzen: grid DEGIL flex. --clc-cols yazilmaz (sutun yok),
+                    // ayrac gradyani .clc-fields-row--free ile kapatilir.
+                    __containerStyle = Object.assign({}, containerStyle, { display: 'flex' })
+                    __containerCls = containerClassName + ' clc-fields-row--free'
+                  } else {
+                    __containerStyle = Object.assign({}, containerStyle, { '--clc-cols': String(gridCols) })
+                  }
+                }
                 return (
-                  <div style={__containerStyle} className={containerClassName}>
+                  <div style={__containerStyle} className={__containerCls}>
                     {cardItems.map(function(item) {
                       var col = item.col
                       if (!item.visible) return null
@@ -2084,10 +2122,22 @@ export default function CalibraLineItemsGrid(props) {
                         // KALDIRILDI — artik admin percent alanina Standart Alanlar'dan
                         // istedigi dar cardWidth'i (ör. 1-2) verebilir; hucre siniri da
                         // tablo hizasina uyar (onceki sabit 104px, span'dan bagimsizdi).
-                        var __rawW = resolvedCardWidth(col)
-                        var __effW = showMirror ? __rawW * 2 : __rawW
-                        __effW = Math.min(Math.max(__effW, 1), gridCols)
-                        cellStyle.gridColumn = 'span ' + __effW
+                        if (lineLayoutFree) {
+                          // Serbest duzen: sutun/span YOK, hucre kendi piksel
+                          // genisliginde; satir dolunca flex-wrap ile alta akar.
+                          // TL mirror iki deger gosterdigi icin +90px yer alir
+                          // (span*2 katlamasinin px karsiligi — 2 kat cok genisti).
+                          var __px = resolvedCellWidthPx(col)
+                          if (showMirror) __px += 90
+                          cellStyle.flex = '0 0 auto'
+                          cellStyle.width = __px + 'px'
+                          cellStyle.maxWidth = '100%'
+                        } else {
+                          var __rawW = resolvedCardWidth(col)
+                          var __effW = showMirror ? __rawW * 2 : __rawW
+                          __effW = Math.min(Math.max(__effW, 1), gridCols)
+                          cellStyle.gridColumn = 'span ' + __effW
+                        }
                         cellStyle.minWidth = 0
                       } else {
                         // Kimlik satirina tasinan alanlar (cardSection=0) — ESKI flex-grow

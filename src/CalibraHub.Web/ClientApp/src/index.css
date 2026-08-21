@@ -3412,6 +3412,18 @@ body.app-theme-dark .clc-card-actions { --clc-strip-border: rgba(255,255,255,0.0
 /* Dar konteynerde sutun sayisi JS'te clamp'lenir (gridNarrow → en fazla 3) ve
    ayni `--clc-cols` degiskeniyle gelir; bu yuzden buradaki sablon/gradyan
    ezmesi KALDIRILDI — iki yerde ayri sayi tutmak kaymaya yol aciyordu. */
+/* ══ SERBEST DUZEN — kalem karti (layoutMode='free', 2026-08-20 Faz 4) ═══════
+   Izgara kurallari YERINDE BIRAKILDI; serbest duzen yalniz bu sinifin altinda.
+   Sinif yoksa hicbir sey degismez (izgara yolu birebir calisir). */
+.clc-fields-row--free {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 2px 0;
+  grid-template-columns: none;
+  background-image: none;          /* dikey ayraclar KALKAR */
+}
+
 .clc-field-cell { padding: 6px 10px; }
 
 /* 2026-08-20 (kullanici istegi): serit hucrelerindeki DEGERLER ayni taban
