@@ -72,6 +72,11 @@ targets:
           - $(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
         OTHER_LDFLAGS:
           - $(inherited)
+          # -ObjC: statik framework icindeki TUM nesne dosyalarini (Objective-C sinif/kategori
+          # kayitlari dahil) yuklemeye zorlar. Statik linklemede kullanilmayan gorunen nesne
+          # dosyalari atlanabilir; Kotlin/Native + Compose calisma zamani kayitlari boyle
+          # dusünce uygulama ACILIR ACILMAZ, UI cizilmeden coker (yasadigimiz tablo).
+          - -ObjC
           - -framework
           - shared
     preBuildScripts:
