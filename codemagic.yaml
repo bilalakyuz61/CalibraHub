@@ -133,3 +133,61 @@ workflows:
         # yeterli, beta incelemesi ve bu formlar GEREKMEZ. Ileride harici testere acilirsa
         # once test-info doldurulup bu true yapilir.
         submit_to_testflight: false
+
+  ios-sim-run:
+    name: iOS simulator kosumu (GERCEK crash log yakala)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    # Neden bu workflow: uygulama iOS'ta Compose baslatilinca cokuyor ama crash log'u NE cihazdan
+    # (.ips hic olusmadi) NE App Store Connect'ten (Crash Feedback bos) alinabildi. Codemagic'in
+    # Mac'inde iOS Simulator VAR — uygulamayi orada calistirip konsol ciktisini ve DiagnosticReports
+    # altindaki crash raporunu DOGRUDAN build log'una basiyoruz. Mac sahibi olmadan, TestFlight
+    # turu olmadan gercek hata mesajina ulasmanin yolu budur. Imzalama GEREKMEZ (simulator).
+    environment:
+      xcode: 26.4
+      vars:
+        KMP_DIR: "mobile/CalibraHubKmp"
+    scripts:
+      - name: XcodeGen kur (yoksa)
+        script: which xcodegen || brew install xcodegen
+      - name: Xcode projesini uret (xcodegen)
+        script: |
+          cd "$KMP_DIR/iosApp"
+          xcodegen generate
+      - name: gradlew calistirilabilir yap
+        script: chmod +x "$KMP_DIR/gradlew"
+      - name: Simulator icin derle (imzasiz, Debug)
+        script: |
+          cd "$KMP_DIR/iosApp"
+          xcodebuild \
+            -project iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath build/dd \
+            -destination 'generic/platform=iOS Simulator' \
+            build \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Simulatorde calistir + KONSOL ve CRASH raporunu bas
+        script: |
+          set +e   # cokme beklenen — adim kirmizi olsa da loglari basmaya devam et
+          DEVICE=$(xcrun simctl list devices available | grep -m1 "iPhone" | sed -E 's/.*\(([0-9A-Fa-f-]{36})\).*/\1/')
+          echo "== Simulator UDID: $DEVICE"
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          APP=$(find "$KMP_DIR/iosApp/build/dd/Build/Products/Debug-iphonesimulator" -maxdepth 1 -name "*.app" | head -1)
+          echo "== APP: $APP"
+          xcrun simctl install "$DEVICE" "$APP"
+          echo "===================== UYGULAMA KONSOL CIKTISI ====================="
+          xcrun simctl launch --console-pty "$DEVICE" com.calibrahub.mobile 2>&1 | tail -200
+          echo "===================== CRASH RAPORLARI ============================="
+          sleep 8
+          for f in $(find ~/Library/Logs/DiagnosticReports -maxdepth 1 \( -name "*iosApp*" -o -name "*CalibraHub*" \) 2>/dev/null | head -3); do
+            echo "----- $f"
+            head -80 "$f"
+          done
+          echo "===================== SIMULATOR SISTEM LOGU (son) ================="
+          xcrun simctl spawn "$DEVICE" log show --last 2m --predicate 'process CONTAINS "iosApp"' --style compact 2>/dev/null | tail -80
+          exit 0
+    artifacts:
+      - /tmp/xcodebuild_logs/*.log
