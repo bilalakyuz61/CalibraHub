@@ -40,7 +40,6 @@ struct ContentView: View {
                 Button("Compose'u baslat") {
                     showCompose = true
                 }
-                .buttonStyle(.borderedProminent)
             }
         }
     }
