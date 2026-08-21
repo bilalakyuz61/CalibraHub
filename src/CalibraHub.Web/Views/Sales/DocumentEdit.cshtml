@@ -2283,6 +2283,10 @@
        `display: contents` ile SEFFAF — sarmalayici hic yokmus gibi davranir, mevcut
        izgara yerlesimi degismez. Serbest modda tek flex ogesi olur ve icinde
        nowrap ile uyeler ayrilmaz. */
+    /* Genis hucre — textarea gibi alanlar seritte tam satiri kaplar (2026-08-21). */
+    .sqe-hrow--wide { flex: 1 1 100%; width: 100% !important; max-width: 100% !important; }
+    .sqe-hrow--wide .sqe-notes-area { width: 100%; }
+
     .sqe-hgroup { display: contents; }
     .sqe-strips--free .sqe-hgroup {
         display: flex;
@@ -3278,26 +3282,52 @@
         </div>
 
         <!-- TAB 3: Kosullar -->
+        @* 2026-08-21 Faz 1 — HUCRE BICIMI TEKLESTIRME.
+           Onceden bu pane `.sqe-form-grid` + `.sqe-form-field--full` kullaniyordu;
+           Genel Bilgiler ise `.sqe-strips` + `.sqe-hrow`. Uc ayri hucre bicimi
+           (buradaki, Genel Bilgiler'deki ve Notlar'daki ciplak textarea) bir alanin
+           HER sekmeye tasinabilmesini engelliyordu — hedef kap hucreyi kabul etmiyordu.
+           Artik tum alan hucreleri `.sqe-hrow` ve tum alan sekmeleri `.sqe-strips`
+           tasiyor; runtime donusturme koduna gerek kalmiyor.
+           Element id'leri (sqPaymentTerms vb.) DEGISMEDI → save/load ve davranis
+           katmani etkilenmez (ikisi de id ile esliyor). *@
         <div class="sqe-tab-pane" data-sqe-pane="conditions">
-            <div class="sqe-form-grid">
-                <div class="sqe-form-field sqe-form-field--full" data-field-key="paymentTerms">
-                    <label class="sqe-label">Odeme Kosulu</label>
-                    <input id="sqPaymentTerms" class="form-control form-control-sm" placeholder="ornegin: 30 gun vadeli" />
-                </div>
-                <div class="sqe-form-field sqe-form-field--full" data-field-key="deliveryTerms">
-                    <label class="sqe-label">Teslimat</label>
-                    <input id="sqDeliveryTerms" class="form-control form-control-sm" placeholder="ornegin: Fabrika teslim" />
-                </div>
-                <div class="sqe-form-field sqe-form-field--full" data-field-key="deliveryAddress">
-                    <label class="sqe-label">Teslimat Adresi</label>
-                    <input id="sqDeliveryAddress" class="form-control form-control-sm" />
+            <div class="sqe-hform">
+                <div class="sqe-strips">
+                    <div class="sqe-strip" data-sqe-section="1">
+                        <div class="sqe-hrow" data-field-key="paymentTerms">
+                            <label class="sqe-hlabel">Odeme Kosulu</label>
+                            <input id="sqPaymentTerms" class="form-control form-control-sm sqe-hinput" placeholder="ornegin: 30 gun vadeli" />
+                        </div>
+                        <div class="sqe-hrow" data-field-key="deliveryTerms">
+                            <label class="sqe-hlabel">Teslimat</label>
+                            <input id="sqDeliveryTerms" class="form-control form-control-sm sqe-hinput" placeholder="ornegin: Fabrika teslim" />
+                        </div>
+                        <div class="sqe-hrow" data-field-key="deliveryAddress">
+                            <label class="sqe-hlabel">Teslimat Adresi</label>
+                            <input id="sqDeliveryAddress" class="form-control form-control-sm sqe-hinput" />
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- TAB 4: Notlar -->
+        @* 2026-08-21 Faz 1 — Notlar da serit modeline alindi. `data-field-key`
+           textarea'dan SARMALAYICIYA tasindi: tasima motoru (applySections) hucreyi
+           tasir, ciplak bir textarea'yi degil. Davranis katmani alani `notes: 'sqNotes'`
+           yani ELEMENT ID'si ile esliyor, bu yuzden attribute'un yeri onu etkilemez. *@
         <div class="sqe-tab-pane" data-sqe-pane="notes">
-            <textarea id="sqNotes" data-field-key="notes" class="form-control sqe-notes-area" rows="6" placeholder="Teklif notlari..."></textarea>
+            <div class="sqe-hform">
+                <div class="sqe-strips">
+                    <div class="sqe-strip" data-sqe-section="1">
+                        <div class="sqe-hrow sqe-hrow--wide" data-field-key="notes">
+                            <label class="sqe-hlabel">Notlar</label>
+                            <textarea id="sqNotes" class="form-control sqe-notes-area" rows="6" placeholder="Teklif notlari..."></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- TAB 5: Ek Alanlar -->
@@ -3942,11 +3972,12 @@
         /* Serbest duzende hucre genisligini uygular. Izgara modunda CAGRILMAZ
            (applyCardWidths gorevini surdurur) — iki yol birbirine karismaz. */
         function applyCellWidths(fields) {
-            var hform = document.querySelector('.sqe-hform');
-            if (!hform) return;
+            // 2026-08-21 Faz 1: artik BIRDEN COK .sqe-hform var (Genel Bilgiler +
+            // Kosullar + Notlar serit modeline alindi). Tek querySelector yalniz
+            // ILKINI bulur ve diger sekmelerin hucreleri genisliksiz kalirdi.
             var byKey = {};
             (fields || []).forEach(function (f) { if (f && f.key) byKey[f.key] = f; });
-            hform.querySelectorAll('.sqe-strip .sqe-hrow[data-field-key]').forEach(function (row) {
+            document.querySelectorAll('.sqe-hform .sqe-strip .sqe-hrow[data-field-key]').forEach(function (row) {
                 var key = row.getAttribute('data-field-key');
                 var f = byKey[key];
                 var w = (f && typeof f.cellWidthPx === 'number' && isFinite(f.cellWidthPx))
@@ -4061,22 +4092,25 @@
         function applyStripColumns() {
             // Serbest duzende sutun kavrami yok — hucreler kendi px genisliginde akar.
             if (__sqFreeLayout) return;
-            var strips = document.querySelectorAll('.sqe-hform .sqe-strip');
-            if (!strips.length) return;
+            // 2026-08-21 Faz 1: sutun sayisi artik HER .sqe-strips kabi icin AYRI
+            // hesaplanir. Onceden tek bir sayi tum seritlere yaziliyordu; Kosullar/
+            // Notlar da serit modeline gecince onlar Genel Bilgiler'in sutun sayisini
+            // alip bos sutunlarla cizilirdi.
             function visibleCells(strip) {
                 return Array.prototype.filter.call(
                     strip.querySelectorAll(':scope > .sqe-hrow'),
-                    function (el) {
-                        if (el.offsetParent === null) return false;   // display:none (ve ata zinciri)
-                        return true;
-                    });
+                    function (el) { return el.offsetParent !== null; });
             }
-            var first = visibleCells(strips[0]).length;
-            if (!first) return;
-            var narrow = strips[0].classList.contains('sqe-strip--narrow');
-            var cols = narrow ? Math.min(first, 3) : first;
-            Array.prototype.forEach.call(strips, function (el) {
-                el.style.setProperty('--sqe-cols', String(cols));
+            document.querySelectorAll('.sqe-hform .sqe-strips').forEach(function (wrap) {
+                var strips = wrap.querySelectorAll(':scope > .sqe-strip');
+                if (!strips.length) return;
+                var first = visibleCells(strips[0]).length;
+                if (!first) return;
+                var narrow = strips[0].classList.contains('sqe-strip--narrow');
+                var cols = narrow ? Math.min(first, 3) : first;
+                Array.prototype.forEach.call(strips, function (el) {
+                    el.style.setProperty('--sqe-cols', String(cols));
+                });
             });
         }
         fetch('/api/form-behavior/' + encodeURIComponent('@headerFormCode'), { credentials: 'same-origin' })
@@ -4094,8 +4128,10 @@
                 // DocumentEdit'i paylasan diger 7 belge tipi etkilenmez.
                 __sqFreeLayout = (data.layoutMode === 'free');
                 if (__sqFreeLayout) {
-                    var strips = document.querySelector('.sqe-strips');
-                    if (strips) strips.classList.add('sqe-strips--free');
+                    // Faz 1 sonrasi birden cok .sqe-strips var (Genel/Kosullar/Notlar)
+                    document.querySelectorAll('.sqe-strips').forEach(function (el) {
+                        el.classList.add('sqe-strips--free');
+                    });
                     applyCellWidths(data.fields);
                 } else {
                     applyCardWidths(data.fields, data.defaultCardWidth);
