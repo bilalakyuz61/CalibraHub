@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Domain.Entities;
 using Microsoft.Extensions.DependencyInjection;
@@ -86,17 +86,8 @@ public sealed class ExchangeRateUpdateWorker : BackgroundService
 
     private async Task TryReportRunAsync(int status, string? msg, DateTime? nextRun, CancellationToken ct)
     {
-        try
-        {
-            using var scope = _scopeFactory.CreateScope();
-            var repo = scope.ServiceProvider.GetRequiredService<IScheduledTaskRepository>();
-            // Name uzerinden Id resolve et (built-in tasklar UpsertRegistrationAsync ile
-            // Name uniqueness'le eklendi). Bulunamazsa skip — bir sonraki run'da retry.
-            var task = await repo.GetByNameAsync(TaskName, ct);
-            if (task is not null)
-                await repo.ReportRunAsync(task.Id, status, msg, null, nextRun, ct);
-        }
-        catch (Exception ex) { _logger.LogWarning(ex, "ScheduledTask ReportRun failed."); }
+        // Name uzerinden Id resolve + LastRun* guncelleme + gecmis satiri: ortak yazicida.
+        await BuiltinTaskRunReporter.ReportAsync(_scopeFactory, _logger, TaskName, status, msg, null, nextRun, ct);
     }
 
 

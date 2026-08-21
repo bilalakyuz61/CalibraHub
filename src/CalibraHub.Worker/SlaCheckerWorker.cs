@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Services.Approval;
@@ -68,15 +68,9 @@ public sealed class SlaCheckerWorker : BackgroundService
                 status = 1; msg = ex.Message;
             }
 
-            try
-            {
-                using var scope = _scopeFactory.CreateScope();
-                var repo = scope.ServiceProvider.GetRequiredService<IScheduledTaskRepository>();
-                var t = await repo.GetByNameAsync(TaskName, stoppingToken);
-                if (t is not null)
-                    await repo.ReportRunAsync(t.Id, status, msg, null, DateTime.UtcNow.Add(PollInterval), stoppingToken);
-            }
-            catch { /* swallow */ }
+            // Calisma raporu + gecmis satiri (ScheduledTaskRun) — ortak yazici.
+            await BuiltinTaskRunReporter.ReportAsync(_scopeFactory, _logger, TaskName,
+                status, msg, null, DateTime.UtcNow.Add(PollInterval), stoppingToken);
 
             try { await Task.Delay(PollInterval, stoppingToken); }
             catch (OperationCanceledException) { break; }

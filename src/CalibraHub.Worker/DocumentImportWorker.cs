@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Domain.Entities;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,7 +43,6 @@ public sealed class DocumentImportWorker : BackgroundService
             using var scope = _scopeFactory.CreateScope();
             var importService = scope.ServiceProvider.GetRequiredService<IDocumentImportService>();
             var integratorSettingsRepository = scope.ServiceProvider.GetRequiredService<IIntegratorSettingsRepository>();
-            var taskRepo = scope.ServiceProvider.GetRequiredService<IScheduledTaskRepository>();
 
             try
             {
@@ -57,16 +56,9 @@ public sealed class DocumentImportWorker : BackgroundService
                     result.SkippedCount,
                     (int)nextDelay.TotalSeconds);
 
-                try
-                {
-                    var t = await taskRepo.GetByNameAsync(TaskName, stoppingToken);
-                    if (t is not null)
-                        await taskRepo.ReportRunAsync(t.Id, 0,
-                            $"{result.ImportedCount} eklendi, {result.SkippedCount} atlandi.",
-                            null,
-                            DateTime.UtcNow.Add(nextDelay), stoppingToken);
-                }
-                catch { /* swallow */ }
+                await BuiltinTaskRunReporter.ReportAsync(_scopeFactory, _logger, TaskName, 0,
+                    $"{result.ImportedCount} eklendi, {result.SkippedCount} atlandi.",
+                    null, DateTime.UtcNow.Add(nextDelay), stoppingToken);
 
                 await Task.Delay(nextDelay, stoppingToken);
             }
@@ -77,14 +69,8 @@ public sealed class DocumentImportWorker : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Belge ice aktarma worker'inda hata olustu.");
-                try
-                {
-                    var t = await taskRepo.GetByNameAsync(TaskName, stoppingToken);
-                    if (t is not null)
-                        await taskRepo.ReportRunAsync(t.Id, 1, ex.Message, null,
-                            DateTime.UtcNow.AddSeconds(30), stoppingToken);
-                }
-                catch { /* swallow */ }
+                await BuiltinTaskRunReporter.ReportAsync(_scopeFactory, _logger, TaskName, 1,
+                    ex.Message, null, DateTime.UtcNow.AddSeconds(30), stoppingToken);
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
             }
         }
