@@ -40,7 +40,8 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import FieldBehaviorModal from './FieldBehaviorModal'
 import {
-  DndContext, closestCenter, PointerSensor, useSensor, useSensors, useDroppable,
+  DndContext, DragOverlay, PointerSensor, useSensor, useSensors, useDroppable,
+  pointerWithin, rectIntersection, MeasuringStrategy,
 } from '@dnd-kit/core'
 import {
   SortableContext, useSortable, verticalListSortingStrategy,
@@ -351,70 +352,6 @@ function freeDefaultWidth(key) { return FREE_DEFAULT_W[key] || 200 }
 /* Piksel genislik adimlayicisi (60-600, 10px adim). Olculer SABIT — deger
    "Varsayilan (150)" ile "220px" arasinda gidip gelirken satirdaki switch'ler
    kaymasin (ayni tuzak bu oturumda bir kez yasandi). */
-function WidthStepper(props) {
-  var value = (typeof props.value === 'number') ? props.value : null
-  var fallback = props.fallback
-  var allowClear = props.allowClear === true
-  var onChange = props.onChange
-  var display = (value !== null) ? value : fallback
-  function step(delta) {
-    var next = Math.max(CARD_WIDTH_MIN, Math.min(CARD_WIDTH_MAX, display + delta))
-    onChange(next)
-  }
-  return (
-    /* 2026-08-20 (kullanici istegi): SABIT olculer. Etiket "Varsayilan (3)" (uzun)
-       ile "3/12" (kisa) arasinda gidip geldigi ve temizle butonu gelip gittigi icin
-       adimlayicinin genisligi degisiyor, bu da satirdaki Gorunur/Zorunlu
-       switch'lerini kaydiriyordu. Hem etikete min-width hem temizle yuvasina sabit
-       yer verildi (buton yokken yuva GORUNMEZ ama yer kaplar). */
-    <div className="flex items-center gap-1 flex-shrink-0">
-      <div className="flex items-center rounded-md border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.04] overflow-hidden">
-        <button
-          type="button"
-          onClick={function () { step(-1) }}
-          disabled={display <= CARD_WIDTH_MIN}
-          title="Bir sütun daralt"
-          className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:bg-slate-50 dark:text-white/55 dark:hover:text-indigo-300 dark:hover:bg-white/[0.08] disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          <Minus size={11} strokeWidth={2.4} />
-        </button>
-        <span
-          style={{ minWidth: 78 }}
-          className={'px-1.5 text-[10.5px] font-bold tabular-nums text-center whitespace-nowrap ' + (
-            value !== null ? 'text-slate-700 dark:text-white/85' : 'text-slate-400 italic dark:text-white/40'
-          )}
-          title={value !== null ? (value + ' / 12 sütun') : ('Ayarlanmamış — form varsayılanı: ' + fallback + ' / 12')}
-        >
-          {value !== null ? (value + '/12') : ('Varsayılan (' + fallback + ')')}
-        </span>
-        <button
-          type="button"
-          onClick={function () { step(1) }}
-          disabled={display >= CARD_WIDTH_MAX}
-          title="Bir sütun genişlet"
-          className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:bg-slate-50 dark:text-white/55 dark:hover:text-indigo-300 dark:hover:bg-white/[0.08] disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          <Plus size={11} strokeWidth={2.4} />
-        </button>
-      </div>
-      {allowClear && (
-        <button
-          type="button"
-          onClick={function () { if (value !== null) onChange(null) }}
-          disabled={value === null}
-          aria-hidden={value === null}
-          tabIndex={value === null ? -1 : 0}
-          title="Varsayılana dön"
-          style={{ width: 13, visibility: value === null ? 'hidden' : 'visible' }}
-          className="flex-shrink-0 text-slate-400 hover:text-indigo-600 dark:text-white/35 dark:hover:text-indigo-300"
-        >
-          <RotateCcw size={11} strokeWidth={2.2} />
-        </button>
-      )}
-    </div>
-  )
-}
-
 function PxWidthStepper(props) {
   var value = (typeof props.value === 'number') ? props.value : null
   var fallback = props.fallback
@@ -549,17 +486,26 @@ function SectionDropZone(props) {
    ETKISIZ oldugu icin tutamak kapatilir — kullanici bosuna denemesin. */
 var HGROUP_FOLLOWER = { exchangeRate: 1, rateDate: 1 }
 
+/* 2026-08-22 (kullanici bildirimi: "seritler arasi alan tasirken tasinan alan
+   kayboluyor"): sebep DragOverlay YOKLUGU idi. dnd-kit'te aktif oge DOM'da kendi
+   kabinda kalir; imlec baska bir kaba gecince o kabin sirasi artik ogeye transform
+   uretmez ve oge kaynak yerinde soluk halde ASILI kalir — kullanici "kayboldu"
+   olarak gorur (birakma yine de dogru calisir; sikayetin "tasima sorunsuz" kismi bu).
+   Cozum: aktif ogenin kopyasi DragOverlay ile imlecin altinda TASINIR; kaynak satir
+   ise yerinde kesik-cizgili BOSLUK olarak kalir (nereden alindigi gorunur). */
 function SortableRow(props) {
   var locked = props.locked === true
   var sortable = useSortable({ id: props.id, disabled: locked })
+  var dragging = sortable.isDragging
   var style = {
     transform: CSS.Transform.toString(sortable.transform),
     transition: sortable.transition,
-    opacity: sortable.isDragging ? 0.45 : 1,
   }
   return (
     <div ref={sortable.setNodeRef} style={style}
-         className="rounded-lg border border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.03] px-2.5 py-2 flex items-start gap-2">
+         className={'rounded-lg px-2.5 py-2 flex items-start gap-2 ' + (dragging
+           ? 'border border-dashed border-indigo-300 bg-indigo-50/40 opacity-55 dark:border-indigo-400/40 dark:bg-indigo-500/[0.07]'
+           : 'border border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.03]')}>
       {locked ? (
         <span title={props.lockedTitle || 'Bu alan taşınamaz'}
               className="flex-shrink-0 mt-0.5 p-0.5 text-slate-300 dark:text-white/20 cursor-not-allowed">
@@ -601,8 +547,6 @@ export default function StandardFieldsEditor(props) {
   var [behaviorKey, setBehaviorKey] = useState(null)
   // Serit basina satir yuksekligi (px): { 1: 44, 2: 36, ... }. Bos = varsayilan.
   var [stripHeights, setStripHeights] = useState({})
-  // Duzen modu: 'grid' (varsayilan, 12 sutunluk izgara) | 'free' (serbest akis + px)
-  var [layoutMode, setLayoutMode] = useState('grid')
   // Onizleme modali acik mi (2026-08-21) — canli onizleme editorden cikarildi.
   var [previewOpen, setPreviewOpen] = useState(false)
   // Sifirla — yuklenen (kaydedilmis) hale donus icin anlik goruntu
@@ -650,7 +594,6 @@ export default function StandardFieldsEditor(props) {
           if (x && x.section > 0 && typeof x.rowHeight === 'number') sh[x.section] = x.rowHeight
         })
         setStripHeights(sh)
-        setLayoutMode(data.layoutMode === 'free' ? 'free' : 'grid')
         // Form varsayilan hucre genisligi — kokte gelir, null/eksikse 3 (sozlesme).
         var loadedDefaultCardWidth = normalizeCardWidth(data.defaultCardWidth)
         var resolvedDefaultCardWidth = loadedDefaultCardWidth === null ? 3 : loadedDefaultCardWidth
@@ -708,6 +651,27 @@ export default function StandardFieldsEditor(props) {
      sirada. Bu yuzden cok-kapli (multi-container) surukleme kuruldu; eski
      "Bolum" buton grubu ve yukari/asagi oklari kaldirildi. */
   var dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+  // Suruklenen alanin key'i — DragOverlay icerigi bundan cizilir (null = surukleme yok).
+  var [dragKey, setDragKey] = useState(null)
+
+  /* Carpisma stratejisi (2026-08-22): `closestCenter` cok-kapli listede kaba
+     kaliyordu — imlec bir seridin USTUNDEYKEN bile merkezi daha yakin olan BASKA
+     seritteki satir "over" secilebiliyordu. Once `pointerWithin` (imlecin GERCEKTEN
+     icinde oldugu hedefler), o bos donerse (imlec bosluktaysa) `rectIntersection`.
+     Sonuc: birakma noktasi imlecin altindaki hedefle birebir ortusur. */
+  function preciseCollision(args) {
+    var hits = pointerWithin(args)
+    if (hits.length === 0) hits = rectIntersection(args)
+    if (hits.length === 0) return hits
+    /* Kap (SectionDropZone) satirlari SARDIGI icin imlec bir satirin uzerindeyken
+       hem satir hem kap carpisir. dnd-kit listenin ILKINI secer; siralama merkeze
+       uzakliga gore oldugundan buyuk kabin merkezi bazen satirdan yakin kalip
+       "sona ekle" davranisi ureterek birakma noktasini kaydiriyordu.
+       Kural: SATIR carpismasi varsa DAIMA o kazanir; kap yalniz imlec satirlarin
+       arasindaki/altindaki bosluktayken (veya serit bosken) hedef olur. */
+    var rows = hits.filter(function (h) { return !dropTargetFromId(h.id) })
+    return rows.length > 0 ? rows : hits
+  }
 
   /* Droppable id (2026-08-21 Faz 4): "tab:<key>|sec:<n>" — iki seviye tek
      anahtarda. Eski tek seviyeli "sec:<n>" bicimi de okunur (geri uyum). */
@@ -770,6 +734,7 @@ export default function StandardFieldsEditor(props) {
   }
 
   function handleDragEnd(event) {
+    setDragKey(null)
     var active = event.active, over = event.over
     if (!active || !over || active.id === over.id) return
     var key = String(active.id)
@@ -859,7 +824,10 @@ export default function StandardFieldsEditor(props) {
         }),
         // Serit satir yukseklikleri — yalniz DEGER VERILMIS seritler gonderilir;
         // gonderilmeyen serit sunucuda satir acmaz (varsayilan, fail-open).
-        layoutMode: layoutMode,
+        // 2026-08-22 (kullanici karari): "Izgara (tablo)" secenegi KALDIRILDI —
+        // duzen daima serbest. `cardWidth` (1..12 span) verisi DB'de silinmez,
+        // yalniz artik duzenlenmez; genislik alan basina piksel (`cellWidthPx`).
+        layoutMode: 'free',
         stripHeights: Object.keys(stripHeights).map(function (k) {
           return { section: parseInt(k, 10), rowHeight: stripHeights[k] }
         }).filter(function (x) { return x.section > 0 && typeof x.rowHeight === 'number' }),
@@ -888,7 +856,6 @@ export default function StandardFieldsEditor(props) {
     }
   }
 
-  var scopeKeys = fields.map(function (f) { return f.key }).join(', ')
   var showTabBadge = tabs.length > 0
   var tabTree = buildTabTree(fields, tabs, maxStrip)
   var customCount = tabs.filter(function (t) { return t.isCustom }).length
@@ -944,7 +911,7 @@ export default function StandardFieldsEditor(props) {
           <div className="flex-1 min-w-0">
             <div className="text-[14px] font-bold text-slate-800 dark:text-white/90">Alan Düzeni</div>
             <div className="text-[11px] text-slate-600 dark:text-white/60">
-              Görünürlük, zorunluluk, varsayılan değer, başlık, koşullu kurallar ve kart Bölümü bu formun tüm kullanıcıları için geçerlidir.
+              Görünürlük, zorunluluk, başlık metni, genişlik ve alanın hangi sekme/şeritte duracağı bu formun tüm kullanıcıları için geçerlidir.
             </div>
           </div>
           <button
@@ -1034,45 +1001,6 @@ export default function StandardFieldsEditor(props) {
               </div>
               )}
 
-              {/* ── Düzen modu (2026-08-20) ────────────────────────────────────
-                  DocumentEdit 8 belge tipiyle paylaşımlı; serbest düzen form başına
-                  opt-in. 'grid' = bugünkü 12 sütunluk ızgara (diğer formlar hiç
-                  etkilenmez), 'free' = serbest akış + alan başına piksel genişlik. */}
-              <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.04]">
-                <LayoutGrid size={13} strokeWidth={2} className="flex-shrink-0 text-slate-500 dark:text-white/50" />
-                <span className="text-[11.5px] font-bold text-slate-700 dark:text-white/80">Düzen</span>
-                {[{ v: 'grid', l: 'Izgara (tablo)' }, { v: 'free', l: 'Serbest (form)' }].map(function (o) {
-                  var on = layoutMode === o.v
-                  return (
-                    <button key={o.v} type="button" onClick={function () { setLayoutMode(o.v) }}
-                      className={'px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors ' + (
-                        on ? 'bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-400/30'
-                           : 'text-slate-500 border-slate-200 hover:bg-slate-50 dark:text-white/55 dark:border-white/10 dark:hover:bg-white/[0.08]'
-                      )}>{o.l}</button>
-                  )
-                })}
-                <span className="text-[10.5px] text-slate-400 dark:text-white/35">
-                  {layoutMode === 'free'
-                    ? 'Alan başına piksel genişlik · dikey ayraç yok'
-                    : 'Eşit sütunlu ızgara · bugünkü görünüm'}
-                </span>
-              </div>
-
-              {/* ── Varsayılan Hücre Genişliği (2026-08-20) — form genelinde 12 sütunluk
-                  ortak ızgarada, genişliği ayarlanmamış alanların kullanacağı değer. ── */}
-              <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.03] px-3 py-2.5">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <LayoutGrid size={13} className="text-slate-500 dark:text-white/55 flex-shrink-0" />
-                  <span className="text-[11.5px] font-bold text-slate-700 dark:text-white/80">Varsayılan Hücre Genişliği</span>
-                  <div className="flex-1" />
-                  <WidthStepper value={defaultCardWidth} fallback={3} allowClear={false}
-                    onChange={function (v) { setDefaultCardWidth(v) }} />
-                </div>
-                <div className="text-[10px] text-slate-500 dark:text-white/50 mt-1">
-                  Genişliği ayarlanmamış alanlar bu değeri kullanır (12 sütunluk şerit ızgarası).
-                </div>
-              </div>
-
               {/* ── Bölüm şeridi araç çubuğu ── */}
               <div className="flex items-center gap-2 mb-2">
                 <LayoutGrid size={13} className="text-slate-500 dark:text-white/55 flex-shrink-0" />
@@ -1107,10 +1035,7 @@ export default function StandardFieldsEditor(props) {
                 >
                   <Plus size={12} strokeWidth={2.4} /> Yeni Sekme Ekle
                 </button>
-                {/* Onizleme MODALDA (2026-08-21) — eskiden liste ustunde hep acikti.
-                    Yalniz SERBEST duzende: izgara modunda hucre genisligi 1..12 span
-                    oldugu icin piksel surukleme anlamsiz. */}
-                {layoutMode === 'free' && (
+                {/* Onizleme MODALDA (2026-08-21) — eskiden liste ustunde hep acikti. */}
                 <button
                   type="button"
                   onClick={function () { setPreviewOpen(true) }}
@@ -1119,7 +1044,6 @@ export default function StandardFieldsEditor(props) {
                 >
                   <Eye size={12} strokeWidth={2.2} /> Önizleme
                 </button>
-                )}
               </div>
 
               {/* Arama — alan sayisi arttikca liste uzuyor (Sutun Ayarlari paneliyle ayni desen) */}
@@ -1142,7 +1066,16 @@ export default function StandardFieldsEditor(props) {
 
               {/* ── Alanlar: bölüme göre gruplu, bölümler arası SÜRÜKLENEBİLİR ──
                   Bos bolumler de render edilir — birakma hedefi olmalari icin. */}
-              <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              {/* measuring Always: serit yukseklikleri surukleme SIRASINDA degisiyor
+                  (satir cikinca kap kisaliyor). Varsayilan olcum bir kez alindigi icin
+                  hedef dikdortgenleri bayatliyor ve birakma birkac px kayabiliyordu. */}
+              <DndContext
+                sensors={dndSensors}
+                collisionDetection={preciseCollision}
+                measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+                onDragStart={function (e) { setDragKey(String(e.active.id)) }}
+                onDragCancel={function () { setDragKey(null) }}
+                onDragEnd={handleDragEnd}>
               {tabTree.map(function (tab) {
               return (
                 <div key={'tab-' + tab.key} className="mb-5">
@@ -1323,23 +1256,11 @@ export default function StandardFieldsEditor(props) {
                               </div>
                               <div className="flex items-center gap-1.5">
                                 <span className="text-[9.5px] font-semibold text-slate-500 dark:text-white/50">Genişlik</span>
-                                {/* Serbest duzende PIKSEL, izgara modunda 1..12 span.
-                                    Iki yol ayri veri tutar (cellWidthPx / cardWidth) —
-                                    mod degistirince digerinin degeri kaybolmaz. */}
-                                {layoutMode === 'free' ? (
-                                  <PxWidthStepper
-                                    value={f.cellWidthPx}
-                                    fallback={freeDefaultWidth(f.key)}
-                                    onChange={function (v) { patchField(f.key, { cellWidthPx: v }) }}
-                                  />
-                                ) : (
-                                  <WidthStepper
-                                    value={f.cardWidth}
-                                    fallback={defaultCardWidth}
-                                    allowClear={true}
-                                    onChange={function (v) { patchField(f.key, { cardWidth: v }) }}
-                                  />
-                                )}
+                                <PxWidthStepper
+                                  value={f.cellWidthPx}
+                                  fallback={freeDefaultWidth(f.key)}
+                                  onChange={function (v) { patchField(f.key, { cellWidthPx: v }) }}
+                                />
                               </div>
                               {/* Bolum artik SURUKLEYEREK degistirilir — buton grubu kalkti.
                                   Yerine detaylari acan katlama dugmesi. */}
@@ -1352,7 +1273,7 @@ export default function StandardFieldsEditor(props) {
                                     return next
                                   })
                                 }}
-                                title={isOpen ? 'Detayları gizle' : 'Başlık, stil ve davranış ayarları'}
+                                title={isOpen ? 'Detayları gizle' : 'Başlık metni ve davranış ayarları'}
                                 className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-semibold text-slate-500 hover:text-indigo-600 dark:text-white/50 dark:hover:text-indigo-300"
                               >
                                 {isOpen ? <ChevronDown size={12} strokeWidth={2.2} /> : <ChevronRight size={12} strokeWidth={2.2} />}
@@ -1362,8 +1283,12 @@ export default function StandardFieldsEditor(props) {
 
                             {/* Satır 2: detaylar — yalnizca satir ACIKKEN. Kapaliyken
                                 liste kisa kalir (Sutun Ayarlari panelindeki desen). */}
+                            {/* 2026-08-22 (kullanici karari): "Başlık Stili" (Standart/
+                                Modern/Sade) secenegi KALDIRILDI. `labelStyle` verisi
+                                DB'de silinmez — load/save'de aynen tasinir, yalniz
+                                duzenlenmez. */}
                             {isOpen && (
-                            <div className="grid grid-cols-1 lg:grid-cols-[1fr_100px_1.2fr] gap-2 items-center">
+                            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr] gap-2 items-center">
                               <input
                                 type="text"
                                 value={f.labelText}
@@ -1372,15 +1297,6 @@ export default function StandardFieldsEditor(props) {
                                 onChange={function (e) { patchField(f.key, { labelText: e.target.value }) }}
                                 className={inputCls}
                               />
-                              <select
-                                value={f.labelStyle}
-                                onChange={function (e) { patchField(f.key, { labelStyle: e.target.value }) }}
-                                className={inputCls}
-                              >
-                                <option value="">Standart</option>
-                                <option value="modern">Modern</option>
-                                <option value="inline">Sade</option>
-                              </select>
                               {/* 2026-08-20 (kullanici istegi): Varsayilan Deger / Gorunurluk
                                   Kosulu / Zorunluluk Kosulu artik satir icinde serbest metin
                                   DEGIL — tek butonla acilan modalden tanimlanir. Kosullar
@@ -1412,12 +1328,31 @@ export default function StandardFieldsEditor(props) {
                 </div>
               )
               })}
+
+              {/* Imlecin altinda tasinan kopya — surukleme boyunca HER ZAMAN gorunur,
+                  kap sinirlarindan ve overflow'dan etkilenmez (portal degil, DndContext
+                  icinde konumlanir ama transform ile serbest hareket eder). */}
+              <DragOverlay dropAnimation={{ duration: 160, easing: 'cubic-bezier(.2,0,.2,1)' }}>
+                {dragKey ? (function () {
+                  var df = fields.find(function (x) { return x.key === dragKey })
+                  if (!df) return null
+                  return (
+                    <div className="rounded-lg border border-indigo-300 bg-[#fff] shadow-lg px-2.5 py-2 flex items-center gap-2 dark:border-indigo-400/50 dark:bg-[#1b2233]">
+                      <GripVertical size={13} strokeWidth={2} className="flex-shrink-0 text-indigo-500 dark:text-indigo-300" />
+                      <span className="text-[11.5px] font-semibold text-slate-700 dark:text-white/85 truncate">
+                        {df.labelText || df.label || df.key}
+                      </span>
+                      {showTabBadge && tabLabels[df.tab] && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-100 text-slate-500 border border-slate-200 dark:bg-white/[0.05] dark:text-white/50 dark:border-white/10 flex-shrink-0">
+                          {tabLabels[df.tab]}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })() : null}
+              </DragOverlay>
               </DndContext>
 
-              <div className="text-[10.5px] text-slate-500 dark:text-white/55">
-                Koşul ifadelerinde kullanılabilir alanlar: <span className="font-mono">{scopeKeys}</span>.
-                Örnekler: <span className="font-mono">currency != 'TRY'</span> · <span className="font-mono">vatIncluded == true</span> · <span className="font-mono">discountRate &gt; 0</span>
-              </div>
             </>
           )}
 

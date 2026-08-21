@@ -111,6 +111,7 @@ public static class AuditFieldLabels
             ["ExchangeRate"] = "Kur",
             ["RateDate"] = "Kur Tarihi",
             ["IsVatIncluded"] = "KDV Dahil",
+            ["SourceDocumentNo"] = "Kaynak Belge No",
             ["SalesRepId"] = "Satış Temsilcisi",
             ["SalesRepName"] = "Satış Temsilcisi",
             ["PaymentTerm"] = "Ödeme Koşulu",
