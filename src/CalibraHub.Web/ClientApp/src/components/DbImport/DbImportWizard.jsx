@@ -1,4 +1,4 @@
-import React from 'react'
+﻿import React from 'react'
 import {
   Database, ArrowLeft, ArrowRight, Save, Play, Loader2, Search,
   CheckCircle2, XCircle, AlertTriangle, KeyRound, Wand2, Trash2, Filter, Plus, ListChecks, X, CalendarClock,
@@ -405,8 +405,16 @@ export default function DbImportWizard() {
               )}
               <div className="dbi-field">
                 <span className="dbi-label">Kaynak Bağlantı <span className="dbi-required">*</span></span>
+                {/* Baglanti degisince kaynak nesnesiyle BIRLIKTE kolon eslemesi de temizlenir:
+                    esleme kaynak kolon ADLARINA bagli, yeni baglantida o adlar olmayabilir —
+                    duruyor birakilirsa aktarim sessizce bos/yanlis kolonla calisir. */}
                 <select className="dbi-select" value={job.connectionId}
-                        onChange={(e) => setJob({ ...job, connectionId: Number(e.target.value), sourceObject: '' })}>
+                        onChange={(e) => {
+                          const nextId = Number(e.target.value)
+                          const hadMapping = job.columns.length > 0 || job.matchKeyFields.length > 0
+                          setJob((prev) => ({ ...prev, connectionId: nextId, sourceObject: '', columns: [], matchKeyFields: [] }))
+                          if (hadMapping) setNotice('Kaynak bağlantı değiştirildi — önceki kolon eşlemesi ve anahtar seçimi temizlendi.')
+                        }}>
                   <option value={0}>— Seçiniz —</option>
                   {connections.map((c) => (
                     <option key={c.id} value={c.id}>{c.name} ({c.serverName} · {c.databaseName})</option>
@@ -445,7 +453,11 @@ export default function DbImportWizard() {
                             <td>
                               <button type="button"
                                       className={`dbi-btn dbi-btn--xs ${selected ? 'dbi-btn--primary' : ''}`}
-                                      onClick={() => setJob({ ...job, sourceSchema: o.schemaName, sourceObject: o.objectName, columns: [] })}>
+                                      onClick={() => {
+                                        const hadMapping = job.columns.length > 0 || job.matchKeyFields.length > 0
+                                        setJob((prev) => ({ ...prev, sourceSchema: o.schemaName, sourceObject: o.objectName, columns: [], matchKeyFields: [] }))
+                                        if (hadMapping) setNotice('Kaynak tablo değiştirildi — önceki kolon eşlemesi ve anahtar seçimi temizlendi.')
+                                      }}>
                                 {selected ? 'Seçili' : 'Seç'}
                               </button>
                             </td>
