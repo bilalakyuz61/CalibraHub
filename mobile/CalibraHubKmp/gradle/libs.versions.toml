@@ -19,14 +19,14 @@
 # DERS: Android artifact'leri JVM bytecode oldugu icin klib ABI kontrolune girmez — bu yuzden
 # Kotlin 2.2.21 ile Android build YESIL geciyordu ama iOS/native derleme patliyordu.
 # "Android yesil != iOS yesil": KMP'de native klib ABI eslesmesi AYRICA dogrulanmali.
-kotlin = "2.3.20"
+kotlin = "2.2.21"
 agp = "8.7.3"
 # Compose Multiplatform resmi Kotlin uyumluluk sayfasi (jetbrains.com/help/kotlin-multiplatform-dev/
 # compose-compatibility-and-versioning.html): "latest CMP her zaman latest Kotlin ile uyumlu" +
 # "iOS/web gibi hizli evrilen platformlar icin Kotlin 2.2.20'ye yukselt" acik tavsiyesi. 1.11.1
 # (2026-05-13 yayinlandi) CMP'nin en son STABIL surumu; Compose Compiler Gradle plugin'i (kotlin-
 # compose alias'i) YINE `kotlin` version.ref'i ile ayni tutulur (CMP'nin zorunlu kildigi esleme).
-compose-multiplatform = "1.11.1"
+compose-multiplatform = "1.10.0"
 # Ktor 3.0.3 -> 3.5.2: buyuk Kotlin siramasinda (2.1.0->2.2.21) klib/metadata guncelligini
 # korumak icin en son kararli 3.x patch'ine tasindi; ktor-client-* API'lerinde davranissal
 # degisiklik YOK (yalnizca additive/bugfix sürümler), androidApp derlemesiyle dogrulandi.
