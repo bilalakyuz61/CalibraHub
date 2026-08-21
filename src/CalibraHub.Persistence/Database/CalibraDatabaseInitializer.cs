@@ -1,4 +1,4 @@
-﻿using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Security;
 using CalibraHub.Application.Ui;
@@ -14125,6 +14125,9 @@ END;";
                     [CardSection]  INT            NULL,
                     [CardOrder]    INT            NULL,
                     [CardWidth]    INT            NULL,
+                    -- 2026-08-20: serit BASINA satir yuksekligi (px). Yalnizca rezerve
+                    -- '__stripN' satirlarinda anlamli; alan satirlarinda NULL kalir.
+                    [RowHeight]    INT            NULL,
                     [IsActive]     BIT            NOT NULL CONSTRAINT [DF_FormFieldBehavior_IsActive] DEFAULT 1,
                     [CreatedById]  INT            NULL,
                     [CreatedBy]    NVARCHAR(120)  NULL,
@@ -14145,6 +14148,8 @@ END;";
                     ALTER TABLE [{s}].[FormFieldBehavior] ADD [CardOrder] INT NULL;
                 IF COL_LENGTH(N'{sl}.FormFieldBehavior', N'CardWidth') IS NULL
                     ALTER TABLE [{s}].[FormFieldBehavior] ADD [CardWidth] INT NULL;
+                IF COL_LENGTH(N'{sl}.FormFieldBehavior', N'RowHeight') IS NULL
+                    ALTER TABLE [{s}].[FormFieldBehavior] ADD [RowHeight] INT NULL;
             END;
             """;
         await using var cmd = connection.CreateCommand();

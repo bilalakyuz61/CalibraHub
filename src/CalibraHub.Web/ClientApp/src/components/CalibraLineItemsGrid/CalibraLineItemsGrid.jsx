@@ -167,6 +167,8 @@ export default function CalibraLineItemsGrid(props) {
   // (defaultCardWidth, 1..12). null = alan bazinda cardWidth de yoksa 3 kullanilir
   // (bkz. resolvedCardWidth, 2026-08-20 "seritler tablo gibi hizalansin" istegi).
   var [lineDefaultCardWidth, setLineDefaultCardWidth] = useState(null)
+  // Serit basina satir yuksekligi (px): { 1: 44, ... }. Bos = kartin kendi olcusu.
+  var [lineStripHeights, setLineStripHeights] = useState({})
   // NOT: Kart Düzeni editörü grid'den kaldırıldı (2026-08-05) — düzen yönetimi
   // yalnızca Alan Yönetimi → "Kart Düzeni" üzerinden; grid düzeni yalnız UYGULAR.
   // Dar konteynerde (tablet dikey / bolunmus ekran) 24-kolon span'lar okunmaz
@@ -1464,6 +1466,15 @@ export default function CalibraLineItemsGrid(props) {
         // Form-seviye varsayilan hucre genisligi — alan bazinda cardWidth
         // atanmamis alanlar bunu kullanir (yoksa 3'e duser, bkz. resolvedCardWidth).
         setLineDefaultCardWidth((typeof data.defaultCardWidth === 'number' && isFinite(data.defaultCardWidth)) ? data.defaultCardWidth : null)
+        // Serit satir yukseklikleri (2026-08-20) — fail-open: gelmezse bos kalir,
+        // kart bugunku olcusunu kullanir.
+        var __sh = {}
+        ;(data.stripHeights || []).forEach(function (x) {
+          if (x && x.section > 0 && typeof x.rowHeight === 'number' && isFinite(x.rowHeight)) {
+            __sh[x.section] = x.rowHeight
+          }
+        })
+        setLineStripHeights(__sh)
       })
       .catch(function () { /* sessiz — fail-open */ })
     return function () { alive = false }
@@ -2383,7 +2394,9 @@ export default function CalibraLineItemsGrid(props) {
                         dikey buton grubu) seritlerin DISINDA, tek yerde — tekrarlanmaz. */}
                     {stripSections.map(function (sec) {
                       return (
-                        <div className="clc-strip flex items-stretch" key={'clc-strip-' + sec}>
+                        <div className="clc-strip flex items-stretch" key={'clc-strip-' + sec}
+                             style={typeof lineStripHeights[sec] === 'number'
+                               ? { '--clc-cell-h': lineStripHeights[sec] + 'px' } : undefined}>
                           {renderFieldsList(
                             { display: 'grid', alignItems: 'stretch', flex: 1, minWidth: 0 },
                             'clc-fields-row' + (isKitComponent ? ' opacity-90' : '') + (gridNarrow ? ' clc-fields-row--narrow' : ''),

@@ -39,6 +39,20 @@ public sealed partial class FormBehaviorController : Controller
     /// </summary>
     private const string DefaultCardWidthFieldKey = "__card";
 
+    /// <summary>
+    /// Şerit başına satır yüksekliği (px) rezerve satırın FieldKey öneki:
+    /// "__strip1", "__strip2"… Değer RowHeight kolonunda taşınır. __card ile
+    /// aynı desen (yeni tablo açılmaz); katalogda karşılığı olmadığından
+    /// GET'teki fields[] merge döngüsüne girmez.
+    /// </summary>
+    private const string StripRowHeightKeyPrefix = "__strip";
+
+    private const int RowHeightMin = 28;
+    private const int RowHeightMax = 96;
+
+    private static int? ClampRowHeight(int? v)
+        => v is null ? null : Math.Min(RowHeightMax, Math.Max(RowHeightMin, v.Value));
+
     private readonly IFormFieldBehaviorRepository _repository;
     private readonly IAuditTrailService? _audit;
     private readonly ILogger<FormBehaviorController> _logger;
@@ -64,8 +78,12 @@ public sealed partial class FormBehaviorController : Controller
 
     public sealed record TabBehaviorDto(string Key, bool IsVisible = true, int SortOrder = 0, string? LabelText = null);
 
+    /// <summary>Şerit no (1..N) → satır yüksekliği (px). null/boş = varsayılan.</summary>
+    public sealed record StripHeightDto(int Section, int? RowHeight);
+
     public sealed record SaveBehaviorRequest(
-        string FormCode, List<FieldBehaviorDto>? Fields, List<TabBehaviorDto>? Tabs, int? DefaultCardWidth = null);
+        string FormCode, List<FieldBehaviorDto>? Fields, List<TabBehaviorDto>? Tabs, int? DefaultCardWidth = null,
+        List<StripHeightDto>? StripHeights = null);
 
     private sealed record CatalogItem(string Key, string Label, string Tab, string DataType, bool Locked);
 
@@ -170,6 +188,18 @@ public sealed partial class FormBehaviorController : Controller
         byKey.TryGetValue(DefaultCardWidthFieldKey, out var cardDefaultRow);
         var defaultCardWidth = cardDefaultRow?.CardWidth;
 
+        // Şerit satır yükseklikleri — rezerve "__stripN" satırlarından toplanır.
+        var stripHeights = rows
+            .Where(r => r.FieldKey.StartsWith(StripRowHeightKeyPrefix, StringComparison.OrdinalIgnoreCase)
+                        && r.RowHeight is not null)
+            .Select(r => new
+            {
+                section = int.TryParse(r.FieldKey.AsSpan(StripRowHeightKeyPrefix.Length), out var n) ? n : 0,
+                rowHeight = r.RowHeight,
+            })
+            .Where(x => x.section > 0)
+            .ToArray();
+
         // Sekme yönetimi yalnız header formlarda — kalem formunda boş liste döner.
         object[] tabs = Array.Empty<object>();
         if (isHeader)
@@ -189,7 +219,7 @@ public sealed partial class FormBehaviorController : Controller
             }).OrderBy(t => t.sortOrder).Cast<object>().ToArray();
         }
 
-        return Json(new { ok = true, formCode, canEdit = IsAdmin(), fields, tabs, defaultCardWidth });
+        return Json(new { ok = true, formCode, canEdit = IsAdmin(), fields, tabs, defaultCardWidth, stripHeights });
     }
 
     [HttpPost("/api/form-behavior/save")]
@@ -277,6 +307,26 @@ public sealed partial class FormBehaviorController : Controller
                     FieldKey = DefaultCardWidthFieldKey,
                     IsVisible = true,
                     CardWidth = defaultCardWidth,
+                    CreatedById = GetUserId(),
+                    CreatedBy = User?.Identity?.Name,
+                });
+            }
+
+            // Şerit satır yükseklikleri — yalnız DEĞER VERİLMİŞ şeritler satır açar
+            // (null = varsayılan, satır yazılmaz → fail-open, kart kendi ölçüsünü kullanır).
+            foreach (var sh in request.StripHeights ?? [])
+            {
+                if (sh is null || sh.Section < 1 || sh.Section > 99) continue;
+                var h = ClampRowHeight(sh.RowHeight);
+                if (h is null) continue;
+                var key = StripRowHeightKeyPrefix + sh.Section;
+                if (!seen.Add(key)) continue;
+                rows.Add(new FormFieldBehavior
+                {
+                    FormCode = formCode,
+                    FieldKey = key,
+                    IsVisible = true,
+                    RowHeight = h,
                     CreatedById = GetUserId(),
                     CreatedBy = User?.Identity?.Name,
                 });

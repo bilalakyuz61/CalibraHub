@@ -53,6 +53,13 @@ public sealed class FormFieldBehavior
     /// map'ler), kökte ayrı bir "defaultCardWidth" alanı olarak döner.
     /// </summary>
     public int? CardWidth { get; set; }
+
+    /// <summary>
+    /// Serit satir yuksekligi (px). YALNIZCA rezerve '__strip{N}' satirlarinda
+    /// doludur — o seridin tum hucreleri bu yuksekligi kullanir. Alan satirlarinda
+    /// NULL; null ise kart kendi varsayilanini uygular (fail-open).
+    /// </summary>
+    public int? RowHeight { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
     public int? CreatedById { get; init; }

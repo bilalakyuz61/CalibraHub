@@ -309,6 +309,8 @@ export default function StandardFieldsEditor(props) {
   var [initialDefaultCardWidth, setInitialDefaultCardWidth] = useState(3)
   // Davranis modali acik olan alanin key'i (null = kapali)
   var [behaviorKey, setBehaviorKey] = useState(null)
+  // Serit basina satir yuksekligi (px): { 1: 44, 2: 36, ... }. Bos = varsayilan.
+  var [stripHeights, setStripHeights] = useState({})
   // Sifirla — yuklenen (kaydedilmis) hale donus icin anlik goruntu
   var [initialFields, setInitialFields] = useState([])
   // Arama kutusu (Sutun Ayarlari paneliyle ayni etkilesim dili)
@@ -345,6 +347,11 @@ export default function StandardFieldsEditor(props) {
         setFields(loadedFields)
         // Sifirla icin baslangic anlik goruntusu (kaydedilmis son hal)
         setInitialFields(loadedFields)
+        var sh = {}
+        ;(data.stripHeights || []).forEach(function (x) {
+          if (x && x.section > 0 && typeof x.rowHeight === 'number') sh[x.section] = x.rowHeight
+        })
+        setStripHeights(sh)
         // Form varsayilan hucre genisligi — kokte gelir, null/eksikse 3 (sozlesme).
         var loadedDefaultCardWidth = normalizeCardWidth(data.defaultCardWidth)
         var resolvedDefaultCardWidth = loadedDefaultCardWidth === null ? 3 : loadedDefaultCardWidth
@@ -525,6 +532,11 @@ export default function StandardFieldsEditor(props) {
         tabs: tabs.map(function (t, i) {
           return { key: t.key, isVisible: t.isVisible, sortOrder: i, labelText: t.labelText.trim() || null }
         }),
+        // Serit satir yukseklikleri — yalniz DEGER VERILMIS seritler gonderilir;
+        // gonderilmeyen serit sunucuda satir acmaz (varsayilan, fail-open).
+        stripHeights: Object.keys(stripHeights).map(function (k) {
+          return { section: parseInt(k, 10), rowHeight: stripHeights[k] }
+        }).filter(function (x) { return x.section > 0 && typeof x.rowHeight === 'number' }),
       }
       var resp = await fetch('/api/form-behavior/save', {
         method: 'POST',
@@ -731,6 +743,49 @@ export default function StandardFieldsEditor(props) {
                       </span>
                       {group.hint && <span className="text-[10px] text-slate-400 dark:text-white/40">{group.hint}</span>}
                       <span className="text-[10px] text-slate-400 dark:text-white/35">({visibleFields.length})</span>
+                      {/* Serit satir yuksekligi (2026-08-20 kullanici istegi: "serit basina
+                          ayri"). Bos = varsayilan (kart kendi olcusunu kullanir); deger
+                          verilince o seridin TUM hucreleri bu yuksekligi alir. Sifirla
+                          okuyla varsayilana donulur. */}
+                      {group.kind === 'strip' && (function () {
+                        var h = stripHeights[group.section]
+                        function setH(v) {
+                          setStripHeights(function (prev) {
+                            var next = Object.assign({}, prev)
+                            if (v == null) delete next[group.section]; else next[group.section] = v
+                            return next
+                          })
+                        }
+                        var cur = (typeof h === 'number') ? h : 36
+                        return (
+                          <span className="flex items-center gap-1 ml-1">
+                            <span className="text-[9.5px] font-semibold text-slate-500 dark:text-white/50">Yükseklik</span>
+                            <span className="flex items-center rounded-md border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.04] overflow-hidden">
+                              <button type="button" onClick={function () { setH(Math.max(28, cur - 4)) }}
+                                      disabled={cur <= 28} title="Daralt"
+                                      className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-indigo-600 dark:text-white/55 dark:hover:text-indigo-300 disabled:opacity-30">
+                                <Minus size={10} strokeWidth={2.4} />
+                              </button>
+                              <span style={{ minWidth: 58 }}
+                                    className={'px-1 text-[10px] font-bold tabular-nums text-center whitespace-nowrap ' + (
+                                      typeof h === 'number' ? 'text-slate-700 dark:text-white/85' : 'text-slate-400 italic dark:text-white/40')}>
+                                {typeof h === 'number' ? (h + 'px') : 'Varsayılan'}
+                              </span>
+                              <button type="button" onClick={function () { setH(Math.min(96, cur + 4)) }}
+                                      disabled={cur >= 96} title="Genişlet"
+                                      className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-indigo-600 dark:text-white/55 dark:hover:text-indigo-300 disabled:opacity-30">
+                                <Plus size={10} strokeWidth={2.4} />
+                              </button>
+                            </span>
+                            <button type="button" onClick={function () { if (typeof h === 'number') setH(null) }}
+                                    disabled={typeof h !== 'number'} title="Varsayılana dön"
+                                    style={{ width: 13, visibility: typeof h === 'number' ? 'visible' : 'hidden' }}
+                                    className="flex-shrink-0 text-slate-400 hover:text-indigo-600 dark:text-white/35 dark:hover:text-indigo-300">
+                              <RotateCcw size={11} strokeWidth={2.2} />
+                            </button>
+                          </span>
+                        )
+                      })()}
                       {/* 2026-08-20 (kullanici istegi): silme butonu SERIDIN YANINDA.
                           Yalnizca serit gruplarinda ve yalnizca serit BOSSA aktif —
                           dolu bir seridi silmek alanlari sessizce "Varsayilan"a

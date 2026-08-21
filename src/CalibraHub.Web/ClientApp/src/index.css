@@ -3414,6 +3414,21 @@ body.app-theme-dark .clc-card-actions { --clc-strip-border: rgba(255,255,255,0.0
    ezmesi KALDIRILDI — iki yerde ayri sayi tutmak kaymaya yol aciyordu. */
 .clc-field-cell { padding: 6px 10px; }
 
+/* 2026-08-20 (kullanici istegi): serit hucrelerindeki DEGERLER ayni taban
+   cizgisinde dursun. Sebep: bir hucrede <input>, digerinde duz metin ya da
+   placeholder ("—") render ediliyor; bunlarin dogal yukseklikleri farkli
+   oldugu icin degerler birkac piksel kayiyordu. Deger sarmalayicisina ORTAK
+   min-height + dikey ortalama verildi — icerik ne olursa olsun ayni hizada.
+   Alt cizgi (border-bottom) sarmalayicida oldugu icin cizgiler de hizalanir. */
+.clc-field-cell .clc-cell-underline {
+  min-height: var(--clc-cell-h, 26px);
+  display: flex;
+  align-items: center;
+}
+/* Ic kontrol sarmalayiciyi doldursun — aksi halde sayisal alanlarin sag
+   yaslamasi (text-align:right) dar bir kutuya sikisip kayardi. */
+.clc-field-cell .clc-cell-underline > * { flex: 1 1 auto; min-width: 0; }
+
 /* CalibraLineItemsGrid — Kur (döviz kuru) input'u, grid footer (PageComment Seq 1083).
    Native input color-scheme sinyali olmadan light modda bile beyaz/light render
    olabilir (bkz. CLAUDE.md "color-scheme zorunluluğu") — light default, dark override. */

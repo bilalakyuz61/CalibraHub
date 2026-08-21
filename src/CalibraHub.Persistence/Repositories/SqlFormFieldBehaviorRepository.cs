@@ -31,7 +31,10 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
         cmd.CommandText = $"""
             SELECT [Id],[FormCode],[FieldKey],[IsVisible],[IsRequired],[DefaultValue],
                    [LabelText],[LabelStyle],[RulesJSON],[SortOrder],[CardSection],[CardOrder],[CardWidth],[IsActive],
-                   [CreatedById],[CreatedBy],[Created],[UpdatedById],[UpdatedBy],[Updated]
+                   [CreatedById],[CreatedBy],[Created],[UpdatedById],[UpdatedBy],[Updated],
+                   -- 2026-08-20 RowHeight SONA eklendi: mevcut ordinal eslemesi (0..19)
+                   -- bozulmasin diye araya DEGIL sona. Okuma indeksi 20.
+                   [RowHeight]
             FROM {_table}
             WHERE [FormCode]=@FormCode AND [IsActive]=1
             ORDER BY [SortOrder],[FieldKey];
@@ -63,6 +66,7 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                 UpdatedById = r.IsDBNull(17) ? null : r.GetInt32(17),
                 UpdatedBy = r.IsDBNull(18) ? null : r.GetString(18),
                 Updated = r.IsDBNull(19) ? null : r.GetDateTime(19),
+                RowHeight = r.IsDBNull(20) ? null : r.GetInt32(20),
             });
         }
         return list;
@@ -90,11 +94,11 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                     INSERT INTO {_table}
                         ([FormCode],[FieldKey],[IsVisible],[IsRequired],[DefaultValue],
                          [LabelText],[LabelStyle],[RulesJSON],[SortOrder],[CardSection],[CardOrder],[CardWidth],[IsActive],
-                         [CreatedById],[CreatedBy])
+                         [CreatedById],[CreatedBy],[RowHeight])
                     VALUES
                         (@FormCode,@FieldKey,@IsVisible,@IsRequired,@DefaultValue,
                          @LabelText,@LabelStyle,@RulesJson,@SortOrder,@CardSection,@CardOrder,@CardWidth,1,
-                         @CreatedById,@CreatedBy);
+                         @CreatedById,@CreatedBy,@RowHeight);
                     """;
                 ins.Parameters.Add(new SqlParameter("@FormCode", formCode));
                 ins.Parameters.Add(new SqlParameter("@FieldKey", row.FieldKey));
@@ -108,6 +112,7 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                 ins.Parameters.Add(new SqlParameter("@CardSection", (object?)row.CardSection ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@CardOrder", (object?)row.CardOrder ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@CardWidth", (object?)row.CardWidth ?? DBNull.Value));
+                ins.Parameters.Add(new SqlParameter("@RowHeight", (object?)row.RowHeight ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@CreatedById", (object?)row.CreatedById ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@CreatedBy", (object?)row.CreatedBy ?? DBNull.Value));
                 await ins.ExecuteNonQueryAsync(ct);
