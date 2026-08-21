@@ -10,7 +10,12 @@ import './DbImport.css'
 /*
  * DbImportWizard — harici SQL kaynağından içe aktarım işi tanımlama + çalıştırma.
  *
- * Adımlar: Kaynak → Eşleme → Prosedürler → Önizleme → Aktar
+ * Adımlar: Tanım (Hedef + Kaynak) → Eşleme → Prosedürler → Önizleme → Aktar
+ *
+ * Hedef kayıt türü (neyi aktardığımız) kaynak seçiminden ÖNCE, Adım 1'de sorulur —
+ * kullanıcı "nereden" okuyacağını seçmeden önce "ne için" okuduğunu bilmeli
+ * (PageComment #1105). Hedef değişince mevcut kolon eşlemesi/anahtar seçimi
+ * temizlenir (aksi halde eşleme sessizce eski/yanlış hedefe bağlı kalır).
  *
  * ANAHTAR ALAN ZORUNLUDUR. Bu iş elle ya da cron ile tekrar tekrar çalışır;
  * anahtarsız bir aktarım her turda kayıtları çoğaltır. UI ilerlemeyi/kaydetmeyi
@@ -20,7 +25,7 @@ import './DbImport.css'
  */
 
 const STEPS = [
-  { n: 1, label: 'Kaynak' },
+  { n: 1, label: 'Tanım' },
   { n: 2, label: 'Eşleme' },
   { n: 3, label: 'Prosedürler' },
   { n: 4, label: 'Önizleme' },
@@ -275,9 +280,12 @@ export default function DbImportWizard() {
     setNotice(`${next.length} alan otomatik eşlendi. Lütfen kontrol edin.`)
   }
 
-  const step1Ok = job.connectionId > 0 && !!job.sourceObject && !!job.name.trim()
+  // Adım 1 artık hem hedefi (ne için) hem kaynağı (nereden) kapsar — biri eksikse ilerleme kapalı.
+  const step1Ok = !!job.name.trim() && !!job.targetEntity && job.connectionId > 0 && !!job.sourceObject
   // Ekleme ve güncelleme birlikte kapalıysa aktarım hiçbir şey yazmaz — ilerlemeyi engelle.
-  const step2Ok = job.targetEntity && job.columns.length > 0 && matchKeyMapped
+  // targetEntity kontrolü burada da tekrarlanır: adım sekmelerine doğrudan tıklayıp
+  // Adım 1'i atlamak mümkün olduğundan tek gate noktasına güvenilmez.
+  const step2Ok = !!job.targetEntity && job.columns.length > 0 && matchKeyMapped
     && (job.insertNew !== false || job.updateExisting !== false)
 
   async function save() {
@@ -373,6 +381,28 @@ export default function DbImportWizard() {
                        onChange={(e) => setJob({ ...job, name: e.target.value })}
                        placeholder="Örn. Netsis Cari Aktarımı" />
               </div>
+              {/* Hedef önce sorulur: kaynak seçmeden önce "ne için" olduğu belli olmalı
+                  (PageComment #1105). Hedef değişince eşleme/anahtar seçimleri temizlenir —
+                  aksi halde Eşleme adımında eski hedefin alan anahtarlarına sessizce bağlı kalır. */}
+              <div className="dbi-field">
+                <span className="dbi-label">Hedef Kayıt Türü <span className="dbi-required">*</span></span>
+                <select className="dbi-select" value={job.targetEntity}
+                        onChange={(e) => {
+                          const nextEntity = e.target.value
+                          const hadMapping = job.columns.length > 0 || job.matchKeyFields.length > 0
+                          setJob((prev) => ({ ...prev, targetEntity: nextEntity, columns: [], matchKeyFields: [] }))
+                          if (hadMapping) setNotice('Hedef kayıt türü değiştirildi — önceki kolon eşlemesi ve anahtar seçimi temizlendi.')
+                        }}>
+                  <option value="">— Seçiniz —</option>
+                  {entities.map((e) => <option key={e.entity} value={e.entity}>{e.label}</option>)}
+                </select>
+              </div>
+              {job.targetEntity && entities.find((e) => e.entity === job.targetEntity)?.supportsUpsert === false && (
+                <div className="dbi-alert dbi-alert--warn" style={{ marginTop: 4, marginBottom: 10 }}>
+                  <AlertTriangle size={13} /> Bu kayıt türü güncelleme desteklemiyor — her çalıştırma yeni
+                  kayıt açar, anahtar alan mükerrer oluşmasını engellemez. Zamanlanmış göreve bağlamayın.
+                </div>
+              )}
               <div className="dbi-field">
                 <span className="dbi-label">Kaynak Bağlantı <span className="dbi-required">*</span></span>
                 <select className="dbi-select" value={job.connectionId}
@@ -433,17 +463,19 @@ export default function DbImportWizard() {
         {/* ── 2. Eşleme ── */}
         {step === 2 && (
           <>
-            {/* Hedef + politika tek satırda. Azami satır UI'dan kaldırıldı
+            {/* Hedef kayıt türü Adım 1'de seçildi (PageComment #1105) — burada yalnız
+                yazma politikası + kolon eşleme var. Azami satır UI'dan kaldırıldı
                 (varsayılan 50.000, iş tanımında saklanmaya devam ediyor). */}
             <div className="dbi-card">
               <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                <div className="dbi-field" style={{ margin: 0, minWidth: 260 }}>
-                  <span className="dbi-label">Hedef Kayıt Türü <span className="dbi-required">*</span></span>
-                  <select className="dbi-select" value={job.targetEntity}
-                          onChange={(e) => setJob({ ...job, targetEntity: e.target.value, columns: [], matchKeyFields: [] })}>
-                    <option value="">— Seçiniz —</option>
-                    {entities.map((e) => <option key={e.entity} value={e.entity}>{e.label}</option>)}
-                  </select>
+                <div className="dbi-field" style={{ margin: 0, minWidth: 220 }}>
+                  <span className="dbi-label">Hedef Kayıt Türü</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div className="dbi-input" style={{ background: 'var(--dbi-surface-alt)', width: 'auto', flex: '0 0 auto' }}>
+                      {entities.find((e) => e.entity === job.targetEntity)?.label || job.targetEntity || '—'}
+                    </div>
+                    <button type="button" className="dbi-btn dbi-btn--xs" onClick={() => setStep(1)}>Değiştir</button>
+                  </div>
                 </div>
                 <label className="dbi-switch" style={{ paddingBottom: 6 }}>
                   <input type="checkbox" checked={!!job.deactivateAbsent}
@@ -475,12 +507,6 @@ export default function DbImportWizard() {
                 </button>
               </div>
 
-              {job.targetEntity && entities.find((e) => e.entity === job.targetEntity)?.supportsUpsert === false && (
-                <div className="dbi-alert dbi-alert--warn" style={{ marginTop: 10, marginBottom: 0 }}>
-                  <AlertTriangle size={13} /> Bu kayıt türü güncelleme desteklemiyor — her çalıştırma yeni
-                  kayıt açar, anahtar alan mükerrer oluşmasını engellemez. Zamanlanmış göreve bağlamayın.
-                </div>
-              )}
               {job.insertNew === false && job.updateExisting === false && (
                 <div className="dbi-alert dbi-alert--err" style={{ marginTop: 10, marginBottom: 0 }}>
                   <AlertTriangle size={13} /> Ekleme ve güncelleme birlikte kapalı — aktarım hiçbir şey yazmaz.
@@ -508,7 +534,16 @@ export default function DbImportWizard() {
                 </button>
               </div>
 
-              {!job.targetEntity && <div className="dbi-hint">Önce hedef kayıt türünü seçin.</div>}
+              {!job.targetEntity && (
+                <div className="dbi-hint">
+                  Önce <a href="#" onClick={(e) => { e.preventDefault(); setStep(1) }}>Adım 1'de hedef kayıt türünü seçin</a>.
+                </div>
+              )}
+              {job.targetEntity && !sourceColumns.length && (
+                <div className="dbi-hint">
+                  Kaynak kolonları için <a href="#" onClick={(e) => { e.preventDefault(); setStep(1) }}>Adım 1'de kaynak tablo/view seçin</a>.
+                </div>
+              )}
 
               {job.targetEntity && targetFields.length > 0 && (
                 <div className="dbi-table-wrap" style={{ overflowY: 'auto' }}>

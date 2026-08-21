@@ -30,10 +30,13 @@ namespace CalibraHub.Web.Controllers;
 public sealed class ScheduledTaskController : Controller
 {
     private readonly IScheduledTaskRepository _scheduledTaskRepo;
+    private readonly ILogger<ScheduledTaskController> _logger;
 
-    public ScheduledTaskController(IScheduledTaskRepository scheduledTaskRepo)
+    public ScheduledTaskController(IScheduledTaskRepository scheduledTaskRepo,
+        ILogger<ScheduledTaskController> logger)
     {
         _scheduledTaskRepo = scheduledTaskRepo;
+        _logger = logger;
     }
 
     [HttpGet("/Admin/ScheduledTasks")]
@@ -66,6 +69,14 @@ public sealed class ScheduledTaskController : Controller
             var task = await _scheduledTaskRepo.GetByIdAsync(id.Value, ct);
             if (task is null) return NotFound();
             var all = await _scheduledTaskRepo.GetAllAsync(ct);
+
+            // Kilit bu dalda da uygulanir. Onceki surumde lockContext yalniz "yeni gorev"
+            // dalinda degerlendiriliyordu; mevcut bir gorev sihirbazdan acildiginda kilit
+            // SESSIZCE uygulanmiyordu (form kilitsiz aciliyor, kullanici bunu fark etmiyor).
+            var editJobId = jobId is > 0 ? jobId : TryReadJobId(task.ParametersJson);
+            var (editLocked, editJobName) = await ResolveLockedJobAsync(
+                lockContext, (int)task.TaskType, editJobId, dataImportService, ct);
+
             return View("~/Views/Admin/ScheduledTaskEdit.cshtml", new ScheduledTaskEditViewModel
             {
                 Id                  = task.Id,
@@ -82,6 +93,9 @@ public sealed class ScheduledTaskController : Controller
                 AllTasks            = all.Where(t => t.Id != task.Id)
                                          .Select(t => (t.Id, t.Name))
                                          .ToList(),
+                IsLockedContext     = editLocked,
+                LockedJobId         = editLocked ? editJobId : null,
+                LockedJobName       = editJobName,
             });
         }
 
@@ -99,19 +113,8 @@ public sealed class ScheduledTaskController : Controller
 
         // lockContext ile gelen kilit yalnız DataImport türünde ve iş gerçekten mevcutsa uygulanır
         // (fail-open: iş silinmiş/bulunamıyorsa form normal — kilitsiz — davranır).
-        var isLockedContext = false;
-        string? lockedJobName = null;
-        if (!string.IsNullOrWhiteSpace(lockContext)
-            && prefillType == (int)CalibraHub.Domain.Enums.ScheduledTaskType.DataImport
-            && jobId is > 0)
-        {
-            var job = await dataImportService.GetJobAsync(jobId.Value, ct);
-            if (job is not null)
-            {
-                isLockedContext = true;
-                lockedJobName = job.Name;
-            }
-        }
+        var (isLockedContext, lockedJobName) = await ResolveLockedJobAsync(
+            lockContext, prefillType, jobId, dataImportService, ct);
 
         return View("~/Views/Admin/ScheduledTaskEdit.cshtml", new ScheduledTaskEditViewModel
         {
@@ -122,6 +125,40 @@ public sealed class ScheduledTaskController : Controller
             LockedJobId      = isLockedContext ? jobId : null,
             LockedJobName    = lockedJobName,
         });
+    }
+
+    /// <summary>
+    /// Kilit baglamini cozer: lockContext dolu + tur DataImport + is gercekten mevcut ise
+    /// (true, isAdi) doner. Is silinmis/bulunamiyorsa fail-open — form kilitsiz acilir,
+    /// kaydetmedeki sunucu dogrulamasi yine devrededir.
+    /// </summary>
+    private static async Task<(bool Locked, string? JobName)> ResolveLockedJobAsync(
+        string? lockContext, int taskType, int? jobId,
+        CalibraHub.Application.Abstractions.Services.IDataImportService dataImportService,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(lockContext)) return (false, null);
+        if (taskType != (int)CalibraHub.Domain.Enums.ScheduledTaskType.DataImport) return (false, null);
+        if (jobId is not > 0) return (false, null);
+        var job = await dataImportService.GetJobAsync(jobId.Value, ct);
+        return job is null ? (false, null) : (true, job.Name);
+    }
+
+    /// <summary>ParametersJson icindeki jobId'yi okur; okunamazsa null (bicim serbest olabilir).</summary>
+    private int? TryReadJobId(string? parametersJson)
+    {
+        if (string.IsNullOrWhiteSpace(parametersJson)) return null;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(parametersJson);
+            if (doc.RootElement.TryGetProperty("jobId", out var el) && el.TryGetInt32(out var v) && v > 0)
+                return v;
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            _logger.LogWarning(ex, "ScheduledTask ParametersJson cozumlenemedi, kilit baglami atlandi.");
+        }
+        return null;
     }
 
     [HttpGet("/Admin/ScheduledTaskHistoryView/{id:int}")]
@@ -220,7 +257,6 @@ public sealed class ScheduledTaskController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ScheduledTaskSave([FromBody] ScheduledTaskSaveRequest req,
         [FromServices] CalibraHub.Application.Abstractions.Services.IDataImportService dataImportService,
-        [FromServices] ILogger<ScheduledTaskController> logger,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(req.Name))
@@ -246,20 +282,20 @@ public sealed class ScheduledTaskController : Controller
                 }
                 catch (System.Text.Json.JsonException ex)
                 {
-                    logger.LogWarning(ex, "ScheduledTaskSave: DataImport görevi icin parametersJson ayristirilamadi. Name={Name}", req.Name);
+                    _logger.LogWarning(ex, "ScheduledTaskSave: DataImport görevi icin parametersJson ayristirilamadi. Name={Name}", req.Name);
                 }
             }
 
             if (parsedJobId is not > 0)
             {
-                logger.LogWarning("ScheduledTaskSave: DataImport görevi icin jobId eksik. Name={Name}", req.Name);
+                _logger.LogWarning("ScheduledTaskSave: DataImport görevi icin jobId eksik. Name={Name}", req.Name);
                 return Json(new { success = false, message = "Veritabanı Aktarımı görevi için geçerli bir aktarım işi seçilmelidir." });
             }
 
             var importJob = await dataImportService.GetJobAsync(parsedJobId.Value, ct);
             if (importJob is null)
             {
-                logger.LogWarning("ScheduledTaskSave: DataImport görevi jobId={JobId} bulunamadi. Name={Name}", parsedJobId, req.Name);
+                _logger.LogWarning("ScheduledTaskSave: DataImport görevi jobId={JobId} bulunamadi. Name={Name}", parsedJobId, req.Name);
                 return Json(new { success = false, message = "Seçilen aktarım işi bulunamadı — silinmiş olabilir. Lütfen geçerli bir aktarım işi seçin." });
             }
         }
