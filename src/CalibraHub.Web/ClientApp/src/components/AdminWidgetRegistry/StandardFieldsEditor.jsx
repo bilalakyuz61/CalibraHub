@@ -351,6 +351,70 @@ function freeDefaultWidth(key) { return FREE_DEFAULT_W[key] || 200 }
 /* Piksel genislik adimlayicisi (60-600, 10px adim). Olculer SABIT — deger
    "Varsayilan (150)" ile "220px" arasinda gidip gelirken satirdaki switch'ler
    kaymasin (ayni tuzak bu oturumda bir kez yasandi). */
+function WidthStepper(props) {
+  var value = (typeof props.value === 'number') ? props.value : null
+  var fallback = props.fallback
+  var allowClear = props.allowClear === true
+  var onChange = props.onChange
+  var display = (value !== null) ? value : fallback
+  function step(delta) {
+    var next = Math.max(CARD_WIDTH_MIN, Math.min(CARD_WIDTH_MAX, display + delta))
+    onChange(next)
+  }
+  return (
+    /* 2026-08-20 (kullanici istegi): SABIT olculer. Etiket "Varsayilan (3)" (uzun)
+       ile "3/12" (kisa) arasinda gidip geldigi ve temizle butonu gelip gittigi icin
+       adimlayicinin genisligi degisiyor, bu da satirdaki Gorunur/Zorunlu
+       switch'lerini kaydiriyordu. Hem etikete min-width hem temizle yuvasina sabit
+       yer verildi (buton yokken yuva GORUNMEZ ama yer kaplar). */
+    <div className="flex items-center gap-1 flex-shrink-0">
+      <div className="flex items-center rounded-md border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.04] overflow-hidden">
+        <button
+          type="button"
+          onClick={function () { step(-1) }}
+          disabled={display <= CARD_WIDTH_MIN}
+          title="Bir sütun daralt"
+          className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:bg-slate-50 dark:text-white/55 dark:hover:text-indigo-300 dark:hover:bg-white/[0.08] disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          <Minus size={11} strokeWidth={2.4} />
+        </button>
+        <span
+          style={{ minWidth: 78 }}
+          className={'px-1.5 text-[10.5px] font-bold tabular-nums text-center whitespace-nowrap ' + (
+            value !== null ? 'text-slate-700 dark:text-white/85' : 'text-slate-400 italic dark:text-white/40'
+          )}
+          title={value !== null ? (value + ' / 12 sütun') : ('Ayarlanmamış — form varsayılanı: ' + fallback + ' / 12')}
+        >
+          {value !== null ? (value + '/12') : ('Varsayılan (' + fallback + ')')}
+        </span>
+        <button
+          type="button"
+          onClick={function () { step(1) }}
+          disabled={display >= CARD_WIDTH_MAX}
+          title="Bir sütun genişlet"
+          className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:bg-slate-50 dark:text-white/55 dark:hover:text-indigo-300 dark:hover:bg-white/[0.08] disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          <Plus size={11} strokeWidth={2.4} />
+        </button>
+      </div>
+      {allowClear && (
+        <button
+          type="button"
+          onClick={function () { if (value !== null) onChange(null) }}
+          disabled={value === null}
+          aria-hidden={value === null}
+          tabIndex={value === null ? -1 : 0}
+          title="Varsayılana dön"
+          style={{ width: 13, visibility: value === null ? 'hidden' : 'visible' }}
+          className="flex-shrink-0 text-slate-400 hover:text-indigo-600 dark:text-white/35 dark:hover:text-indigo-300"
+        >
+          <RotateCcw size={11} strokeWidth={2.2} />
+        </button>
+      )}
+    </div>
+  )
+}
+
 function PxWidthStepper(props) {
   var value = (typeof props.value === 'number') ? props.value : null
   var fallback = props.fallback
@@ -537,6 +601,8 @@ export default function StandardFieldsEditor(props) {
   var [behaviorKey, setBehaviorKey] = useState(null)
   // Serit basina satir yuksekligi (px): { 1: 44, 2: 36, ... }. Bos = varsayilan.
   var [stripHeights, setStripHeights] = useState({})
+  // Duzen modu: 'grid' (varsayilan, 12 sutunluk izgara) | 'free' (serbest akis + px)
+  var [layoutMode, setLayoutMode] = useState('grid')
   // Onizleme modali acik mi (2026-08-21) — canli onizleme editorden cikarildi.
   var [previewOpen, setPreviewOpen] = useState(false)
   // Sifirla — yuklenen (kaydedilmis) hale donus icin anlik goruntu
@@ -584,6 +650,7 @@ export default function StandardFieldsEditor(props) {
           if (x && x.section > 0 && typeof x.rowHeight === 'number') sh[x.section] = x.rowHeight
         })
         setStripHeights(sh)
+        setLayoutMode(data.layoutMode === 'free' ? 'free' : 'grid')
         // Form varsayilan hucre genisligi — kokte gelir, null/eksikse 3 (sozlesme).
         var loadedDefaultCardWidth = normalizeCardWidth(data.defaultCardWidth)
         var resolvedDefaultCardWidth = loadedDefaultCardWidth === null ? 3 : loadedDefaultCardWidth
@@ -792,8 +859,7 @@ export default function StandardFieldsEditor(props) {
         }),
         // Serit satir yukseklikleri — yalniz DEGER VERILMIS seritler gonderilir;
         // gonderilmeyen serit sunucuda satir acmaz (varsayilan, fail-open).
-        // Izgara (tablo) secenegi 2026-08-21'de kaldirildi — duzen daima serbest.
-        layoutMode: 'free',
+        layoutMode: layoutMode,
         stripHeights: Object.keys(stripHeights).map(function (k) {
           return { section: parseInt(k, 10), rowHeight: stripHeights[k] }
         }).filter(function (x) { return x.section > 0 && typeof x.rowHeight === 'number' }),
@@ -968,6 +1034,45 @@ export default function StandardFieldsEditor(props) {
               </div>
               )}
 
+              {/* ── Düzen modu (2026-08-20) ────────────────────────────────────
+                  DocumentEdit 8 belge tipiyle paylaşımlı; serbest düzen form başına
+                  opt-in. 'grid' = bugünkü 12 sütunluk ızgara (diğer formlar hiç
+                  etkilenmez), 'free' = serbest akış + alan başına piksel genişlik. */}
+              <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.04]">
+                <LayoutGrid size={13} strokeWidth={2} className="flex-shrink-0 text-slate-500 dark:text-white/50" />
+                <span className="text-[11.5px] font-bold text-slate-700 dark:text-white/80">Düzen</span>
+                {[{ v: 'grid', l: 'Izgara (tablo)' }, { v: 'free', l: 'Serbest (form)' }].map(function (o) {
+                  var on = layoutMode === o.v
+                  return (
+                    <button key={o.v} type="button" onClick={function () { setLayoutMode(o.v) }}
+                      className={'px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors ' + (
+                        on ? 'bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-400/30'
+                           : 'text-slate-500 border-slate-200 hover:bg-slate-50 dark:text-white/55 dark:border-white/10 dark:hover:bg-white/[0.08]'
+                      )}>{o.l}</button>
+                  )
+                })}
+                <span className="text-[10.5px] text-slate-400 dark:text-white/35">
+                  {layoutMode === 'free'
+                    ? 'Alan başına piksel genişlik · dikey ayraç yok'
+                    : 'Eşit sütunlu ızgara · bugünkü görünüm'}
+                </span>
+              </div>
+
+              {/* ── Varsayılan Hücre Genişliği (2026-08-20) — form genelinde 12 sütunluk
+                  ortak ızgarada, genişliği ayarlanmamış alanların kullanacağı değer. ── */}
+              <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.03] px-3 py-2.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <LayoutGrid size={13} className="text-slate-500 dark:text-white/55 flex-shrink-0" />
+                  <span className="text-[11.5px] font-bold text-slate-700 dark:text-white/80">Varsayılan Hücre Genişliği</span>
+                  <div className="flex-1" />
+                  <WidthStepper value={defaultCardWidth} fallback={3} allowClear={false}
+                    onChange={function (v) { setDefaultCardWidth(v) }} />
+                </div>
+                <div className="text-[10px] text-slate-500 dark:text-white/50 mt-1">
+                  Genişliği ayarlanmamış alanlar bu değeri kullanır (12 sütunluk şerit ızgarası).
+                </div>
+              </div>
+
               {/* ── Bölüm şeridi araç çubuğu ── */}
               <div className="flex items-center gap-2 mb-2">
                 <LayoutGrid size={13} className="text-slate-500 dark:text-white/55 flex-shrink-0" />
@@ -1002,7 +1107,10 @@ export default function StandardFieldsEditor(props) {
                 >
                   <Plus size={12} strokeWidth={2.4} /> Yeni Sekme Ekle
                 </button>
-                {/* Onizleme MODALDA (2026-08-21) — eskiden liste ustunde hep acikti. */}
+                {/* Onizleme MODALDA (2026-08-21) — eskiden liste ustunde hep acikti.
+                    Yalniz SERBEST duzende: izgara modunda hucre genisligi 1..12 span
+                    oldugu icin piksel surukleme anlamsiz. */}
+                {layoutMode === 'free' && (
                 <button
                   type="button"
                   onClick={function () { setPreviewOpen(true) }}
@@ -1011,6 +1119,7 @@ export default function StandardFieldsEditor(props) {
                 >
                   <Eye size={12} strokeWidth={2.2} /> Önizleme
                 </button>
+                )}
               </div>
 
               {/* Arama — alan sayisi arttikca liste uzuyor (Sutun Ayarlari paneliyle ayni desen) */}
@@ -1214,14 +1323,23 @@ export default function StandardFieldsEditor(props) {
                               </div>
                               <div className="flex items-center gap-1.5">
                                 <span className="text-[9.5px] font-semibold text-slate-500 dark:text-white/50">Genişlik</span>
-                                {/* Genislik daima PIKSEL — izgara (1..12 span) secenegi
-                                    2026-08-21'de kaldirildi. `cardWidth` verisi silinmez,
-                                    yalniz duzenlenmez (geri donus istenirse durur). */}
-                                <PxWidthStepper
-                                  value={f.cellWidthPx}
-                                  fallback={freeDefaultWidth(f.key)}
-                                  onChange={function (v) { patchField(f.key, { cellWidthPx: v }) }}
-                                />
+                                {/* Serbest duzende PIKSEL, izgara modunda 1..12 span.
+                                    Iki yol ayri veri tutar (cellWidthPx / cardWidth) —
+                                    mod degistirince digerinin degeri kaybolmaz. */}
+                                {layoutMode === 'free' ? (
+                                  <PxWidthStepper
+                                    value={f.cellWidthPx}
+                                    fallback={freeDefaultWidth(f.key)}
+                                    onChange={function (v) { patchField(f.key, { cellWidthPx: v }) }}
+                                  />
+                                ) : (
+                                  <WidthStepper
+                                    value={f.cardWidth}
+                                    fallback={defaultCardWidth}
+                                    allowClear={true}
+                                    onChange={function (v) { patchField(f.key, { cardWidth: v }) }}
+                                  />
+                                )}
                               </div>
                               {/* Bolum artik SURUKLEYEREK degistirilir — buton grubu kalkti.
                                   Yerine detaylari acan katlama dugmesi. */}
