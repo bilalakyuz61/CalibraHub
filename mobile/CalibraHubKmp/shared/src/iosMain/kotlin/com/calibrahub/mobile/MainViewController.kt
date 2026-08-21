@@ -48,6 +48,20 @@ import com.calibrahub.mobile.ui.AppRoot
  */
 fun diagnosticPing(): String = "Kotlin calisma zamani OK (framework ayakta)"
 
+/**
+ * TESHIS SONDASI 2 — Compose'un UIViewController'ini OLUSTURUR ama SUNMAZ, hatayi yakalar.
+ * Kotlin seviyesinde bir istisna varsa metni ekranda gorunur (crash log alamiyoruz).
+ *  - "OK ..." donuyorsa   -> olusturma sorunsuz; cokme SUNUM/CIZIM (skiko/Metal) asamasinda.
+ *  - "HATA ..." donuyorsa -> Compose init'inde Kotlin istisnasi; mesaj kok nedeni verir.
+ *  - Burada da cokuyorsa  -> native (Kotlin-disi) cokme, olusturma aninda.
+ */
+fun diagnosticComposeInit(): String = try {
+    ComposeUIViewController { }
+    "OK: Compose UIViewController olusturuldu (cokme sunum/cizim asamasinda)"
+} catch (t: Throwable) {
+    "HATA (Compose init): ${t::class.simpleName}: ${t.message}"
+}
+
 fun MainViewController() = ComposeUIViewController { DiagnosticRoot() }
 
 @Composable

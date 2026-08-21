@@ -31,13 +31,10 @@ kotlin {
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "shared"
-            // 2026-08-21: isStatic true -> false (DINAMIK framework).
-            // Teshis: SwiftUI kabugu aciliyor ama MainViewController() cagrilinca uygulama
-            // COKUYOR -> sorun Kotlin/Compose ayaga kalkmasinda. Statik framework'te Skia
-            // (skiko) ve bagimli oldugu sistem framework'lerinin link/init kayitlari
-            // dusebiliyor; dinamik framework bu bagimliliklari KENDI icinde cozup yaninda
-            // tasir (embedAndSignAppleFrameworkForXcode uygulama paketine gomup imzalar).
-            isStatic = false
+            // isStatic = true: Compose Multiplatform'in RESMI/desteklenen yapilandirmasi (JetBrains
+            // KMP sablonu da boyle). 2026-08-21'de DINAMIK (false) denendi -> Compose init cokmesini
+            // COZMEDI, bu yuzden desteklenen yapilandirmaya geri donuldu (sapmayi azalt).
+            isStatic = true
         }
     }
 

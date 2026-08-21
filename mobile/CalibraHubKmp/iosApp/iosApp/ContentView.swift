@@ -46,6 +46,10 @@ struct ContentView: View {
                     // Compose'a hic dokunmadan Kotlin/Native calisma zamanini dener.
                     kotlinResult = MainViewControllerKt.diagnosticPing()
                 }
+                Button("3) Compose VC olustur (sunma)") {
+                    // Compose VC'sini olusturur ama SUNMAZ; Kotlin istisnasi varsa metni gosterir.
+                    kotlinResult = MainViewControllerKt.diagnosticComposeInit()
+                }
                 Button("2) Compose'u baslat") {
                     showCompose = true
                 }
