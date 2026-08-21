@@ -46,6 +46,13 @@ targets:
         # build icin "Missing Compliance / App Encryption Documentation" sorusunu ELLE sorar ve
         # build yanitlanana kadar testerlara dagitilamaz. false = "non-exempt sifreleme YOK".
         ITSAppUsesNonExemptEncryption: false
+        # ZORUNLU (Compose Multiplatform): CMP acilista Info.plist'i denetler
+        # (androidx.compose.ui.uikit.PlistSanityCheck) ve bu anahtar YOKSA/false ise
+        # kotlin.IllegalStateException FIRLATIR -> uygulama Compose baslar baslamaz COKER.
+        # 2026-08-21'de tam bu yuzden cokuyordu; Codemagic iOS Simulator kosumunun konsolu
+        # ("ios-sim-run" workflow'u) kok nedeni birebir verdi. Anahtar ayrica yuksek yenileme
+        # hizli (ProMotion 120Hz) iPhone'larda tam kare hizini acar.
+        CADisableMinimumFrameDurationOnPhone: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.calibrahub.mobile
@@ -95,9 +102,7 @@ schemes:
     run:
       config: Debug
     archive:
-      # 2026-08-21 TESHIS: Release -> Debug. Compose'un BOS bir ComposeUIViewController'i bile
-      # native olarak cokuyor (try/catch yakalamiyor) — kalan en guclu supheli RELEASE
-      # optimizasyonu (Kotlin/Native + Xcode olu-kod temizleme Compose'un calisma zamani
-      # kayitlarini dusurebiliyor). Debug arsiv, Gradle'in DEBUG framework'unu (optimizasyonsuz)
-      # kullanir; Debug CALISIR + Release cokerse kok neden optimizasyon/strip demektir.
-      config: Debug
+      # Release: uretim/TestFlight yapilandirmasi. (2026-08-21'de teshis icin gecici olarak Debug
+      # yapilmisti; cokmenin kok nedeni Info.plist'teki eksik CADisableMinimumFrameDurationOnPhone
+      # anahtari cikinca Release'e geri donuldu.)
+      config: Release
