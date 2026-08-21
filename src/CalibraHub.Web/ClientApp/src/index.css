@@ -3291,11 +3291,26 @@ body.app-theme-dark .clc-cell-underline:focus-within {
    stilleri tutarlı biçimde ezmek için gerekli (bkz. .cb-invalid-shake ile aynı
    proje deseni). */
 /* 2026-08-20 (kullanici istegi): Malzeme Kodu ile Malzeme Adi degerleri AYNI
-   hizada olsun. Kod input'u 13.5px/700, ad input'u 13px — farkli yukseklikler
-   uretip degerleri birkac px kaydiriyordu. Iki deger kutusuna ORTAK min-height
-   verip icerigi dikeyde ortaliyoruz (etiketler zaten hizali). */
+   hizada olsun.
+   2026-08-22 DUZELTME — `min-height: 28px` yetmiyordu, cunku sorun kutulardan
+   birinin 28'in ALTINDA degil USTUNDE kalmasiydi:
+     kod  : GuideLookupCell input'u dikey dolgusuz (`padding: 0 8px`), en uzun
+            cocuk 26px rehber butonu → kutu 28px.
+     ad   : `readonly: true` oldugu icin <input> DEGIL readonly <div> cizilir
+            (LineGridCell readonly dali) ve `py-2` tasir → 8 + ~19.5 + 8 ≈ 35.5px.
+   Iki kutu ust kenardan hizali oldugundan merkezleri ~4px kayiyordu (ad asagida).
+   Cozum: SABIT ortak yukseklik + ad kutusunun ICINDEKI dikey dolguyu sifirla.
+   `.clc-ident-name input` kurali (asagida) bu yuzden hic eslesmiyor — ad bir
+   input degil; readonly kaldirilirsa diye duruyor. */
 .clc-ident-code,
-.clc-ident-name { min-height: 28px; display: flex; align-items: center; }
+.clc-ident-name { height: 28px; min-height: 28px; display: flex; align-items: center; }
+.clc-ident-code > *, .clc-ident-name > * { min-width: 0; }
+.clc-ident-name > * {
+  width: 100%;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 1.2;
+}
 .clc-ident-code { --clc-ident-accent: #4338ca; }
 body.app-theme-dark .clc-ident-code { --clc-ident-accent: #a5b4fc; }
 .clc-ident-code input {
