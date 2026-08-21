@@ -49,7 +49,7 @@ import { CSS } from '@dnd-kit/utilities'
 import {
   SlidersHorizontal, X as XIcon, Eye, EyeOff, Lock, ArrowUp, ArrowDown,
   AlertTriangle, Plus, Minus, LayoutGrid, Settings2, Trash2,
-  GripVertical, ChevronDown, ChevronRight, Search, RotateCcw,
+  GripVertical, ChevronDown, ChevronRight, Search, RotateCcw, Link2,
 } from 'lucide-react'
 // Top govdesine portallanmaz — bkz. LineCardLayoutEditor'daki ayni not: tam ekran
 // perde ust menu seridini kilitliyordu. iframe'in kendi body'sine portallanir.
@@ -198,7 +198,7 @@ function LayoutPreview(props) {
   return (
     <div className="mb-3">
       <div className="text-[10.5px] text-slate-500 dark:text-white/50 mb-1.5">
-        Canlı önizleme — hücre kenarından sürükleyerek genişlik, alt kenardan şerit yüksekliği
+        {(props.tabLabel ? 'Canlı önizleme · ' + props.tabLabel : 'Canlı önizleme')} — hücre kenarından sürükleyerek genişlik, alt kenardan şerit yüksekliği
       </div>
       <div className="rounded-lg border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.03] overflow-hidden">
         {visible.map(function (g) {
@@ -378,6 +378,38 @@ var tabLabels = { general: 'Genel Bilgiler', lines: 'Kalem Bilgileri', condition
  * Alanları cardSection'a göre grupla: Kimlik(0) → Şerit 1..N → Varsayılan(null) en
  * sonda. Her grup içi ayrıca cardOrder'a göre sıralanır (bkz. compareByCardOrder).
  */
+/** Alanin EFEKTIF sekmesi: kullanici tasidiysa o, yoksa katalogdaki. */
+function effTab(f) { return f.targetTab || f.tab || 'general' }
+
+/**
+ * Sekme → bolum agaci (2026-08-21 Faz 4). Once sekmeye, sonra bolume gruplar.
+ * Yalnizca ALAN barindirabilen sekmeler dallanir; bilesen sekmeleri (kalem gridi,
+ * ekli dosyalar…) alan listesine girmez — icerikleri tasinabilir ama parcalanamaz.
+ */
+function buildTabTree(fields, tabs, maxStrip) {
+  var fieldTabKeys = {}
+  fields.forEach(function (f) { fieldTabKeys[effTab(f)] = true })
+  // Alan barindiran sekmeler + kullanici tanimli sekmeler (henuz bos olabilir)
+  var keys = tabs
+    .filter(function (t) { return fieldTabKeys[t.key] || t.isCustom })
+    .map(function (t) { return t.key })
+  Object.keys(fieldTabKeys).forEach(function (k) {
+    if (keys.indexOf(k) === -1) keys.push(k)
+  })
+  return keys.map(function (key) {
+    var t = tabs.find(function (x) { return x.key === key })
+    var mine = fields.filter(function (f) { return effTab(f) === key })
+    return {
+      key: key,
+      label: (t && (t.labelText || t.label)) || key,
+      isCustom: !!(t && t.isCustom),
+      locked: !!(t && t.locked),
+      fieldCount: mine.length,
+      sections: buildSectionGroups(mine, maxStrip),
+    }
+  })
+}
+
 function buildSectionGroups(fields, maxStrip) {
   function bySection(sec) {
     return fields.filter(function (f) { return f.cardSection === sec }).slice().sort(compareByCardOrder)
@@ -396,7 +428,11 @@ function buildSectionGroups(fields, maxStrip) {
 
 /** Bolum kabi — bos olsa bile birakma hedefi olur (alan surukleyip birakilabilsin). */
 function SectionDropZone(props) {
-  var over = useDroppable({ id: 'sec:' + (props.section === null ? 'null' : props.section) })
+  // 2026-08-21 Faz 4: birakma hedefi artik SEKME + BOLUM. Tek anahtarda tasinir:
+  // "tab:<key>|sec:<n>" (bkz. dropTargetFromId).
+  var over = useDroppable({
+    id: 'tab:' + (props.tab || 'general') + '|sec:' + (props.section === null ? 'null' : props.section),
+  })
   return (
     <div
       ref={over.setNodeRef}
@@ -410,8 +446,14 @@ function SectionDropZone(props) {
 }
 
 /** Surukleneble alan satiri — tutamak yalnizca GripVertical, govde tiklanabilir kalir. */
+/* Grup uyeleri: Para Birimi anchor, digerleri onunla birlikte hareket eder
+   (bkz. DocumentEdit __HGROUP_ANCHOR). Bunlarin tek basina surukklenmesi
+   ETKISIZ oldugu icin tutamak kapatilir — kullanici bosuna denemesin. */
+var HGROUP_FOLLOWER = { exchangeRate: 1, rateDate: 1 }
+
 function SortableRow(props) {
-  var sortable = useSortable({ id: props.id })
+  var locked = props.locked === true
+  var sortable = useSortable({ id: props.id, disabled: locked })
   var style = {
     transform: CSS.Transform.toString(sortable.transform),
     transition: sortable.transition,
@@ -420,15 +462,22 @@ function SortableRow(props) {
   return (
     <div ref={sortable.setNodeRef} style={style}
          className="rounded-lg border border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.03] px-2.5 py-2 flex items-start gap-2">
-      <button
-        type="button"
-        {...sortable.attributes}
-        {...sortable.listeners}
-        title="Sürükleyerek sırala veya başka bölüme taşı"
-        className="flex-shrink-0 mt-0.5 p-0.5 rounded text-slate-400 hover:text-indigo-600 dark:text-white/35 dark:hover:text-indigo-300 cursor-grab active:cursor-grabbing"
-      >
-        <GripVertical size={13} strokeWidth={2} />
-      </button>
+      {locked ? (
+        <span title={props.lockedTitle || 'Bu alan taşınamaz'}
+              className="flex-shrink-0 mt-0.5 p-0.5 text-slate-300 dark:text-white/20 cursor-not-allowed">
+          <Link2 size={13} strokeWidth={2} />
+        </span>
+      ) : (
+        <button
+          type="button"
+          {...sortable.attributes}
+          {...sortable.listeners}
+          title="Sürükleyerek sırala, başka bölüme veya sekmeye taşı"
+          className="flex-shrink-0 mt-0.5 p-0.5 rounded text-slate-400 hover:text-indigo-600 dark:text-white/35 dark:hover:text-indigo-300 cursor-grab active:cursor-grabbing"
+        >
+          <GripVertical size={13} strokeWidth={2} />
+        </button>
+      )}
       <div className="flex-1 min-w-0 flex flex-col gap-1.5">{props.children}</div>
     </div>
   )
@@ -483,6 +532,9 @@ export default function StandardFieldsEditor(props) {
             labelText: f.labelText || '',
             labelStyle: f.labelStyle || '',
             cellWidthPx: (typeof f.cellWidthPx === 'number' && isFinite(f.cellWidthPx)) ? f.cellWidthPx : null,
+            tab: f.tab || 'general',            // katalog sekmesi (degismez)
+            targetTab: f.targetTab || null,     // kullanicinin tasidigi sekme (null = katalog)
+            movable: f.movable !== false,       // false → baska sekmeye tasinamaz
             visibleIf: f.visibleIf || '',
             requiredIf: f.requiredIf || '',
             cardSection: normalizeCardSection(f.cardSection),
@@ -510,6 +562,7 @@ export default function StandardFieldsEditor(props) {
             isVisible: t.isVisible !== false,
             labelText: t.labelText || '',
             targetTabKey: t.targetTabKey || '',
+            isCustom: t.isCustom === true,
           }
         }))
         // Mevcut en yüksek şerit numarasına göre başlangıç şerit sayısı (en az 3,
@@ -556,11 +609,14 @@ export default function StandardFieldsEditor(props) {
      "Bolum" buton grubu ve yukari/asagi oklari kaldirildi. */
   var dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
-  /** Droppable id <-> cardSection donusumu ("sec:0" | "sec:3" | "sec:null") */
-  function sectionFromDroppableId(id) {
-    var m = /^sec:(.+)$/.exec(String(id))
-    if (!m) return undefined
-    return m[1] === 'null' ? null : parseInt(m[1], 10)
+  /* Droppable id (2026-08-21 Faz 4): "tab:<key>|sec:<n>" — iki seviye tek
+     anahtarda. Eski tek seviyeli "sec:<n>" bicimi de okunur (geri uyum). */
+  function dropTargetFromId(id) {
+    var m = /^tab:([^|]+)\|sec:(.+)$/.exec(String(id))
+    if (m) return { tab: m[1], section: m[2] === 'null' ? null : parseInt(m[2], 10) }
+    var m2 = /^sec:(.+)$/.exec(String(id))
+    if (m2) return { tab: null, section: m2[1] === 'null' ? null : parseInt(m2[1], 10) }
+    return null
   }
 
   /**
@@ -568,14 +624,22 @@ export default function StandardFieldsEditor(props) {
    * grup 0..n-1 olacak sekilde yeniden numaralandirilir — bosluksuz, kararli
    * (bosluksuz, kararli yeniden numaralandirma).
    */
-  function moveFieldTo(key, targetSection, targetIndex) {
+  function moveFieldTo(key, targetSection, targetIndex, targetTab) {
     setFields(function (prev) {
       var moving = prev.find(function (f) { return f.key === key })
       if (!moving) return prev
+      // Tasinamaz alan (ör. Genel İskonto %) sekme DEGISTIREMEZ; bolum icinde
+      // siralanabilir. Sessizce yok saymak yerine sekme kismini iptal ediyoruz.
+      var newTab = (targetTab != null && moving.movable !== false)
+        ? (targetTab === (moving.tab || 'general') ? null : targetTab)
+        : moving.targetTab
       var sourceSection = moving.cardSection
       // Hedef gruptaki mevcut sira (tasinan haric)
+      // Hedef gruptaki mevcut sira — AYNI sekme + AYNI bolum
+      var tabOf = function (f) { return f.targetTab || f.tab || 'general' }
+      var wantTab = newTab || (moving.tab || 'general')
       var target = prev.filter(function (f) {
-        return f.cardSection === targetSection && f.key !== key
+        return f.cardSection === targetSection && tabOf(f) === wantTab && f.key !== key
       }).slice().sort(compareByCardOrder)
       var idx = (targetIndex == null || targetIndex < 0 || targetIndex > target.length)
         ? target.length : targetIndex
@@ -584,14 +648,19 @@ export default function StandardFieldsEditor(props) {
       target.forEach(function (f, i) { orderInTarget[f.key] = i })
       // Kaynak grup (bolum degistiyse) yeniden numaralandirilir
       var orderInSource = {}
-      if (sourceSection !== targetSection) {
-        prev.filter(function (f) { return f.cardSection === sourceSection && f.key !== key })
+      if (sourceSection !== targetSection || (moving.targetTab || null) !== (newTab || null)) {
+        var srcTab = tabOf(moving)
+        prev.filter(function (f) { return f.cardSection === sourceSection && tabOf(f) === srcTab && f.key !== key })
             .slice().sort(compareByCardOrder)
             .forEach(function (f, i) { orderInSource[f.key] = i })
       }
       return prev.map(function (f) {
         if (f.key === key) {
-          return Object.assign({}, f, { cardSection: targetSection, cardOrder: orderInTarget[f.key] })
+          return Object.assign({}, f, {
+            cardSection: targetSection,
+            cardOrder: orderInTarget[f.key],
+            targetTab: newTab,
+          })
         }
         if (orderInTarget[f.key] != null) return Object.assign({}, f, { cardOrder: orderInTarget[f.key] })
         if (orderInSource[f.key] != null) return Object.assign({}, f, { cardOrder: orderInSource[f.key] })
@@ -607,17 +676,18 @@ export default function StandardFieldsEditor(props) {
     var overId = String(over.id)
 
     // Bos bir bolume birakildi (droppable kabin kendisi)
-    var secFromZone = sectionFromDroppableId(overId)
-    if (secFromZone !== undefined) { moveFieldTo(key, secFromZone, null); return }
+    var zone = dropTargetFromId(overId)
+    if (zone) { moveFieldTo(key, zone.section, null, zone.tab); return }
 
-    // Baska bir alanin uzerine birakildi → o alanin bolumu + sirasi
+    // Baska bir alanin uzerine birakildi → o alanin sekmesi + bolumu + sirasi
     var overField = fields.find(function (f) { return f.key === overId })
     if (!overField) return
+    var overTab = effTab(overField)
     var groupFields = fields.filter(function (f) {
-      return f.cardSection === overField.cardSection && f.key !== key
+      return f.cardSection === overField.cardSection && effTab(f) === overTab && f.key !== key
     }).slice().sort(compareByCardOrder)
     var at = groupFields.findIndex(function (f) { return f.key === overId })
-    moveFieldTo(key, overField.cardSection, at < 0 ? null : at)
+    moveFieldTo(key, overField.cardSection, at < 0 ? null : at, overTab)
   }
 
   /** Kaydedilmis son hale don — kaydetmez, yalniz yerel degisiklikleri atar. */
@@ -676,6 +746,7 @@ export default function StandardFieldsEditor(props) {
             cardOrder: (typeof f.cardOrder === 'number') ? f.cardOrder : null,
             cardWidth: (typeof f.cardWidth === 'number') ? f.cardWidth : null,
             cellWidthPx: (typeof f.cellWidthPx === 'number') ? f.cellWidthPx : null,
+            targetTab: f.targetTab || null,
           }
         }),
         tabs: tabs.map(function (t, i) {
@@ -683,6 +754,7 @@ export default function StandardFieldsEditor(props) {
             key: t.key, isVisible: t.isVisible, sortOrder: i,
             labelText: t.labelText.trim() || null,
             targetTabKey: t.targetTabKey || null,
+            isCustom: t.isCustom === true,
           }
         }),
         // Serit satir yukseklikleri — yalniz DEGER VERILMIS seritler gonderilir;
@@ -718,7 +790,41 @@ export default function StandardFieldsEditor(props) {
 
   var scopeKeys = fields.map(function (f) { return f.key }).join(', ')
   var showTabBadge = tabs.length > 0
-  var sectionGroups = buildSectionGroups(fields, maxStrip)
+  var tabTree = buildTabTree(fields, tabs, maxStrip)
+  /* Canli onizleme TEK sekmeyi gosterir — alanlar artik sekmelere dagildigi icin
+     hepsini tek seritte cizmek yaniltici olurdu. Alani olan ilk sekme secilir. */
+  var previewTab = tabTree.find(function (t) { return t.fieldCount > 0 }) || tabTree[0]
+  var previewGroups = previewTab ? previewTab.sections : []
+  var customCount = tabs.filter(function (t) { return t.isCustom }).length
+
+  /** Yeni ozel sekme — bir sonraki bos c<N> anahtarini secer. */
+  function addCustomTab() {
+    if (customCount >= 6) return
+    var used = {}
+    tabs.forEach(function (t) { if (t.isCustom) used[t.key] = true })
+    var n = 1
+    while (used['c' + n] && n < 20) n++
+    var key = 'c' + n
+    setTabs(function (prev) {
+      return prev.concat([{
+        key: key, label: 'Sekme ' + n, locked: false, isVisible: true,
+        labelText: 'Sekme ' + n, targetTabKey: '', isCustom: true,
+      }])
+    })
+  }
+
+  /** Ozel sekmeyi sil — YALNIZ bos oldugunda (alanlari once tasinmali). */
+  function removeCustomTab(key) {
+    var used = fields.some(function (f) { return effTab(f) === key })
+    if (used) return
+    setTabs(function (prev) { return prev.filter(function (t) { return t.key !== key }) })
+  }
+
+  function renameTab(key, name) {
+    setTabs(function (prev) {
+      return prev.map(function (t) { return t.key === key ? Object.assign({}, t, { labelText: name }) : t })
+    })
+  }
   var behaviorField = behaviorKey ? fields.find(function (f) { return f.key === behaviorKey }) : null
 
   return createPortal(
@@ -890,13 +996,29 @@ export default function StandardFieldsEditor(props) {
                 >
                   <Plus size={12} strokeWidth={2.4} /> Yeni Şerit Ekle
                 </button>
+                {/* 2026-08-21 Faz 4: kullanici tanimli sekme. Icine alan surukleyip
+                    birakilir; bos kalirsa silinebilir. En fazla 6 (sunucu da sinirlar). */}
+                <button
+                  type="button"
+                  onClick={addCustomTab}
+                  disabled={customCount >= 6}
+                  title={customCount >= 6 ? 'En fazla 6 özel sekme' : 'Yeni sekme ekle'}
+                  className={'flex items-center gap-1 px-2.5 py-1 rounded-md text-[10.5px] font-semibold border transition-colors ' + (
+                    customCount >= 6
+                      ? 'text-slate-300 border-slate-200 cursor-not-allowed dark:text-white/25 dark:border-white/10'
+                      : 'text-indigo-600 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 dark:text-indigo-300 dark:border-indigo-400/30 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20'
+                  )}
+                >
+                  <Plus size={12} strokeWidth={2.4} /> Yeni Sekme Ekle
+                </button>
               </div>
 
               {/* Canli onizleme — yalniz SERBEST duzende. Izgara modunda hucre
                   genisligi 1..12 span oldugu icin piksel surukleme anlamsiz. */}
               {layoutMode === 'free' && (
                 <LayoutPreview
-                  groups={sectionGroups}
+                  groups={previewGroups}
+                  tabLabel={previewTab && previewTab.label}
                   stripHeights={stripHeights}
                   onWidth={function (key, px) { patchField(key, { cellWidthPx: px }) }}
                   onHeight={function (section, px) {
@@ -930,7 +1052,40 @@ export default function StandardFieldsEditor(props) {
               {/* ── Alanlar: bölüme göre gruplu, bölümler arası SÜRÜKLENEBİLİR ──
                   Bos bolumler de render edilir — birakma hedefi olmalari icin. */}
               <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              {sectionGroups.map(function (group) {
+              {tabTree.map(function (tab) {
+              return (
+                <div key={'tab-' + tab.key} className="mb-5">
+                  {/* ── Sekme başlığı: ad + alan sayısı + (özel ise) yeniden adlandır/sil ── */}
+                  <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-slate-200 dark:border-white/10">
+                    <LayoutGrid size={12} strokeWidth={2} className="flex-shrink-0 text-indigo-500 dark:text-indigo-300" />
+                    {tab.isCustom ? (
+                      <input
+                        type="text" value={tab.label} maxLength={40}
+                        onChange={function (e) { renameTab(tab.key, e.target.value) }}
+                        className={inputCls + ' max-w-[180px] font-semibold'}
+                      />
+                    ) : (
+                      <span className="text-[12px] font-bold text-slate-700 dark:text-white/80">{tab.label}</span>
+                    )}
+                    <span className="text-[10px] text-slate-400 dark:text-white/35">({tab.fieldCount})</span>
+                    {tab.isCustom && (function () {
+                      var canDel = tab.fieldCount === 0
+                      return (
+                        <button type="button" disabled={!canDel}
+                          onClick={function () { if (canDel) removeCustomTab(tab.key) }}
+                          title={canDel ? 'Sekmeyi sil' : 'Önce alanları başka sekmeye taşıyın'}
+                          className={'flex items-center justify-center w-5 h-5 rounded transition-colors ' + (
+                            canDel ? 'text-rose-500 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-500/15'
+                                   : 'text-slate-300 cursor-not-allowed dark:text-white/20')}>
+                          <Trash2 size={11} strokeWidth={2.2} />
+                        </button>
+                      )
+                    })()}
+                    {!tab.isCustom && tab.fieldCount === 0 && (
+                      <span className="text-[10px] text-amber-600 dark:text-amber-300">boş — belgede gizlenir</span>
+                    )}
+                  </div>
+              {tab.sections.map(function (group) {
                 var visibleFields = search
                   ? group.fields.filter(function (f) {
                       var q = search.toLocaleLowerCase('tr')
@@ -1027,7 +1182,7 @@ export default function StandardFieldsEditor(props) {
                         )
                       })()}
                     </div>
-                    <SectionDropZone section={group.section}>
+                    <SectionDropZone tab={tab.key} section={group.section}>
                     <SortableContext items={visibleFields.map(function (f) { return f.key })}
                                      strategy={verticalListSortingStrategy}>
                     <div className="flex flex-col gap-1.5 min-h-[34px]">
@@ -1039,7 +1194,11 @@ export default function StandardFieldsEditor(props) {
                       {visibleFields.map(function (f) {
                         var isOpen = expanded[f.key] === true
                         return (
-                          <SortableRow key={f.key} id={f.key}>
+                          <SortableRow key={f.key} id={f.key}
+                            locked={f.movable === false || !!HGROUP_FOLLOWER[f.key]}
+                            lockedTitle={HGROUP_FOLLOWER[f.key]
+                              ? 'Para Birimi ile birlikte hareket eder'
+                              : 'Bu alan bağımsız bir hücre değil — taşınamaz'}>
                             {/* Satır 1: alan adı + bağlam rozeti + Görünür/Zorunlu + Bölüm */}
                             <div className="flex items-center gap-2 flex-wrap">
                               <div className="flex items-center gap-1.5 min-w-0">
@@ -1158,6 +1317,9 @@ export default function StandardFieldsEditor(props) {
                     </SectionDropZone>
                   </div>
                 )
+              })}
+                </div>
+              )
               })}
               </DndContext>
 
