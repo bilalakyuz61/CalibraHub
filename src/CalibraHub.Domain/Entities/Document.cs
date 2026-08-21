@@ -20,6 +20,15 @@ public sealed class Document
     [Description("Kullaniciya gosterilen belge numarasi (seri-sayac, benzersiz).")]
     public required string DocumentNumber { get; init; }
 
+    /// <summary>
+    /// Dis sistemin (ERP) belge numarasi; ice aktarimda mukerrer korumasi icin tutulur.
+    /// CalibraHub kendi <see cref="DocumentNumber"/> serisini uretmeye devam eder — bu alan
+    /// yalnizca kaynak eslemesidir. Benzersizlik (DocumentTypeId + SourceDocumentNo) ikilisinde
+    /// anlamlidir; DB'de UNIQUE kisit YOK, kontrolu aktarim handler'i yapar.
+    /// </summary>
+    [Description("Dis sistemin (ERP) belge numarasi. Ice aktarimda mukerrer belge acilmamasi icin kaynak eslemesi olarak kullanilir; CalibraHub'in kendi DocumentNumber serisinin yerine GECMEZ.")]
+    public string? SourceDocumentNo { get; set; }
+
     [Description("Belgenin duzenlendigi tarih.")]
     public DateTime DocumentDate { get; set; } = DateTime.Now;
 

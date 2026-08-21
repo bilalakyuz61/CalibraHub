@@ -922,6 +922,9 @@ public sealed class DocumentService : IDocumentService
                 IsVatIncluded = request.IsVatIncluded,
                 // TRY belgede kur 1 sabittir → kur tarihi anlamsız, NULL bırakılır.
                 RateDate = (request.CurrencyId > 0 ? request.CurrencyId : 1) == 1 ? null : request.RateDate,
+                // PageComment Seq 1106 — dış sistem belge no (yalnız içe aktarım doldurur; UI'dan null gelir).
+                SourceDocumentNo = string.IsNullOrWhiteSpace(request.SourceDocumentNo)
+                    ? null : request.SourceDocumentNo.Trim(),
                 SubTotal = Math.Round(subTotal, 4),
                 DiscountRate = request.DiscountRate,
                 DiscountAmount = discountAmount,
@@ -969,6 +972,11 @@ public sealed class DocumentService : IDocumentService
             existing.IsVatIncluded = request.IsVatIncluded;
             // TRY belgede kur 1 sabittir → kur tarihi anlamsız, NULL bırakılır.
             existing.RateDate = (request.CurrencyId > 0 ? request.CurrencyId : 1) == 1 ? null : request.RateDate;
+            // PageComment Seq 1106 — dış sistem belge no yalnız DOLU gelirse yazılır. Normal ekran
+            // kaydında (null) mevcut değer KORUNUR; aksi halde kullanıcının elle kaydettiği bir
+            // belge, içe aktarımın kaynak eşlemesini sessizce silerdi (tekrar mükerrer üretir).
+            if (!string.IsNullOrWhiteSpace(request.SourceDocumentNo))
+                existing.SourceDocumentNo = request.SourceDocumentNo.Trim();
             existing.SubTotal = Math.Round(subTotal, 4);
             existing.DiscountRate = request.DiscountRate;
             existing.DiscountAmount = discountAmount;
@@ -1388,7 +1396,8 @@ public sealed class DocumentService : IDocumentService
         q.CurrencyCode, q.CurrencySymbol,
         q.RequesterPersonnelId, q.RequesterPersonnelName,
         q.LocationId, q.LocationName,
-        q.ExchangeRate, q.IsVatIncluded, q.RateDate);
+        q.ExchangeRate, q.IsVatIncluded, q.RateDate,
+        q.SourceDocumentNo);
 
     /// <summary>
     /// Satir revizyonu — repository katmanina delege eder. Widget degerlerinin

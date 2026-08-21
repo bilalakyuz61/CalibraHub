@@ -29,7 +29,10 @@ public sealed record DocumentDto(
     bool IsVatIncluded = false,
     // 2026-08-06 — kurun ALINDIĞI tarih (belge tarihinden farklı olabilir). Yalnız izlenebilirlik
     // ve ekranda doğru gösterim için; tutar hesabı kayıtlı ExchangeRate ile yapılır.
-    DateTime? RateDate = null);
+    DateTime? RateDate = null,
+    // PageComment Seq 1106 — dış sistemin (ERP) belge numarası. İçe aktarımda mükerrer koruması
+    // için tutulur; CalibraHub'ın kendi DocumentNumber serisinin yerine GEÇMEZ.
+    string? SourceDocumentNo = null);
 
 /// <summary>
 /// Sipariş → İrsaliye kısmi teslimat modalı için açık (teslim edilmemiş) sipariş kalemi.
@@ -151,7 +154,11 @@ public sealed record SaveDocumentRequest(
     bool IsVatIncluded = false,
     // 2026-08-06 — kurun ALINDIĞI tarih (belge tarihinden farklı olabilir). Yalnız izlenebilirlik
     // ve ekranda doğru gösterim için; tutar hesabı kayıtlı ExchangeRate ile yapılır.
-    DateTime? RateDate = null);
+    DateTime? RateDate = null,
+    // PageComment Seq 1106 — dış sistemin (ERP) belge numarası. YALNIZ içe aktarım akışı doldurur
+    // (kullanıcı ekranından gelmez); mükerrer belge açılmaması için kaynak eşlemesi olarak
+    // saklanır. NULL bırakılırsa mevcut davranış birebir korunur.
+    string? SourceDocumentNo = null);
 
 /// <summary>
 /// Client'tan gelen kayit istegi. ItemId zorunludur — malzeme kodu/adi tabloda tutulmaz,

@@ -41,6 +41,17 @@ public interface IDocumentRepository
     /// <summary>Sadece [status] kolonunu günceller — onay başlatıldığında, onaylandığında vb.</summary>
     Task UpdateStatusAsync(int id, string status, CancellationToken ct);
     Task<string> GetNextDocumentNumberAsync(CancellationToken ct);
+
+    /// <summary>
+    /// PageComment Seq 1106 — ERP'den belge içe aktarımında MÜKERRER KORUMASI. Belge türü +
+    /// dış sistem belge numarası (<c>Document.SourceDocumentNo</c>) ikilisiyle mevcut AKTİF
+    /// belgeyi arar; yoksa null döner. Cron ile tekrar tekrar çalışan aktarım, aynı kaynak
+    /// belgeyi ikinci kez açmak yerine bu Id'yi güncellemelidir.
+    ///
+    /// DocumentTypeId ZORUNLU: aynı kaynak numara farklı belge türlerinde gelebilir (aynı ERP
+    /// numarası hem teklif hem sipariş olarak) — DB'de UNIQUE kısıt bilinçli olarak YOKTUR.
+    /// </summary>
+    Task<int?> FindIdBySourceDocumentNoAsync(string sourceDocumentNo, int documentTypeId, CancellationToken ct);
     Task<IReadOnlyCollection<DocumentLineDetail>> GetLineDetailsAsync(int documentLineId, CancellationToken ct);
     Task SaveLineDetailsAsync(int documentLineId, IReadOnlyCollection<DocumentLineDetail> details, CancellationToken ct);
 

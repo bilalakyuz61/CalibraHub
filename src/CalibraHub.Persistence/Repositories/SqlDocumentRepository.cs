@@ -244,7 +244,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    q.[SalesRepId],q.[RequesterPersonnelId],p.[FullName] AS RequesterPersonnelName,
                    q.[LocationId],hloc.[LocationName] AS HeaderLocationName,
                    q.[CurrencyId],cur.[Code] AS CurrencyCode,cur.[Symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
-                   q.[ExchangeRate],q.[IsVatIncluded],q.[RateDate],
+                   q.[ExchangeRate],q.[IsVatIncluded],q.[RateDate],q.[SourceDocumentNo],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[Status],q.[RevisionNo],q.[ParentDocumentId],
                    q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
                    (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[Id]) AS [line_count]
@@ -292,7 +292,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    q.[SalesRepId],q.[RequesterPersonnelId],p.[FullName] AS RequesterPersonnelName,
                    q.[LocationId],hloc.[LocationName] AS HeaderLocationName,
                    q.[CurrencyId],cur.[Code] AS CurrencyCode,cur.[Symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
-                   q.[ExchangeRate],q.[IsVatIncluded],q.[RateDate],
+                   q.[ExchangeRate],q.[IsVatIncluded],q.[RateDate],q.[SourceDocumentNo],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[Status],q.[RevisionNo],q.[ParentDocumentId],
                    q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
                    (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[Id]) AS [line_count],
@@ -358,7 +358,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    q.[SalesRepId],q.[RequesterPersonnelId],p.[FullName] AS RequesterPersonnelName,
                    q.[LocationId],hloc.[LocationName] AS HeaderLocationName,
                    q.[CurrencyId],cur.[Code] AS CurrencyCode,cur.[Symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
-                   q.[ExchangeRate],q.[IsVatIncluded],q.[RateDate],
+                   q.[ExchangeRate],q.[IsVatIncluded],q.[RateDate],q.[SourceDocumentNo],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[Status],q.[RevisionNo],q.[ParentDocumentId],
                    q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
                    (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[Id]) AS [line_count]
@@ -389,7 +389,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    q.[SalesRepId],q.[RequesterPersonnelId],p.[FullName] AS RequesterPersonnelName,
                    q.[LocationId],hloc.[LocationName] AS HeaderLocationName,
                    q.[CurrencyId],cur.[Code] AS CurrencyCode,cur.[Symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
-                   q.[ExchangeRate],q.[IsVatIncluded],q.[RateDate],
+                   q.[ExchangeRate],q.[IsVatIncluded],q.[RateDate],q.[SourceDocumentNo],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[Status],q.[RevisionNo],q.[ParentDocumentId],
                    q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
                    ca.[AccountCode] AS customer_code
@@ -458,6 +458,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                     [CurrencyId]=@CurrencyId, [SubTotal]=@SubTotal, [DiscountRate]=@DiscountRate,
                     [DiscountAmount]=@DiscountAmount, [TaxRate]=@TaxRate, [TaxAmount]=@TaxAmount,
                     [GrandTotal]=@GrandTotal, [ExchangeRate]=@ExchangeRate, [IsVatIncluded]=@IsVatIncluded, [RateDate]=@RateDate,
+                    [SourceDocumentNo]=@SourceDocumentNo,
                     [PaymentTerms]=@PaymentTerms, [DeliveryTerms]=@DeliveryTerms,
                     [DeliveryAddress]=@DeliveryAddress, [Status]=@Status, [RevisionNo]=@RevisionNo,
                     [ParentDocumentId]=@ParentDocumentId,
@@ -473,13 +474,13 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 INSERT INTO {_quoteTable}
                     ([CompanyId],[DocumentNumber],[DocumentTypeId],[DocumentDate],[ValidUntil],[DeliveryDate],[DeliveryDays],[ContactId],[ContactAddress],
                      [SalesRepId],[RequesterPersonnelId],[LocationId],[CurrencyId],[SubTotal],[DiscountRate],[DiscountAmount],[TaxRate],[TaxAmount],[GrandTotal],
-                     [ExchangeRate],[IsVatIncluded],[RateDate],
+                     [ExchangeRate],[IsVatIncluded],[RateDate],[SourceDocumentNo],
                      [PaymentTerms],[DeliveryTerms],[DeliveryAddress],[Status],[RevisionNo],[ParentDocumentId],
                      [Notes],[CreatedById],[Created],[Updated],[IsActive])
                 VALUES
                     (@CompanyId,@DocumentNumber,@DocumentTypeId,@DocumentDate,@ValidUntil,@DeliveryDate,@DeliveryDays,@ContactId,@ContactAddress,
                      @SalesRepId,@RequesterPersonnelId,@LocationId,@CurrencyId,@SubTotal,@DiscountRate,@DiscountAmount,@TaxRate,@TaxAmount,@GrandTotal,
-                     @ExchangeRate,@IsVatIncluded,@RateDate,
+                     @ExchangeRate,@IsVatIncluded,@RateDate,@SourceDocumentNo,
                      @PaymentTerms,@DeliveryTerms,@DeliveryAddress,@Status,@RevisionNo,@ParentDocumentId,
                      @Notes,@CreatedById,@CreatedAt,@UpdatedAt,@IsActive);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
@@ -513,6 +514,10 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         cmd.Parameters.Add(new SqlParameter("@ExchangeRate", q.ExchangeRate > 0 ? q.ExchangeRate : 1m));
         cmd.Parameters.Add(new SqlParameter("@IsVatIncluded", q.IsVatIncluded));
         cmd.Parameters.Add(new SqlParameter("@RateDate", (object?)q.RateDate ?? DBNull.Value));
+        // Dis sistem belge no (ice aktarim mukerrer korumasi) — bos/whitespace ise NULL yazilir
+        // ki filtreli index (WHERE [SourceDocumentNo] IS NOT NULL) yalniz gercek degerleri tasisin.
+        cmd.Parameters.Add(new SqlParameter("@SourceDocumentNo",
+            string.IsNullOrWhiteSpace(q.SourceDocumentNo) ? (object)DBNull.Value : q.SourceDocumentNo.Trim()));
         cmd.Parameters.Add(new SqlParameter("@PaymentTerms", (object?)q.PaymentTerms ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@DeliveryTerms", (object?)q.DeliveryTerms ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@DeliveryAddress", (object?)q.DeliveryAddress ?? DBNull.Value));
@@ -948,12 +953,41 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         return prefix + nextSeq.ToString("D8");
     }
 
+    /// <summary>
+    /// Ice aktarim mukerrer kontrolu: (belge turu + dis sistem belge no) ikilisiyle AKTIF belgeyi
+    /// bulur. Bulamazsa null. Ayni kaynak numara farkli belge turlerinde gelebildigi icin
+    /// DocumentTypeId filtresi ZORUNLUDUR (DB'de UNIQUE kisit yok — bkz. CalibraDatabaseInitializer).
+    /// Birden fazla eslesme varsa (elle acilmis mukerrer) en eski/kucuk Id doner — deterministik.
+    /// </summary>
+    public async Task<int?> FindIdBySourceDocumentNoAsync(string sourceDocumentNo, int documentTypeId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(sourceDocumentNo) || documentTypeId <= 0) return null;
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT TOP 1 [Id] FROM {_quoteTable}
+            WHERE [SourceDocumentNo] = @SourceDocumentNo
+              AND [DocumentTypeId]   = @DocumentTypeId
+              AND [IsActive] = 1
+            ORDER BY [Id];
+            """;
+        cmd.Parameters.Add(new SqlParameter("@SourceDocumentNo", sourceDocumentNo.Trim()));
+        cmd.Parameters.Add(new SqlParameter("@DocumentTypeId", documentTypeId));
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is null || result == DBNull.Value ? null : Convert.ToInt32(result);
+    }
+
     private static Document MapQuote(SqlDataReader r) => new()
     {
         Id = r.GetInt32(r.GetOrdinal("Id")),
         CompanyId = TryGetOrdinal(r, "CompanyId") is int cmpOrd && cmpOrd >= 0 && !r.IsDBNull(cmpOrd)
             ? r.GetInt32(cmpOrd) : 0,
         DocumentNumber = r.GetString(r.GetOrdinal("DocumentNumber")),
+        // Kolon eski semada olmayabilir → TryGetOrdinal ile guvenli oku.
+        SourceDocumentNo = TryGetOrdinal(r, "SourceDocumentNo") is int sdnOrd && sdnOrd >= 0 && !r.IsDBNull(sdnOrd)
+            ? r.GetString(sdnOrd) : null,
         DocumentTypeId = TryGetOrdinal(r, "DocumentTypeId") is int dtOrd && dtOrd >= 0 && !r.IsDBNull(dtOrd)
             ? r.GetInt32(dtOrd) : null,
         DocumentDate = r.GetDateTime(r.GetOrdinal("DocumentDate")),
