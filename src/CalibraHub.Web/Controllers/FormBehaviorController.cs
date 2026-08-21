@@ -60,6 +60,16 @@ public sealed partial class FormBehaviorController : Controller
     /// </summary>
     private const string LayoutModeFieldKey = "__layout";
 
+    /// <summary>
+    /// Kullanici tanimli (ozel) sekme anahtari deseni: c1, c2 … Katalog sekmeleriyle
+    /// (general/lines/…) cakismaz. Sekme kaydi mevcut "tab:&lt;key&gt;" satir desenini
+    /// kullanir; adi LabelText, sirasi SortOrder kolonunda tasinir — yeni tablo yok.
+    /// </summary>
+    [GeneratedRegex(@"^c\d{1,2}$")]
+    private static partial Regex CustomTabKeyRegex();
+
+    private const int MaxCustomTabs = 6;
+
     private const int CellWidthMin = 60;
     private const int CellWidthMax = 600;
 
@@ -93,11 +103,11 @@ public sealed partial class FormBehaviorController : Controller
         string Key, bool IsVisible = true, bool IsRequired = false,
         string? DefaultValue = null, string? LabelText = null, string? LabelStyle = null,
         string? VisibleIf = null, string? RequiredIf = null, int? CardSection = null, int? CardOrder = null,
-        int? CardWidth = null, int? CellWidthPx = null);
+        int? CardWidth = null, int? CellWidthPx = null, string? TargetTab = null);
 
     public sealed record TabBehaviorDto(
         string Key, bool IsVisible = true, int SortOrder = 0, string? LabelText = null,
-        string? TargetTabKey = null);
+        string? TargetTabKey = null, bool IsCustom = false);
 
     /// <summary>Şerit no (1..N) → satır yüksekliği (px). null/boş = varsayılan.</summary>
     public sealed record StripHeightDto(int Section, int? RowHeight);
@@ -106,7 +116,8 @@ public sealed partial class FormBehaviorController : Controller
         string FormCode, List<FieldBehaviorDto>? Fields, List<TabBehaviorDto>? Tabs, int? DefaultCardWidth = null,
         List<StripHeightDto>? StripHeights = null, string? LayoutMode = null);
 
-    private sealed record CatalogItem(string Key, string Label, string Tab, string DataType, bool Locked);
+    private sealed record CatalogItem(string Key, string Label, string Tab, string DataType, bool Locked,
+        bool Movable = true);
 
     /// <summary>
     /// Form kodu → birleşik alan kataloğu. Header (*_EDIT) formları
@@ -127,7 +138,7 @@ public sealed partial class FormBehaviorController : Controller
     {
         var header = DocumentHeaderFieldCatalog.Resolve(formCode);
         if (header is not null)
-            return (header.Select(f => new CatalogItem(f.Key, f.Label, f.Tab, f.DataType, f.Locked)).ToList(), true);
+            return (header.Select(f => new CatalogItem(f.Key, f.Label, f.Tab, f.DataType, f.Locked, f.Movable)).ToList(), true);
 
         var lines = DocumentLineFieldCatalog.Resolve(formCode);
         if (lines is null) return null;

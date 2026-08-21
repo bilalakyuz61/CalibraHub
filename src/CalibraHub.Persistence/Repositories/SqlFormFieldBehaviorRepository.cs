@@ -34,7 +34,7 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                    [CreatedById],[CreatedBy],[Created],[UpdatedById],[UpdatedBy],[Updated],
                    -- 2026-08-20 RowHeight SONA eklendi: mevcut ordinal eslemesi (0..19)
                    -- bozulmasin diye araya DEGIL sona. Okuma indeksi 20.
-                   [RowHeight],[CellWidthPx],[TargetTabKey]
+                   [RowHeight],[CellWidthPx],[TargetTabKey],[TargetTab]
             FROM {_table}
             WHERE [FormCode]=@FormCode AND [IsActive]=1
             ORDER BY [SortOrder],[FieldKey];
@@ -69,6 +69,7 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                 RowHeight = r.IsDBNull(20) ? null : r.GetInt32(20),
                 CellWidthPx = r.IsDBNull(21) ? null : r.GetInt32(21),
                 TargetTabKey = r.IsDBNull(22) ? null : r.GetString(22),
+                TargetTab = r.IsDBNull(23) ? null : r.GetString(23),
             });
         }
         return list;
@@ -96,11 +97,11 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                     INSERT INTO {_table}
                         ([FormCode],[FieldKey],[IsVisible],[IsRequired],[DefaultValue],
                          [LabelText],[LabelStyle],[RulesJSON],[SortOrder],[CardSection],[CardOrder],[CardWidth],[IsActive],
-                         [CreatedById],[CreatedBy],[RowHeight],[CellWidthPx],[TargetTabKey])
+                         [CreatedById],[CreatedBy],[RowHeight],[CellWidthPx],[TargetTabKey],[TargetTab])
                     VALUES
                         (@FormCode,@FieldKey,@IsVisible,@IsRequired,@DefaultValue,
                          @LabelText,@LabelStyle,@RulesJson,@SortOrder,@CardSection,@CardOrder,@CardWidth,1,
-                         @CreatedById,@CreatedBy,@RowHeight,@CellWidthPx,@TargetTabKey);
+                         @CreatedById,@CreatedBy,@RowHeight,@CellWidthPx,@TargetTabKey,@TargetTab);
                     """;
                 ins.Parameters.Add(new SqlParameter("@FormCode", formCode));
                 ins.Parameters.Add(new SqlParameter("@FieldKey", row.FieldKey));
@@ -117,6 +118,7 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                 ins.Parameters.Add(new SqlParameter("@RowHeight", (object?)row.RowHeight ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@CellWidthPx", (object?)row.CellWidthPx ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@TargetTabKey", (object?)row.TargetTabKey ?? DBNull.Value));
+                ins.Parameters.Add(new SqlParameter("@TargetTab", (object?)row.TargetTab ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@CreatedById", (object?)row.CreatedById ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@CreatedBy", (object?)row.CreatedBy ?? DBNull.Value));
                 await ins.ExecuteNonQueryAsync(ct);

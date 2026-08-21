@@ -72,6 +72,14 @@ public sealed class FormFieldBehavior
     /// 'tab:&lt;key&gt;' satirlarinda anlamli; null/kendisi = yerinde kal.
     /// </summary>
     public string? TargetTabKey { get; set; }
+
+    /// <summary>
+    /// ALAN satirinin bulunacagi sekme. null = katalogdaki sekme (fail-open).
+    /// Katalog sekmesi ya da kullanici tanimli ozel sekme (c1, c2...) olabilir.
+    /// <see cref="TargetTabKey"/> ile karistirilmamali: o SEKME satirinda, sekmenin
+    /// TUM icerigini baska sekmeye tasir; bu ise TEK alani tasir.
+    /// </summary>
+    public string? TargetTab { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
     public int? CreatedById { get; init; }

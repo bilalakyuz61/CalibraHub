@@ -19,7 +19,14 @@ public static class DocumentHeaderFieldCatalog
     /// <param name="Tab">Bulunduğu sekme key'i (sqe-tab: general/lines/conditions/notes)</param>
     /// <param name="DataType">Kural scope tip dönüşümü: text/date/numeric/boolean/currencyCode</param>
     /// <param name="Locked">true → gizlenemez</param>
-    public sealed record HeaderField(string Key, string Label, string Tab, string DataType, bool Locked);
+    /// <param name="Movable">
+    /// false → alan BASKA SEKMEYE TASINAMAZ. Sebep: markup'ta bagimsiz bir hucre
+    /// degildir (ör. Genel İskonto % — toplamlar bloguna orulu iki &lt;span&gt;).
+    /// Editorde surukleme tutamagi kapali gosterilir; sessizce hicbir sey yapmamak
+    /// yerine nedeni kullaniciya soylenir.
+    /// </param>
+    public sealed record HeaderField(string Key, string Label, string Tab, string DataType, bool Locked,
+        bool Movable = true);
 
     public sealed record HeaderTab(string Key, string Label, bool Locked);
 
@@ -51,7 +58,8 @@ public static class DocumentHeaderFieldCatalog
         new("vatIncluded",     "KDV Dahil",            "general",    "boolean",      false),
         new("customer",        "Cari / Tedarikçi",     "general",    "text",         true),
         new("salesRep",        "Temsilci",             "general",    "text",         false),
-        new("discountRate",    "Genel İskonto %",      "lines",      "numeric",      false),
+        // Movable:false — toplamlar blogunun icine orulu (bagimsiz hucre degil), tasinamaz.
+        new("discountRate",    "Genel İskonto %",      "lines",      "numeric",      false, Movable: false),
         new("paymentTerms",    "Ödeme Koşulu",         "conditions", "text",         false),
         new("deliveryTerms",   "Teslimat",             "conditions", "text",         false),
         new("deliveryAddress", "Teslimat Adresi",      "conditions", "text",         false),

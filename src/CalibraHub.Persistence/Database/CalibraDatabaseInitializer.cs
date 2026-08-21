@@ -14134,6 +14134,9 @@ END;";
                     -- Sekme icerigi baska sekmeye tasinabilir: hedef sekme anahtari.
                     -- Yalniz 'tab:<key>' satirlarinda anlamli; null = yerinde kal.
                     [TargetTabKey] NVARCHAR(50)   NULL,
+                    -- 2026-08-21: ALAN satirinin sekmesi. null = katalogdaki sekme (fail-open).
+                    -- TargetTabKey ile karistirma: o SEKME satirinda, bu ALAN satirinda.
+                    [TargetTab]    NVARCHAR(50)   NULL,
                     [IsActive]     BIT            NOT NULL CONSTRAINT [DF_FormFieldBehavior_IsActive] DEFAULT 1,
                     [CreatedById]  INT            NULL,
                     [CreatedBy]    NVARCHAR(120)  NULL,
@@ -14160,6 +14163,8 @@ END;";
                     ALTER TABLE [{s}].[FormFieldBehavior] ADD [CellWidthPx] INT NULL;
                 IF COL_LENGTH(N'{sl}.FormFieldBehavior', N'TargetTabKey') IS NULL
                     ALTER TABLE [{s}].[FormFieldBehavior] ADD [TargetTabKey] NVARCHAR(50) NULL;
+                IF COL_LENGTH(N'{sl}.FormFieldBehavior', N'TargetTab') IS NULL
+                    ALTER TABLE [{s}].[FormFieldBehavior] ADD [TargetTab] NVARCHAR(50) NULL;
             END;
             """;
         await using var cmd = connection.CreateCommand();
