@@ -370,7 +370,7 @@ export default function DbImportWizard() {
         {notice && <div className="dbi-alert dbi-alert--ok"><CheckCircle2 size={13} /> {notice}</div>}
         {busy && <div className="dbi-alert dbi-alert--warn"><Loader2 size={13} /> İşleniyor…</div>}
 
-        {/* ── 1. Kaynak ── */}
+        {/* ── 1. Tanım (Hedef + Kaynak) ── */}
         {step === 1 && (
           <>
             <div className="dbi-card">
