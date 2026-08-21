@@ -40,6 +40,14 @@ import com.calibrahub.mobile.ui.AppRoot
  * Teshis bitince bu dosya eski haline dondurulur:  fun MainViewController() =
  *     ComposeUIViewController { AppRoot() }        (bkz. git gecmisi / commit b619407 oncesi)
  */
+/**
+ * TESHIS SONDASI — Compose'a HIC dokunmadan Kotlin/Native calisma zamanini test eder.
+ * Swift tarafi bunu cagirip sonucu ekranda gosterir:
+ *  - Metin donuyorsa  -> Kotlin framework ayakta; cokme COMPOSE baslatmasinda.
+ *  - Burada cokuyorsa -> Kotlin framework'unun kendisi ayaga kalkmiyor.
+ */
+fun diagnosticPing(): String = "Kotlin calisma zamani OK (framework ayakta)"
+
 fun MainViewController() = ComposeUIViewController { DiagnosticRoot() }
 
 @Composable

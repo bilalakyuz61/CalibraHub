@@ -24,6 +24,7 @@ struct ComposeView: UIViewControllerRepresentable {
 /// Teshis bitince ContentView tekrar dogrudan ComposeView() dondurecek sekilde sadelestirilir.
 struct ContentView: View {
     @State private var showCompose = false
+    @State private var kotlinResult = "Kotlin henuz test edilmedi"
 
     var body: some View {
         if showCompose {
@@ -37,7 +38,15 @@ struct ContentView: View {
                     .font(.footnote)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
-                Button("Compose'u baslat") {
+                Text(kotlinResult)
+                    .font(.footnote)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                Button("1) Kotlin'i test et (Compose YOK)") {
+                    // Compose'a hic dokunmadan Kotlin/Native calisma zamanini dener.
+                    kotlinResult = MainViewControllerKt.diagnosticPing()
+                }
+                Button("2) Compose'u baslat") {
                     showCompose = true
                 }
             }
