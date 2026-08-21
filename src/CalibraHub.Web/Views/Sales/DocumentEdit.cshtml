@@ -2202,20 +2202,6 @@
         --sqe-strip-border: rgba(255,255,255,.08);
     }
 
-    /* 2026-08-19: Genel Toplam kendi karti — seritlerin altinda, saga yasli.
-       Seritlerle ayni kenarlik/zemin dilini kullanir. */
-    .sqe-total-card {
-        display: flex; align-items: baseline; justify-content: flex-end; gap: 10px;
-        border: 1px solid var(--sqe-strip-border, #e2e8f0);
-        border-radius: 10px;
-        background: var(--sqe-strip-bg, #f8fafc);
-        padding: 10px 16px;
-        margin-top: 8px;
-    }
-    body.app-theme-dark .sqe-total-card {
-        --sqe-strip-bg: rgba(255,255,255,.025);
-        --sqe-strip-border: rgba(255,255,255,.08);
-    }
     /* 2026-08-20 (kullanıcı isteği): "şerit hücreleri iki satır da olsa tablo
        mantığında aynı genişlikte olmalı, alt alta hizalı" — flex-wrap İÇERİK
        genişliğine göre dizdiği için alt alta gelen şeritlerdeki hücreler
@@ -2292,6 +2278,20 @@
     }
     body.app-theme-dark .sqe-moved-block { border-top-color: rgba(255,255,255,.08); }
     body.app-theme-dark .sqe-moved-title { color: rgba(255,255,255,.55); }
+
+    /* Alan grubu (2026-08-21): birlikte hareket eden hucreler. Izgara modunda
+       `display: contents` ile SEFFAF — sarmalayici hic yokmus gibi davranir, mevcut
+       izgara yerlesimi degismez. Serbest modda tek flex ogesi olur ve icinde
+       nowrap ile uyeler ayrilmaz. */
+    .sqe-hgroup { display: contents; }
+    .sqe-strips--free .sqe-hgroup {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: flex-start;
+        gap: 12px 22px;
+        flex: 0 0 auto;
+        max-width: 100%;
+    }
 
     .sqe-strip--narrow {
         grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -3074,6 +3074,16 @@
                        sipariş aşamasında belli olur. Diğer 4 belge tipinde her ikisi de görünür.
                        Inputlar DOM'da hala mevcut (hidden) — JS save akışı bos string gönderir,
                        backend default değerleri (CurrencyId=1, ContactId=NULL) uygular. *@
+                    @* 2026-08-21 (kullanici istegi): "Para Birimi, Kur ve Kur Tarihi ortak
+                       hareket etmeli ve ayrilmamali". Uc hucre tek bir sarmalayiciya alindi:
+                       - IZGARA modunda sarmalayici `display: contents` — hucreler yine dogrudan
+                         grid ogesi kalir, gorunum BIREBIR degismez.
+                       - SERBEST modda sarmalayici tek bir flex ogesidir ve icinde
+                         `flex-wrap: nowrap` vardir → satir sonunda ucu birden alta iner,
+                         asla birbirinden ayrilmaz.
+                       - applySections grup uyesi bir alani tasirken SARMALAYICIYI tasir
+                         (bkz. __HGROUP_ANCHOR), boylece bolum degisiminde de birlikte gider. *@
+                    <div class="sqe-hgroup" data-hgroup="currency">
                     <div class="sqe-hrow" data-field-key="currency" style="@(isPurchaseRequest ? "display:none;" : "")">
                         <label class="sqe-hlabel">Para Birimi</label>
                         <!-- ID-bazli FK (CurrencyId): value=currencies.id, data-code attribute'unda
@@ -3116,6 +3126,7 @@
                                    onchange="sqRateDateChanged()" />
                         </div>
                     }
+                    </div>@* /.sqe-hgroup (currency + exchangeRate + rateDate) *@
                     @if (!isPurchaseRequest)
                     {
                         @* Seq 1068: KDV Dahil switch — aktifse girilen birim fiyat KDV dahil kabul edilir. *@
@@ -3223,16 +3234,11 @@
                 </div>
                 </div>
 
-                @* 2026-08-19 (kullanici istegi): Genel Toplam artik kimlik kartinin sag
-                   ucunda degil, seritlerin ALTINDA kendi kartinda. Kaynak eleman
-                   #sqGrandTotal (Kalem Bilgileri footer) DEGISMEDI; bu yalniz bir AYNA
-                   (mirror) — sqRecalc() ikisini birden gunceller. Id ve class adlari
-                   korundu, yalnizca konum degisti (JS dokunulmadi). Ihtiyac Kaydi'nda
-                   fiyat/toplam yok → gizli kalir (sqRecalc erken return eder). *@
-                <div class="sqe-total-card" id="sqIdentGrandTotalWrap">
-                    <span class="sqe-ident-total-label">Genel Toplam</span>
-                    <span class="sqe-ident-total-value" id="sqGrandTotalIdentMirror">0,00</span>
-                </div>
+                @* 2026-08-21 (kullanici istegi): ust bilgide Genel Toplam KALDIRILDI.
+                   Asil toplam Kalem Bilgileri footer'indaki #sqGrandTotal'dedir; buradaki
+                   yalnizca aynaydi. sqRecalc() aynayi `if (mirrorWrap && mirrorVal)` ile
+                   yaziyor — element yoklugunda sessizce atliyor, bu yuzden JS'e
+                   DOKUNULMADI (ayni null-guvenli yol Ihtiyac Kaydi icin zaten vardi). *@
             </div>
         </div>
 
