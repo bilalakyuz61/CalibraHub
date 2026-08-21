@@ -8576,6 +8576,9 @@ END;";
                     [Id]                INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_Document] PRIMARY KEY,
                     [CompanyId]         INT              NOT NULL CONSTRAINT [DF_Document_CompanyId] DEFAULT({DefaultCompanyId}),
                     [DocumentNumber]    NVARCHAR(15)     NOT NULL,
+                    -- Dis sistemin (ERP) belge numarasi — ice aktarimda mukerrer korumasi.
+                    -- CalibraHub kendi [DocumentNumber] serisini uretmeye devam eder.
+                    [SourceDocumentNo]  NVARCHAR(100)    NULL,
                     [DocumentTypeId]    INT              NULL,
                     [DocumentDate]      DATETIME     NOT NULL,
                     [ValidUntil]        DATETIME     NULL,
@@ -8786,6 +8789,26 @@ END;";
             -- farklı olabilir; NULL = eski kayıt / TRY belge. Exchange.[Date] ile aynı tip (DATE).
             IF COL_LENGTH(N'[{s}].[Document]', N'RateDate') IS NULL
                 ALTER TABLE [{s}].[Document] ADD [RateDate] DATE NULL;
+
+            -- PageComment Seq 1106 (2026-08-22): ERP'den belge ice aktarimi (/DbImport).
+            -- [SourceDocumentNo] = DIS sistemin belge numarasi. CalibraHub kendi
+            -- [DocumentNumber] serisini uretmeye devam eder; cron ile tekrar tekrar calisan
+            -- aktarim mukerrer belge acmamak icin mevcut kaydi bu kolondan bulur
+            -- (bkz. SqlDocumentRepository.FindIdBySourceDocumentNoAsync).
+            --
+            -- UNIQUE DEGIL — BILINCLI: ayni kaynak numara farkli belge TURLERINDE gelebilir
+            -- (ayni ERP numarasi hem teklif hem siparis olarak). Benzersizlik yalniz
+            -- (DocumentTypeId + SourceDocumentNo) ikilisinde anlamlidir; bu kontrolu aktarim
+            -- handler'i yapar. Burada yalniz filtreli ARAMA indeksi var.
+            IF COL_LENGTH(N'[{s}].[Document]', N'SourceDocumentNo') IS NULL
+                ALTER TABLE [{s}].[Document] ADD [SourceDocumentNo] NVARCHAR(100) NULL;
+            -- CREATE INDEX deferred EXEC ile: kolon ayni batch'te ALTER ile eklenmis olabilir
+            -- (bkz. IX_DocumentLine_RevisedFromId'deki ayni gerekce).
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE name = N'IX_Document_SourceDocumentNo'
+                             AND object_id = OBJECT_ID(N'[{s}].[Document]'))
+               AND COL_LENGTH(N'[{s}].[Document]', N'SourceDocumentNo') IS NOT NULL
+                EXEC(N'CREATE INDEX [IX_Document_SourceDocumentNo] ON [{s}].[Document]([SourceDocumentNo]) WHERE [SourceDocumentNo] IS NOT NULL;');
 
             IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NULL
             BEGIN
