@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Constants;
 using CalibraHub.Web.Authorization;
 using CalibraHub.Web.Helpers;
@@ -130,6 +130,19 @@ public sealed class ScheduledTaskController : Controller
         CancellationToken ct)
     {
         var runs = await runRepo.GetRecentByTaskIdAsync(id, 30, ct);
+        // Gecmis satiri hic yoksa gorevin kendi LastRun* alanlarini ozet olarak gecir:
+        // sistem gorevleri ScheduledTaskRun'a 2026-08-22'den once yazmiyordu, bu yuzden
+        // eski calismalar icin tablo bos kalir ve ekran "bozuk" gorunur (PageComment Seq 1103).
+        if (runs.Count == 0)
+        {
+            var task = await _scheduledTaskRepo.GetByIdAsync(id, ct);
+            if (task?.LastRunAt is not null)
+            {
+                ViewData["LastRunAt"]      = task.LastRunAt;
+                ViewData["LastRunStatus"]  = task.LastRunStatus;
+                ViewData["LastRunMessage"] = task.LastRunMessage;
+            }
+        }
         return PartialView("~/Views/Admin/_ScheduledTaskHistory.cshtml", runs);
     }
 

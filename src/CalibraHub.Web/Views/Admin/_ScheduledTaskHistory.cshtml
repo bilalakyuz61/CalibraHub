@@ -28,10 +28,29 @@ body.app-theme-dark .sth-empty strong { color: #e2e8f0; }
 <div class="sth">
 @if (!Model.Any())
 {
+    var lastRunAt  = ViewData["LastRunAt"] as DateTime?;
+    var lastStatus = ViewData["LastRunStatus"] as int?;
+    var lastMsg    = ViewData["LastRunMessage"] as string;
     <div class="sth-empty">
-        <strong>Henüz Çalıştırma Kaydı Yok</strong>
-        Bu görev hiç çalışmamış olabilir; sistem görevlerinde geçmiş, arka plan servisi
-        her çalıştığında yazılır.
+        <strong>Ayrıntılı Çalıştırma Kaydı Yok</strong>
+        @if (lastRunAt.HasValue)
+        {
+            <text>
+                Bu görev en son
+                <b>@lastRunAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b> tarihinde
+                @(lastStatus == 0 ? "başarıyla" : lastStatus is null ? "" : "hata ile") çalışmış.
+                @if (!string.IsNullOrWhiteSpace(lastMsg)) { <text>(@lastMsg)</text> }
+                <br />
+                Ayrıntılı geçmiş kaydı yalnızca bu tarihten sonraki çalışmalar için tutulur.
+            </text>
+        }
+        else
+        {
+            <text>
+                Bu görev henüz hiç çalışmamış. Sistem görevlerinde geçmiş, arka plan
+                servisi her çalıştığında yazılır.
+            </text>
+        }
     </div>
 }
 else
