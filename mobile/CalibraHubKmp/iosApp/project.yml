@@ -95,4 +95,9 @@ schemes:
     run:
       config: Debug
     archive:
-      config: Release
+      # 2026-08-21 TESHIS: Release -> Debug. Compose'un BOS bir ComposeUIViewController'i bile
+      # native olarak cokuyor (try/catch yakalamiyor) — kalan en guclu supheli RELEASE
+      # optimizasyonu (Kotlin/Native + Xcode olu-kod temizleme Compose'un calisma zamani
+      # kayitlarini dusurebiliyor). Debug arsiv, Gradle'in DEBUG framework'unu (optimizasyonsuz)
+      # kullanir; Debug CALISIR + Release cokerse kok neden optimizasyon/strip demektir.
+      config: Debug
