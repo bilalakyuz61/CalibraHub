@@ -145,6 +145,54 @@ function Switch(props) {
  * (N)" olarak gösterilir; genel ayar (form varsayılanı) için allowClear kapalı,
  * her zaman somut bir sayı taşır.
  */
+/* Serbest duzende tip bazli varsayilan genislikler — DocumentEdit.cshtml'deki
+   FREE_DEFAULT_W ile AYNI kume olmali (ayrisirsa editorde gosterilen "varsayilan"
+   ile ekranda cizilen genislik tutmaz). */
+var FREE_DEFAULT_W = {
+  quoteDate: 150, validUntil: 220, rateDate: 150,
+  currency: 90, exchangeRate: 120, vatIncluded: 90,
+  salesRep: 240, warehouse: 200, paymentPlan: 200,
+}
+function freeDefaultWidth(key) { return FREE_DEFAULT_W[key] || 200 }
+
+/* Piksel genislik adimlayicisi (60-600, 10px adim). Olculer SABIT — deger
+   "Varsayilan (150)" ile "220px" arasinda gidip gelirken satirdaki switch'ler
+   kaymasin (ayni tuzak bu oturumda bir kez yasandi). */
+function PxWidthStepper(props) {
+  var value = (typeof props.value === 'number') ? props.value : null
+  var fallback = props.fallback
+  var onChange = props.onChange
+  var display = (value !== null) ? value : fallback
+  function step(d) { onChange(Math.max(60, Math.min(600, display + d))) }
+  return (
+    <div className="flex items-center gap-1 flex-shrink-0">
+      <div className="flex items-center rounded-md border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.04] overflow-hidden">
+        <button type="button" onClick={function () { step(-10) }} disabled={display <= 60} title="Daralt"
+                className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-indigo-600 dark:text-white/55 dark:hover:text-indigo-300 disabled:opacity-30">
+          <Minus size={11} strokeWidth={2.4} />
+        </button>
+        <span style={{ minWidth: 86 }}
+              title={value !== null ? (value + ' piksel') : ('Ayarlanmamış — varsayılan: ' + fallback + 'px')}
+              className={'px-1.5 text-[10.5px] font-bold tabular-nums text-center whitespace-nowrap ' + (
+                value !== null ? 'text-slate-700 dark:text-white/85' : 'text-slate-400 italic dark:text-white/40')}>
+          {value !== null ? (value + 'px') : ('Varsayılan (' + fallback + ')')}
+        </span>
+        <button type="button" onClick={function () { step(10) }} disabled={display >= 600} title="Genişlet"
+                className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-indigo-600 dark:text-white/55 dark:hover:text-indigo-300 disabled:opacity-30">
+          <Plus size={11} strokeWidth={2.4} />
+        </button>
+      </div>
+      <button type="button" onClick={function () { if (value !== null) onChange(null) }}
+              disabled={value === null} aria-hidden={value === null} tabIndex={value === null ? -1 : 0}
+              title="Varsayılana dön"
+              style={{ width: 13, visibility: value === null ? 'hidden' : 'visible' }}
+              className="flex-shrink-0 text-slate-400 hover:text-indigo-600 dark:text-white/35 dark:hover:text-indigo-300">
+        <RotateCcw size={11} strokeWidth={2.2} />
+      </button>
+    </div>
+  )
+}
+
 function WidthStepper(props) {
   var value = (typeof props.value === 'number') ? props.value : null
   var fallback = props.fallback
@@ -311,6 +359,8 @@ export default function StandardFieldsEditor(props) {
   var [behaviorKey, setBehaviorKey] = useState(null)
   // Serit basina satir yuksekligi (px): { 1: 44, 2: 36, ... }. Bos = varsayilan.
   var [stripHeights, setStripHeights] = useState({})
+  // Duzen modu: 'grid' (varsayilan, 12 sutunluk izgara) | 'free' (serbest akis + px)
+  var [layoutMode, setLayoutMode] = useState('grid')
   // Sifirla — yuklenen (kaydedilmis) hale donus icin anlik goruntu
   var [initialFields, setInitialFields] = useState([])
   // Arama kutusu (Sutun Ayarlari paneliyle ayni etkilesim dili)
@@ -337,6 +387,7 @@ export default function StandardFieldsEditor(props) {
             defaultValue: f.defaultValue || '',
             labelText: f.labelText || '',
             labelStyle: f.labelStyle || '',
+            cellWidthPx: (typeof f.cellWidthPx === 'number' && isFinite(f.cellWidthPx)) ? f.cellWidthPx : null,
             visibleIf: f.visibleIf || '',
             requiredIf: f.requiredIf || '',
             cardSection: normalizeCardSection(f.cardSection),
@@ -352,6 +403,7 @@ export default function StandardFieldsEditor(props) {
           if (x && x.section > 0 && typeof x.rowHeight === 'number') sh[x.section] = x.rowHeight
         })
         setStripHeights(sh)
+        setLayoutMode(data.layoutMode === 'free' ? 'free' : 'grid')
         // Form varsayilan hucre genisligi — kokte gelir, null/eksikse 3 (sozlesme).
         var loadedDefaultCardWidth = normalizeCardWidth(data.defaultCardWidth)
         var resolvedDefaultCardWidth = loadedDefaultCardWidth === null ? 3 : loadedDefaultCardWidth
@@ -527,6 +579,7 @@ export default function StandardFieldsEditor(props) {
             cardSection: (typeof f.cardSection === 'number') ? f.cardSection : null,
             cardOrder: (typeof f.cardOrder === 'number') ? f.cardOrder : null,
             cardWidth: (typeof f.cardWidth === 'number') ? f.cardWidth : null,
+            cellWidthPx: (typeof f.cellWidthPx === 'number') ? f.cellWidthPx : null,
           }
         }),
         tabs: tabs.map(function (t, i) {
@@ -534,6 +587,7 @@ export default function StandardFieldsEditor(props) {
         }),
         // Serit satir yukseklikleri — yalniz DEGER VERILMIS seritler gonderilir;
         // gonderilmeyen serit sunucuda satir acmaz (varsayilan, fail-open).
+        layoutMode: layoutMode,
         stripHeights: Object.keys(stripHeights).map(function (k) {
           return { section: parseInt(k, 10), rowHeight: stripHeights[k] }
         }).filter(function (x) { return x.section > 0 && typeof x.rowHeight === 'number' }),
@@ -660,6 +714,30 @@ export default function StandardFieldsEditor(props) {
                 </div>
               </div>
               )}
+
+              {/* ── Düzen modu (2026-08-20) ────────────────────────────────────
+                  DocumentEdit 8 belge tipiyle paylaşımlı; serbest düzen form başına
+                  opt-in. 'grid' = bugünkü 12 sütunluk ızgara (diğer formlar hiç
+                  etkilenmez), 'free' = serbest akış + alan başına piksel genişlik. */}
+              <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.04]">
+                <LayoutGrid size={13} strokeWidth={2} className="flex-shrink-0 text-slate-500 dark:text-white/50" />
+                <span className="text-[11.5px] font-bold text-slate-700 dark:text-white/80">Düzen</span>
+                {[{ v: 'grid', l: 'Izgara (tablo)' }, { v: 'free', l: 'Serbest (form)' }].map(function (o) {
+                  var on = layoutMode === o.v
+                  return (
+                    <button key={o.v} type="button" onClick={function () { setLayoutMode(o.v) }}
+                      className={'px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors ' + (
+                        on ? 'bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-400/30'
+                           : 'text-slate-500 border-slate-200 hover:bg-slate-50 dark:text-white/55 dark:border-white/10 dark:hover:bg-white/[0.08]'
+                      )}>{o.l}</button>
+                  )
+                })}
+                <span className="text-[10.5px] text-slate-400 dark:text-white/35">
+                  {layoutMode === 'free'
+                    ? 'Alan başına piksel genişlik · dikey ayraç yok'
+                    : 'Eşit sütunlu ızgara · bugünkü görünüm'}
+                </span>
+              </div>
 
               {/* ── Varsayılan Hücre Genişliği (2026-08-20) — form genelinde 12 sütunluk
                   ortak ızgarada, genişliği ayarlanmamış alanların kullanacağı değer. ── */}
@@ -861,12 +939,23 @@ export default function StandardFieldsEditor(props) {
                               </div>
                               <div className="flex items-center gap-1.5">
                                 <span className="text-[9.5px] font-semibold text-slate-500 dark:text-white/50">Genişlik</span>
-                                <WidthStepper
-                                  value={f.cardWidth}
-                                  fallback={defaultCardWidth}
-                                  allowClear={true}
-                                  onChange={function (v) { patchField(f.key, { cardWidth: v }) }}
-                                />
+                                {/* Serbest duzende PIKSEL, izgara modunda 1..12 span.
+                                    Iki yol ayri veri tutar (cellWidthPx / cardWidth) —
+                                    mod degistirince digerinin degeri kaybolmaz. */}
+                                {layoutMode === 'free' ? (
+                                  <PxWidthStepper
+                                    value={f.cellWidthPx}
+                                    fallback={freeDefaultWidth(f.key)}
+                                    onChange={function (v) { patchField(f.key, { cellWidthPx: v }) }}
+                                  />
+                                ) : (
+                                  <WidthStepper
+                                    value={f.cardWidth}
+                                    fallback={defaultCardWidth}
+                                    allowClear={true}
+                                    onChange={function (v) { patchField(f.key, { cardWidth: v }) }}
+                                  />
+                                )}
                               </div>
                               {/* Bolum artik SURUKLEYEREK degistirilir — buton grubu kalkti.
                                   Yerine detaylari acan katlama dugmesi. */}

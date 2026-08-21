@@ -2253,6 +2253,35 @@
             var(--sqe-strip-border, #e2e8f0) calc(100% / var(--sqe-cols, 12))
         );
     }
+    /* ══ SERBEST DUZEN (layoutMode='free', 2026-08-20) ══════════════════════════
+       DocumentEdit 8 belge tipiyle PAYLASIMLI. Bu yuzden izgara kurallari YERINDE
+       BIRAKILDI; serbest duzen yalnizca .sqe-strips--free altinda tanimlanir —
+       sinif yoksa hicbir sey degismez (diger 7 belge tipi etkilenmez).
+       Fark: sabit sutun + dikey ayrac YOK; hucreler kendi px genisliginde,
+       satir dolunca alta akar (izgara oncesi flex temeline donus). */
+    .sqe-strips--free .sqe-strip {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        justify-content: flex-start;
+        gap: 12px 22px;
+        padding: 10px 14px;
+        background-image: none;              /* dikey ayraclar KALKAR */
+        grid-template-columns: none;
+    }
+    .sqe-strips--free .sqe-hrow {
+        /* Genislik JS'te alan basina yazilir (applyCellWidths). Buradaki deger yalniz
+           veri gelmeden onceki ilk render icin makul bir taban. */
+        flex: 0 0 auto;
+        width: 200px;
+        max-width: 100%;
+        grid-column: auto;                   /* izgara span'i etkisiz kalsin */
+        border-left: none;                   /* hucre ayraci da yok */
+        padding: 0;
+    }
+    /* Dar konteynerde hucre tasmasin — px degeri korunur ama tavan %100 olur. */
+    .sqe-strips--free .sqe-strip--narrow .sqe-hrow { max-width: 100%; }
+
     .sqe-strip--narrow {
         grid-template-columns: repeat(6, minmax(0, 1fr));
         background-image: repeating-linear-gradient(
@@ -3744,6 +3773,10 @@
     // FAIL-OPEN: istek başarısız / cardSection alanı yok / API henüz güncel
     // değil → hiçbir şey yapılmaz, yukarıdaki varsayılan gruplama aynen kalır.
     (function initCardSections() {
+        // Duzen bayragi: 'free' ise serbest akis + px genislik, aksi halde IZGARA
+        // (bugunku davranis). fetch yanitindan set edilir; oncesinde false kalir
+        // ki veri gelmeden izgara yolu bozulmasin (fail-open).
+        var __sqFreeLayout = false;
         // fields: API'den gelen tam liste ({key, cardSection, cardOrder, ...}).
         // Yalnizca cardSection'i ACIKCA ayarli alanlar tasinir/siralanir; digerleri
         // markup'taki yerinde kalir (fail-open, alan bazinda).
@@ -3863,7 +3896,40 @@
            GÖRÜNÜR sayılır: belge tipine göre gizlenen (display:none) ve Alan
            Düzeni görünürlük kuralıyla kapatılan hücreler ızgarada yer kaplamaz.
            Fail-open: hiç görünür hücre yoksa değişken yazılmaz → CSS 12'ye düşer. */
+        /* ── Serbest duzen: alan basina PIKSEL genislik (2026-08-20) ──────────────
+           Tip bazli varsayilanlar — cellWidthPx verilmemis alanlar bunu kullanir.
+           Anahtar = data-field-key; tip bilgisi markup'ta olmadigi icin alan
+           anahtarindan turetilir (katalogla ayni kume, tek yerde tutulur). */
+        var FREE_DEFAULT_W = {
+            quoteDate: 150, validUntil: 220, rateDate: 150,
+            currency: 90, exchangeRate: 120, vatIncluded: 90,
+            salesRep: 240, warehouse: 200, paymentPlan: 200,
+        };
+        function freeDefaultWidth(key) {
+            return FREE_DEFAULT_W[key] || 200;
+        }
+        /* Serbest duzende hucre genisligini uygular. Izgara modunda CAGRILMAZ
+           (applyCardWidths gorevini surdurur) — iki yol birbirine karismaz. */
+        function applyCellWidths(fields) {
+            var hform = document.querySelector('.sqe-hform');
+            if (!hform) return;
+            var byKey = {};
+            (fields || []).forEach(function (f) { if (f && f.key) byKey[f.key] = f; });
+            hform.querySelectorAll('.sqe-strip .sqe-hrow[data-field-key]').forEach(function (row) {
+                var key = row.getAttribute('data-field-key');
+                var f = byKey[key];
+                var w = (f && typeof f.cellWidthPx === 'number' && isFinite(f.cellWidthPx))
+                    ? f.cellWidthPx : freeDefaultWidth(key);
+                w = Math.min(600, Math.max(60, Math.round(w)));
+                row.style.width = w + 'px';
+                row.style.flex = '0 0 auto';
+                row.style.gridColumn = 'auto';   // izgaradan kalan span'i temizle
+            });
+        }
+
         function applyStripColumns() {
+            // Serbest duzende sutun kavrami yok — hucreler kendi px genisliginde akar.
+            if (__sqFreeLayout) return;
             var strips = document.querySelectorAll('.sqe-hform .sqe-strip');
             if (!strips.length) return;
             function visibleCells(strip) {
@@ -3890,7 +3956,19 @@
                     return f && f.key && f.cardSection !== null && f.cardSection !== undefined;
                 });
                 if (any) applySections(data.fields);
-                applyCardWidths(data.fields, data.defaultCardWidth);
+
+                // ── Duzen gate'i (2026-08-20) ──────────────────────────────────
+                // layoutMode 'free' DEGILSE hicbir sey degismez: izgara yolu
+                // (applyCardWidths + applyStripColumns) aynen calisir. Bu sayede
+                // DocumentEdit'i paylasan diger 7 belge tipi etkilenmez.
+                __sqFreeLayout = (data.layoutMode === 'free');
+                if (__sqFreeLayout) {
+                    var strips = document.querySelector('.sqe-strips');
+                    if (strips) strips.classList.add('sqe-strips--free');
+                    applyCellWidths(data.fields);
+                } else {
+                    applyCardWidths(data.fields, data.defaultCardWidth);
+                }
             })
             .catch(function (e) { try { console.warn('[CardSections] yükleme hatası (fail-open):', e && e.message) } catch (_) {} })
             // Once genislik gozcusu (narrow sinifi yerlesir), SONRA sutun sayisi —

@@ -288,6 +288,7 @@ public sealed partial class FormBehaviorController : Controller
                 var defaultValue = string.IsNullOrWhiteSpace(f.DefaultValue) ? null : f.DefaultValue.Trim();
                 if (defaultValue is { Length: > 400 }) defaultValue = defaultValue[..400];
                 var cardWidth = ClampCardWidth(f.CardWidth, $"field[{key}]");
+                var cellWidthPx = ClampCellWidthPx(f.CellWidthPx);
 
                 string? rulesJson = null;
                 if (visibleIf is not null || requiredIf is not null)
@@ -302,7 +303,8 @@ public sealed partial class FormBehaviorController : Controller
                 // fail-open semantiği net olur (satır yok = bugünkü davranış).
                 var isDefault = isVisible && !f.IsRequired && defaultValue is null
                     && labelText is null && labelStyle is null && rulesJson is null
-                    && f.CardSection is null && f.CardOrder is null && cardWidth is null;
+                    && f.CardSection is null && f.CardOrder is null && cardWidth is null
+                    && cellWidthPx is null;
                 if (isDefault) continue;
 
                 rows.Add(new FormFieldBehavior
@@ -319,6 +321,7 @@ public sealed partial class FormBehaviorController : Controller
                     CardSection = f.CardSection,
                     CardOrder = f.CardOrder,
                     CardWidth = cardWidth,
+                    CellWidthPx = cellWidthPx,
                     CreatedById = GetUserId(),
                     CreatedBy = User?.Identity?.Name,
                 });
@@ -367,11 +370,17 @@ public sealed partial class FormBehaviorController : Controller
                 var isVisible = cat.Locked || t.IsVisible;
                 var labelText = string.IsNullOrWhiteSpace(t.LabelText) ? null : t.LabelText.Trim();
                 if (labelText is { Length: > 40 }) labelText = labelText[..40];
+                // Hedef sekme: yalniz KATALOGDA olan ve KENDISI OLMAYAN bir anahtar kabul edilir
+                // (bilinmeyen/kendine-hedef sessizce null'a duser → yerinde kalir).
+                var target = t.TargetTabKey?.Trim();
+                if (string.IsNullOrEmpty(target)
+                    || string.Equals(target, key, StringComparison.OrdinalIgnoreCase)
+                    || !tabByKey.ContainsKey(target)) target = null;
 
                 // Varsayılan sıra = katalog sırası; farklı sıra da davranış sayılır.
                 var catalogIndex = DocumentHeaderFieldCatalog.Tabs.ToList().FindIndex(x =>
                     string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase));
-                if (isVisible && labelText is null && t.SortOrder == catalogIndex) continue;
+                if (isVisible && labelText is null && t.SortOrder == catalogIndex && target is null) continue;
 
                 rows.Add(new FormFieldBehavior
                 {
@@ -380,6 +389,22 @@ public sealed partial class FormBehaviorController : Controller
                     IsVisible = isVisible,
                     LabelText = labelText,
                     SortOrder = t.SortOrder,
+                    TargetTabKey = target,
+                    CreatedById = GetUserId(),
+                    CreatedBy = User?.Identity?.Name,
+                });
+            }
+
+            // Form duzeni — yalniz 'free' satir acar; 'grid' varsayilandir (satir yok =
+            // bugunku izgara davranisi, diger belge tipleri hic etkilenmez).
+            if (NormalizeLayoutMode(request.LayoutMode) == "free" && seen.Add(LayoutModeFieldKey))
+            {
+                rows.Add(new FormFieldBehavior
+                {
+                    FormCode = formCode,
+                    FieldKey = LayoutModeFieldKey,
+                    IsVisible = true,
+                    DefaultValue = "free",
                     CreatedById = GetUserId(),
                     CreatedBy = User?.Identity?.Name,
                 });
