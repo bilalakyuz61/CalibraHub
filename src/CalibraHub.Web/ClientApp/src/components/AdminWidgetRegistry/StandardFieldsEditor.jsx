@@ -36,7 +36,7 @@
  * gizlenemez. Kural ifadeleri widget kural motoru sözdizimiyle aynıdır; scope'ta
  * bu formun alan key'leri bulunur (örn. currency == 'USD', vatIncluded == true).
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import FieldBehaviorModal from './FieldBehaviorModal'
 import {
@@ -145,6 +145,101 @@ function Switch(props) {
  * (N)" olarak gösterilir; genel ayar (form varsayılanı) için allowClear kapalı,
  * her zaman somut bir sayı taşır.
  */
+/* ── Canli onizleme (2026-08-20, Faz 5) ─────────────────────────────────────
+   Kullanici istegi: "tasarimi yonetmesi kolay ve kullanici dostu olsun".
+   Piksel genisligi rakam yazarak vermek zor; burada seridin KENDISI cizilir ve
+   hucre kenarindan surukleyerek boyutlandirilir. Alt kenar serit yuksekligini
+   ayarlar. Onizleme ile alttaki alan listesi AYNI `fields` state'ini okur —
+   birinde degisen otekine aninda yansir (tek kaynak, iki gorunum).
+   ANLIK KAYIT YOK: yalniz yerel state degisir, kalici yazma acik "Kaydet" ile. */
+function LayoutPreview(props) {
+  var groups = props.groups
+  var stripHeights = props.stripHeights || {}
+  var onWidth = props.onWidth
+  var onHeight = props.onHeight
+  var drag = useRef(null)
+
+  useEffect(function () {
+    function move(e) {
+      var d = drag.current
+      if (!d) return
+      e.preventDefault()
+      if (d.kind === 'w') {
+        onWidth(d.key, Math.round(Math.min(600, Math.max(60, d.start + (e.clientX - d.p0)))))
+      } else {
+        onHeight(d.section, Math.round(Math.min(96, Math.max(28, d.start + (e.clientY - d.p0)))))
+      }
+    }
+    function up() {
+      if (drag.current) { drag.current = null; document.body.style.cursor = '' }
+    }
+    document.addEventListener('mousemove', move)
+    document.addEventListener('mouseup', up)
+    return function () {
+      document.removeEventListener('mousemove', move)
+      document.removeEventListener('mouseup', up)
+    }
+  }, [onWidth, onHeight])
+
+  function startW(e, key, cur) {
+    e.preventDefault(); e.stopPropagation()
+    drag.current = { kind: 'w', key: key, start: cur, p0: e.clientX }
+    document.body.style.cursor = 'col-resize'
+  }
+  function startH(e, section, cur) {
+    e.preventDefault(); e.stopPropagation()
+    drag.current = { kind: 'h', section: section, start: cur, p0: e.clientY }
+    document.body.style.cursor = 'row-resize'
+  }
+
+  var visible = groups.filter(function (g) { return g.fields.length > 0 })
+  if (visible.length === 0) return null
+
+  return (
+    <div className="mb-3">
+      <div className="text-[10.5px] text-slate-500 dark:text-white/50 mb-1.5">
+        Canlı önizleme — hücre kenarından sürükleyerek genişlik, alt kenardan şerit yüksekliği
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.03] overflow-hidden">
+        {visible.map(function (g) {
+          var h = (typeof stripHeights[g.section] === 'number') ? stripHeights[g.section] : 36
+          return (
+            <div key={g.key} className="relative border-b border-slate-100 last:border-b-0 dark:border-white/[0.06]">
+              <div className="px-3 pt-1.5 text-[9px] font-bold tracking-wide text-slate-400 dark:text-white/30">{g.label}</div>
+              <div className="flex flex-wrap items-start gap-y-2 px-3 pb-3">
+                {g.fields.map(function (f) {
+                  var w = (typeof f.cellWidthPx === 'number') ? f.cellWidthPx : freeDefaultWidth(f.key)
+                  return (
+                    <div key={f.key} style={{ width: w, paddingRight: 10 }} className="relative flex-shrink-0">
+                      <div className="text-[9.5px] text-slate-400 dark:text-white/35 truncate mb-0.5">{f.labelText || f.label}</div>
+                      <div style={{ height: Math.max(16, h - 18) }}
+                           className="rounded-sm border-b border-slate-300 bg-slate-50/70 dark:border-white/20 dark:bg-white/[0.04]" />
+                      <div
+                        onMouseDown={function (e) { startW(e, f.key, w) }}
+                        title={'Genişlik: ' + w + 'px — sürükleyin'}
+                        style={{ position: 'absolute', top: 14, right: 2, width: 5, height: Math.max(14, h - 20), cursor: 'col-resize' }}
+                        className="rounded-sm bg-slate-300 hover:bg-indigo-500 dark:bg-white/20 dark:hover:bg-indigo-400"
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+              {g.kind === 'strip' && (
+                <div
+                  onMouseDown={function (e) { startH(e, g.section, h) }}
+                  title={'Şerit yüksekliği: ' + h + 'px — sürükleyin'}
+                  style={{ height: 5, cursor: 'row-resize' }}
+                  className="bg-slate-100 hover:bg-indigo-400 dark:bg-white/[0.06] dark:hover:bg-indigo-500"
+                />
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 /* Serbest duzende tip bazli varsayilan genislikler — DocumentEdit.cshtml'deki
    FREE_DEFAULT_W ile AYNI kume olmali (ayrisirsa editorde gosterilen "varsayilan"
    ile ekranda cizilen genislik tutmaz). */
@@ -796,6 +891,23 @@ export default function StandardFieldsEditor(props) {
                   <Plus size={12} strokeWidth={2.4} /> Yeni Şerit Ekle
                 </button>
               </div>
+
+              {/* Canli onizleme — yalniz SERBEST duzende. Izgara modunda hucre
+                  genisligi 1..12 span oldugu icin piksel surukleme anlamsiz. */}
+              {layoutMode === 'free' && (
+                <LayoutPreview
+                  groups={sectionGroups}
+                  stripHeights={stripHeights}
+                  onWidth={function (key, px) { patchField(key, { cellWidthPx: px }) }}
+                  onHeight={function (section, px) {
+                    setStripHeights(function (prev) {
+                      var next = Object.assign({}, prev)
+                      next[section] = px
+                      return next
+                    })
+                  }}
+                />
+              )}
 
               {/* Arama — alan sayisi arttikca liste uzuyor (Sutun Ayarlari paneliyle ayni desen) */}
               <div className="flex items-center gap-2 mb-2 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.04]">
