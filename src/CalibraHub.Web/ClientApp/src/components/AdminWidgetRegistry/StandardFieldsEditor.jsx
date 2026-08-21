@@ -386,70 +386,6 @@ function PxWidthStepper(props) {
   )
 }
 
-function WidthStepper(props) {
-  var value = (typeof props.value === 'number') ? props.value : null
-  var fallback = props.fallback
-  var allowClear = props.allowClear === true
-  var onChange = props.onChange
-  var display = (value !== null) ? value : fallback
-  function step(delta) {
-    var next = Math.max(CARD_WIDTH_MIN, Math.min(CARD_WIDTH_MAX, display + delta))
-    onChange(next)
-  }
-  return (
-    /* 2026-08-20 (kullanici istegi): SABIT olculer. Etiket "Varsayilan (3)" (uzun)
-       ile "3/12" (kisa) arasinda gidip geldigi ve temizle butonu gelip gittigi icin
-       adimlayicinin genisligi degisiyor, bu da satirdaki Gorunur/Zorunlu
-       switch'lerini kaydiriyordu. Hem etikete min-width hem temizle yuvasina sabit
-       yer verildi (buton yokken yuva GORUNMEZ ama yer kaplar). */
-    <div className="flex items-center gap-1 flex-shrink-0">
-      <div className="flex items-center rounded-md border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.04] overflow-hidden">
-        <button
-          type="button"
-          onClick={function () { step(-1) }}
-          disabled={display <= CARD_WIDTH_MIN}
-          title="Bir sütun daralt"
-          className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:bg-slate-50 dark:text-white/55 dark:hover:text-indigo-300 dark:hover:bg-white/[0.08] disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          <Minus size={11} strokeWidth={2.4} />
-        </button>
-        <span
-          style={{ minWidth: 78 }}
-          className={'px-1.5 text-[10.5px] font-bold tabular-nums text-center whitespace-nowrap ' + (
-            value !== null ? 'text-slate-700 dark:text-white/85' : 'text-slate-400 italic dark:text-white/40'
-          )}
-          title={value !== null ? (value + ' / 12 sütun') : ('Ayarlanmamış — form varsayılanı: ' + fallback + ' / 12')}
-        >
-          {value !== null ? (value + '/12') : ('Varsayılan (' + fallback + ')')}
-        </span>
-        <button
-          type="button"
-          onClick={function () { step(1) }}
-          disabled={display >= CARD_WIDTH_MAX}
-          title="Bir sütun genişlet"
-          className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:bg-slate-50 dark:text-white/55 dark:hover:text-indigo-300 dark:hover:bg-white/[0.08] disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          <Plus size={11} strokeWidth={2.4} />
-        </button>
-      </div>
-      {allowClear && (
-        <button
-          type="button"
-          onClick={function () { if (value !== null) onChange(null) }}
-          disabled={value === null}
-          aria-hidden={value === null}
-          tabIndex={value === null ? -1 : 0}
-          title="Varsayılana dön"
-          style={{ width: 13, visibility: value === null ? 'hidden' : 'visible' }}
-          className="flex-shrink-0 text-slate-400 hover:text-indigo-600 dark:text-white/35 dark:hover:text-indigo-300"
-        >
-          <RotateCcw size={11} strokeWidth={2.2} />
-        </button>
-      )}
-    </div>
-  )
-}
-
 /* bg-[#fff]: Bootstrap'in .bg-white{...!important} utility'si Tailwind dark:
    varyantini eziyordu (karanlik temada beyaz bloklar) — ayni gorunum, cakismayan ad. */
 var inputCls = 'w-full px-2 py-1 rounded-md text-[11.5px] border border-slate-200 bg-[#fff] text-slate-700 ' +
@@ -889,10 +825,6 @@ export default function StandardFieldsEditor(props) {
   var scopeKeys = fields.map(function (f) { return f.key }).join(', ')
   var showTabBadge = tabs.length > 0
   var tabTree = buildTabTree(fields, tabs, maxStrip)
-  /* Canli onizleme TEK sekmeyi gosterir — alanlar artik sekmelere dagildigi icin
-     hepsini tek seritte cizmek yaniltici olurdu. Alani olan ilk sekme secilir. */
-  var previewTab = tabTree.find(function (t) { return t.fieldCount > 0 }) || tabTree[0]
-  var previewGroups = previewTab ? previewTab.sections : []
   var customCount = tabs.filter(function (t) { return t.isCustom }).length
 
   /** Yeni ozel sekme — bir sonraki bos c<N> anahtarini secer. */
@@ -1419,6 +1351,29 @@ export default function StandardFieldsEditor(props) {
       {/* Alan davranisi modali — Varsayilan Deger / Gorunurluk / Zorunluluk.
           Kendi portal'ini acar (z-[120]), bu modalin USTUNDE durur. Uygula
           yalnizca yerel state'i gunceller; kalici yazma yine alttaki "Kaydet". */}
+      {/* Onizleme modali (2026-08-21) — taslak olculer "Uygula" ile bu ekrana
+          aktarilir; kalici yazma yine "Kaydet" ile. `key` ile her acilista yeniden
+          kurulur ki taslak bir onceki oturumun degerlerinden baslamasin. */}
+      {previewOpen && (
+        <LayoutPreviewModal
+          key={'preview-' + fields.length}
+          tabTree={tabTree}
+          stripHeights={stripHeights}
+          onClose={function () { setPreviewOpen(false) }}
+          onApply={function (r) {
+            setFields(function (prev) {
+              return prev.map(function (f) {
+                if (!Object.prototype.hasOwnProperty.call(r.widths, f.key)) return f
+                var w = r.widths[f.key]
+                var next = (typeof w === 'number') ? w : null
+                return (next === f.cellWidthPx) ? f : Object.assign({}, f, { cellWidthPx: next })
+              })
+            })
+            setStripHeights(Object.assign({}, r.heights))
+          }}
+        />
+      )}
+
       <FieldBehaviorModal
         field={behaviorField}
         fields={fields.map(function (f) { return { key: f.key, label: f.labelText || f.label || f.key } })}
