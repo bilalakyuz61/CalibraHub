@@ -60,6 +60,18 @@ public sealed class FormFieldBehavior
     /// NULL; null ise kart kendi varsayilanini uygular (fail-open).
     /// </summary>
     public int? RowHeight { get; set; }
+
+    /// <summary>
+    /// Serbest duzende (layoutMode='free') alanin PIKSEL genisligi (60-600).
+    /// null = tip bazli varsayilan. Izgara modunda okunmaz (orada CardWidth gecerli).
+    /// </summary>
+    public int? CellWidthPx { get; set; }
+
+    /// <summary>
+    /// Sekme icerigi baska sekmeye tasinsin: hedef sekme anahtari. YALNIZCA
+    /// 'tab:&lt;key&gt;' satirlarinda anlamli; null/kendisi = yerinde kal.
+    /// </summary>
+    public string? TargetTabKey { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
     public int? CreatedById { get; init; }

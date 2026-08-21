@@ -14128,6 +14128,12 @@ END;";
                     -- 2026-08-20: serit BASINA satir yuksekligi (px). Yalnizca rezerve
                     -- '__stripN' satirlarinda anlamli; alan satirlarinda NULL kalir.
                     [RowHeight]    INT            NULL,
+                    -- 2026-08-20 Serbest duzen: alan basina PIKSEL genislik (60-600).
+                    -- CardWidth (1..12 izgara span) yerine gecer; izgara modunda okunmaz.
+                    [CellWidthPx]  INT            NULL,
+                    -- Sekme icerigi baska sekmeye tasinabilir: hedef sekme anahtari.
+                    -- Yalniz 'tab:<key>' satirlarinda anlamli; null = yerinde kal.
+                    [TargetTabKey] NVARCHAR(50)   NULL,
                     [IsActive]     BIT            NOT NULL CONSTRAINT [DF_FormFieldBehavior_IsActive] DEFAULT 1,
                     [CreatedById]  INT            NULL,
                     [CreatedBy]    NVARCHAR(120)  NULL,
@@ -14150,6 +14156,10 @@ END;";
                     ALTER TABLE [{s}].[FormFieldBehavior] ADD [CardWidth] INT NULL;
                 IF COL_LENGTH(N'{sl}.FormFieldBehavior', N'RowHeight') IS NULL
                     ALTER TABLE [{s}].[FormFieldBehavior] ADD [RowHeight] INT NULL;
+                IF COL_LENGTH(N'{sl}.FormFieldBehavior', N'CellWidthPx') IS NULL
+                    ALTER TABLE [{s}].[FormFieldBehavior] ADD [CellWidthPx] INT NULL;
+                IF COL_LENGTH(N'{sl}.FormFieldBehavior', N'TargetTabKey') IS NULL
+                    ALTER TABLE [{s}].[FormFieldBehavior] ADD [TargetTabKey] NVARCHAR(50) NULL;
             END;
             """;
         await using var cmd = connection.CreateCommand();

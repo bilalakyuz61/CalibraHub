@@ -50,6 +50,25 @@ public sealed partial class FormBehaviorController : Controller
     private const int RowHeightMin = 28;
     private const int RowHeightMax = 96;
 
+    /// <summary>
+    /// Form duzeni rezerve satirinin FieldKey'i. Deger DefaultValue kolonunda:
+    /// "grid" (varsayilan, 12 sutunluk izgara — bugunku davranis) | "free"
+    /// (serbest akis + alan basina piksel genislik). Yeni kolon acilmadi;
+    /// __card / __strip{{N}} ile ayni rezerve-satir deseni.
+    /// GATE: DocumentEdit 8 belge tipiyle PAYLASIMLI oldugu icin serbest duzen
+    /// form basina opt-in'dir — 'free' secilmeyen formlar hic etkilenmez.
+    /// </summary>
+    private const string LayoutModeFieldKey = "__layout";
+
+    private const int CellWidthMin = 60;
+    private const int CellWidthMax = 600;
+
+    private static int? ClampCellWidthPx(int? v)
+        => v is null ? null : Math.Min(CellWidthMax, Math.Max(CellWidthMin, v.Value));
+
+    private static string NormalizeLayoutMode(string? v)
+        => string.Equals(v?.Trim(), "free", StringComparison.OrdinalIgnoreCase) ? "free" : "grid";
+
     private static int? ClampRowHeight(int? v)
         => v is null ? null : Math.Min(RowHeightMax, Math.Max(RowHeightMin, v.Value));
 
@@ -74,16 +93,18 @@ public sealed partial class FormBehaviorController : Controller
         string Key, bool IsVisible = true, bool IsRequired = false,
         string? DefaultValue = null, string? LabelText = null, string? LabelStyle = null,
         string? VisibleIf = null, string? RequiredIf = null, int? CardSection = null, int? CardOrder = null,
-        int? CardWidth = null);
+        int? CardWidth = null, int? CellWidthPx = null);
 
-    public sealed record TabBehaviorDto(string Key, bool IsVisible = true, int SortOrder = 0, string? LabelText = null);
+    public sealed record TabBehaviorDto(
+        string Key, bool IsVisible = true, int SortOrder = 0, string? LabelText = null,
+        string? TargetTabKey = null);
 
     /// <summary>Şerit no (1..N) → satır yüksekliği (px). null/boş = varsayılan.</summary>
     public sealed record StripHeightDto(int Section, int? RowHeight);
 
     public sealed record SaveBehaviorRequest(
         string FormCode, List<FieldBehaviorDto>? Fields, List<TabBehaviorDto>? Tabs, int? DefaultCardWidth = null,
-        List<StripHeightDto>? StripHeights = null);
+        List<StripHeightDto>? StripHeights = null, string? LayoutMode = null);
 
     private sealed record CatalogItem(string Key, string Label, string Tab, string DataType, bool Locked);
 
@@ -182,6 +203,7 @@ public sealed partial class FormBehaviorController : Controller
                 cardSection = b?.CardSection,
                 cardOrder = b?.CardOrder,
                 cardWidth = b?.CardWidth,
+                cellWidthPx = b?.CellWidthPx,
             };
         }).ToArray();
 
@@ -200,6 +222,9 @@ public sealed partial class FormBehaviorController : Controller
             .Where(x => x.section > 0)
             .ToArray();
 
+        byKey.TryGetValue(LayoutModeFieldKey, out var layoutRow);
+        var layoutMode = NormalizeLayoutMode(layoutRow?.DefaultValue);
+
         // Sekme yönetimi yalnız header formlarda — kalem formunda boş liste döner.
         object[] tabs = Array.Empty<object>();
         if (isHeader)
@@ -215,11 +240,12 @@ public sealed partial class FormBehaviorController : Controller
                     isVisible = t.Locked || b is null || b.IsVisible,
                     sortOrder = b?.SortOrder ?? i,
                     labelText = b?.LabelText,
+                    targetTabKey = b?.TargetTabKey,
                 };
             }).OrderBy(t => t.sortOrder).Cast<object>().ToArray();
         }
 
-        return Json(new { ok = true, formCode, canEdit = IsAdmin(), fields, tabs, defaultCardWidth, stripHeights });
+        return Json(new { ok = true, formCode, canEdit = IsAdmin(), fields, tabs, defaultCardWidth, stripHeights, layoutMode });
     }
 
     [HttpPost("/api/form-behavior/save")]
