@@ -145,19 +145,41 @@ function Switch(props) {
  * (N)" olarak gösterilir; genel ayar (form varsayılanı) için allowClear kapalı,
  * her zaman somut bir sayı taşır.
  */
-/* ── Canli onizleme (2026-08-20, Faz 5) ─────────────────────────────────────
-   Kullanici istegi: "tasarimi yonetmesi kolay ve kullanici dostu olsun".
-   Piksel genisligi rakam yazarak vermek zor; burada seridin KENDISI cizilir ve
-   hucre kenarindan surukleyerek boyutlandirilir. Alt kenar serit yuksekligini
-   ayarlar. Onizleme ile alttaki alan listesi AYNI `fields` state'ini okur —
-   birinde degisen otekine aninda yansir (tek kaynak, iki gorunum).
-   ANLIK KAYIT YOK: yalniz yerel state degisir, kalici yazma acik "Kaydet" ile. */
-function LayoutPreview(props) {
-  var groups = props.groups
-  var stripHeights = props.stripHeights || {}
-  var onWidth = props.onWidth
-  var onHeight = props.onHeight
+/* ── Önizleme modalı (2026-08-21) ────────────────────────────────────────────
+   Onceki surumde onizleme alan listesinin USTUNDE hep acikti ve editorun yarisini
+   kapliyordu; kullanici istegi uzerine MODALA tasindi. Serit burada gercek
+   olculeriyle cizilir; hucre kenarindan surukleyerek genislik, alt kenardan serit
+   yuksekligi ayarlanir.
+
+   TASLAK MODEL: modal kendi kopyasi uzerinde calisir. "Uygula" denene kadar
+   editordeki `fields` / `stripHeights` state'ine DOKUNMAZ — vazgecen kullanici
+   surukleyerek bozdugu olculeri geri almak zorunda kalmaz. "Uygula" degerleri
+   alan duzeni ekranina aktarir; KALICI yazma yine acik "Kaydet" ile olur.
+
+   CLAUDE.md "Modal boyut sabitligi": sabit genislik + yukseklik, govde kendi
+   icinde kaydirilir — sekme degistikce modal buyuyup kuculmez. */
+function LayoutPreviewModal(props) {
+  var tabTree = props.tabTree || []
+  var onApply = props.onApply
+  var onClose = props.onClose
   var drag = useRef(null)
+
+  var firstWithFields = tabTree.find(function (t) { return t.fieldCount > 0 }) || tabTree[0]
+  var [activeKey, setActiveKey] = useState(firstWithFields ? firstWithFields.key : null)
+
+  // Taslak olculer — modal acilirken mevcut degerlerden kopyalanir.
+  var [widths, setWidths] = useState(function () {
+    var m = {}
+    tabTree.forEach(function (t) {
+      t.sections.forEach(function (s) {
+        s.fields.forEach(function (f) {
+          m[f.key] = (typeof f.cellWidthPx === 'number') ? f.cellWidthPx : null
+        })
+      })
+    })
+    return m
+  })
+  var [heights, setHeights] = useState(function () { return Object.assign({}, props.stripHeights || {}) })
 
   useEffect(function () {
     function move(e) {
@@ -165,21 +187,27 @@ function LayoutPreview(props) {
       if (!d) return
       e.preventDefault()
       if (d.kind === 'w') {
-        onWidth(d.key, Math.round(Math.min(600, Math.max(60, d.start + (e.clientX - d.p0)))))
+        var w = Math.round(Math.min(600, Math.max(60, d.start + (e.clientX - d.p0))))
+        setWidths(function (prev) { var n = Object.assign({}, prev); n[d.key] = w; return n })
       } else {
-        onHeight(d.section, Math.round(Math.min(96, Math.max(28, d.start + (e.clientY - d.p0)))))
+        var h = Math.round(Math.min(96, Math.max(28, d.start + (e.clientY - d.p0))))
+        setHeights(function (prev) { var n = Object.assign({}, prev); n[d.section] = h; return n })
       }
     }
     function up() {
       if (drag.current) { drag.current = null; document.body.style.cursor = '' }
     }
+    function onKey(e) { if (e.key === 'Escape') onClose() }
     document.addEventListener('mousemove', move)
     document.addEventListener('mouseup', up)
+    document.addEventListener('keydown', onKey)
     return function () {
       document.removeEventListener('mousemove', move)
       document.removeEventListener('mouseup', up)
+      document.removeEventListener('keydown', onKey)
+      document.body.style.cursor = ''
     }
-  }, [onWidth, onHeight])
+  }, [onClose])
 
   function startW(e, key, cur) {
     e.preventDefault(); e.stopPropagation()
@@ -191,52 +219,122 @@ function LayoutPreview(props) {
     drag.current = { kind: 'h', section: section, start: cur, p0: e.clientY }
     document.body.style.cursor = 'row-resize'
   }
+  function widthOf(key) {
+    var v = widths[key]
+    return (typeof v === 'number') ? v : freeDefaultWidth(key)
+  }
+  function apply() {
+    onApply({ widths: widths, heights: heights })
+    onClose()
+  }
 
-  var visible = groups.filter(function (g) { return g.fields.length > 0 })
-  if (visible.length === 0) return null
+  var activeTab = tabTree.find(function (t) { return t.key === activeKey }) || firstWithFields
+  var visible = activeTab ? activeTab.sections.filter(function (g) { return g.fields.length > 0 }) : []
 
-  return (
-    <div className="mb-3">
-      <div className="text-[10.5px] text-slate-500 dark:text-white/50 mb-1.5">
-        {(props.tabLabel ? 'Canlı önizleme · ' + props.tabLabel : 'Canlı önizleme')} — hücre kenarından sürükleyerek genişlik, alt kenardan şerit yüksekliği
-      </div>
-      <div className="rounded-lg border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.03] overflow-hidden">
-        {visible.map(function (g) {
-          var h = (typeof stripHeights[g.section] === 'number') ? stripHeights[g.section] : 36
-          return (
-            <div key={g.key} className="relative border-b border-slate-100 last:border-b-0 dark:border-white/[0.06]">
-              <div className="px-3 pt-1.5 text-[9px] font-bold tracking-wide text-slate-400 dark:text-white/30">{g.label}</div>
-              <div className="flex flex-wrap items-start gap-y-2 px-3 pb-3">
-                {g.fields.map(function (f) {
-                  var w = (typeof f.cellWidthPx === 'number') ? f.cellWidthPx : freeDefaultWidth(f.key)
-                  return (
-                    <div key={f.key} style={{ width: w, paddingRight: 10 }} className="relative flex-shrink-0">
-                      <div className="text-[9.5px] text-slate-400 dark:text-white/35 truncate mb-0.5">{f.labelText || f.label}</div>
-                      <div style={{ height: Math.max(16, h - 18) }}
-                           className="rounded-sm border-b border-slate-300 bg-slate-50/70 dark:border-white/20 dark:bg-white/[0.04]" />
-                      <div
-                        onMouseDown={function (e) { startW(e, f.key, w) }}
-                        title={'Genişlik: ' + w + 'px — sürükleyin'}
-                        style={{ position: 'absolute', top: 14, right: 2, width: 5, height: Math.max(14, h - 20), cursor: 'col-resize' }}
-                        className="rounded-sm bg-slate-300 hover:bg-indigo-500 dark:bg-white/20 dark:hover:bg-indigo-400"
-                      />
-                    </div>
-                  )
-                })}
-              </div>
-              {g.kind === 'strip' && (
-                <div
-                  onMouseDown={function (e) { startH(e, g.section, h) }}
-                  title={'Şerit yüksekliği: ' + h + 'px — sürükleyin'}
-                  style={{ height: 5, cursor: 'row-resize' }}
-                  className="bg-slate-100 hover:bg-indigo-400 dark:bg-white/[0.06] dark:hover:bg-indigo-500"
-                />
-              )}
+  return createPortal(
+    <div
+      onClick={function (e) { if (e.target === e.currentTarget) onClose() }}
+      className="fixed inset-0 z-[120] flex items-center justify-center p-4"
+      style={{ background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}
+    >
+      {/* bg-[#fff] (bg-white DEGIL): Bootstrap .bg-white{...!important} dark: varyantini yener. */}
+      <div
+        onClick={function (e) { e.stopPropagation() }}
+        className="flex flex-col rounded-2xl border border-slate-200 bg-[#fff] shadow-2xl dark:border-white/10 dark:bg-[#171c2a] overflow-hidden"
+        style={{ width: '100%', maxWidth: 'min(940px, calc(100vw - 48px))', height: 'min(620px, calc(100vh - 64px))' }}
+      >
+        <div className="flex items-start gap-3 px-5 py-4 border-b border-slate-200 dark:border-white/10 flex-shrink-0">
+          <div className="min-w-0 flex-1">
+            <div className="text-[14px] font-bold text-slate-800 dark:text-white truncate">Düzen Önizleme</div>
+            <div className="text-[11.5px] text-slate-500 dark:text-white/45 mt-0.5">
+              Hücre kenarından sürükleyerek genişlik, şeridin alt kenarından yükseklik ayarlanır.
+              Uygula ölçüleri alan düzeni ekranına aktarır; kalıcı olması için Kaydet gerekir.
             </div>
-          )
-        })}
+          </div>
+          <button type="button" onClick={onClose} title="Kapat"
+                  className="flex-shrink-0 p-1 rounded-lg text-slate-400 hover:bg-slate-100 dark:text-white/40 dark:hover:bg-white/10">
+            <XIcon size={16} strokeWidth={2} />
+          </button>
+        </div>
+
+        {/* Sekme secici — alanlar sekmelere dagildigi icin hepsini tek seritte
+            cizmek yaniltici olurdu; her sekme kendi duzeniyle onizlenir. */}
+        {tabTree.length > 1 && (
+          <div className="flex items-center gap-1 flex-wrap px-5 py-2 border-b border-slate-200 dark:border-white/10 flex-shrink-0">
+            {tabTree.map(function (t) {
+              var on = activeTab && t.key === activeTab.key
+              return (
+                <button key={t.key} type="button" onClick={function () { setActiveKey(t.key) }}
+                  className={'px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors ' + (
+                    on ? 'bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-400/30'
+                       : 'text-slate-500 border-slate-200 hover:bg-slate-50 dark:text-white/55 dark:border-white/10 dark:hover:bg-white/[0.08]'
+                  )}>
+                  {t.label}
+                  <span className="ml-1 opacity-60">({t.fieldCount})</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        <div className="flex-1 min-h-0 overflow-auto px-5 py-4">
+          {visible.length === 0 ? (
+            <div className="text-[11.5px] text-slate-400 dark:text-white/35 py-8 text-center">
+              Bu sekmede alan yok.
+            </div>
+          ) : (
+            <div className="rounded-lg border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.03] overflow-hidden">
+              {visible.map(function (g) {
+                var h = (typeof heights[g.section] === 'number') ? heights[g.section] : 36
+                return (
+                  <div key={g.key} className="relative border-b border-slate-100 last:border-b-0 dark:border-white/[0.06]">
+                    <div className="px-3 pt-1.5 text-[9px] font-bold tracking-wide text-slate-400 dark:text-white/30">{g.label}</div>
+                    <div className="flex flex-wrap items-start gap-y-2 px-3 pb-3">
+                      {g.fields.map(function (f) {
+                        var w = widthOf(f.key)
+                        return (
+                          <div key={f.key} style={{ width: w, paddingRight: 10 }} className="relative flex-shrink-0">
+                            <div className="text-[9.5px] text-slate-400 dark:text-white/35 truncate mb-0.5">{f.labelText || f.label}</div>
+                            <div style={{ height: Math.max(16, h - 18) }}
+                                 className="rounded-sm border-b border-slate-300 bg-slate-50/70 dark:border-white/20 dark:bg-white/[0.04]" />
+                            <div
+                              onMouseDown={function (e) { startW(e, f.key, w) }}
+                              title={'Genişlik: ' + w + 'px — sürükleyin'}
+                              style={{ position: 'absolute', top: 14, right: 2, width: 5, height: Math.max(14, h - 20), cursor: 'col-resize' }}
+                              className="rounded-sm bg-slate-300 hover:bg-indigo-500 dark:bg-white/20 dark:hover:bg-indigo-400"
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {g.kind === 'strip' && (
+                      <div
+                        onMouseDown={function (e) { startH(e, g.section, h) }}
+                        title={'Şerit yüksekliği: ' + h + 'px — sürükleyin'}
+                        style={{ height: 5, cursor: 'row-resize' }}
+                        className="bg-slate-100 hover:bg-indigo-400 dark:bg-white/[0.06] dark:hover:bg-indigo-500"
+                      />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-white/10 flex-shrink-0">
+          <button type="button" onClick={onClose}
+                  className="px-3 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-600 border border-slate-200 hover:bg-slate-50 dark:text-white/70 dark:border-white/10 dark:hover:bg-white/[0.08]">
+            Vazgeç
+          </button>
+          <button type="button" onClick={apply}
+                  className="px-3.5 py-1.5 rounded-lg text-[11.5px] font-bold text-white bg-indigo-600 hover:bg-indigo-700">
+            Uygula
+          </button>
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -503,8 +601,8 @@ export default function StandardFieldsEditor(props) {
   var [behaviorKey, setBehaviorKey] = useState(null)
   // Serit basina satir yuksekligi (px): { 1: 44, 2: 36, ... }. Bos = varsayilan.
   var [stripHeights, setStripHeights] = useState({})
-  // Duzen modu: 'grid' (varsayilan, 12 sutunluk izgara) | 'free' (serbest akis + px)
-  var [layoutMode, setLayoutMode] = useState('grid')
+  // Onizleme modali acik mi (2026-08-21) — canli onizleme editorden cikarildi.
+  var [previewOpen, setPreviewOpen] = useState(false)
   // Sifirla — yuklenen (kaydedilmis) hale donus icin anlik goruntu
   var [initialFields, setInitialFields] = useState([])
   // Arama kutusu (Sutun Ayarlari paneliyle ayni etkilesim dili)
@@ -550,7 +648,6 @@ export default function StandardFieldsEditor(props) {
           if (x && x.section > 0 && typeof x.rowHeight === 'number') sh[x.section] = x.rowHeight
         })
         setStripHeights(sh)
-        setLayoutMode(data.layoutMode === 'free' ? 'free' : 'grid')
         // Form varsayilan hucre genisligi — kokte gelir, null/eksikse 3 (sozlesme).
         var loadedDefaultCardWidth = normalizeCardWidth(data.defaultCardWidth)
         var resolvedDefaultCardWidth = loadedDefaultCardWidth === null ? 3 : loadedDefaultCardWidth
@@ -759,7 +856,8 @@ export default function StandardFieldsEditor(props) {
         }),
         // Serit satir yukseklikleri — yalniz DEGER VERILMIS seritler gonderilir;
         // gonderilmeyen serit sunucuda satir acmaz (varsayilan, fail-open).
-        layoutMode: layoutMode,
+        // Izgara (tablo) secenegi 2026-08-21'de kaldirildi — duzen daima serbest.
+        layoutMode: 'free',
         stripHeights: Object.keys(stripHeights).map(function (k) {
           return { section: parseInt(k, 10), rowHeight: stripHeights[k] }
         }).filter(function (x) { return x.section > 0 && typeof x.rowHeight === 'number' }),
@@ -938,45 +1036,6 @@ export default function StandardFieldsEditor(props) {
               </div>
               )}
 
-              {/* ── Düzen modu (2026-08-20) ────────────────────────────────────
-                  DocumentEdit 8 belge tipiyle paylaşımlı; serbest düzen form başına
-                  opt-in. 'grid' = bugünkü 12 sütunluk ızgara (diğer formlar hiç
-                  etkilenmez), 'free' = serbest akış + alan başına piksel genişlik. */}
-              <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.04]">
-                <LayoutGrid size={13} strokeWidth={2} className="flex-shrink-0 text-slate-500 dark:text-white/50" />
-                <span className="text-[11.5px] font-bold text-slate-700 dark:text-white/80">Düzen</span>
-                {[{ v: 'grid', l: 'Izgara (tablo)' }, { v: 'free', l: 'Serbest (form)' }].map(function (o) {
-                  var on = layoutMode === o.v
-                  return (
-                    <button key={o.v} type="button" onClick={function () { setLayoutMode(o.v) }}
-                      className={'px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors ' + (
-                        on ? 'bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-400/30'
-                           : 'text-slate-500 border-slate-200 hover:bg-slate-50 dark:text-white/55 dark:border-white/10 dark:hover:bg-white/[0.08]'
-                      )}>{o.l}</button>
-                  )
-                })}
-                <span className="text-[10.5px] text-slate-400 dark:text-white/35">
-                  {layoutMode === 'free'
-                    ? 'Alan başına piksel genişlik · dikey ayraç yok'
-                    : 'Eşit sütunlu ızgara · bugünkü görünüm'}
-                </span>
-              </div>
-
-              {/* ── Varsayılan Hücre Genişliği (2026-08-20) — form genelinde 12 sütunluk
-                  ortak ızgarada, genişliği ayarlanmamış alanların kullanacağı değer. ── */}
-              <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.03] px-3 py-2.5">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <LayoutGrid size={13} className="text-slate-500 dark:text-white/55 flex-shrink-0" />
-                  <span className="text-[11.5px] font-bold text-slate-700 dark:text-white/80">Varsayılan Hücre Genişliği</span>
-                  <div className="flex-1" />
-                  <WidthStepper value={defaultCardWidth} fallback={3} allowClear={false}
-                    onChange={function (v) { setDefaultCardWidth(v) }} />
-                </div>
-                <div className="text-[10px] text-slate-500 dark:text-white/50 mt-1">
-                  Genişliği ayarlanmamış alanlar bu değeri kullanır (12 sütunluk şerit ızgarası).
-                </div>
-              </div>
-
               {/* ── Bölüm şeridi araç çubuğu ── */}
               <div className="flex items-center gap-2 mb-2">
                 <LayoutGrid size={13} className="text-slate-500 dark:text-white/55 flex-shrink-0" />
@@ -1011,25 +1070,16 @@ export default function StandardFieldsEditor(props) {
                 >
                   <Plus size={12} strokeWidth={2.4} /> Yeni Sekme Ekle
                 </button>
+                {/* Onizleme MODALDA (2026-08-21) — eskiden liste ustunde hep acikti. */}
+                <button
+                  type="button"
+                  onClick={function () { setPreviewOpen(true) }}
+                  title="Düzeni önizle ve genişlik ayarla"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10.5px] font-semibold border transition-colors text-slate-600 border-slate-200 hover:bg-slate-50 dark:text-white/70 dark:border-white/10 dark:hover:bg-white/[0.08]"
+                >
+                  <Eye size={12} strokeWidth={2.2} /> Önizleme
+                </button>
               </div>
-
-              {/* Canli onizleme — yalniz SERBEST duzende. Izgara modunda hucre
-                  genisligi 1..12 span oldugu icin piksel surukleme anlamsiz. */}
-              {layoutMode === 'free' && (
-                <LayoutPreview
-                  groups={previewGroups}
-                  tabLabel={previewTab && previewTab.label}
-                  stripHeights={stripHeights}
-                  onWidth={function (key, px) { patchField(key, { cellWidthPx: px }) }}
-                  onHeight={function (section, px) {
-                    setStripHeights(function (prev) {
-                      var next = Object.assign({}, prev)
-                      next[section] = px
-                      return next
-                    })
-                  }}
-                />
-              )}
 
               {/* Arama — alan sayisi arttikca liste uzuyor (Sutun Ayarlari paneliyle ayni desen) */}
               <div className="flex items-center gap-2 mb-2 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.04]">
@@ -1232,23 +1282,14 @@ export default function StandardFieldsEditor(props) {
                               </div>
                               <div className="flex items-center gap-1.5">
                                 <span className="text-[9.5px] font-semibold text-slate-500 dark:text-white/50">Genişlik</span>
-                                {/* Serbest duzende PIKSEL, izgara modunda 1..12 span.
-                                    Iki yol ayri veri tutar (cellWidthPx / cardWidth) —
-                                    mod degistirince digerinin degeri kaybolmaz. */}
-                                {layoutMode === 'free' ? (
-                                  <PxWidthStepper
-                                    value={f.cellWidthPx}
-                                    fallback={freeDefaultWidth(f.key)}
-                                    onChange={function (v) { patchField(f.key, { cellWidthPx: v }) }}
-                                  />
-                                ) : (
-                                  <WidthStepper
-                                    value={f.cardWidth}
-                                    fallback={defaultCardWidth}
-                                    allowClear={true}
-                                    onChange={function (v) { patchField(f.key, { cardWidth: v }) }}
-                                  />
-                                )}
+                                {/* Genislik daima PIKSEL — izgara (1..12 span) secenegi
+                                    2026-08-21'de kaldirildi. `cardWidth` verisi silinmez,
+                                    yalniz duzenlenmez (geri donus istenirse durur). */}
+                                <PxWidthStepper
+                                  value={f.cellWidthPx}
+                                  fallback={freeDefaultWidth(f.key)}
+                                  onChange={function (v) { patchField(f.key, { cellWidthPx: v }) }}
+                                />
                               </div>
                               {/* Bolum artik SURUKLEYEREK degistirilir — buton grubu kalkti.
                                   Yerine detaylari acan katlama dugmesi. */}
