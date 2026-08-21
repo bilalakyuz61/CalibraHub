@@ -653,6 +653,10 @@ export default function StandardFieldsEditor(props) {
   var dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
   // Suruklenen alanin key'i — DragOverlay icerigi bundan cizilir (null = surukleme yok).
   var [dragKey, setDragKey] = useState(null)
+  /* handleDragOver kap degisimini ANINDA uyguladigi icin Esc/iptal durumunda
+     alan tasinmis kalirdi. Surukleme baslarken alinan anlik goruntu iptalde
+     geri yuklenir — "vazgectim" gercekten vazgecmek olsun. */
+  var dragSnapshot = useRef(null)
 
   /* Carpisma stratejisi (2026-08-22): `closestCenter` cok-kapli listede kaba
      kaliyordu — imlec bir seridin USTUNDEYKEN bile merkezi daha yakin olan BASKA
@@ -733,8 +737,51 @@ export default function StandardFieldsEditor(props) {
     })
   }
 
+  /** `over.id` hangi kaba (sekme+bolum) denk geliyor — satir da olabilir kap da. */
+  function containerOfOverId(overId) {
+    var zone = dropTargetFromId(overId)
+    if (zone) return { tab: zone.tab, section: zone.section }
+    var f = fields.find(function (x) { return x.key === overId })
+    return f ? { tab: effTab(f), section: f.cardSection } : null
+  }
+
+  /* ── Serit/sekme DEGISIMI surukleme SIRASINDA uygulanir (2026-08-22) ────────
+     Kullanici bildirimi: "kendi seridi icinde diger alanlari kaydirabiliyor ama
+     baska seritte ilk tasimada bunu yapamiyor."
+     Sebep: `SortableContext` yalnizca KENDI kabindaki ogeleri kaydirir. Alan hala
+     kaynak kabin listesinde oldugu icin hedef seridin satirlari yer acmiyordu;
+     birakma yine dogru calisiyordu cunku hedef `handleDragEnd`'de hesaplaniyor.
+     Cozum (dnd-kit cok-kapli reciplerinin standardi): imlec BASKA bir kaba
+     gecince alani o kaba HEMEN tasi — boylece hedef kabin SortableContext'i onu
+     kendi listesinde gorur ve komsular yer acar. Ayni kap icindeki siralama
+     burada YAPILMAZ (sortable zaten yapiyor), yalniz kap degisimi. */
+  function handleDragOver(event) {
+    var active = event.active, over = event.over
+    if (!active || !over || active.id === over.id) return
+    var key = String(active.id)
+    var moving = fields.find(function (f) { return f.key === key })
+    if (!moving) return
+    var dst = containerOfOverId(String(over.id))
+    if (!dst) return
+    var dstTab = dst.tab || effTab(moving)
+    // Ayni kap → dokunma; sortable kendi icinde zaten kaydiriyor.
+    if (dst.section === moving.cardSection && dstTab === effTab(moving)) return
+    // Hedef satirin uzerindeysek onun sirasina, kabin bosluguysa sona.
+    var overField = fields.find(function (f) { return f.key === String(over.id) })
+    var idx = null
+    if (overField) {
+      var g = fields.filter(function (f) {
+        return f.cardSection === overField.cardSection && effTab(f) === dstTab && f.key !== key
+      }).slice().sort(compareByCardOrder)
+      var at = g.findIndex(function (f) { return f.key === overField.key })
+      if (at >= 0) idx = at
+    }
+    moveFieldTo(key, dst.section, idx, dstTab)
+  }
+
   function handleDragEnd(event) {
     setDragKey(null)
+    dragSnapshot.current = null
     var active = event.active, over = event.over
     if (!active || !over || active.id === over.id) return
     var key = String(active.id)
@@ -1073,8 +1120,16 @@ export default function StandardFieldsEditor(props) {
                 sensors={dndSensors}
                 collisionDetection={preciseCollision}
                 measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
-                onDragStart={function (e) { setDragKey(String(e.active.id)) }}
-                onDragCancel={function () { setDragKey(null) }}
+                onDragStart={function (e) {
+                  dragSnapshot.current = fields
+                  setDragKey(String(e.active.id))
+                }}
+                onDragOver={handleDragOver}
+                onDragCancel={function () {
+                  if (dragSnapshot.current) setFields(dragSnapshot.current)
+                  dragSnapshot.current = null
+                  setDragKey(null)
+                }}
                 onDragEnd={handleDragEnd}>
               {tabTree.map(function (tab) {
               return (
