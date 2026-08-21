@@ -215,6 +215,8 @@ public sealed partial class FormBehaviorController : Controller
                 cardOrder = b?.CardOrder,
                 cardWidth = b?.CardWidth,
                 cellWidthPx = b?.CellWidthPx,
+                targetTab = b?.TargetTab,
+                movable = f.Movable,
             };
         }).ToArray();
 
@@ -240,7 +242,10 @@ public sealed partial class FormBehaviorController : Controller
         object[] tabs = Array.Empty<object>();
         if (isHeader)
         {
-            tabs = DocumentHeaderFieldCatalog.Tabs.Select((t, i) =>
+            // Katalog sekmeleri + kullanici tanimli ("tab:c1") sekmeler AYNI listede
+            // doner; istemci ayirt etmek icin isCustom'a bakar. Tek tip anonim nesne
+            // kullanilir ki Concat/OrderBy tip uyusmazligina dusmesin.
+            var catalogTabs = DocumentHeaderFieldCatalog.Tabs.Select((t, i) =>
             {
                 byKey.TryGetValue("tab:" + t.Key, out var b);
                 return new
@@ -252,8 +257,30 @@ public sealed partial class FormBehaviorController : Controller
                     sortOrder = b?.SortOrder ?? i,
                     labelText = b?.LabelText,
                     targetTabKey = b?.TargetTabKey,
+                    isCustom = false,
                 };
-            }).OrderBy(t => t.sortOrder).Cast<object>().ToArray();
+            });
+
+            var customTabs = rows
+                .Where(r => r.FieldKey.StartsWith("tab:", StringComparison.OrdinalIgnoreCase)
+                            && CustomTabKeyRegex().IsMatch(r.FieldKey[4..]))
+                .Select(r => new
+                {
+                    key = r.FieldKey[4..],
+                    // Ad verilmemisse anlasilir bir varsayilan goster (bos etiket degil).
+                    label = string.IsNullOrWhiteSpace(r.LabelText) ? ("Sekme " + r.FieldKey[5..]) : r.LabelText!,
+                    locked = false,
+                    isVisible = r.IsVisible,
+                    sortOrder = r.SortOrder,
+                    labelText = r.LabelText,
+                    targetTabKey = r.TargetTabKey,
+                    isCustom = true,
+                });
+
+            tabs = catalogTabs.Concat(customTabs)
+                .OrderBy(t => t.sortOrder)
+                .Cast<object>()
+                .ToArray();
         }
 
         return Json(new { ok = true, formCode, canEdit = IsAdmin(), fields, tabs, defaultCardWidth, stripHeights, layoutMode });
@@ -282,6 +309,7 @@ public sealed partial class FormBehaviorController : Controller
         {
             var rows = new List<FormFieldBehavior>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var customTabCount = 0;
 
             foreach (var f in request.Fields ?? [])
             {
@@ -300,6 +328,14 @@ public sealed partial class FormBehaviorController : Controller
                 if (defaultValue is { Length: > 400 }) defaultValue = defaultValue[..400];
                 var cardWidth = ClampCardWidth(f.CardWidth, $"field[{key}]");
                 var cellWidthPx = ClampCellWidthPx(f.CellWidthPx);
+                // Alanin sekmesi: katalog sekmesi VEYA ozel sekme (c1..) olabilir.
+                // Bilinmeyen/kendi katalog sekmesine esit deger null'a duser (fail-open).
+                // Movable:false alan (ör. Genel İskonto %) hic tasinamaz.
+                var targetTab = f.TargetTab?.Trim();
+                if (string.IsNullOrEmpty(targetTab) || !cat.Movable
+                    || string.Equals(targetTab, cat.Tab, StringComparison.OrdinalIgnoreCase)
+                    || !(tabByKey.ContainsKey(targetTab) || CustomTabKeyRegex().IsMatch(targetTab)))
+                    targetTab = null;
 
                 string? rulesJson = null;
                 if (visibleIf is not null || requiredIf is not null)
@@ -315,7 +351,7 @@ public sealed partial class FormBehaviorController : Controller
                 var isDefault = isVisible && !f.IsRequired && defaultValue is null
                     && labelText is null && labelStyle is null && rulesJson is null
                     && f.CardSection is null && f.CardOrder is null && cardWidth is null
-                    && cellWidthPx is null;
+                    && cellWidthPx is null && targetTab is null;
                 if (isDefault) continue;
 
                 rows.Add(new FormFieldBehavior
@@ -333,6 +369,7 @@ public sealed partial class FormBehaviorController : Controller
                     CardOrder = f.CardOrder,
                     CardWidth = cardWidth,
                     CellWidthPx = cellWidthPx,
+                    TargetTab = targetTab,
                     CreatedById = GetUserId(),
                     CreatedBy = User?.Identity?.Name,
                 });
@@ -375,10 +412,17 @@ public sealed partial class FormBehaviorController : Controller
             foreach (var (t, i) in (request.Tabs ?? []).Select(static (t, i) => (t, i)))
             {
                 var key = t.Key?.Trim();
-                if (string.IsNullOrEmpty(key) || !tabByKey.TryGetValue(key, out var cat) || !seen.Add("tab:" + key))
-                    continue;
+                if (string.IsNullOrEmpty(key) || !seen.Add("tab:" + key)) continue;
 
-                var isVisible = cat.Locked || t.IsVisible;
+                // Katalog sekmesi mi, kullanici tanimli ozel sekme mi?
+                var isCatalog = tabByKey.TryGetValue(key, out var cat);
+                var isCustomTab = !isCatalog && CustomTabKeyRegex().IsMatch(key);
+                if (!isCatalog && !isCustomTab) continue;   // bilinmeyen anahtar yok sayilir
+                if (isCustomTab && customTabCount >= MaxCustomTabs) continue;
+                if (isCustomTab) customTabCount++;
+
+                var locked = isCatalog && cat.Locked;
+                var isVisible = locked || t.IsVisible;
                 var labelText = string.IsNullOrWhiteSpace(t.LabelText) ? null : t.LabelText.Trim();
                 if (labelText is { Length: > 40 }) labelText = labelText[..40];
                 // Hedef sekme: yalniz KATALOGDA olan ve KENDISI OLMAYAN bir anahtar kabul edilir
@@ -386,12 +430,14 @@ public sealed partial class FormBehaviorController : Controller
                 var target = t.TargetTabKey?.Trim();
                 if (string.IsNullOrEmpty(target)
                     || string.Equals(target, key, StringComparison.OrdinalIgnoreCase)
-                    || !tabByKey.ContainsKey(target)) target = null;
+                    || !(tabByKey.ContainsKey(target) || CustomTabKeyRegex().IsMatch(target))) target = null;
 
                 // Varsayılan sıra = katalog sırası; farklı sıra da davranış sayılır.
+                // Ozel sekme HER ZAMAN satir acar (tanimin kendisi o satirda yasar);
+                // katalog sekmesi yalniz varsayilandan farkliysa saklanir.
                 var catalogIndex = DocumentHeaderFieldCatalog.Tabs.ToList().FindIndex(x =>
                     string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase));
-                if (isVisible && labelText is null && t.SortOrder == catalogIndex && target is null) continue;
+                if (!isCustomTab && isVisible && labelText is null && t.SortOrder == catalogIndex && target is null) continue;
 
                 rows.Add(new FormFieldBehavior
                 {

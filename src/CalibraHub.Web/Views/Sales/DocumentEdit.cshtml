@@ -3584,21 +3584,27 @@
         // validate() zaten eksik alanlari kirmizi isaretler + kendi toast'ini
         // gosterir; burada sadece tetikliyoruz, donen degeri yok sayiyoruz.
         if (tabKey === 'lines') sqWarnMissingHeaderWidgets();
-        if (tabKey === 'attachments') sqAttLoad();
-        if (tabKey === 'lineage') sqLineageLoad();
-        // Notlar sekmesi ilk kez acildiginda textarea gizliyken scrollHeight=0
-        // donduruluyor ve sqLoadQuote icindeki autoResizeTextarea cagirisi boyu
-        // dogru hesaplayamiyor. Gorunur hale geldiginde yeniden boyutlandir.
-        if (tabKey === 'notes') {
-            var sqNotesEl3 = document.getElementById('sqNotes');
-            if (sqNotesEl3) autoResizeTextarea(sqNotesEl3);
-        }
-        // Ek Alanlar sekmesi her aktiflendiginde probe'u tetikle — admin'de
-        // tanim degisse bile (ya da ilk yuklemede race varsa) kullanici
-        // dogru teshisi hemen gorur.
-        if (tabKey === 'widgets' && typeof window.sqProbeWidgets === 'function') {
-            window.sqProbeWidgets();
-        }
+
+        /* ── Sekme kancalari (2026-08-21 Faz 3) ───────────────────────────────
+           Kancalar eskiden sekme ANAHTARINA baglıydı (`tabKey === 'attachments'`).
+           Icerik baska bir sekmeye tasinabildigi icin bu yanlis: Ekli Dosyalar'ı
+           Genel Bilgiler'e tasiyinca liste hic yuklenmezdi. Artik kanca, ilgili
+           ICERIGIN acilan pane'de BULUNUP bulunmadigina bakar — icerik nereye
+           giderse kanca onu takip eder. */
+        (function runPaneHooks() {
+            var pane = document.querySelector('[data-sqe-pane="' + tabKey + '"]');
+            if (!pane) return;
+            if (pane.querySelector('.sqe-att-wrap')) { try { sqAttLoad(); } catch (e) {} }
+            if (pane.querySelector('#sqLineageHost')) { try { sqLineageLoad(); } catch (e) {} }
+            if (pane.querySelector('#sqDynamicWidgets') && typeof window.sqProbeWidgets === 'function') {
+                try { window.sqProbeWidgets(); } catch (e) {}
+            }
+            var ta = pane.querySelector('#sqNotes');
+            if (ta) { try { autoResizeTextarea(ta); } catch (e) {} }
+        })();
+        // NOT: Notlar (textarea yeniden boyutlandirma) ve Ek Alanlar (widget probe)
+        // kancalari YUKARIDAKI runPaneHooks icine tasindi — icerik tasindiginda
+        // anahtar degil ICERIK takip edilsin diye.
     };
 
     // ── İlişkili Belgeler / Akış (belge soyağacı) ─────────────────────────────
@@ -3834,14 +3840,30 @@
         var __HGROUP_ANCHOR = { currency: 'currency', exchangeRate: 'currency', rateDate: 'currency' };
 
         function applySections(fields) {
-            var hform = document.querySelector('.sqe-hform');
-            if (!hform) return;
+            // 2026-08-21 Faz 3: kapsam BELGE GENELI. Onceden yalniz ilk .sqe-hform
+            // (Genel Bilgiler) icinde arıyordu; artik alan Kosullar/Notlar/ozel
+            // sekmelerden de gelebilir ve BASKA bir sekmeye tasinabilir.
+            var scope = document.querySelector('.sqe-tab-content') || document;
+            var __stripsById = {}, __stripsSeq = 0;
+            var firstHform = document.querySelector('.sqe-hform');
+            if (!firstHform) return;
             // Tasima ONCESI markup sirasi — cardOrder=null alanlar bu sirayi korur.
             var domOrder = {};
-            Array.prototype.forEach.call(hform.querySelectorAll('[data-field-key]'), function (el, idx) {
+            Array.prototype.forEach.call(scope.querySelectorAll('[data-field-key]'), function (el, idx) {
                 var k = el.getAttribute('data-field-key');
                 if (k && !(k in domOrder)) domOrder[k] = idx;
             });
+            /* Alanin gidecegi .sqe-strips kabi: TargetTab verilmisse o sekmenin,
+               yoksa alanin bulundugu sekmenin kabi. Hedef pane yoksa (ör. ozel sekme
+               silinmis) alan YERINDE kalir — fail-open. */
+            function stripsFor(targetTab, container) {
+                if (targetTab) {
+                    var pane = document.querySelector('[data-sqe-pane="' + targetTab + '"]');
+                    var w = pane && pane.querySelector('.sqe-strips');
+                    if (w) return w;
+                }
+                return container.closest ? container.closest('.sqe-strips') : null;
+            }
             // section -> [{key, container, order, domIndex}]
             var bySection = {};
             fields.forEach(function (f) {
@@ -3853,7 +3875,7 @@
                 // tasinan sey hucre degil SARMALAYICIDIR (uc hucre birlikte gider).
                 var anchor = __HGROUP_ANCHOR[f.key];
                 if (anchor && anchor !== f.key) return;
-                var container = hform.querySelector('[data-field-key="' + f.key + '"]');
+                var container = scope.querySelector('[data-field-key="' + f.key + '"]');
                 if (!container) return; // bu belge tipinde render edilmemis alan
                 if (anchor) {
                     var grp = container.closest ? container.closest('.sqe-hgroup') : null;
@@ -3864,15 +3886,32 @@
                     var n = parseInt(f.cardOrder, 10);
                     if (isFinite(n)) order = n;
                 }
-                (bySection[section] = bySection[section] || []).push({
+                // Hedef serit kabi alanin sekmesine gore secilir; ayni kap+bolum
+                // birlikte gruplanir ki siralama kap icinde tutarli olsun.
+                var wrap = stripsFor(f.targetTab, container);
+                if (!wrap) return;
+                var bucket = (wrap.getAttribute('data-strips-id')
+                    || (function () {
+                        var id = 'sw' + (++__stripsSeq);
+                        wrap.setAttribute('data-strips-id', id);
+                        __stripsById[id] = wrap;
+                        return id;
+                    })()) + ':' + section;
+                (bySection[bucket] = bySection[bucket] || []).push({
                     container: container,
                     order: order,
                     domIndex: domOrder[f.key] !== undefined ? domOrder[f.key] : 1e9
                 });
             });
-            Object.keys(bySection).forEach(function (sectionKey) {
-                var section = parseInt(sectionKey, 10);
-                var entries = bySection[sectionKey];
+            Object.keys(bySection).forEach(function (bucketKey) {
+                // bucket = "<stripsId>:<section>" — hangi sekmenin serit kabinda,
+                // hangi bolum oldugunu birlikte tasir.
+                var parts = String(bucketKey).split(':');
+                var wrap = __stripsById[parts[0]];
+                var section = parseInt(parts[1], 10);
+                if (!wrap) return;
+                var ownerHform = wrap.closest ? wrap.closest('.sqe-hform') : firstHform;
+                var entries = bySection[bucketKey];
                 // cardOrder'i olanlar once (kucukten buyuge), null'lar SONRA ve kendi
                 // aralarinda markup sirasini koruyarak (kararli siralama).
                 entries.sort(function (a, b) {
@@ -3887,16 +3926,19 @@
                 // Kimlik alanları (0) .sqe-ident-fields İÇİNE, şerit alanları (1,2,…) .sqe-strip İÇİNE girer.
                 var target;
                 if (section === 0) {
-                    target = hform.querySelector('.sqe-ident-row .sqe-ident-fields');
-                } else {
-                    target = hform.querySelector('.sqe-strip[data-sqe-section="' + section + '"]');
+                    // Kimlik satiri yalnizca Genel Bilgiler'de var; ozel sekmede
+                    // kimlik bolumu yok → alan o sekmenin 1. seridine duser.
+                    target = ownerHform && ownerHform.querySelector('.sqe-ident-row .sqe-ident-fields');
+                    if (!target) section = 1;
+                }
+                if (!target) {
+                    target = wrap.querySelector(':scope > .sqe-strip[data-sqe-section="' + section + '"]');
                     if (!target) {
                         target = document.createElement('div');
                         target.className = 'sqe-strip';
                         target.setAttribute('data-sqe-section', String(section));
-                        // Yeni şerit, şerit BLOĞUNUN içine eklenir (ayrı kutu değil,
-                        // aynı bloğun bir sonraki satırı) — bkz. .sqe-strips (2026-08-19).
-                        (hform.querySelector('.sqe-strips') || hform).appendChild(target);
+                        // Yeni şerit, o sekmenin KENDI serit blogunun icine eklenir.
+                        wrap.appendChild(target);
                     }
                 }
                 if (!target) return;
@@ -4003,10 +4045,48 @@
            SIRA: once plan (DOM'a dokunmadan) hesaplanir, guvenlik kontrolleri
            gecerse uygulanir. Boylece "hicbir sekme kalmadi" durumunda kullanici
            ekranda kilitlenmez — hicbir degisiklik yapilmaz. */
+        /* Kullanici tanimli sekme icin buton + pane uretir (2026-08-21 Faz 3).
+           Pane, Genel Bilgiler ile AYNI iskeleti tasir (.sqe-hform > .sqe-strips >
+           .sqe-strip) — kullanici karari "ozel sekmenin ici Genel Bilgiler ile ayni".
+           Boylece serit/genislik/yukseklik motoru hic degistirilmeden calisir.
+           Idempotent: zaten varsa yeniden uretmez (applyTabs birden cok kez cagrilabilir). */
+        function ensureCustomTab(key, label) {
+            var nav = document.querySelector('.sqe-tab-nav');
+            if (!nav) return null;
+            var btn = nav.querySelector('[data-sqe-tab-btn="' + key + '"]');
+            if (!btn) {
+                btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'sqe-tab-btn';
+                btn.setAttribute('data-sqe-tab-btn', key);
+                btn.textContent = label || key;
+                btn.addEventListener('click', function () { sqSwitchTab(key); });
+                nav.appendChild(btn);
+            }
+            var pane = document.querySelector('[data-sqe-pane="' + key + '"]');
+            if (!pane) {
+                pane = document.createElement('div');
+                pane.className = 'sqe-tab-pane';
+                pane.setAttribute('data-sqe-pane', key);
+                pane.innerHTML = '<div class="sqe-hform"><div class="sqe-strips">'
+                               + '<div class="sqe-strip" data-sqe-section="1"></div>'
+                               + '</div></div>';
+                var lastPane = document.querySelectorAll('.sqe-tab-pane');
+                if (lastPane.length) lastPane[lastPane.length - 1].parentNode.appendChild(pane);
+            }
+            return pane;
+        }
+
         function applyTabs(tabs) {
             if (!Array.isArray(tabs) || !tabs.length) return;
             var nav = document.querySelector('.sqe-tab-nav');
             if (!nav) return;
+
+            // Ozel sekmeler once uretilir — sonraki adimlar (tasima, gorunurluk,
+            // sira) onlari da normal sekme gibi gorsun.
+            tabs.forEach(function (t) {
+                if (t && t.isCustom && t.key) ensureCustomTab(t.key, t.labelText || t.label);
+            });
 
             var cfg = {};
             tabs.forEach(function (t) { if (t && t.key) cfg[t.key] = t; });
