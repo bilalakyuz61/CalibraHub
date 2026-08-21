@@ -7017,7 +7017,13 @@
                 // Render oldu ise empty state'i tamamen gizle; olmadiysa "bekleniyor +
                 // teshis" goster (race: API dondu, React henuz basmadi).
                 var rendererEl2 = document.getElementById('sqDynamicWidgets');
-                var hasCards = rendererEl2 && rendererEl2.querySelectorAll('[data-dyn-group-id]').length > 0;
+                // 2026-08-21: renderer artik SIDETABS duzeni basiyor ve
+                // [data-dyn-group-id] kartlari URETMIYOR. Tek basina o seciciye
+                // bakmak "render olmadi" yanlis alarmini kalici kiliyordu (teshis
+                // paneli render basarili oldugu halde ekranda kaliyordu).
+                // Iki duzeni de kabul et.
+                var __sel = '[data-dyn-group-id], .dwr-sidetabs__tab, .dwr-sidetabs__content';
+                var hasCards = rendererEl2 && rendererEl2.querySelectorAll(__sel).length > 0;
                 if (hasCards) {
                     console.info('[SQ probe] ' + fields.length + ' field widget render edildi');
                     if (emptyEl) emptyEl.classList.add('is-hidden');
@@ -7029,7 +7035,7 @@
                     if (emptyEl) emptyEl.classList.remove('is-hidden');
                     // Kisa suredur bir sonraki cycle'da kontrol et — React render edince gizlensin.
                     setTimeout(function () {
-                        var cardsNow = rendererEl2 && rendererEl2.querySelectorAll('[data-dyn-group-id]').length;
+                        var cardsNow = rendererEl2 && rendererEl2.querySelectorAll(__sel).length;
                         if (cardsNow > 0 && emptyEl) emptyEl.classList.add('is-hidden');
                     }, 400);
                 }

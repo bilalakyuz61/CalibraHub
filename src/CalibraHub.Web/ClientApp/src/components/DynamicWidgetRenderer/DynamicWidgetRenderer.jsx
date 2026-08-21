@@ -875,7 +875,7 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
     var activeTab = sideTabs.find(function (t) { return t.key === activeGroupKey }) || sideTabs[0] || null
     return (
       <div className={classPrefix + '-dyn-root dwr-sidetabs'} data-widget-renderer>
-        <aside className="dwr-sidetabs__nav" role="tablist" aria-orientation="vertical">
+        <div className="dwr-sidetabs__nav" role="tablist" aria-orientation="horizontal">
           {sideTabs.map(function (tab) {
             var isActive = activeTab && activeTab.key === tab.key
             var missing = countMissingRequiredInTab(tab)
@@ -895,7 +895,7 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
               </button>
             )
           })}
-        </aside>
+        </div>
         <section className="dwr-sidetabs__content" role="tabpanel">
           {activeTab ? (
             // Birlesik sekmede (ayni tabName'li 2+ grup) her grup kendi bolum
