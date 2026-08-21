@@ -2230,7 +2230,12 @@
        CalibraLineItemsGrid.jsx .clc-fields-row). */
     .sqe-strip {
         display: grid;
-        grid-template-columns: repeat(12, minmax(0, 1fr));
+        /* 2026-08-20: sutun sayisi SABIT 12 DEGIL — ilk seridin GORUNUR hucre
+           sayisindan gelir (applyStripColumns), `--sqe-cols` ile bildirilir.
+           Sabit 12 iken her hucre varsayilan 3 sutun aliyordu; tam genislikte
+           satirda 4 hucre + kalanlar BOS sutun olarak ayraclarla ciziliyordu.
+           Fallback 12: degisken gelmezse eski davranis birebir korunur. */
+        grid-template-columns: repeat(var(--sqe-cols, 12), minmax(0, 1fr));
         align-items: stretch;
         /* Dikey ayraçlar — hücre border'ı YERİNE konteyner arka planında 1/12
            aralıklarla tekrarlayan çizgi (span'a göre değişen "satırın ilk
@@ -2243,9 +2248,9 @@
         background-image: repeating-linear-gradient(
             to right,
             transparent 0,
-            transparent calc(100% / 12 - 1px),
-            var(--sqe-strip-border, #e2e8f0) calc(100% / 12 - 1px),
-            var(--sqe-strip-border, #e2e8f0) calc(100% / 12)
+            transparent calc(100% / var(--sqe-cols, 12) - 1px),
+            var(--sqe-strip-border, #e2e8f0) calc(100% / var(--sqe-cols, 12) - 1px),
+            var(--sqe-strip-border, #e2e8f0) calc(100% / var(--sqe-cols, 12))
         );
     }
     .sqe-strip--narrow {
@@ -2274,7 +2279,10 @@
            (aşağıda) /api/form-behavior yanıtı geldiğinde bunu inline stille
            cardWidth/defaultCardWidth'e göre override eder; istek düşerse/API
            eski ise bu CSS değeri kalır — hiçbir alan kaybolmaz/hizasız kalmaz. */
-        grid-column: span 3;
+        /* 2026-08-20: varsayilan span 1 — sutun sayisi zaten hucre sayisina esit
+           (bkz. applyStripColumns). Eskiden 3'tu ve sabit 12 sutunla birlikte bos
+           sutun birakiyordu. */
+        grid-column: span 1;
         padding: 8px 14px;
         min-width: 0;
     }
@@ -3817,7 +3825,10 @@
                 if (!f || !f.key) return;
                 var row = hform.querySelector('.sqe-strip [data-field-key="' + f.key + '"]');
                 if (!row) return; // kimlik satırındaki alan veya bu belge tipinde render edilmeyen alan — ızgaraya girmez
-                var w = (typeof f.cardWidth === 'number' && isFinite(f.cardWidth)) ? f.cardWidth : defW;
+                // Alan bazinda cardWidth ACIKCA verilmisse o kazanir; verilmemisse
+                // span 1 (form-seviye defaultCardWidth artik varsayilan span DEGIL —
+                // sutun sayisi hucre sayisina esit oldugundan her hucre bir sutun).
+                var w = (typeof f.cardWidth === 'number' && isFinite(f.cardWidth)) ? f.cardWidth : 1;
                 w = Math.min(12, Math.max(1, Math.round(w)));
                 row.style.gridColumn = 'span ' + w;
             });
@@ -3837,8 +3848,39 @@
                     var w = entry.contentRect ? entry.contentRect.width : 0;
                     el.classList.toggle('sqe-strip--narrow', w > 0 && w < 480);
                 });
+                // Genislik degisince sutun sayisi da yeniden hesaplanir (dar
+                // konteynerde tavan 3'e iner).
+                applyStripColumns();
             });
             strips.forEach(function (el) { ro.observe(el); });
+        }
+
+        /* ── Şerit sütun sayısı (2026-08-20 kullanıcı kararı) ────────────────
+           Sütun sayısı = İLK ŞERİDİN GÖRÜNÜR hücre sayısı. Böylece ilk şerit tam
+           olarak bir satıra oturur, boş sütun ve o boşlukları çizen ayraçlar
+           kalmaz; diğer şeritler de aynı sütunlara hizalanır (kalem kartıyla aynı
+           kural — bkz. CalibraLineItemsGrid STRIP_GRID_COLS).
+           GÖRÜNÜR sayılır: belge tipine göre gizlenen (display:none) ve Alan
+           Düzeni görünürlük kuralıyla kapatılan hücreler ızgarada yer kaplamaz.
+           Fail-open: hiç görünür hücre yoksa değişken yazılmaz → CSS 12'ye düşer. */
+        function applyStripColumns() {
+            var strips = document.querySelectorAll('.sqe-hform .sqe-strip');
+            if (!strips.length) return;
+            function visibleCells(strip) {
+                return Array.prototype.filter.call(
+                    strip.querySelectorAll(':scope > .sqe-hrow'),
+                    function (el) {
+                        if (el.offsetParent === null) return false;   // display:none (ve ata zinciri)
+                        return true;
+                    });
+            }
+            var first = visibleCells(strips[0]).length;
+            if (!first) return;
+            var narrow = strips[0].classList.contains('sqe-strip--narrow');
+            var cols = narrow ? Math.min(first, 3) : first;
+            Array.prototype.forEach.call(strips, function (el) {
+                el.style.setProperty('--sqe-cols', String(cols));
+            });
         }
         fetch('/api/form-behavior/' + encodeURIComponent('@headerFormCode'), { credentials: 'same-origin' })
             .then(function (r) { return r.ok ? r.json() : null; })
@@ -3851,7 +3893,11 @@
                 applyCardWidths(data.fields, data.defaultCardWidth);
             })
             .catch(function (e) { try { console.warn('[CardSections] yükleme hatası (fail-open):', e && e.message) } catch (_) {} })
-            .then(initStripNarrowWatch, initStripNarrowWatch);
+            // Once genislik gozcusu (narrow sinifi yerlesir), SONRA sutun sayisi —
+            // applyStripColumns narrow durumuna gore tavan uygular. Iki dalda da
+            // (basari/hata) calisir: fail-open'da bile izgara bos sutunla kalmaz.
+            .then(function () { initStripNarrowWatch(); applyStripColumns(); },
+                  function () { initStripNarrowWatch(); applyStripColumns(); });
     })();
 
     // Liste ekranlarindaki "Islemler" menusunden gelen derin-link: ?autoAction=costs|approval|status.
