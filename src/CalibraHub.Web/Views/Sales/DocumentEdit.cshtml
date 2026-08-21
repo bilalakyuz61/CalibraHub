@@ -3797,6 +3797,12 @@
         // fields: API'den gelen tam liste ({key, cardSection, cardOrder, ...}).
         // Yalnizca cardSection'i ACIKCA ayarli alanlar tasinir/siralanir; digerleri
         // markup'taki yerinde kalir (fail-open, alan bazinda).
+        /* Birlikte hareket eden alan gruplari (2026-08-21 kullanici istegi).
+           ANCHOR = grubun bolum/sirasini belirleyen alan; digerlerinin kendi
+           cardSection/cardOrder degeri YOK SAYILIR (aksi halde ucu farkli seritlere
+           dagilip "ayrilmamali" kurali cignenirdi). */
+        var __HGROUP_ANCHOR = { currency: 'currency', exchangeRate: 'currency', rateDate: 'currency' };
+
         function applySections(fields) {
             var hform = document.querySelector('.sqe-hform');
             if (!hform) return;
@@ -3813,8 +3819,16 @@
                 if (f.cardSection === null || f.cardSection === undefined) return;
                 var section = parseInt(f.cardSection, 10);
                 if (!isFinite(section)) return;
+                // Grup uyesi ise ANCHOR disindakiler atlanir; anchor icin de asil
+                // tasinan sey hucre degil SARMALAYICIDIR (uc hucre birlikte gider).
+                var anchor = __HGROUP_ANCHOR[f.key];
+                if (anchor && anchor !== f.key) return;
                 var container = hform.querySelector('[data-field-key="' + f.key + '"]');
                 if (!container) return; // bu belge tipinde render edilmemis alan
+                if (anchor) {
+                    var grp = container.closest ? container.closest('.sqe-hgroup') : null;
+                    if (grp) container = grp;
+                }
                 var order = null;
                 if (f.cardOrder !== null && f.cardOrder !== undefined) {
                     var n = parseInt(f.cardOrder, 10);
