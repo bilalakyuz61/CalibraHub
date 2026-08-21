@@ -35,7 +35,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
 /**
@@ -113,15 +116,26 @@ class SessionManager(private val storage: SecureStorage) {
      * BUNDAN besler, [com.calibrahub.mobile.ui.nav.AppDrawerContent] pin ikonuyla degistirir. */
     val pinnedRoutes: StateFlow<Set<String>> = _pinnedRoutes.asStateFlow()
 
+    /** Acilis tohumlamasi icin uygulama-omurlu scope — bkz. [init]. */
+    private val initScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     init {
-        // Uygulama acilisinda son kaydedilen "beni hatirla" tercihini cookie jar'a senkronla —
-        // Android SessionManager.init ile AYNI davranis (senkron, tek seferlik runBlocking;
-        // SessionManager application-scoped tek instance oldugu icin maliyeti dusuk). Tercih
-        // hic kaydedilmemisse (ilk kurulum) varsayilan ACIK.
-        val remembered = runBlocking { storage.getString(REMEMBER_ME_KEY)?.toBooleanStrictOrNull() ?: true }
-        cookiesStorage.setPersistenceEnabled(remembered)
-        // Tema/pin StateFlow'larini AYNI tek seferlik runBlocking ile tohumla (bkz. themeMode KDoc).
-        runBlocking {
+        // Kalici tercihleri (beni-hatirla / tema / pinned) depodan oku ve StateFlow'lari tohumla.
+        //
+        // ASENKRON olmasi ZORUNLU: SessionManager Compose kompozisyonu icinde kurulur
+        // (AppRoot: `remember { SessionManager(...) }`), yani ANA THREAD'de. Burada `runBlocking`
+        // kullanmak iOS'ta ana thread'i acilis aninda BLOKLAR; iOS watchdog bunu "yanit vermeyen
+        // uygulama" sayip sureci OLDURUR -> kullanici "uygulama coktu" gorur (UI hic cizilmeden).
+        // Android'de ayni kod zararsizdi (boyle bir watchdog yok) — bu yuzden Android'de calisip
+        // iOS'ta aninda cokuyordu. DERS: ortak kodda ana thread'i bloklayan cagri YAPMA.
+        //
+        // Varsayilanlar (SYSTEM tema / bos pin) alan tanimlarinda zaten mevcut; tohumlama bitince
+        // StateFlow'lar guncellenir ve Compose otomatik yeniden cizer. Acilis ile tohumlama
+        // arasindaki pencerede ag cagrisi olmaz (kullanici henuz giris yapmadi), dolayisiyla
+        // cookie persistence tercihinin gec uygulanmasi risk yaratmaz.
+        initScope.launch {
+            val remembered = storage.getString(REMEMBER_ME_KEY)?.toBooleanStrictOrNull() ?: true
+            cookiesStorage.setPersistenceEnabled(remembered)
             _themeMode.value = ThemeMode.fromStorageKey(storage.getString(THEME_MODE_KEY))
             _pinnedRoutes.value = storage.getStringSet(PINNED_ROUTES_KEY) ?: emptySet()
         }
