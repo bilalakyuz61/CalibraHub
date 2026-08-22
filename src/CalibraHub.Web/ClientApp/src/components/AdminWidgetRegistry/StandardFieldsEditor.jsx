@@ -490,6 +490,13 @@ function SectionDropZone(props) {
    ETKISIZ oldugu icin tutamak kapatilir — kullanici bosuna denemesin. */
 var HGROUP_FOLLOWER = { exchangeRate: 1, rateDate: 1 }
 
+/* Belge ekraninda TOPLAMLAR blogunun icine orulu ust-bilgi alanlari
+   (DocumentEdit `.sqe-total-*` markup'i). Kalem Bilgileri sekmesinde
+   listeleniyorlar cunku fiziksel yerleri kalem panesinin alti — ama kalem
+   verisi degil, belge geneline ait. Kart icinde ayri baslik altinda toplanirlar.
+   Yeni bir toplam alani ayarlanabilir hale gelirse anahtarini buraya ekle. */
+var TOTALS_BLOCK_KEYS = { discountRate: 1 }
+
 /* 2026-08-22 (kullanici bildirimi: "seritler arasi alan tasirken tasinan alan
    kayboluyor"): sebep DragOverlay YOKLUGU idi. dnd-kit'te aktif oge DOM'da kendi
    kabinda kalir; imlec baska bir kaba gecince o kabin sirasi artik ogeye transform
@@ -1396,13 +1403,35 @@ export default function StandardFieldsEditor(props) {
                         </div>
                       )
                     }
+                    // Toplamlar bloguna ait olanlar ayri baslik altinda; kalani "Diger".
+                    var gruplar = [
+                      { key: 'totals', label: 'Toplamlar Bloğu', hint: 'Kalem listesinin altındaki toplamlar satırlarında görünür',
+                        fields: own.filter(function (f) { return !!TOTALS_BLOCK_KEYS[f.key] }) },
+                      { key: 'other', label: 'Diğer', hint: null,
+                        fields: own.filter(function (f) { return !TOTALS_BLOCK_KEYS[f.key] }) },
+                    ].filter(function (g) { return g.fields.length > 0 })
                     return (
-                      <div className="flex flex-col gap-1.5">
-                        {own.map(function (f) {
+                      <div className="flex flex-col gap-3">
+                        {gruplar.map(function (g) {
                           return (
-                            <div key={f.key}
-                                 className="rounded-lg border border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.03] px-2.5 py-2">
-                              {renderFieldRow(f)}
+                            <div key={g.key}>
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400/30">
+                                  {g.label}
+                                </span>
+                                {g.hint && <span className="text-[10px] text-slate-400 dark:text-white/40">{g.hint}</span>}
+                                <span className="text-[10px] text-slate-400 dark:text-white/35">({g.fields.length})</span>
+                              </div>
+                              <div className="flex flex-col gap-1.5">
+                                {g.fields.map(function (f) {
+                                  return (
+                                    <div key={f.key}
+                                         className="rounded-lg border border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.03] px-2.5 py-2">
+                                      {renderFieldRow(f)}
+                                    </div>
+                                  )
+                                })}
+                              </div>
                             </div>
                           )
                         })}
