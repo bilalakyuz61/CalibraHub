@@ -55,6 +55,11 @@ function ColHead(props) {
 
 export default function ConvertToOrdersModal(props) {
   var onClose = props.onClose || function () {}
+  /* variant="page" (2026-08-22, kullanici istegi): ayni bilesen TAM EKRAN sayfa
+     olarak da render edilir — Yukleme Planlama ile ayni iskelet (perde yok,
+     yukseklik viewport'a oturur, genislik tavani yok). Modal yolu AYNEN durur;
+     yalnizca kabuk stilleri ve "kapat" davranisi degisir. */
+  var isPage = props.variant === 'page'
   var onSuccess = props.onSuccess || function () {}
 
   // Theme detection
@@ -308,30 +313,48 @@ export default function ConvertToOrdersModal(props) {
 
   var allSelected = quotes.length > 0 && quotes.every(function (q) { return selectedIds[q.id] })
 
-  return (
-    <div
-      onClick={function (e) { if (e.target === e.currentTarget) onClose() }}
-      style={{
+  var outerStyle = isPage
+    ? {
+        display: 'flex', flexDirection: 'column',
+        height: 'calc(100vh - 56px)', padding: '16px 20px 0',
+        overflow: 'hidden',
+      }
+    : {
         position: 'fixed', inset: 0, zIndex: 9999,
         background: palette.backdrop,
         backdropFilter: 'blur(4px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: '24px',
-      }}
+      }
+  var shellStyle = isPage
+    ? {
+        background: palette.modalBg,
+        border: '1px solid ' + palette.modalBorder,
+        borderRadius: '16px',
+        width: '100%', maxWidth: 'none',
+        flex: '1 1 auto', minHeight: 0,
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden',
+        color: palette.textPrimary,
+      }
+    : {
+        background: palette.modalBg,
+        border: '1px solid ' + palette.modalBorder,
+        borderRadius: '16px',
+        width: '100%', maxWidth: '960px',
+        maxHeight: 'calc(100vh - 48px)',
+        display: 'flex', flexDirection: 'column',
+        boxShadow: '0 25px 80px rgba(0,0,0,0.45)',
+        overflow: 'hidden',
+        color: palette.textPrimary,
+      }
+
+  return (
+    <div
+      onClick={isPage ? undefined : function (e) { if (e.target === e.currentTarget) onClose() }}
+      style={outerStyle}
     >
-      <div
-        style={{
-          background: palette.modalBg,
-          border: '1px solid ' + palette.modalBorder,
-          borderRadius: '16px',
-          width: '100%', maxWidth: '960px',
-          maxHeight: 'calc(100vh - 48px)',
-          display: 'flex', flexDirection: 'column',
-          boxShadow: '0 25px 80px rgba(0,0,0,0.45)',
-          overflow: 'hidden',
-          color: palette.textPrimary,
-        }}
-      >
+      <div style={shellStyle}>
         {/* ── HEADER ── */}
         <div style={{
           padding: '16px 20px', borderBottom: '1px solid ' + palette.cardBorder,

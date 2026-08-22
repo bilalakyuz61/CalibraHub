@@ -674,7 +674,9 @@ public sealed class SalesController : Controller
                     label = "Tekliften Siparis",
                     icon = "ArrowRightCircle",
                     variant = "secondary",
-                    trigger = "convert-orders-modal",
+                    // 2026-08-22: modal (trigger) yerine TAM EKRAN sayfa (url).
+                    // Modal mount yolu bundle'da duruyor, baska yerden cagrilabilir.
+                    url = "/Sales/ConvertToOrders",
                 },
             },
             masterWidgets,
@@ -2690,6 +2692,21 @@ public sealed class SalesController : Controller
     // analoğu. Rezervasyon MANTIKSAL'dır (fiziksel stok azalmaz); fiziksel çıkış Faz 2'de
     // "Yükle" aksiyonuyla üretilecek irsaliyede olur — bu fazda irsaliye YOK.
     // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// "Tekliflerden Sipariş Oluştur" TAM EKRAN sayfası (2026-08-22 kullanıcı isteği —
+    /// önceden Satış Siparişi listesindeki bir modaldı). Veri client-side gelir:
+    /// GET /Sales/GetConvertibleQuotes + POST /Sales/CreateOrdersFromQuotes.
+    /// Yetki: sipariş oluşturduğu için SalesOrder.
+    /// GET /Sales/ConvertToOrders
+    /// </summary>
+    [HttpGet("/Sales/ConvertToOrders")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SalesOrder)]
+    public IActionResult ConvertToOrders()
+    {
+        ViewData["Title"] = "Tekliflerden Sipariş Oluştur";
+        return View();
+    }
 
     /// <summary>
     /// Yükleme Planlama Merkezi ekranı. Board/veri yükü frontend tarafından

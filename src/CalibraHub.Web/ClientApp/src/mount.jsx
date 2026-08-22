@@ -1038,6 +1038,38 @@ function openConvertToOrdersModal(opts) {
 window.CalibraHub.openConvertToOrdersModal = openConvertToOrdersModal
 
 /**
+ * mountConvertToOrdersPage — AYNI bileseni TAM EKRAN sayfa olarak mount eder
+ * (2026-08-22 kullanici istegi: "tekliften siparis olusturma ekrani da tam ekran
+ * ve yukleme planlama ekrani gibi olsun"). Modal yolu (openConvertToOrdersModal)
+ * kaldirilmadi — baska bir yerden hala cagrilabilir.
+ *
+ * @param {HTMLElement} element
+ * @param {{ backUrl?: string }} opts  kapatinca donulecek adres
+ */
+function mountConvertToOrdersPage(element, opts) {
+  opts = opts || {}
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(ConvertToOrdersModal, {
+        variant: 'page',
+        onClose: function () {
+          try { window.location.href = opts.backUrl || '/Sales/Orders' } catch (e) { /* yoksay */ }
+        },
+        onSuccess: function () { /* bilesen kendi toast'ini gosterir */ },
+      })
+    )
+  )
+  return { unmount: function () { root.unmount(); mountedRoots.delete(element) } }
+}
+window.CalibraHub.mountConvertToOrdersPage = mountConvertToOrdersPage
+
+/**
  * openConvertSingleQuoteModal — Tek teklifi siparise donusturen modali acar.
  * SmartCard'taki "Siparise Donustur" extraAction (trigger) tarafindan cagrilir.
  *
