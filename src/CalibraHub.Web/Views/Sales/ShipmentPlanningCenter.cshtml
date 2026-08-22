@@ -23,6 +23,17 @@
     ViewData["BodyClass"] = "page-sp";
 }
 
+@using System.Text.Json
+@inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
+@{
+    var spBoardJson = JsonSerializer.Serialize(ViewData["BoardConfig"], new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    });
+}
+
 @section Styles {
 <style>
     /* ── Sayfa kap (FulfillmentCenter fc3-outer ile aynı iskelet) ── */
@@ -477,65 +488,15 @@
 
 <section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard__content">
 <div class="sp-outer" id="spOuter">
-
-    @* ── Başlık ── *@
-    <div class="sp-hd">
-        <div class="sp-title-icon">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M3 16v5h5"/><path d="M21 16v5h-5"/><rect x="7" y="7" width="10" height="10" rx="1"/>
-            </svg>
-        </div>
-        <div style="flex:1">
-            <div class="sp-title-tx">Yükleme Planlama</div>
-            <div class="sp-title-sub" id="spSubtitle">Açık sipariş kalemlerini depodan rezerve edin</div>
-        </div>
-        <div class="sp-qs-wrap">
-            <svg class="sp-qs-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="search" id="spQuickSearch" class="sp-qs-input" placeholder="Malzeme kodu/adı veya sipariş no…" autocomplete="off">
-        </div>
-        <button type="button" class="sp-hd-icon-btn" id="spRefreshBtn" onclick="spRefreshClicked(this)" title="Yenile">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-        </button>
-        <button type="button" class="sp-hd-icon-btn" id="spExcelBtn" onclick="spExportExcel()" title="Excel'e Aktar">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </button>
-        <button type="button" class="sp-hd-icon-btn" id="spColBtn" onclick="spToggleColPanel(event)" title="Sütun Ayarları">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><circle cx="18" cy="12" r="2"/><line x1="4" y1="18" x2="11" y2="18"/><circle cx="15" cy="18" r="2"/></svg>
-        </button>
-        <div class="sp-col-panel" id="spColPanel">
-            <div class="sp-cfg-hdr">
-                <span>Sütun Ayarları</span>
-                <button type="button" class="sp-cfg-reset" onclick="spResetColCfg()">Varsayılana dön</button>
-            </div>
-            <div class="sp-cfg-rows" id="spColRows"></div>
-        </div>
-    </div>
-
-    @* ── Liste ── *@
-    <div class="sp-body">
-        <div class="sp-left" id="spLeft">
-            @* Başlık JS tarafından üretilir (sütun ayarlarına göre) — bkz. spRenderColHdr. *@
-            <div class="sp-flat-hdr" id="spFlatHdr"></div>
-            <div class="sp-list" id="spList">
-                <div class="sp-empty-list">Yükleniyor…</div>
-            </div>
-        </div>
-    </div>
-
+    @* Liste TAMAMEN CalibraSmartBoard (tablo modu): başlık şeridi, arama, filtre,
+       dışa aktarım, gruplama ve sütun ayarları standart bileşenden gelir — bu ekran
+       artık kendi başlığını/tablosunu çizmez. Ekrana özel olan tek şey rezervasyon
+       akışıdır: "Rezerve Et" toplu aksiyonu type:"event" ile aşağıdaki modalı açar,
+       satır detayı o kalemin rezervasyonlarını (Yükle/İptal ile) listeler.
+       Config: SalesController.BuildShipmentPlanningBoard *@
+    <div id="spBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
 </div>
 </section>
-
-@* ── Seçim aksiyon bar ── *@
-<div class="sp-selbar" id="spSelBar">
-    <span class="sp-sb-cnt" id="spSbCnt"></span>
-    <div class="sp-sb-right">
-        <button type="button" class="sp-btn sp-btn--p" id="spReserveBtn" onclick="spOpenReserveModal()">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-            Depodan Rezerve Et
-        </button>
-        <button type="button" class="sp-fb-cancel" onclick="spClearSelection()">İptal</button>
-    </div>
-</div>
 
 @Html.AntiForgeryToken()
 
@@ -603,6 +564,11 @@
 </div>
 
 @section Scripts {
+<link rel="stylesheet" href="@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")" />
+<script>
+    window.__SP_BOARD_CONFIG__ = @Html.Raw(spBoardJson);
+    window.__SP_BUNDLE_URL__ = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+</script>
 <script>
 (function() {
     'use strict';
@@ -645,419 +611,6 @@
         return el ? el.value : '';
     }
 
-    // ══ Sütun ayarları (kullanıcı bazlı) ═════════════════════════════════════
-    // Standart liste ekranı deseni: görünürlük + sürükle-bırak sıra + başlık adı +
-    // genişlik + hizalama. Ayarlar user_settings'te (ui.sp.col-cfg) saklanır;
-    // localStorage yalnız ilk çizim sunucu yanıtını beklemesin diye ayna tutar.
-    var SP_COL_LS = 'sp-col-cfg-v1';
-    function spDefaultColDefs() {
-        return [
-            { key:'num', label:'Sipariş No', visible:true, align:'left',  width:130, icon:'doc' },
-            { key:'mat', label:'Malzeme',    visible:true, align:'left',  width:0,   icon:'box' },  // 0 = esnek (1fr)
-            { key:'ord', label:'Sipariş',    visible:true, align:'right', width:80,  icon:'num' },
-            { key:'dlv', label:'Teslim',     visible:true, align:'right', width:80,  icon:'num' },
-            { key:'rsv', label:'Rezerve',    visible:true, align:'right', width:80,  icon:'num' },
-            { key:'opn', label:'Açık',       visible:true, align:'right', width:80,  icon:'num' },
-            { key:'stk', label:'Kull. Stok', visible:true, align:'right', width:110, icon:'stk' },
-            { key:'unt', label:'Br.',        visible:true, align:'left',  width:46,  icon:'unt' }
-        ];
-    }
-    var _colDefs = spDefaultColDefs();
-    var _cfgOpen = {};   // panelde detayı açık olan kolonlar
-
-    function spSerializeCols() {
-        return JSON.stringify(_colDefs.map(function(c) {
-            return { key:c.key, label:c.label, visible:c.visible, align:c.align, width:c.width || 0 };
-        }));
-    }
-    function spApplySavedCols(json) {
-        if (!json) return;
-        var saved;
-        try { saved = JSON.parse(json); } catch (e) { return; }
-        if (!Array.isArray(saved)) return;
-        saved.forEach(function(sv) {
-            var def = _colDefs.find(function(d) { return d.key === sv.key; });
-            if (!def) return;   // kaldırılmış kolon ayarı — sessizce atlanır
-            if (sv.label   !== undefined && String(sv.label).trim() !== '') def.label = String(sv.label);
-            if (sv.visible !== undefined) def.visible = !!sv.visible;
-            if (sv.align   !== undefined && ['left','center','right'].indexOf(sv.align) >= 0) def.align = sv.align;
-            if (sv.width   !== undefined) def.width = parseInt(sv.width, 10) || 0;
-        });
-        var order = saved.map(function(sv) { return sv.key; });
-        _colDefs.sort(function(a, b) {
-            var ia = order.indexOf(a.key), ib = order.indexOf(b.key);
-            if (ia === -1) return 1;
-            if (ib === -1) return -1;
-            return ia - ib;
-        });
-    }
-    function spSaveCols() {
-        var json = spSerializeCols();
-        try { localStorage.setItem(SP_COL_LS, json); } catch (e) {}
-        fetch('/Sales/SaveShipmentColConfig', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': spCsrf() },
-            body: JSON.stringify({ config: json })
-        }).catch(function() {});   // ayar kaydı başarısızsa ekran çalışmaya devam eder
-    }
-
-    // Grid şablonu — başlık ve satırlar bunu ortak --sp-cols değişkeninden okur.
-    // İlk (26px onay kutusu) ve son (26px detay oku) sütun sabittir, gizlenemez.
-    function spGridTemplate(vis) {
-        var t = ['26px'];
-        vis.forEach(function(c) { t.push(c.width > 0 ? (c.width + 'px') : 'minmax(120px,1fr)'); });
-        t.push('26px');
-        return t.join(' ');
-    }
-    function spVisibleCols() {
-        return _colDefs.filter(function(c) { return c.visible; });
-    }
-    function spRenderColHdr() {
-        var hdr = document.getElementById('spFlatHdr');
-        var left = document.getElementById('spLeft');
-        if (!hdr) return;
-        var vis = spVisibleCols();
-        if (left) left.style.setProperty('--sp-cols', spGridTemplate(vis));
-        var h = '<span></span>';
-        vis.forEach(function(c) {
-            // Sağa hizalı sütunda ikon etiketin SOLUNDA kalsın diye içerik flex ile sarılır.
-            var just = c.align === 'right' ? 'flex-end' : (c.align === 'center' ? 'center' : 'flex-start');
-            h += '<span class="sp-fh" style="justify-content:' + just + '">'
-               +   (SP_COL_ICON[c.icon] || '')
-               +   '<span class="sp-fh-tx">' + esc(c.label) + '</span>'
-               + '</span>';
-        });
-        hdr.innerHTML = h + '<span></span>';
-    }
-
-    // ── Panel ────────────────────────────────────────────────────────────────
-    // Sütun başlığı ikonları (Malzeme Kartları başlık dili — etiketin solunda küçük ikon).
-    var SP_COL_ICON = {
-        doc: '<svg class="sp-fh-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
-        box: '<svg class="sp-fh-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/></svg>',
-        num: '<svg class="sp-fh-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>',
-        stk: '<svg class="sp-fh-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><polyline points="19 9 13 15 9 11 5 15"/></svg>',
-        unt: '<svg class="sp-fh-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20"/><path d="M6 12V8"/><path d="M10 12V6"/><path d="M14 12V8"/><path d="M18 12V6"/></svg>'
-    };
-    var SP_GRIP = '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/><circle cx="11" cy="4" r="1.2"/><circle cx="11" cy="8" r="1.2"/><circle cx="11" cy="12" r="1.2"/></svg>';
-    var SP_EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
-    var SP_EYEOFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
-    var SP_CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>';
-    var SP_ALIGN = {
-        left:   '<svg viewBox="0 0 16 14" fill="currentColor"><rect y="0" width="16" height="2" rx="1"/><rect y="4" width="10" height="2" rx="1"/><rect y="8" width="13" height="2" rx="1"/><rect y="12" width="8" height="2" rx="1"/></svg>',
-        center: '<svg viewBox="0 0 16 14" fill="currentColor"><rect y="0" width="16" height="2" rx="1"/><rect x="3" y="4" width="10" height="2" rx="1"/><rect x="1.5" y="8" width="13" height="2" rx="1"/><rect x="4" y="12" width="8" height="2" rx="1"/></svg>',
-        right:  '<svg viewBox="0 0 16 14" fill="currentColor"><rect y="0" width="16" height="2" rx="1"/><rect x="6" y="4" width="10" height="2" rx="1"/><rect x="2.5" y="8" width="13" height="2" rx="1"/><rect x="8" y="12" width="8" height="2" rx="1"/></svg>'
-    };
-
-    function spApplyColChange() { spSaveCols(); spRenderColPanel(); spRenderColHdr(); spRenderList(); }
-
-    function spRenderColPanel() {
-        var el = document.getElementById('spColRows');
-        if (!el) return;
-        var html = '';
-        _colDefs.forEach(function(c, i) {
-            var open = !!_cfgOpen[c.key];
-            html += '<div class="sp-cfg-row' + (c.visible ? '' : ' is-hidden') + '" data-idx="' + i + '" data-key="' + c.key + '" draggable="true">'
-                 +    '<span class="sp-cfg-grip">' + SP_GRIP + '</span>'
-                 +    '<button type="button" class="sp-cfg-eye' + (c.visible ? '' : ' sp-eye-off') + '" data-key="' + c.key + '" title="' + (c.visible ? 'Gizle' : 'Göster') + '">' + (c.visible ? SP_EYE : SP_EYEOFF) + '</button>'
-                 +    '<span class="sp-cfg-label">' + esc(c.label) + '</span>'
-                 +    '<button type="button" class="sp-cfg-exp' + (open ? ' open' : '') + '" data-key="' + c.key + '" title="Detay">' + SP_CHEV + '</button>'
-                 +  '</div>'
-                 +  '<div class="sp-cfg-detail' + (open ? ' open' : '') + '">'
-                 +    '<div class="sp-cfg-frow"><span class="sp-cfg-flabel">Başlık</span>'
-                 +      '<input type="text" class="sp-cfg-input" data-key="' + c.key + '" data-field="label" value="' + esc(c.label) + '"></div>'
-                 +    '<div class="sp-cfg-frow"><span class="sp-cfg-flabel">Genişlik</span>'
-                 +      '<input type="number" class="sp-cfg-input sp-cfg-width" data-key="' + c.key + '" data-field="width" value="' + (c.width || '') + '" placeholder="Esnek" min="40" max="600">'
-                 +      '<span class="sp-cfg-unit">px</span></div>'
-                 +    '<div class="sp-cfg-frow"><span class="sp-cfg-flabel">Hizalama</span><span class="sp-cfg-align">'
-                 +      ['left','center','right'].map(function(a) {
-                            return '<button type="button" class="sp-cfg-abtn' + (c.align === a ? ' on' : '') + '" data-key="' + c.key + '" data-align="' + a + '">' + SP_ALIGN[a] + '</button>';
-                        }).join('')
-                 +    '</span></div>'
-                 +  '</div>';
-        });
-        el.innerHTML = html;
-
-        el.querySelectorAll('.sp-cfg-eye').forEach(function(b) {
-            b.addEventListener('click', function(e) {
-                e.stopPropagation();
-                var d = _colDefs.find(function(x) { return x.key === b.getAttribute('data-key'); });
-                if (!d) return;
-                d.visible = !d.visible;
-                spApplyColChange();
-            });
-        });
-        el.querySelectorAll('.sp-cfg-abtn').forEach(function(b) {
-            b.addEventListener('click', function(e) {
-                e.stopPropagation();
-                var d = _colDefs.find(function(x) { return x.key === b.getAttribute('data-key'); });
-                if (!d) return;
-                d.align = b.getAttribute('data-align');
-                spApplyColChange();
-            });
-        });
-        el.querySelectorAll('.sp-cfg-exp').forEach(function(b) {
-            b.addEventListener('click', function(e) {
-                e.stopPropagation();
-                var k = b.getAttribute('data-key');
-                _cfgOpen[k] = !_cfgOpen[k];
-                spRenderColPanel();
-            });
-        });
-        // Başlık yazarken paneli yeniden çizersek odak kaybolur → yalnız etiketi tazele.
-        el.querySelectorAll('input[data-field="label"]').forEach(function(inp) {
-            inp.addEventListener('input', function() {
-                var d = _colDefs.find(function(x) { return x.key === inp.getAttribute('data-key'); });
-                if (!d) return;
-                d.label = inp.value;
-                var lbl = el.querySelector('.sp-cfg-row[data-key="' + d.key + '"] .sp-cfg-label');
-                if (lbl) lbl.textContent = d.label;
-                spSaveCols(); spRenderColHdr();
-            });
-        });
-        el.querySelectorAll('input[data-field="width"]').forEach(function(inp) {
-            inp.addEventListener('change', function() {
-                var d = _colDefs.find(function(x) { return x.key === inp.getAttribute('data-key'); });
-                if (!d) return;
-                d.width = parseInt(inp.value, 10) || 0;
-                spSaveCols(); spRenderColHdr();
-            });
-        });
-
-        // Sürükle-bırak sıralama
-        var srcIdx = null;
-        var panelEl = document.getElementById('spColPanel');
-        if (panelEl) panelEl.ondragover = function(e) { e.preventDefault(); };
-        el.querySelectorAll('.sp-cfg-row').forEach(function(row) {
-            row.addEventListener('dragstart', function(e) {
-                srcIdx = parseInt(row.getAttribute('data-idx'), 10);
-                e.dataTransfer.effectAllowed = 'move';
-            });
-            row.addEventListener('dragover', function(e) {
-                e.preventDefault(); e.dataTransfer.dropEffect = 'move';
-                el.querySelectorAll('.sp-cfg-row').forEach(function(r) { r.classList.remove('drag-over'); });
-                row.classList.add('drag-over');
-            });
-            row.addEventListener('dragleave', function() { row.classList.remove('drag-over'); });
-            row.addEventListener('drop', function(e) {
-                e.preventDefault(); row.classList.remove('drag-over');
-                var tgt = parseInt(row.getAttribute('data-idx'), 10);
-                if (srcIdx === null || srcIdx === tgt) return;
-                var moved = _colDefs.splice(srcIdx, 1)[0];
-                _colDefs.splice(tgt, 0, moved);
-                srcIdx = null;
-                spApplyColChange();
-            });
-        });
-    }
-
-    window.spToggleColPanel = function(e) {
-        e.stopPropagation();
-        var panel = document.getElementById('spColPanel');
-        var btn = document.getElementById('spColBtn');
-        if (!panel) return;
-        var opening = !panel.classList.contains('open');
-        panel.classList.toggle('open', opening);
-        if (btn) btn.classList.toggle('active', opening);
-        if (opening) spRenderColPanel();
-    };
-    document.addEventListener('click', function(e) {
-        var panel = document.getElementById('spColPanel');
-        var btn = document.getElementById('spColBtn');
-        if (!panel || !panel.classList.contains('open')) return;
-        if (panel.contains(e.target) || (btn && btn.contains(e.target))) return;
-        panel.classList.remove('open');
-        if (btn) btn.classList.remove('active');
-    });
-
-    window.spResetColCfg = function() {
-        _colDefs = spDefaultColDefs();
-        _cfgOpen = {};
-        spApplyColChange();
-    };
-
-    // ── Excel — görünür sütunlar, görünen sıra ve başlıklarla ────────────────
-    window.spExportExcel = function() {
-        if (!LINES.length) return;
-        var vis = spVisibleCols();
-        var payload = {
-            fileName: 'yukleme-planlama.xlsx',
-            sheetName: 'Yükleme Planlama',
-            headers: vis.map(function(c) { return { id: c.key, label: c.label }; }),
-            rows: LINES.map(function(l) {
-                var row = {};
-                vis.forEach(function(c) { row[c.key] = spCellText(c.key, l); });
-                return row;
-            })
-        };
-        var form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '/api/export/smartboard-excel';
-        form.style.display = 'none';
-        var ta = document.createElement('textarea');
-        ta.name = 'payload';
-        ta.value = JSON.stringify(payload);
-        form.appendChild(ta);
-        document.body.appendChild(form);
-        form.submit();
-        setTimeout(function() { if (form.parentNode) form.parentNode.removeChild(form); }, 1500);
-    };
-
-    // Excel için düz karşılık (ekrandaki değerlerin biçimsiz hâli).
-    function spCellText(key, l) {
-        var isKit = !!l.isKit;
-        switch (key) {
-            case 'num': return l.orderNumber || '';
-            case 'mat': return l.materialName || l.materialCode || ('#' + l.itemId);
-            case 'ord': return parseFloat(l.orderQty || 0);
-            case 'dlv': return parseFloat(l.deliveredQty || 0);
-            case 'rsv': return parseFloat(spReservedForLine(l) || 0);
-            case 'opn': return parseFloat(l.openQty || 0);
-            case 'stk': return parseFloat(spAvailable(l) || 0);
-            case 'unt': return isKit ? 'set' : (l.unitCode || '');
-            default:    return '';
-        }
-    }
-
-    // Satır hücresi — grid düzeninde tek eleman. Hizalama sütun ayarından gelir.
-    function spCellHtml(c, l) {
-        var isKit = !!l.isKit;
-        var st = ' style="text-align:' + c.align + '"';
-        switch (c.key) {
-            case 'num':
-                return '<button type="button" class="sp-flat-num"' + st
-                     + ' onclick="spOpenOrderTab(event, ' + l.orderDocumentId + ')" title="Siparişi aç">'
-                     + esc(l.orderNumber) + '</button>';
-            case 'mat':
-                return '<div class="sp-flat-mat"' + st + '>'
-                     +   '<span class="sp-flat-mat-name">' + esc(l.materialName || l.materialCode || ('#' + l.itemId))
-                     +     (isKit ? '<span class="sp-kit-badge" title="Kit ürün — miktarlar set bazındadır">Kit</span>' : '')
-                     +   '</span>'
-                     +   '<span class="sp-flat-mat-code">' + esc(l.materialCode || '') + '</span>'
-                     + '</div>';
-            case 'ord': return '<span class="sp-qty"' + st + '>' + fmtN(l.orderQty) + '</span>';
-            case 'dlv': return '<span class="sp-qty"' + st + '>' + fmtN(l.deliveredQty) + '</span>';
-            case 'rsv': return '<span class="sp-qty"' + st + '>' + (isKit ? fmtSet(spReservedForLine(l)) : fmtN(l.reservedQty)) + '</span>';
-            case 'opn': return '<span class="sp-qty sp-qty--open"' + st + '>' + (isKit ? fmtSet(l.openQty) : fmtN(l.openQty)) + '</span>';
-            case 'stk': return '<span class="sp-stock ' + spStockClass(l) + '"' + st + '>' + (isKit ? fmtSet(spAvailable(l)) : fmtN(l.availableStock)) + '</span>';
-            case 'unt': return '<span class="sp-unit"' + st + '>' + (isKit ? 'set' : esc(l.unitCode || '')) + '</span>';
-            default:    return '<span></span>';
-        }
-    }
-
-    // ── Liste yükleme (in-place; window.location.reload YOK) ──────────────────
-    // NOT: backend materialSearch VE orderNumber'ı AND ile birleştirir (ikisi de dolu gönderilirse
-    // "malzeme eşleşir VE sipariş no eşleşir" ister — tek arama kutusuna aynı metni iki alana da
-    // yazarsak sipariş no yazıldığında sonuç sessizce boş dönerdi). Tek kutuda "malzeme VEYA sipariş
-    // no" davranışı için iki paralel istek atılır (materialSearch=q, orderNumber=q ayrı ayrı) ve
-    // sonuçlar lineId'ye göre birleştirilir.
-    window.spLoadLines = function() {
-        var q = (document.getElementById('spQuickSearch').value || '').trim();
-        var urls = q
-            ? [
-                '/Sales/OpenOrderLinesForReservation?materialSearch=' + encodeURIComponent(q) + '&orderNumber=',
-                '/Sales/OpenOrderLinesForReservation?materialSearch=&orderNumber=' + encodeURIComponent(q),
-              ]
-            : ['/Sales/OpenOrderLinesForReservation?materialSearch=&orderNumber='];
-        var listEl = document.getElementById('spList');
-        listEl.innerHTML = '<div class="sp-empty-list">Yükleniyor…</div>';
-        Promise.all(urls.map(function(u) {
-            return fetch(u, { headers: { 'Accept': 'application/json' } }).then(function(r) { return r.json(); });
-        }))
-            .then(function(results) {
-                var merged = {};
-                var errorMsg = null;
-                var anyArray = false;
-                results.forEach(function(data) {
-                    if (!Array.isArray(data)) { errorMsg = (data && data.error) || 'Kalemler yüklenemedi.'; return; }
-                    anyArray = true;
-                    data.forEach(function(l) { merged[l.lineId] = l; });
-                });
-                if (!anyArray) {
-                    LINES = [];
-                    listEl.innerHTML = '<div class="sp-empty-list">' + esc(errorMsg || 'Kalemler yüklenemedi.') + '</div>';
-                    spUpdateCounts();
-                    return;
-                }
-                LINES = Object.values(merged).sort(function(a, b) {
-                    var da = new Date(a.orderDate).getTime(), db = new Date(b.orderDate).getTime();
-                    if (db !== da) return db - da;
-                    return (a.orderNumber || '').localeCompare(b.orderNumber || '');
-                });
-                // Artık listede olmayan / açığı 0'a düşen kalemleri seçimden düş.
-                var stillOpen = {};
-                LINES.forEach(function(l) { stillOpen[l.lineId] = l; });
-                Object.keys(SELECTED).forEach(function(id) {
-                    if (!stillOpen[id]) delete SELECTED[id];
-                });
-                spRenderList();
-                spUpdateSelBar();
-            })
-            .catch(function() {
-                LINES = [];
-                listEl.innerHTML = '<div class="sp-empty-list">Bağlantı hatası — kalemler yüklenemedi.</div>';
-                spUpdateCounts();
-            });
-    };
-
-    window.spRefreshClicked = function(btn) {
-        btn.classList.add('sp-spin');
-        spLoadLines();
-        setTimeout(function() { btn.classList.remove('sp-spin'); }, 500);
-    };
-
-    // Kayıt sayısı başlığın altında gösterilir (standart liste ekranı düzeni);
-    // seçim varsa aynı satıra eklenir. Ayrı bir sayaç şeridi YOK.
-    function spUpdateCounts() {
-        var sub = document.getElementById('spSubtitle');
-        if (!sub) return;
-        var n = Object.keys(SELECTED).length;
-        sub.textContent = LINES.length + ' kalem' + (n > 0 ? ' · ' + n + ' seçili' : '');
-    }
-
-    function spStockClass(line) {
-        var avail = spAvailable(line);
-        if (avail <= 0) return 'sp-stock--none';
-        if (avail < line.openQty) return 'sp-stock--warn';
-        return 'sp-stock--ok';
-    }
-
-    // ── Liste render (flat — grup yok, Faz 1 sade) ─────────────────────────────
-    function spRenderList() {
-        var listEl = document.getElementById('spList');
-        spUpdateCounts();
-        if (!LINES.length) {
-            listEl.innerHTML = '<div class="sp-empty-list">Açık sipariş kalemi bulunamadı.</div>';
-            return;
-        }
-        var visCols = spVisibleCols();
-        var html = LINES.map(function(l) {
-            var checked = !!SELECTED[l.lineId];
-            var isKit = !!l.isKit;
-            var avail = spAvailable(l);
-            var expOpen = !!EXPANDED[l.lineId];
-            return ''
-                + '<div class="sp-row-wrap" data-line-id="' + l.lineId + '">'
-                +   '<div class="sp-flat-row' + (checked ? ' sel' : '') + (isKit ? ' is-kit' : '') + '">'
-                +     '<input type="checkbox" class="sp-cb" data-line-id="' + l.lineId + '"'
-                +       (checked ? ' checked' : '') + (isKit && avail <= 0 ? ' title="Yetersiz set stoğu — yine de seçilip talep edilebilir"' : '')
-                +       ' onchange="spToggleLine(' + l.lineId + ', this.checked)">'
-                +     visCols.map(function(c) { return spCellHtml(c, l); }).join('')
-                +     '<button type="button" class="sp-exp-btn' + (expOpen ? ' active' : '') + '" onclick="spToggleDetail(' + l.lineId + ')" title="Rezervasyonlar">'
-                +       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
-                +     '</button>'
-                +   '</div>'
-                +   '<div class="sp-sub" id="spSub-' + l.lineId + '" style="display:' + (expOpen ? 'block' : 'none') + ';">'
-                +     (expOpen ? '<div class="sp-sub-loading">Yükleniyor…</div>' : '')
-                +   '</div>'
-                + '</div>';
-        }).join('');
-        listEl.innerHTML = html;
-        Object.keys(EXPANDED).forEach(function(id) {
-            if (EXPANDED[id]) spLoadDetail(parseInt(id, 10));
-        });
-    }
-
     // Sipariş numarasına tıklanınca parent shell'de workspace sekmesi açar (fc3 deseniyle aynı).
     window.spOpenOrderTab = function(event, orderDocumentId) {
         event.preventDefault();
@@ -1069,328 +622,6 @@
         } else {
             window.location.href = url;
         }
-    };
-
-    // ── Seçim ────────────────────────────────────────────────────────────────
-    window.spToggleLine = function(lineId, checked) {
-        var line = LINES.find(function(l) { return l.lineId === lineId; });
-        if (!line) return;
-        // Faz 1.5: kit satırları da seçilebilir — qty=set sayısı olarak CreateReservation'a gider.
-        if (checked) SELECTED[lineId] = line; else delete SELECTED[lineId];
-        spUpdateCounts();
-        spUpdateSelBar();
-        var row = document.querySelector('.sp-row-wrap[data-line-id="' + lineId + '"] .sp-flat-row');
-        if (row) row.classList.toggle('sel', checked);
-    };
-
-    window.spClearSelection = function() {
-        SELECTED = {};
-        document.querySelectorAll('.sp-cb').forEach(function(cb) { cb.checked = false; });
-        document.querySelectorAll('.sp-flat-row.sel').forEach(function(r) { r.classList.remove('sel'); });
-        spUpdateCounts();
-        spUpdateSelBar();
-    };
-
-    function spUpdateSelBar() {
-        var bar = document.getElementById('spSelBar');
-        var n = Object.keys(SELECTED).length;
-        document.getElementById('spSbCnt').textContent = n + ' kalem seçili';
-        bar.classList.toggle('show', n > 0);
-    }
-
-    // ── Rezervasyon detay paneli (expand) ───────────────────────────────────────
-    window.spToggleDetail = function(lineId) {
-        EXPANDED[lineId] = !EXPANDED[lineId];
-        var sub = document.getElementById('spSub-' + lineId);
-        var btn = document.querySelector('.sp-row-wrap[data-line-id="' + lineId + '"] .sp-exp-btn');
-        if (!sub) return;
-        var open = EXPANDED[lineId];
-        sub.style.display = open ? 'block' : 'none';
-        if (btn) btn.classList.toggle('active', open);
-        if (open) {
-            sub.innerHTML = '<div class="sp-sub-loading">Yükleniyor…</div>';
-            spLoadDetail(lineId);
-        }
-    };
-
-    // Tekil (kit-dışı) rezervasyon satırı — mevcut Faz 1/2 görünümü.
-    function spRenderSingleResRow(r, lineId) {
-        return ''
-            + '<div class="sp-sub-row" data-res-id="' + r.id + '">'
-            +   '<input type="checkbox" class="sp-sub-cb" data-res-id="' + r.id + '" onchange="spUpdateSubToolbar(' + lineId + ')">'
-            +   '<span class="sp-sub-loc">' + esc(r.locationName || ('#' + r.locationId)) + '</span>'
-            +   '<span class="sp-sub-qty">' + fmtN(r.quantity) + '</span>'
-            +   '<span class="sp-sub-date">' + (r.plannedShipDate ? fmtDate(r.plannedShipDate) : '—') + '</span>'
-            +   '<span class="sp-sub-notes">' + esc(r.notes || '') + '</span>'
-            +   '<span class="sp-sub-actions">'
-            +     '<button type="button" class="sp-sub-ship" onclick="spShipReservation(' + r.id + ', ' + lineId + ')" title="Bu rezervasyonu irsaliyeye çevir">'
-            +       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>'
-            +       'Yükle'
-            +     '</button>'
-            +     '<button type="button" class="sp-sub-cancel" onclick="spCancelReservation(' + r.id + ', ' + lineId + ')">'
-            +       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>'
-            +       'İptal'
-            +     '</button>'
-            +   '</span>'
-            + '</div>';
-    }
-
-    // Faz 1.5: kit bileşen rezervasyonları AYNI kitOrderLineId altında N ayrı satır gelir (her bileşen
-    // ayrı reservationId) — tek bileşen listesi göstermek yerine hepsini tek "kit seti" kartında toplar.
-    // Kart üzerindeki Yükle/İptal grubun TÜM reservationId'lerini gönderir (bkz. spShipKitGroup/spCancelKitGroup).
-    function spRenderKitGroupCard(group, lineId) {
-        var kitLine = LINES.find(function(l) { return l.lineId === group.kitOrderLineId; });
-        var matLabel = kitLine ? (kitLine.materialName || kitLine.materialCode || ('#' + group.kitOrderLineId)) : ('Kit #' + group.kitOrderLineId);
-        var kitSets = group.kitSets != null ? group.kitSets : group.items.length;
-        var resIds = group.items.map(function(i) { return i.id; }).join(',');
-        var itemsHtml = group.items.map(function(r) {
-            return ''
-                + '<div class="sp-sub-kit-item">'
-                +   '<span class="sp-sub-loc">' + esc(r.locationName || ('#' + r.locationId)) + '</span>'
-                +   '<span class="sp-sub-qty">' + fmtN(r.quantity) + '</span>'
-                +   '<span class="sp-sub-date">' + (r.plannedShipDate ? fmtDate(r.plannedShipDate) : '—') + '</span>'
-                +   '<span class="sp-sub-notes">' + esc(r.notes || '') + '</span>'
-                + '</div>';
-        }).join('');
-        return ''
-            + '<div class="sp-sub-kit-group" data-kit-line-id="' + group.kitOrderLineId + '" data-res-ids="' + resIds + '">'
-            +   '<div class="sp-sub-row">'
-            +     '<input type="checkbox" class="sp-sub-cb sp-sub-cb--kit" data-kit-line-id="' + group.kitOrderLineId + '" onchange="spUpdateSubToolbar(' + lineId + ')">'
-            +     '<span class="sp-kit-badge" title="Kit seti">Kit</span>'
-            +     '<span class="sp-sub-loc">' + esc(matLabel) + ' — ' + fmtSet(kitSets) + ' set (' + group.items.length + ' bileşen)</span>'
-            +     '<span class="sp-sub-actions">'
-            +       '<button type="button" class="sp-sub-ship" onclick="spShipKitGroup(' + group.kitOrderLineId + ', ' + lineId + ')" title="Bu kit setini irsaliyeye çevir">'
-            +         '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>'
-            +         'Yükle'
-            +       '</button>'
-            +       '<button type="button" class="sp-sub-cancel" onclick="spCancelKitGroup(' + group.kitOrderLineId + ', ' + lineId + ')">'
-            +         '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>'
-            +         'İptal'
-            +       '</button>'
-            +     '</span>'
-            +   '</div>'
-            +   '<div class="sp-sub-kit-items">' + itemsHtml + '</div>'
-            + '</div>';
-    }
-
-    function spLoadDetail(lineId) {
-        var sub = document.getElementById('spSub-' + lineId);
-        if (!sub) return;
-        fetch('/Sales/OrderReservations?orderLineId=' + lineId, { headers: { 'Accept': 'application/json' } })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (!Array.isArray(data)) {
-                    sub.innerHTML = '<div class="sp-sub-empty">' + esc((data && data.error) || 'Rezervasyonlar yüklenemedi.') + '</div>';
-                    return;
-                }
-                if (!data.length) {
-                    sub.innerHTML = '<div class="sp-sub-empty">Bu kalem için aktif rezervasyon yok.</div>';
-                    return;
-                }
-                // Kit bileşen rezervasyonlarını kitOrderLineId'ye göre grupla — her grup TEK kart olur.
-                var kitGroups = {};
-                var singles = [];
-                data.forEach(function(r) {
-                    if (r.kitOrderLineId != null) {
-                        var key = r.kitOrderLineId;
-                        if (!kitGroups[key]) kitGroups[key] = { kitOrderLineId: key, kitSets: r.kitSets, items: [] };
-                        kitGroups[key].items.push(r);
-                    } else {
-                        singles.push(r);
-                    }
-                });
-                var toolbar = ''
-                    + '<div class="sp-sub-toolbar" id="spSubToolbar-' + lineId + '" style="display:none;">'
-                    +   '<span class="sp-sub-toolbar-cnt" id="spSubToolbarCnt-' + lineId + '"></span>'
-                    +   '<button type="button" class="sp-btn sp-btn--p sp-btn--xs" onclick="spShipSelected(' + lineId + ')">Seçilenleri Yükle</button>'
-                    + '</div>';
-                var kitCards = Object.keys(kitGroups).map(function(key) { return spRenderKitGroupCard(kitGroups[key], lineId); }).join('');
-                var singleRows = singles.map(function(r) { return spRenderSingleResRow(r, lineId); }).join('');
-                sub.innerHTML = toolbar + kitCards + singleRows;
-            })
-            .catch(function() {
-                sub.innerHTML = '<div class="sp-sub-empty">Bağlantı hatası.</div>';
-            });
-    }
-
-    // Silme onay standardı (CLAUDE.md): ekran-ortası custom modal, native confirm() YASAK.
-    // showConfirm/CalibraAlert global helper _Layout.cshtml'de zaten yüklü (wwwroot/js/confirm-modal.js).
-    window.spCancelReservation = function(reservationId, lineId) {
-        showConfirm({
-            title: 'Rezervasyon İptali',
-            message: 'Bu rezervasyon iptal edilecek. Kullanılabilir stok tekrar serbest kalır. Devam edilsin mi?',
-            okLabel: 'Evet, İptal Et',
-            cancelLabel: 'Vazgeç',
-            danger: true
-        }).then(function(ok) {
-            if (!ok) return;
-            fetch('/Sales/CancelReservation', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': spCsrf() },
-                body: JSON.stringify({ reservationIds: [reservationId] }),
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (d.ok) {
-                    CalibraAlert.show('Rezervasyon iptal edildi.', { type: 'success', autoDismissMs: 2000 });
-                    spLoadDetail(lineId);
-                    spLoadLines(); // in-place refresh — reservedQty/openQty/availableStock değişti
-                } else {
-                    CalibraAlert.show(d.error || 'Rezervasyon iptal edilemedi.', { type: 'error' });
-                }
-            })
-            .catch(function() {
-                CalibraAlert.show('Bağlantı hatası — rezervasyon iptal edilemedi.', { type: 'error' });
-            });
-        });
-    };
-
-    // ── Yükle (Faz 2: rezervasyonu satış irsaliyesine çevirir + stoktan çıkış yazar) ───────────
-    // Faz 1.5: tekil rezervasyon checkbox'ları (data-res-id) + kit grup checkbox'ları (data-kit-line-id,
-    // seçilince grubun TÜM bileşen id'lerini genişletir) birlikte toplanır.
-    function spCollectSelectedResIds(lineId) {
-        var ids = [];
-        document.querySelectorAll('#spSub-' + lineId + ' .sp-sub-cb[data-res-id]:checked').forEach(function(cb) {
-            ids.push(parseInt(cb.getAttribute('data-res-id'), 10));
-        });
-        document.querySelectorAll('#spSub-' + lineId + ' .sp-sub-cb--kit:checked').forEach(function(cb) {
-            var group = document.querySelector('.sp-sub-kit-group[data-kit-line-id="' + cb.getAttribute('data-kit-line-id') + '"]');
-            if (group) {
-                (group.getAttribute('data-res-ids') || '').split(',').filter(Boolean).forEach(function(idStr) {
-                    ids.push(parseInt(idStr, 10));
-                });
-            }
-        });
-        return ids;
-    }
-
-    window.spUpdateSubToolbar = function(lineId) {
-        var box = document.getElementById('spSubToolbar-' + lineId);
-        if (!box) return;
-        var ids = spCollectSelectedResIds(lineId);
-        box.style.display = ids.length > 0 ? 'flex' : 'none';
-        var cnt = document.getElementById('spSubToolbarCnt-' + lineId);
-        if (cnt) cnt.textContent = ids.length + ' rezervasyon seçili';
-    };
-
-    // Silme onay standardı (CLAUDE.md): "Yükle" geri alınamaz (stok çıkışı + irsaliye) — ekran-ortası
-    // custom modal ile onay alınır, native confirm() YASAK.
-    // POST /Sales/ShipReservations — body { reservationIds:[int] }
-    // yanıt { ok, deliveries:[{documentId,docNo,contactName,lineCount}], skipped:[{reservationId,reason}], approvalStarted }
-    function spExecuteShip(reservationIds, affectedLineIds) {
-        if (!reservationIds.length) return;
-        showConfirm({
-            title: 'Rezervasyonu Yükle',
-            message: 'Seçili rezervasyon' + (reservationIds.length > 1 ? 'lar' : '') + ' için satış irsaliyesi oluşturulacak ve stoktan çıkış yazılacak. Bu işlem geri alınamaz. Devam edilsin mi?',
-            okLabel: 'Yükle',
-            cancelLabel: 'Vazgeç',
-            danger: true
-        }).then(function(ok) {
-            if (!ok) return;
-            fetch('/Sales/ShipReservations', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': spCsrf() },
-                body: JSON.stringify({ reservationIds: reservationIds }),
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (!d.ok) {
-                    CalibraAlert.show(d.error || 'Yükleme yapılamadı.', { type: 'error' });
-                    return;
-                }
-                // NOT: CalibraAlert.show tek seferde tek overlay render eder (aynı id'yi domdan sokup
-                // çıkarır) — art arda birden çok show() çağrısı yalnızca sonuncuyu gösterir. Bu yüzden
-                // tüm sonuç mesajları TEK show() çağrısında birleştirilir.
-                var deliveries = d.deliveries || [];
-                var skipped = d.skipped || [];
-                var parts = [];
-                var alertType = 'info';
-                if (deliveries.length) {
-                    var docNos = deliveries.map(function(x) { return x.docNo; }).join(', ');
-                    parts.push(deliveries.length + ' irsaliye oluşturuldu: ' + docNos);
-                    alertType = 'success';
-                }
-                if (skipped.length) {
-                    var reasons = skipped.map(function(s) { return s.reason; }).join('; ');
-                    parts.push(skipped.length + ' rezervasyon atlandı — ' + reasons);
-                    alertType = deliveries.length ? 'warning' : 'error';
-                } else if (!deliveries.length) {
-                    parts.push('Hiçbir rezervasyon yüklenemedi.');
-                    alertType = 'error';
-                }
-                if (d.approvalStarted) {
-                    parts.push('Onay süreci başlatıldı.');
-                }
-                var autoDismissMs = (alertType === 'success' && parts.length === 1) ? 4000 : 0;
-                CalibraAlert.show(parts.join('\n\n'), { type: alertType, autoDismissMs: autoDismissMs });
-
-                // in-place refresh — window.location.reload YOK
-                affectedLineIds.forEach(function(id) {
-                    if (EXPANDED[id]) spLoadDetail(id);
-                });
-                spLoadLines(); // rezerve/teslim/açık miktarlar değişti
-            })
-            .catch(function() {
-                CalibraAlert.show('Bağlantı hatası — yükleme yapılamadı.', { type: 'error' });
-            });
-        });
-    }
-
-    // Rezervasyon satırındaki tekil "Yükle" butonu.
-    window.spShipReservation = function(reservationId, lineId) {
-        spExecuteShip([reservationId], [lineId]);
-    };
-
-    // Rezervasyon detay panelindeki checkbox seçimiyle toplu "Seçilenleri Yükle" (tekil + kit grup).
-    window.spShipSelected = function(lineId) {
-        var ids = spCollectSelectedResIds(lineId);
-        if (!ids.length) return;
-        spExecuteShip(ids, [lineId]);
-    };
-
-    // Kit seti kartındaki "Yükle" — grubun TÜM bileşen reservationId'lerini gönderir.
-    window.spShipKitGroup = function(kitLineId, lineId) {
-        var group = document.querySelector('.sp-sub-kit-group[data-kit-line-id="' + kitLineId + '"]');
-        if (!group) return;
-        var ids = (group.getAttribute('data-res-ids') || '').split(',').filter(Boolean).map(function(s) { return parseInt(s, 10); });
-        if (!ids.length) return;
-        spExecuteShip(ids, [lineId]);
-    };
-
-    // Kit seti kartındaki "İptal" — grubun TÜM bileşen reservationId'lerini gönderir; backend zaten tek
-    // bir bileşen id'si gelse bile aynı kitOrderLineId'nin tüm grubunu iptal eder (netlik için tümü gönderilir).
-    window.spCancelKitGroup = function(kitLineId, lineId) {
-        var group = document.querySelector('.sp-sub-kit-group[data-kit-line-id="' + kitLineId + '"]');
-        if (!group) return;
-        var ids = (group.getAttribute('data-res-ids') || '').split(',').filter(Boolean).map(function(s) { return parseInt(s, 10); });
-        if (!ids.length) return;
-        showConfirm({
-            title: 'Kit Seti Rezervasyonu İptali',
-            message: 'Bu kit setinin tüm bileşen rezervasyonları iptal edilecek. Kullanılabilir stok tekrar serbest kalır. Devam edilsin mi?',
-            okLabel: 'Evet, İptal Et',
-            cancelLabel: 'Vazgeç',
-            danger: true
-        }).then(function(ok) {
-            if (!ok) return;
-            fetch('/Sales/CancelReservation', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': spCsrf() },
-                body: JSON.stringify({ reservationIds: ids }),
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (d.ok) {
-                    CalibraAlert.show('Kit seti rezervasyonu iptal edildi.', { type: 'success', autoDismissMs: 2000 });
-                    spLoadDetail(lineId);
-                    spLoadLines(); // in-place refresh — reservedQty/openQty/availableStock değişti
-                } else {
-                    CalibraAlert.show(d.error || 'Kit seti rezervasyonu iptal edilemedi.', { type: 'error' });
-                }
-            })
-            .catch(function() {
-                CalibraAlert.show('Bağlantı hatası — kit seti rezervasyonu iptal edilemedi.', { type: 'error' });
-            });
-        });
     };
 
     // ── Depo dropdown (lazy, cache) ─────────────────────────────────────────────
@@ -1456,16 +687,12 @@
         document.addEventListener('keydown', spModalEscHandler);
     };
 
+    // Modaldan kalem çıkarma — yalnız modalın kendi durumunu değiştirir.
+    // (Liste seçimi artık board'da; oradaki seçim modal kapanınca tazelemede sıfırlanır.)
     window.spModalRemoveRow = function(lineId) {
         delete SELECTED[lineId];
         var row = document.querySelector('#spResTbody tr[data-line-id="' + lineId + '"]');
         if (row) row.remove();
-        var cb = document.querySelector('.sp-cb[data-line-id="' + lineId + '"]');
-        if (cb) cb.checked = false;
-        var fr = document.querySelector('.sp-row-wrap[data-line-id="' + lineId + '"] .sp-flat-row');
-        if (fr) fr.classList.remove('sel');
-        spUpdateCounts();
-        spUpdateSelBar();
         if (!Object.keys(SELECTED).length) spCloseReserveModal();
     };
 
@@ -1555,9 +782,7 @@
             created.forEach(function(c) { delete SELECTED[c.orderLineId]; });
             okBtn.style.display = 'none';
             cnBtn.textContent = 'Kapat';
-            spUpdateCounts();
-            spUpdateSelBar();
-            spLoadLines(); // in-place refresh — window.location.reload YOK
+            spBoardRefresh();   // in-place — window.location.reload YOK
             if (CalibraAlert && created.length) {
                 CalibraAlert.show(created.length + ' kalem rezerve edildi.', { type: 'success', autoDismissMs: 2500 });
             }
@@ -1568,33 +793,67 @@
         });
     };
 
-    // ── Arama (debounce) ────────────────────────────────────────────────────────
-    document.getElementById('spQuickSearch').addEventListener('input', function() {
-        clearTimeout(searchTimer);
-        searchTimer = setTimeout(spLoadLines, 320);
+    // ── Board köprüsü ───────────────────────────────────────────────────────
+    // Rezervasyon modalı işini bitirince board'u tazeler ve seçimi temizler.
+    var SP_BOARD_KEY = 'sales-shipment-planning';
+    function spBoardRefresh() {
+        var api = window.CalibraSmartBoard;
+        if (!api) return;
+        if (typeof api.clearSelection === 'function') api.clearSelection(SP_BOARD_KEY);
+        if (typeof api.refresh === 'function') api.refresh(SP_BOARD_KEY);
+    }
+
+    // "Rezerve Et" toplu aksiyonu (SmartBoard type:"event") — seçili kalem id'leri
+    // gelir; modal miktar/depo/tarih/not için kalemin TAM verisine ihtiyaç duyduğundan
+    // açık kalemler tazece çekilip SELECTED kurulur.
+    window.addEventListener('shipmentPlanning:reserve', function (e) {
+        var ids = (e && e.detail && e.detail.ids) || [];
+        if (!ids.length) return;
+        fetch('/Sales/OpenOrderLinesForReservation?materialSearch=&orderNumber=', { headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.json(); })
+            .then(function (list) {
+                if (!Array.isArray(list)) {
+                    if (CalibraAlert) CalibraAlert.show((list && list.error) || 'Kalemler okunamadı.', { type: 'error' });
+                    return;
+                }
+                LINES = list;
+                SELECTED = {};
+                ids.forEach(function (id) {
+                    var l = list.find(function (x) { return x.lineId === id; });
+                    if (l) SELECTED[id] = l;
+                });
+                if (!Object.keys(SELECTED).length) {
+                    if (CalibraAlert) CalibraAlert.show('Seçilen kalemler artık açık değil — liste tazelendi.', { type: 'warning' });
+                    spBoardRefresh();
+                    return;
+                }
+                spOpenReserveModal();
+            })
+            .catch(function () {
+                if (CalibraAlert) CalibraAlert.show('Bağlantı hatası — kalemler okunamadı.', { type: 'error' });
+            });
     });
 
-    // ── İlk yükleme ──────────────────────────────────────────────────────────────
-    // Sütun ayarı önce localStorage aynasından uygulanır (ilk çizim sunucuyu beklemesin),
-    // ardından sunucudaki kayıt gelirse farklıysa yeniden çizilir.
-    try { spApplySavedCols(localStorage.getItem(SP_COL_LS)); } catch (e) {}
-    spRenderColHdr();
-    spLoadLines();
-
-    fetch('/Sales/GetShipmentColConfig', { headers: { 'Accept': 'application/json' } })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (!data || !data.config) return;
-            var local = null;
-            try { local = localStorage.getItem(SP_COL_LS); } catch (e) {}
-            if (data.config === local) return;
-            _colDefs = spDefaultColDefs();
-            spApplySavedCols(data.config);
-            try { localStorage.setItem(SP_COL_LS, spSerializeCols()); } catch (e) {}
-            spRenderColHdr();
-            if (LINES.length) spRenderList();
-        })
-        .catch(function() {});   // ayar okunamazsa varsayılan sütun düzeni kullanılır
+    // ── SmartBoard mount (Machines/MaterialCards deseni) ────────────────────
+    (function mountBoard() {
+        var el = document.getElementById('spBoard');
+        if (!el) return;
+        var BOARD_CONFIG = window.__SP_BOARD_CONFIG__;
+        function showError(msg) {
+            el.innerHTML = '<div style="padding:48px 16px;text-align:center;color:#94a3b8;font-size:.85rem;">' + msg + '</div>';
+        }
+        function doMount() {
+            if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) { showError('SmartBoard yüklenemedi.'); return; }
+            try { window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG); }
+            catch (err) { showError('Liste çizilemedi.'); }
+        }
+        if (window.CalibraHub && window.CalibraHub.mountSmartBoard) { doMount(); return; }
+        var sc = document.createElement('script');
+        sc.src = window.__SP_BUNDLE_URL__;
+        sc.onload = function () { setTimeout(doMount, 0); };
+        sc.onerror = function () { showError('Bundle yüklenemedi.'); };
+        document.head.appendChild(sc);
+    })();
 })();
 </script>
 }

@@ -118,6 +118,17 @@ function applyComputed(row, columns) {
   return result
 }
 
+/* Hizalama yardimcilari (2026-08-22) — Alan Duzeni'ndeki sol/orta/sag ayari
+   BASLIK icin flex `justify-*`, KART etiketi icin `text-*` sinifina cevrilir.
+   Deger hizalamasi zaten LineGridCell icindeki alignClass ile kolonun
+   `align`'indan geliyor; ayar orayi da besler (columns.map override'i). */
+function alignJustifyCls(a) {
+  return a === 'right' ? 'justify-end' : (a === 'center' ? 'justify-center' : 'justify-start')
+}
+function alignTextCls(a) {
+  return a === 'right' ? 'text-right' : (a === 'center' ? 'text-center' : 'text-left')
+}
+
 function TR_FMT(n, precision) {
   if (n == null || isNaN(n)) return '0,00'
   return Number(n).toLocaleString('tr-TR', {
@@ -637,6 +648,11 @@ export default function CalibraLineItemsGrid(props) {
         if (!b || c.tlMirror) return c
         var out = Object.assign({}, c)
         if (b.isRequired) out.required = true
+        /* 2026-08-22 (kullanici istegi): hizalama ayari HEM baslik HEM deger icin,
+           HEM tablo HEM kart gorunumunde gecerli. Kolonun `align`'ini ezmek tek
+           dokunusla ucunu birden saglar: baslik `.text-*` sinifini bundan alir,
+           hucre ise LineGridCell icindeki alignClass'tan. */
+        if (b.align) out.align = b.align
         out.__behavior = b
         return out
       })
@@ -1604,9 +1620,12 @@ export default function CalibraLineItemsGrid(props) {
           // piksel genislik olan alan bu haritaya HIC girmez ve serbest duzende
           // hep varsayilan genisligi alirdi (sessiz kirik).
           var hasCellPx = typeof f.cellWidthPx === 'number' && isFinite(f.cellWidthPx)
+          // 2026-08-22: hizalama da bir davranistir — cellWidthPx ile ayni tuzak
+          // (tek ayari hizalama olan alan haritaya girmezse ayar sessizce yok sayilir).
+          var hasAlign = f.align === 'left' || f.align === 'center' || f.align === 'right'
           var hasBehavior = f.isVisible === false || f.isRequired === true
             || f.defaultValue || f.visibleIf || f.requiredIf || hasCardSection || hasCardOrder
-            || hasCardWidth || hasCellPx
+            || hasCardWidth || hasCellPx || hasAlign
           if (!hasBehavior) return
           any = true
           map[f.key] = {
@@ -1619,6 +1638,7 @@ export default function CalibraLineItemsGrid(props) {
             cardOrder: hasCardOrder ? f.cardOrder : null,
             cardWidth: hasCardWidth ? f.cardWidth : null,
             cellWidthPx: hasCellPx ? f.cellWidthPx : null,
+            align: hasAlign ? f.align : null,
           }
         })
         setLineBehaviors(any ? map : null)
@@ -2301,9 +2321,11 @@ export default function CalibraLineItemsGrid(props) {
                         <div key={col.key} data-cell-key={col.key} style={cellStyle} className={'clc-field-cell' + (labelMode === 'inline' ? ' flex items-center gap-2' : '')}>
                           {/* standard: etiket ustte · inline (Sade): etiket solda ·
                               modern: etiket kutunun ust kenarinda yuzer (asagida). */}
+                          {/* 2026-08-22: kart etiketi de Alan Duzeni'ndeki hizalamayi
+                              izler (tablo basligiyla ayni ayar, tek kaynak col.align). */}
                           {labelMode === 'standard' && (
                             <div
-                              className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide mb-0.5 ' + labelColorCls}
+                              className={'calibra-line-card-label flex items-center gap-1 ' + alignJustifyCls(col.align) + ' text-[10px] font-bold tracking-wide mb-0.5 ' + labelColorCls}
                               style={labelStyleOv}
                             >
                               {labelInner}
@@ -2670,7 +2692,7 @@ export default function CalibraLineItemsGrid(props) {
                   <div
                     key={col.key}
                     style={widthCss(col)}
-                    className="flex items-center px-2.5 py-2 text-[10.5px] font-bold tracking-wide text-slate-500 dark:text-white/45 border-r border-slate-100 last:border-r-0 dark:border-white/[0.06] truncate"
+                    className={'flex items-center ' + alignJustifyCls(col.align) + ' px-2.5 py-2 text-[10.5px] font-bold tracking-wide text-slate-500 dark:text-white/45 border-r border-slate-100 last:border-r-0 dark:border-white/[0.06] truncate'}
                   >
                     <span className="truncate">{col.label}</span>
                     {(col.required || col.requirePositive || (col.__behavior && col.__behavior.isRequired)) && <span className="text-rose-500 dark:text-rose-400 ml-0.5">*</span>}
@@ -2682,7 +2704,7 @@ export default function CalibraLineItemsGrid(props) {
                   <div
                     key={col.key}
                     style={widthCss(col)}
-                    className="flex items-center px-2.5 py-2 text-[10.5px] font-bold tracking-wide text-slate-500 dark:text-white/45 border-r border-slate-100 last:border-r-0 dark:border-white/[0.06] truncate"
+                    className={'flex items-center ' + alignJustifyCls(col.align) + ' px-2.5 py-2 text-[10.5px] font-bold tracking-wide text-slate-500 dark:text-white/45 border-r border-slate-100 last:border-r-0 dark:border-white/[0.06] truncate'}
                   >
                     <span className="truncate">{col.label}</span>
                     {col.required && <span className="text-rose-500 dark:text-rose-400 ml-0.5">*</span>}

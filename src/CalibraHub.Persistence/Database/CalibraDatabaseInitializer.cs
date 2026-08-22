@@ -14156,6 +14156,7 @@ END;";
                     -- 2026-08-20 Serbest duzen: alan basina PIKSEL genislik (60-600).
                     -- CardWidth (1..12 izgara span) yerine gecer; izgara modunda okunmaz.
                     [CellWidthPx]  INT            NULL,
+                    [Align]        NVARCHAR(10)   NULL,
                     -- Sekme icerigi baska sekmeye tasinabilir: hedef sekme anahtari.
                     -- Yalniz 'tab:<key>' satirlarinda anlamli; null = yerinde kal.
                     [TargetTabKey] NVARCHAR(50)   NULL,
@@ -14190,6 +14191,10 @@ END;";
                     ALTER TABLE [{s}].[FormFieldBehavior] ADD [TargetTabKey] NVARCHAR(50) NULL;
                 IF COL_LENGTH(N'{sl}.FormFieldBehavior', N'TargetTab') IS NULL
                     ALTER TABLE [{s}].[FormFieldBehavior] ADD [TargetTab] NVARCHAR(50) NULL;
+                -- 2026-08-22: alan hizalamasi (left|center|right). NULL = alanin
+                -- kendi varsayilani (katalog/kolon tipi) — fail-open.
+                IF COL_LENGTH(N'{sl}.FormFieldBehavior', N'Align') IS NULL
+                    ALTER TABLE [{s}].[FormFieldBehavior] ADD [Align] NVARCHAR(10) NULL;
             END;
             """;
         await using var cmd = connection.CreateCommand();

@@ -76,6 +76,14 @@ public sealed partial class FormBehaviorController : Controller
     private static int? ClampCellWidthPx(int? v)
         => v is null ? null : Math.Min(CellWidthMax, Math.Max(CellWidthMin, v.Value));
 
+    /// <summary>Hizalama: yalniz left|center|right kabul edilir; digeri NULL
+    /// (alanin kendi varsayilani) — fail-open (2026-08-22).</summary>
+    private static string? NormalizeAlign(string? v)
+    {
+        var t = v?.Trim().ToLowerInvariant();
+        return t is "left" or "center" or "right" ? t : null;
+    }
+
     private static string NormalizeLayoutMode(string? v)
         => string.Equals(v?.Trim(), "free", StringComparison.OrdinalIgnoreCase) ? "free" : "grid";
 
@@ -103,7 +111,7 @@ public sealed partial class FormBehaviorController : Controller
         string Key, bool IsVisible = true, bool IsRequired = false,
         string? DefaultValue = null, string? LabelText = null, string? LabelStyle = null,
         string? VisibleIf = null, string? RequiredIf = null, int? CardSection = null, int? CardOrder = null,
-        int? CardWidth = null, int? CellWidthPx = null, string? TargetTab = null);
+        int? CardWidth = null, int? CellWidthPx = null, string? TargetTab = null, string? Align = null);
 
     public sealed record TabBehaviorDto(
         string Key, bool IsVisible = true, int SortOrder = 0, string? LabelText = null,
@@ -216,6 +224,7 @@ public sealed partial class FormBehaviorController : Controller
                 cardWidth = b?.CardWidth,
                 cellWidthPx = b?.CellWidthPx,
                 targetTab = b?.TargetTab,
+                align = b?.Align,
                 movable = f.Movable,
             };
         }).ToArray();
@@ -328,6 +337,7 @@ public sealed partial class FormBehaviorController : Controller
                 if (defaultValue is { Length: > 400 }) defaultValue = defaultValue[..400];
                 var cardWidth = ClampCardWidth(f.CardWidth, $"field[{key}]");
                 var cellWidthPx = ClampCellWidthPx(f.CellWidthPx);
+                var align = NormalizeAlign(f.Align);
                 // Alanin sekmesi: katalog sekmesi VEYA ozel sekme (c1..) olabilir.
                 // Bilinmeyen/kendi katalog sekmesine esit deger null'a duser (fail-open).
                 // Movable:false alan (ör. Genel İskonto %) hic tasinamaz.
@@ -351,7 +361,7 @@ public sealed partial class FormBehaviorController : Controller
                 var isDefault = isVisible && !f.IsRequired && defaultValue is null
                     && labelText is null && labelStyle is null && rulesJson is null
                     && f.CardSection is null && f.CardOrder is null && cardWidth is null
-                    && cellWidthPx is null && targetTab is null;
+                    && cellWidthPx is null && targetTab is null && align is null;
                 if (isDefault) continue;
 
                 rows.Add(new FormFieldBehavior
@@ -370,6 +380,7 @@ public sealed partial class FormBehaviorController : Controller
                     CardWidth = cardWidth,
                     CellWidthPx = cellWidthPx,
                     TargetTab = targetTab,
+                    Align = align,
                     CreatedById = GetUserId(),
                     CreatedBy = User?.Identity?.Name,
                 });

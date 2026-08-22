@@ -51,6 +51,7 @@ import {
   SlidersHorizontal, X as XIcon, Eye, EyeOff, Lock,
   AlertTriangle, Plus, Minus, LayoutGrid, Settings2, Trash2,
   GripVertical, ChevronDown, ChevronRight, Search, RotateCcw, Link2,
+  AlignLeft, AlignCenter, AlignRight,
 } from 'lucide-react'
 // Top govdesine portallanmaz — bkz. LineCardLayoutEditor'daki ayni not: tam ekran
 // perde ust menu seridini kilitliyordu. iframe'in kendi body'sine portallanir.
@@ -643,6 +644,7 @@ export default function StandardFieldsEditor(props) {
             labelText: f.labelText || '',
             labelStyle: f.labelStyle || '',
             cellWidthPx: (typeof f.cellWidthPx === 'number' && isFinite(f.cellWidthPx)) ? f.cellWidthPx : null,
+            align: (f.align === 'left' || f.align === 'center' || f.align === 'right') ? f.align : null,
             tab: f.tab || 'general',            // katalog sekmesi (degismez)
             targetTab: f.targetTab || null,     // kullanicinin tasidigi sekme (null = katalog)
             movable: f.movable !== false,       // false → baska sekmeye tasinamaz
@@ -759,7 +761,29 @@ export default function StandardFieldsEditor(props) {
                         />
                       </div>
 
-                      {/* 6) Varsayilan Deger / Gorunurluk / Zorunluluk kosulu — modal */}
+                      {/* 6) Hizalama (2026-08-22) — baslik VE deger, tablo VE kart gorunumunde
+                          gecerli. Bos = alanin kendi varsayilani (sayisal saga, metin sola). */}
+                      <div className="justify-self-start flex items-center rounded-md border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.04] overflow-hidden">
+                        {[
+                          { v: 'left', I: AlignLeft, t: 'Sola hizala' },
+                          { v: 'center', I: AlignCenter, t: 'Ortala' },
+                          { v: 'right', I: AlignRight, t: 'Sağa hizala' },
+                        ].map(function (o) {
+                          var on = f.align === o.v
+                          var Ico = o.I
+                          return (
+                            <button key={o.v} type="button"
+                              title={o.t + (on ? ' (tekrar tıkla: varsayılana dön)' : '')}
+                              onClick={function () { patchField(f.key, { align: on ? null : o.v }) }}
+                              className={'w-6 h-5 flex items-center justify-center transition-colors ' + (
+                                on ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-300'
+                                   : 'text-slate-400 hover:text-indigo-600 dark:text-white/35 dark:hover:text-indigo-300')}>
+                              <Ico size={11} strokeWidth={2.2} />
+                            </button>
+                          )
+                        })}
+                      </div>
+                      {/* 7) Varsayilan Deger / Gorunurluk / Zorunluluk kosulu — modal */}
                       <button
                         type="button"
                         onClick={function () { setBehaviorKey(f.key) }}
@@ -1081,6 +1105,7 @@ export default function StandardFieldsEditor(props) {
             cardOrder: (typeof f.cardOrder === 'number') ? f.cardOrder : null,
             cardWidth: (typeof f.cardWidth === 'number') ? f.cardWidth : null,
             cellWidthPx: (typeof f.cellWidthPx === 'number') ? f.cellWidthPx : null,
+            align: f.align || null,
             targetTab: f.targetTab || null,
           }
         }),

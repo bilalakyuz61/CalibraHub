@@ -853,8 +853,22 @@ export default function SmartBoard(props) {
   // Sunucu sozlesmesi: { ok, message?, error? } (Fulfillment/ShipReservations deseni).
   var executeBulkAction = useCallback(function (action) {
     if (!action || bulkBusy) return
-    var ids = Array.from(selectedIds)
+    var ids = Array.isArray(action._forcedIds) ? action._forcedIds : Array.from(selectedIds)
     if (ids.length === 0) return
+
+    // type:'event' → POST YOK. Secili id'ler DOM olayi ile host sayfaya verilir;
+    // ek girdi toplayan akislar (miktar/depo/tarih soran modal) boyle baglanir.
+    // Host sayfa isi bitince board'u tazelemek icin window.CalibraSmartBoard
+    // .refresh(boardKey) cagirir (asagida kayit edilir).
+    if (action.type === 'event') {
+      try {
+        window.dispatchEvent(new CustomEvent(action.event || 'smartboard:bulk', {
+          detail: { boardKey: boardKey, actionId: action.id || null, ids: ids },
+        }))
+      } catch (e) { /* CustomEvent desteklenmiyorsa sessiz gec */ }
+      return
+    }
+
     var url = action.apiUrl || action.url
     if (!url) return
     setBulkBusy(true)
@@ -868,7 +882,11 @@ export default function SmartBoard(props) {
     fetch(url, {
       method: action.apiMethod || 'POST',
       headers: headers,
-      body: JSON.stringify(Object.assign({ ids: ids }, action.apiBody || {})),
+      // idsField — hedef uc farkli bir alan adi bekliyorsa (ornegin
+      // /Sales/ShipReservations → { reservationIds }) config'te verilir.
+      body: JSON.stringify(Object.assign({}, action.apiBody || {}, (function () {
+        var b = {}; b[action.idsField || 'ids'] = ids; return b
+      })())),
     })
       .then(function (r) { return r.json() })
       .then(function (res) {
@@ -886,7 +904,7 @@ export default function SmartBoard(props) {
         setBulkBusy(false)
         if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('Bağlantı hatası — işlem tamamlanamadı.', 'error')
       })
-  }, [bulkBusy, selectedIds, clearSelection, refreshUrl])
+  }, [bulkBusy, selectedIds, clearSelection, refreshUrl, boardKey])
 
   // action.confirm verilmişse ÖNCE ekran ortasında onay modalı açılır (CLAUDE.md
   // silme/geri-alınamaz işlem standardı — native confirm() KULLANILMAZ).
@@ -896,6 +914,21 @@ export default function SmartBoard(props) {
     executeBulkAction(action)
   }, [bulkBusy, executeBulkAction])
 
+  // Host sayfa koprusu — type:'event' aksiyonundan sonra kendi modalini
+  // tamamlayinca board'u tazelemesi/secimi temizlemesi icin.
+  useEffect(function () {
+    if (!selectEnabled) return undefined
+    var api = window.CalibraSmartBoard || (window.CalibraSmartBoard = {})
+    var store = api._boards || (api._boards = {})
+    store[boardKey] = {
+      refresh: function () { setDetailData({}); if (refreshUrl) refreshBoard() },
+      clearSelection: clearSelection,
+    }
+    api.refresh = function (key) { var b = store[key]; if (b) b.refresh() }
+    api.clearSelection = function (key) { var b = store[key]; if (b) b.clearSelection() }
+    return function () { delete store[boardKey] }
+  }, [selectEnabled, boardKey, refreshUrl, refreshBoard, clearSelection])
+
   var renderDetail = useCallback(function (entity) {
     var st = detailData[entity.id]
     if (!st || st.loading) return <div className="cst-detail-msg">Yükleniyor…</div>
@@ -904,29 +937,61 @@ export default function SmartBoard(props) {
     var cols = Array.isArray(d.columns) ? d.columns : []
     var rows = Array.isArray(d.rows) ? d.rows : []
     if (rows.length === 0) return <div className="cst-detail-msg">{d.empty || 'Kayıt yok.'}</div>
-    if (cols.length === 0) cols = Object.keys(rows[0]).map(function (k) { return { key: k, label: k } })
+    if (cols.length === 0) {
+      cols = Object.keys(rows[0])
+        .filter(function (k) { return k !== 'id' })
+        .map(function (k) { return { key: k, label: k } })
+    }
+    // rowActions — her detay satirinin sonunda buton kolonu. Sunucu sozlesmesi:
+    // { rowActions: [{ id, label, icon, variant, apiUrl, confirm? }] } ve her
+    // satirda `id`. POST govdesi { ids:[<satir id>] } (toplu aksiyonla ayni sekil).
+    var rowActions = Array.isArray(d.rowActions) ? d.rowActions.filter(Boolean) : []
     return (
       <table className="cst-detail-tbl">
         <thead>
-          <tr>{cols.map(function (c) {
-            return <th key={c.key} style={{ textAlign: c.align || 'left', width: c.width || undefined }}>{c.label}</th>
-          })}</tr>
+          <tr>
+            {cols.map(function (c) {
+              return <th key={c.key} style={{ textAlign: c.align || 'left', width: c.width || undefined }}>{c.label}</th>
+            })}
+            {rowActions.length > 0 && <th style={{ width: 1 }} />}
+          </tr>
         </thead>
         <tbody>
           {rows.map(function (r, i) {
             return (
-              <tr key={i}>
+              <tr key={r.id != null ? r.id : i}>
                 {cols.map(function (c) {
                   var v = r[c.key]
                   return <td key={c.key} style={{ textAlign: c.align || 'left' }}>{v == null ? '' : String(v)}</td>
                 })}
+                {rowActions.length > 0 && (
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {rowActions.map(function (a, ai) {
+                      return (
+                        <button
+                          key={a.id || ai}
+                          type="button"
+                          disabled={bulkBusy}
+                          className={'cst-bulk-btn cst-bulk-btn--' + (a.variant === 'danger' ? 'danger' : a.variant === 'primary' ? 'primary' : 'ghost')}
+                          style={{ padding: '4px 10px', fontSize: 11.5, marginLeft: 6 }}
+                          onClick={function (e) {
+                            e.stopPropagation()
+                            runBulkAction(Object.assign({}, a, { _forcedIds: [r.id] }))
+                          }}
+                        >
+                          {a.label}
+                        </button>
+                      )
+                    })}
+                  </td>
+                )}
               </tr>
             )
           })}
         </tbody>
       </table>
     )
-  }, [detailData])
+  }, [detailData, bulkBusy, runBulkAction])
 
   var visibleIds = isTableMode
     ? (tableColumnConfig && Array.isArray(tableColumnConfig.visibleIds) ? tableColumnConfig.visibleIds : null)

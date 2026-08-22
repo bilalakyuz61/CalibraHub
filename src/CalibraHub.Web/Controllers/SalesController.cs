@@ -2688,10 +2688,25 @@ public sealed class SalesController : Controller
     /// </summary>
     [HttpGet("/Sales/ShipmentPlanningCenter")]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShipmentPlanning)]
-    public IActionResult ShipmentPlanningCenter()
+    public async Task<IActionResult> ShipmentPlanningCenter(CancellationToken ct)
     {
         ViewData["Title"] = "Yükleme Planlama";
         ViewData["HelpKey"] = "shipment-planning";
+        // Board config server-side üretilir (Machines/MaterialCards deseni) —
+        // ilk çizim ek bir fetch beklemez. Liste sorgusu patlarsa sayfa yine
+        // açılsın diye boş board ile devam edilir (hata loglanır).
+        object board;
+        try
+        {
+            var lines = await _stockReservationRepo.GetOpenOrderLinesAsync(null, null, ct);
+            board = BuildShipmentPlanningBoard(lines);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ShipmentPlanning] Açılışta board config hazırlanamadı.");
+            board = BuildShipmentPlanningBoard(Array.Empty<CalibraHub.Application.Contracts.OpenOrderLineForReservationDto>());
+        }
+        ViewData["BoardConfig"] = board;
         return View();
     }
 
@@ -2771,7 +2786,9 @@ public sealed class SalesController : Controller
             var userId = GetUserId();
             var cancelled = await _stockReservationRepo.CancelReservationsAsync(
                 req.ReservationIds, userId > 0 ? userId : null, ct);
-            return Json(new { ok = true, cancelled });
+            // message — SmartBoard detay satırı aksiyonlarının genel POST akışı
+            // yanıttaki `message`'ı toast'lar (bkz. SmartBoard.executeBulkAction).
+            return Json(new { ok = true, cancelled, message = cancelled + " rezervasyon iptal edildi." });
         }
         catch (Exception ex)
         {
@@ -2833,12 +2850,21 @@ public sealed class SalesController : Controller
                 approvalStarted = approvalStarted || started;
             }
 
+            // message — SmartBoard'un genel toplu/satir aksiyon akisi yanittaki
+            // `message`'i toast'lar; atlanan rezervasyon varsa sayisi da bildirilir
+            // (sessiz atlama YOK — CLAUDE.md 3. kural).
+            var msg = result.Deliveries.Count > 0
+                ? string.Join(", ", result.Deliveries.Select(d => d.DocNo)) + " irsaliyesi oluşturuldu."
+                : "İrsaliye oluşturulmadı.";
+            if (result.Skipped.Count > 0) msg += " " + result.Skipped.Count + " rezervasyon atlandı.";
+
             return Json(new
             {
                 ok = result.Ok,
                 deliveries = result.Deliveries,
                 skipped = result.Skipped,
                 approvalStarted,
+                message = msg,
             });
         }
         catch (Exception ex)
@@ -2983,6 +3009,183 @@ public sealed class SalesController : Controller
         {
             _logger.LogError(ex, "[ShipmentPlanning] Rezervasyon deposu parametresi kaydedilirken hata.");
             return Json(new { ok = false, error = "Kaydetme sırasında bir hata oluştu." });
+        }
+    }
+
+    /// <summary>
+    /// Yükleme Planlama board config'i (CalibraSmartBoard, tablo modu).
+    /// Ekran artık standart liste iskeletini kullanır: başlık şeridi, arama,
+    /// filtre/dışa aktar/gruplama/sütun ayarları hep SmartBoard'dan gelir.
+    /// Ekrana ÖZEL olan tek şey rezervasyon akışıdır — o da:
+    ///   • toplu aksiyon <c>type:"event"</c> ile sayfadaki rezerve modalını açar,
+    ///   • satır detayı (expandable) o kalemin rezervasyonlarını listeler.
+    /// GET /Sales/ShipmentPlanningBoardConfig
+    /// </summary>
+    [HttpGet("/Sales/ShipmentPlanningBoardConfig")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShipmentPlanning)]
+    public async Task<IActionResult> ShipmentPlanningBoardConfig(
+        string? materialSearch, string? orderNumber, CancellationToken ct)
+    {
+        try
+        {
+            var lines = await _stockReservationRepo.GetOpenOrderLinesAsync(materialSearch, orderNumber, ct);
+            return Json(BuildShipmentPlanningBoard(lines));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ShipmentPlanning] Board config hazırlanırken hata.");
+            return Json(new { ok = false, error = "Kalemler listelenemedi." });
+        }
+    }
+
+    private static object BuildShipmentPlanningBoard(
+        IReadOnlyList<CalibraHub.Application.Contracts.OpenOrderLineForReservationDto> lines)
+    {
+        // Sütun şablonu (masterWidgets) — SmartColumnSettings bu listeden beslenir;
+        // kullanıcı görünürlük/sıra/genişlik/hizalama/başlık ayarını buradan yapar.
+        static Dictionary<string, object?> W(string id, string label, string dataType, string? group = null)
+            => new()
+            {
+                ["id"] = id,
+                ["type"] = "data",
+                ["dataType"] = dataType,
+                ["label"] = label,
+                ["group"] = group ?? "kalem",
+                ["groupLabel"] = "Sipariş Kalemi",
+            };
+
+        var masterWidgets = new List<object>
+        {
+            W("w_ordno", "Sipariş No", "text"),
+            W("w_date",  "Tarih",      "date"),
+            W("w_mat",   "Malzeme",    "text"),
+            W("w_ord",   "Sipariş",    "numeric"),
+            W("w_dlv",   "Teslim",     "numeric"),
+            W("w_rsv",   "Rezerve",    "numeric"),
+            W("w_opn",   "Açık",       "numeric"),
+            W("w_stk",   "Kull. Stok", "numeric"),
+            W("w_unit",  "Br.",        "text"),
+        };
+
+        static string N(decimal v) => v.ToString("N2", System.Globalization.CultureInfo.GetCultureInfo("tr-TR"));
+        static string S(decimal v) => Math.Round(v, 0).ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("tr-TR"));
+
+        var entities = new List<object>(lines.Count);
+        foreach (var l in lines)
+        {
+            var avail = l.IsKit ? l.AvailableStock : l.AvailableStock;
+            // Stok rengi: yeterli / kısmi / yok — kart ve tablo modunda aynı anlam.
+            var stockColor = avail <= 0m ? "rose" : (avail < l.OpenQty ? "amber" : "emerald");
+            var unitLabel = l.IsKit ? "set" : (l.UnitCode ?? "");
+
+            entities.Add(new Dictionary<string, object?>
+            {
+                ["id"] = l.LineId,
+                ["title"] = l.MaterialName ?? l.MaterialCode ?? ("#" + l.ItemId),
+                ["subtitle"] = l.MaterialCode ?? "",
+                // Satır tıklaması / İşlemler menüsü → siparişi aç.
+                ["primaryAction"] = new
+                {
+                    label = "Siparişi Aç",
+                    icon = "ExternalLink",
+                    url = "/Sales/DocumentEdit?id=" + l.OrderDocumentId,
+                    openInTab = new { title = "Satış Siparişi", matchPath = "/Sales/DocumentEdit" },
+                },
+                ["widgets"] = new List<object>
+                {
+                    new Dictionary<string, object?> { ["id"] = "w_ordno", ["type"] = "data", ["dataType"] = "text",    ["label"] = "Sipariş No", ["value"] = l.OrderNumber },
+                    new Dictionary<string, object?> { ["id"] = "w_date",  ["type"] = "data", ["dataType"] = "date",    ["label"] = "Tarih",      ["value"] = l.OrderDate.ToString("yyyy-MM-dd") },
+                    new Dictionary<string, object?> { ["id"] = "w_mat",   ["type"] = "data", ["dataType"] = "text",    ["label"] = "Malzeme",    ["value"] = l.MaterialName ?? l.MaterialCode ?? "", ["detail"] = l.MaterialCode },
+                    new Dictionary<string, object?> { ["id"] = "w_ord",   ["type"] = "data", ["dataType"] = "numeric", ["label"] = "Sipariş",    ["value"] = N(l.OrderQty) },
+                    new Dictionary<string, object?> { ["id"] = "w_dlv",   ["type"] = "data", ["dataType"] = "numeric", ["label"] = "Teslim",     ["value"] = N(l.DeliveredQty) },
+                    new Dictionary<string, object?> { ["id"] = "w_rsv",   ["type"] = "data", ["dataType"] = "numeric", ["label"] = "Rezerve",    ["value"] = l.IsKit ? S(l.ReservedQty) : N(l.ReservedQty) },
+                    new Dictionary<string, object?> { ["id"] = "w_opn",   ["type"] = "data", ["dataType"] = "numeric", ["label"] = "Açık",       ["value"] = l.IsKit ? S(l.OpenQty) : N(l.OpenQty), ["color"] = "indigo" },
+                    new Dictionary<string, object?> { ["id"] = "w_stk",   ["type"] = "data", ["dataType"] = "numeric", ["label"] = "Kull. Stok", ["value"] = l.IsKit ? S(avail) : N(avail), ["color"] = stockColor },
+                    new Dictionary<string, object?> { ["id"] = "w_unit",  ["type"] = "data", ["dataType"] = "text",    ["label"] = "Br.",        ["value"] = unitLabel },
+                },
+            });
+        }
+
+        return new
+        {
+            boardKey = "sales-shipment-planning",
+            title = "Yükleme Planlama",
+            subtitle = lines.Count.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("tr-TR")) + " kalem",
+            itemLabel = "kalem",
+            icon = "PackageCheck",
+            iconColor = "indigo",
+            viewMode = "table",
+            searchPlaceholder = "Malzeme kodu/adı veya sipariş no…",
+            emptyText = "Açık sipariş kalemi bulunamadı",
+            refreshUrl = "/Sales/ShipmentPlanningBoardConfig",
+            // Satır seçimi + açılır detay (SmartBoard opt-in yetenekleri).
+            selectable = true,
+            expandable = true,
+            detailUrl = "/Sales/ShipmentPlanningLineDetail?lineId={id}",
+            bulkActions = new object[]
+            {
+                // POST DEĞİL: miktar/depo/tarih/not girdisi gerektiği için sayfadaki
+                // rezerve modalını açar (bkz. SmartBoard type:"event").
+                new { id = "reserve", label = "Rezerve Et", icon = "Boxes", variant = "primary", type = "event", @event = "shipmentPlanning:reserve" },
+            },
+            masterWidgets,
+            entities,
+        };
+    }
+
+    /// <summary>
+    /// Bir sipariş kaleminin açılır detayı — o kaleme ait aktif rezervasyonlar.
+    /// SmartBoard expandable sözleşmesi: { ok, columns, rows, rowActions, empty }.
+    /// GET /Sales/ShipmentPlanningLineDetail?lineId=123
+    /// </summary>
+    [HttpGet("/Sales/ShipmentPlanningLineDetail")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShipmentPlanning)]
+    public async Task<IActionResult> ShipmentPlanningLineDetail(int lineId, CancellationToken ct)
+    {
+        try
+        {
+            var list = await _stockReservationRepo.GetReservationsAsync(null, lineId, ct);
+            var tr = System.Globalization.CultureInfo.GetCultureInfo("tr-TR");
+
+            var rows = list.Select(r => new Dictionary<string, object?>
+            {
+                ["id"] = r.Id,
+                ["qty"] = r.Quantity.ToString("N2", tr),
+                ["location"] = r.LocationName ?? "—",
+                ["plannedDate"] = r.PlannedShipDate.HasValue ? r.PlannedShipDate.Value.ToString("dd.MM.yyyy") : "—",
+                ["status"] = r.Status switch { 1 => "Aktif", 2 => "Yüklendi", 3 => "İptal", _ => "—" },
+                ["notes"] = r.Notes ?? "",
+            }).ToList();
+
+            return Json(new
+            {
+                ok = true,
+                empty = "Bu kalem için rezervasyon yok.",
+                columns = new object[]
+                {
+                    new { key = "qty",         label = "Miktar",      align = "right", width = 120 },
+                    new { key = "location",    label = "Depo" },
+                    new { key = "plannedDate", label = "Planlı Sevk", width = 110 },
+                    new { key = "status",      label = "Durum",       width = 100 },
+                    new { key = "notes",       label = "Not" },
+                },
+                rowActions = new object[]
+                {
+                    // idsField: bu iki uç gövdede {reservationIds:[...]} bekler (SmartBoard varsayılanı "ids").
+                    new { id = "ship",   label = "Yükle", variant = "primary", apiUrl = "/Sales/ShipReservations",
+                          idsField = "reservationIds",
+                          confirm = "Seçilen rezervasyon irsaliyeye dönüştürülecek. Bu işlem geri alınamaz." },
+                    new { id = "cancel", label = "İptal", variant = "danger",  apiUrl = "/Sales/CancelReservation",
+                          idsField = "reservationIds",
+                          confirm = "Seçilen rezervasyon iptal edilecek. Bu işlem geri alınamaz." },
+                },
+                rows,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ShipmentPlanning] Kalem rezervasyon detayı alınırken hata.");
+            return Json(new { ok = false, error = "Rezervasyon detayı yüklenemedi." });
         }
     }
 

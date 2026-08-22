@@ -10,8 +10,13 @@
  *  6) POST /Sales/CreateOrdersFromQuotes -> success ise toast + opsiyonel navigate
  */
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { ShoppingCart, X, Search, Calendar, Loader2, Check, AlertTriangle } from 'lucide-react'
+import { ShoppingCart, X, Search, Calendar, Loader2, Check, AlertTriangle, FileText, List, Coins } from 'lucide-react'
 import { getConvertibleQuotes, createOrdersFromQuotes, getCustomers } from '../../services/salesService'
+
+// Yükleme Planlama listesiyle aynı dil: başlık şeridi + satırlar TEK grid
+// şablonundan beslenir; sütun başlığında etiketin solunda küçük tip ikonu olur.
+// Değişirse iki yerde değil, burada değişir.
+var LIST_GRID = '15px 130px 92px 84px 1fr'
 
 function todayIso() {
   var d = new Date()
@@ -34,6 +39,18 @@ function formatDateTr(iso) {
     if (isNaN(d.getTime())) return iso
     return d.toLocaleDateString('tr-TR')
   } catch (e) { return iso }
+}
+
+// Sütun başlığı — etiketin solunda tip ikonu (standart liste ekranı dili).
+function ColHead(props) {
+  var Icon = props.icon
+  var just = props.align === 'right' ? 'flex-end' : 'flex-start'
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: '5px', justifyContent: just, minWidth: 0 }}>
+      <Icon size={12} style={{ flexShrink: 0, opacity: 0.65 }} />
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{props.label}</span>
+    </span>
+  )
 }
 
 export default function ConvertToOrdersModal(props) {
@@ -228,7 +245,7 @@ export default function ConvertToOrdersModal(props) {
         if (resp && resp.success) {
           setResultMsg({
             type: 'success',
-            text: resp.ordersCreated + ' siparis olusturuldu.',
+            text: resp.ordersCreated + ' sipariş oluşturuldu.',
           })
           setConfirmOpen(false)
           // Parent callback (toast + navigate)
@@ -239,7 +256,7 @@ export default function ConvertToOrdersModal(props) {
         } else {
           setResultMsg({
             type: 'error',
-            text: (resp && resp.error) || 'Olusturma basarisiz.',
+            text: (resp && resp.error) || 'Oluşturma başarısız.',
           })
           setConfirmOpen(false)
         }
@@ -323,7 +340,7 @@ export default function ConvertToOrdersModal(props) {
         }}>
           <div style={{
             width: '36px', height: '36px',
-            borderRadius: '10px',
+            borderRadius: '12px',
             background: 'linear-gradient(135deg, rgba(16,185,129,0.18), rgba(16,185,129,0.06))',
             border: '1px solid rgba(16,185,129,0.30)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -333,10 +350,10 @@ export default function ConvertToOrdersModal(props) {
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: '15px', fontWeight: 700, letterSpacing: '-0.01em' }}>
-              Tekliflerden Siparis Olustur
+              Tekliflerden Sipariş Oluştur
             </div>
             <div style={{ fontSize: '11.5px', color: palette.textSecondary, marginTop: '2px' }}>
-              Onayli tekliflerden cari bazli siparis(ler) uretir. Ayni cari = tek siparis.
+              Onaylı tekliflerden cari bazlı sipariş(ler) üretir. Aynı cari = tek sipariş.
             </div>
           </div>
           <button
@@ -362,11 +379,11 @@ export default function ConvertToOrdersModal(props) {
           gap: '10px',
           alignItems: 'end',
         }}>
-          <FilterField label="Baslangic Tarihi" palette={palette}>
+          <FilterField label="Başlangıç Tarihi" palette={palette}>
             <input type="date" value={fromDate} onChange={function (e) { setFromDate(e.target.value) }}
               style={inputStyle(palette)} />
           </FilterField>
-          <FilterField label="Bitis Tarihi" palette={palette}>
+          <FilterField label="Bitiş Tarihi" palette={palette}>
             <input type="date" value={toDate} onChange={function (e) { setToDate(e.target.value) }}
               style={inputStyle(palette)} />
           </FilterField>
@@ -396,7 +413,7 @@ export default function ConvertToOrdersModal(props) {
                 type="text"
                 value={search}
                 onChange={function (e) { setSearch(e.target.value) }}
-                placeholder="Belge no ara..."
+                placeholder="Belge no ara…"
                 style={Object.assign({}, inputStyle(palette), { paddingLeft: '32px' })}
               />
             </div>
@@ -411,7 +428,7 @@ export default function ConvertToOrdersModal(props) {
               padding: '60px 0', color: palette.textSecondary,
             }}>
               <Loader2 size={24} className="animate-spin" />
-              <span style={{ marginLeft: '10px', fontSize: '13px' }}>Yukleniyor...</span>
+              <span style={{ marginLeft: '10px', fontSize: '13px' }}>Yükleniyor…</span>
             </div>
           ) : error ? (
             <div style={{
@@ -430,30 +447,34 @@ export default function ConvertToOrdersModal(props) {
               color: palette.textSecondary, fontSize: '13px',
             }}>
               <ShoppingCart size={32} style={{ color: palette.textMuted, marginBottom: '12px' }} />
-              <div>Filtreye uyan, siparise donusturulebilir teklif yok.</div>
+              <div>Filtreye uyan, siparişe dönüştürülebilir teklif yok.</div>
               <div style={{ fontSize: '11.5px', marginTop: '6px', color: palette.textMuted }}>
-                Sadece onayli (Approved) ve daha once siparise donusturulmemis teklifler listelenir.
+                Yalnızca onaylı ve daha önce siparişe dönüştürülmemiş teklifler listelenir.
               </div>
             </div>
           ) : (
             <div>
-              {/* Tum sec / temizle */}
+              {/* Tümünü seç + sütun başlığı şeridi — başlık, satırlarla AYNI
+                  LIST_GRID şablonunu kullanır, böylece kolonlar hizalı kalır. */}
               <div style={{
-                display: 'flex', alignItems: 'center', gap: '8px',
-                padding: '6px 4px', marginBottom: '8px',
+                display: 'grid', gridTemplateColumns: LIST_GRID, gap: '12px',
+                alignItems: 'center', padding: '7px 14px', marginBottom: '8px',
+                borderRadius: '10px', background: palette.headerBg,
+                border: '1px solid ' + palette.cardBorder,
+                fontSize: '10.5px', fontWeight: 700, letterSpacing: '.04em',
+                color: palette.textSecondary,
               }}>
-                <label style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '7px',
-                  fontSize: '12px', cursor: 'pointer', color: palette.textSecondary,
-                }}>
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={toggleAll}
-                    style={{ width: '14px', height: '14px', cursor: 'pointer', accentColor: palette.accentGreen }}
-                  />
-                  <span>{allSelected ? 'Tum secimleri temizle' : 'Tumunu sec'} ({quotes.length} teklif)</span>
-                </label>
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  title={allSelected ? 'Tüm seçimleri temizle' : 'Tümünü seç'}
+                  style={{ width: '14px', height: '14px', cursor: 'pointer', accentColor: palette.accentGreen }}
+                />
+                <ColHead icon={FileText} label="Belge No" />
+                <ColHead icon={Calendar} label="Tarih" />
+                <ColHead icon={List} label="Kalem" />
+                <ColHead icon={Coins} label="Tutar" align="right" />
               </div>
 
               {groups.map(function (group) {
@@ -509,8 +530,9 @@ export default function ConvertToOrdersModal(props) {
                           <label
                             key={q.id}
                             style={{
-                              display: 'flex', alignItems: 'center', gap: '12px',
-                              padding: '9px 14px 9px 38px',
+                              display: 'grid', gridTemplateColumns: LIST_GRID, gap: '12px',
+                              alignItems: 'center',
+                              padding: '9px 14px',
                               borderBottom: '1px solid ' + palette.rowDivider,
                               cursor: 'pointer',
                               fontSize: '12.5px',
@@ -525,16 +547,16 @@ export default function ConvertToOrdersModal(props) {
                               onChange={function () { toggleQuote(q.id) }}
                               style={{ width: '14px', height: '14px', cursor: 'pointer', accentColor: palette.accentGreen }}
                             />
-                            <div style={{ flex: '0 0 130px', fontWeight: 600, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: '11.5px' }}>
+                            <div style={{ fontWeight: 600, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: '11.5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {q.documentNumber}
                             </div>
-                            <div style={{ flex: '0 0 90px', color: palette.textSecondary }}>
+                            <div style={{ color: palette.textSecondary, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: '11.5px' }}>
                               {formatDateTr(q.documentDate)}
                             </div>
-                            <div style={{ flex: '0 0 80px', color: palette.textSecondary, fontSize: '11.5px' }}>
+                            <div style={{ color: palette.textSecondary, fontSize: '11.5px' }}>
                               {q.lineCount} kalem
                             </div>
-                            <div style={{ flex: 1, textAlign: 'right', fontWeight: 600 }}>
+                            <div style={{ textAlign: 'right', fontWeight: 600, fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>
                               {q.currency || 'TRY'} {formatTr(q.grandTotal)}
                             </div>
                           </label>
@@ -558,14 +580,14 @@ export default function ConvertToOrdersModal(props) {
           <div style={{ flex: 1, minWidth: '240px', fontSize: '12.5px', color: palette.textSecondary }}>
             {summary.quoteCount > 0 ? (
               <span>
-                <strong style={{ color: palette.textPrimary }}>{summary.contactCount}</strong> cari icin{' '}
-                <strong style={{ color: palette.accentGreen }}>{summary.ordersToCreate}</strong> siparis olusturulacak{' '}
-                ({summary.quoteCount} teklif birlestiriliyor){summary.totalAmount > 0
+                <strong style={{ color: palette.textPrimary }}>{summary.contactCount}</strong> cari için{' '}
+                <strong style={{ color: palette.accentGreen }}>{summary.ordersToCreate}</strong> sipariş oluşturulacak{' '}
+                ({summary.quoteCount} teklif birleştiriliyor){summary.totalAmount > 0
                   ? ' — toplam ₺' + formatTr(summary.totalAmount)
                   : ''}
               </span>
             ) : (
-              <span style={{ color: palette.textMuted }}>Henuz secim yok</span>
+              <span style={{ color: palette.textMuted }}>Henüz seçim yok</span>
             )}
             {resultMsg && (
               <div style={{
@@ -578,7 +600,7 @@ export default function ConvertToOrdersModal(props) {
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <label style={{ fontSize: '12px', color: palette.textSecondary }}>Siparis Tarihi</label>
+            <label style={{ fontSize: '12px', color: palette.textSecondary }}>Sipariş Tarihi</label>
             <input
               type="date" value={orderDate}
               onChange={function (e) { setOrderDate(e.target.value) }}
@@ -593,7 +615,7 @@ export default function ConvertToOrdersModal(props) {
               border: '1px solid ' + palette.cardBorder, cursor: 'pointer',
             }}
           >
-            Vazgec
+            Vazgeç
           </button>
           <button
             type="button"
@@ -614,7 +636,7 @@ export default function ConvertToOrdersModal(props) {
           >
             {submitting && <Loader2 size={13} className="animate-spin" />}
             <ShoppingCart size={13} />
-            <span>Siparis Olustur</span>
+            <span>Sipariş Oluştur</span>
           </button>
         </div>
       </div>
@@ -680,7 +702,7 @@ function ContactPicker(props) {
         value={props.search}
         onChange={function (e) { props.setSearch(e.target.value); props.setIsOpen(true) }}
         onFocus={function () { props.setIsOpen(true) }}
-        placeholder="Cari ara veya bos birak..."
+        placeholder="Cari ara veya boş bırak…"
         style={inputStyle(props.palette)}
       />
       {props.selectedId && (
@@ -769,17 +791,17 @@ function ConfirmDialog(props) {
           <ShoppingCart size={22} style={{ color: palette.accentGreen }} />
         </div>
         <div style={{ fontSize: '16px', fontWeight: 700, marginBottom: '6px' }}>
-          Siparis(ler) olusturulsun mu?
+          Sipariş(ler) oluşturulsun mu?
         </div>
         <div style={{ fontSize: '12.5px', color: palette.textSecondary, lineHeight: '1.55', marginBottom: '14px' }}>
-          <strong style={{ color: palette.textPrimary }}>{props.summary.contactCount}</strong> cari icin{' '}
-          <strong style={{ color: palette.accentGreen }}>{props.summary.ordersToCreate}</strong> siparis uretilecek
-          ({props.summary.quoteCount} teklif birlestiriliyor).
+          <strong style={{ color: palette.textPrimary }}>{props.summary.contactCount}</strong> cari için{' '}
+          <strong style={{ color: palette.accentGreen }}>{props.summary.ordersToCreate}</strong> sipariş üretilecek
+          ({props.summary.quoteCount} teklif birleştiriliyor).
           <br />
-          Siparis tarihi: <strong style={{ color: palette.textPrimary }}>{formatDateTr(props.orderDate)}</strong>.
+          Sipariş tarihi: <strong style={{ color: palette.textPrimary }}>{formatDateTr(props.orderDate)}</strong>.
           <br /><br />
           Kaynak teklif(ler)in durumu <strong style={{ color: palette.textPrimary }}>Converted</strong>'a
-          gecirilir ve aynı teklif tekrar siparise donusturulemez.
+          geçirilir ve aynı teklif tekrar siparişe dönüştürülemez.
         </div>
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
           <button
@@ -791,7 +813,7 @@ function ConfirmDialog(props) {
               border: '1px solid ' + palette.cardBorder, cursor: 'pointer',
             }}
           >
-            Vazgec
+            Vazgeç
           </button>
           <button
             type="button"
@@ -806,7 +828,7 @@ function ConfirmDialog(props) {
             }}
           >
             {props.submitting && <Loader2 size={13} className="animate-spin" />}
-            <span>Evet, olustur</span>
+            <span>Evet, oluştur</span>
           </button>
         </div>
       </div>

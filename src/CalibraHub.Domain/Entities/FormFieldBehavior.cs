@@ -67,6 +67,10 @@ public sealed class FormFieldBehavior
     /// </summary>
     public int? CellWidthPx { get; set; }
 
+    /// <summary>Alanin yatay hizalamasi: "left" | "center" | "right". NULL =
+    /// alanin kendi varsayilani (kolon tipine gore) — fail-open (2026-08-22).</summary>
+    public string? Align { get; set; }
+
     /// <summary>
     /// Sekme icerigi baska sekmeye tasinsin: hedef sekme anahtari. YALNIZCA
     /// 'tab:&lt;key&gt;' satirlarinda anlamli; null/kendisi = yerinde kal.
