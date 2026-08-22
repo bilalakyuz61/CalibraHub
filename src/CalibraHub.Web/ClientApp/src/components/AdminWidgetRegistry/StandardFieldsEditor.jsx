@@ -679,6 +679,92 @@ export default function StandardFieldsEditor(props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formCode])
 
+  /* Alan satirinin govdesi — hem SIRALANABILIR seritlerde hem de bilesen
+     sekmesinin duz listesinde AYNI markup kullanilir (DRY). */
+  function renderFieldRow(f) {
+    /* ── TEK SATIR, SABIT IZGARA (2026-08-22, kullanici istegi) ──
+    Onceden: satir 1'de ad + switch'ler (flex-wrap), satir 2'de
+    "Detay" ile acilan baslik metni + Ayarla. Iki sorun vardi:
+    (1) katlanir satirda geriye yalnizca iki kontrol kalmisti,
+    (2) flex-wrap'te ad uzunlugu degistikce switch'ler saga sola
+    kayiyor, satirlar arasi DIKEY hiza tutmuyordu.
+    Simdi: SABIT sutunlu grid — her satirda Görünür/Zorunlu/
+    Genişlik/Ayarla tam olarak ayni x'te durur. `expanded`
+    (katlama) state'i tamamen kalkti. */
+    return (
+    <div className="w-full grid items-center gap-2"
+                         style={{ gridTemplateColumns: 'minmax(0,1.3fr) minmax(0,1fr) 74px 74px 150px 148px' }}>
+                      {/* 1) Alan adı + kilit + sekme rozeti */}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {f.locked && <span title="Çekirdek alan — gizlenemez"><Lock size={11} className="text-slate-400 dark:text-white/45 flex-shrink-0" /></span>}
+                        <span className="truncate text-[11.5px] font-semibold text-slate-600 dark:text-white/70" title={f.key}>{f.label}</span>
+                        {showTabBadge && tabLabels[f.tab] && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-100 text-slate-500 border border-slate-200 dark:bg-white/[0.05] dark:text-white/50 dark:border-white/10 flex-shrink-0">
+                            {tabLabels[f.tab]}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* 2) Başlık metni — bos birakilirsa katalog adi kullanilir */}
+                      <input
+                        type="text"
+                        value={f.labelText}
+                        maxLength={60}
+                        placeholder={f.label}
+                        title="Ekranda görünecek başlık — boş bırakılırsa alanın kendi adı kullanılır"
+                        onChange={function (e) { patchField(f.key, { labelText: e.target.value }) }}
+                        className={inputCls}
+                      />
+
+                      {/* 3) Görünür */}
+                      <div className="flex items-center gap-1.5 justify-self-start">
+                        <span className="text-[9.5px] font-semibold text-slate-500 dark:text-white/50">Görünür</span>
+                        <Switch
+                          on={f.isVisible}
+                          disabled={f.locked}
+                          color="bg-emerald-500/70"
+                          title={f.locked ? 'Çekirdek alan — gizlenemez' : 'Görünür'}
+                          onToggle={function () { patchField(f.key, { isVisible: !f.isVisible }) }}
+                        />
+                      </div>
+
+                      {/* 4) Zorunlu */}
+                      <div className="flex items-center gap-1.5 justify-self-start">
+                        <span className="text-[9.5px] font-semibold text-slate-500 dark:text-white/50">Zorunlu</span>
+                        <Switch
+                          on={f.isRequired}
+                          color="bg-red-500/70"
+                          title="Zorunlu — boş bırakılırsa kayıt engellenir"
+                          onToggle={function () { patchField(f.key, { isRequired: !f.isRequired }) }}
+                        />
+                      </div>
+
+                      {/* 5) Genişlik (piksel) */}
+                      <div className="justify-self-start">
+                        <PxWidthStepper
+                          value={f.cellWidthPx}
+                          fallback={freeDefaultWidth(f.key)}
+                          onChange={function (v) { patchField(f.key, { cellWidthPx: v }) }}
+                        />
+                      </div>
+
+                      {/* 6) Varsayilan Deger / Gorunurluk / Zorunluluk kosulu — modal */}
+                      <button
+                        type="button"
+                        onClick={function () { setBehaviorKey(f.key) }}
+                        title="Varsayılan değer, görünürlük ve zorunluluk koşulunu tanımla"
+                        className={'w-full flex items-center justify-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold border transition-colors ' + (
+                          (f.defaultValue || f.visibleIf || f.requiredIf)
+                            ? 'text-indigo-600 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 dark:text-indigo-300 dark:border-indigo-400/30 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20'
+                            : 'text-slate-500 border-slate-200 bg-[#fff] hover:bg-slate-50 dark:text-white/55 dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08]'
+                        )}
+                      >
+                        <Settings2 size={12} strokeWidth={2.2} className="flex-shrink-0" />
+                        <span className="truncate">{describeBehavior(f)}</span>
+                      </button>
+                    </div>
+    )
+  }
   function patchField(key, patch) {
     setFields(function (prev) {
       return prev.map(function (f) { return f.key === key ? Object.assign({}, f, patch) : f })
@@ -1031,6 +1117,15 @@ export default function StandardFieldsEditor(props) {
 
   var showTabBadge = tabs.length > 0
   var tabTree = buildTabTree(fields, tabs, maxStrip)
+  /* ÜST BILGI formunda 'lines' sekmesi bir BILESEN sekmesidir: icerigi kalem
+     gridi'dir, ic duzeni KALEM formunun kendi Alan Duzeni'nden yonetilir. Bu
+     yuzden burada serit/bolum makinesi (Kimlik / Serit N / yukseklik / birakma
+     hedefi) GOSTERILMEZ — kullanici istegi 2026-08-22.
+     Ayrim: kalem formunun KENDI editorunde de sekme anahtari 'lines'tir; oradaki
+     'lines' asil icerik oldugu icin serit duzeni GEREKLIDIR. Ust bilgi formunu
+     'general' sekmesinin varligindan anliyoruz. */
+  var isHeaderForm = tabTree.some(function (t) { return t.key === 'general' })
+  function isComponentTab(tabKey) { return isHeaderForm && tabKey === 'lines' }
   var customCount = tabs.filter(function (t) { return t.isCustom }).length
 
   /** Yeni ozel sekme — bir sonraki bos c<N> anahtarini secer. */
@@ -1275,7 +1370,47 @@ export default function StandardFieldsEditor(props) {
                     </div>
                   }
                 >
-              {tab.sections.map(function (group) {
+              {isComponentTab(tab.key) ? (
+                <div className="pb-2.5">
+                  <div className="mb-2 px-2.5 py-1.5 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 text-[10.5px] text-slate-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-white/50">
+                    Bu sekmenin içeriği kalem gridi. Kalem kartının şerit/hücre düzeni
+                    <span className="font-semibold"> Kalem Bilgileri</span> alan düzeninden yönetilir.
+                    Aşağıdakiler belge üst bilgisine ait, kalem alanına yerleşmiş alanlardır.
+                  </div>
+                  {(function () {
+                    var own = []
+                    tab.sections.forEach(function (g) {
+                      g.fields.forEach(function (f) {
+                        if (search) {
+                          var q = search.toLocaleLowerCase('tr')
+                          if (String(f.label || '').toLocaleLowerCase('tr').indexOf(q) < 0 &&
+                              String(f.key || '').toLocaleLowerCase('tr').indexOf(q) < 0) return
+                        }
+                        own.push(f)
+                      })
+                    })
+                    if (own.length === 0) {
+                      return (
+                        <div className="text-[10.5px] text-slate-400 dark:text-white/30 px-2.5 py-2">
+                          Bu sekmede ayarlanacak üst bilgi alanı yok.
+                        </div>
+                      )
+                    }
+                    return (
+                      <div className="flex flex-col gap-1.5">
+                        {own.map(function (f) {
+                          return (
+                            <div key={f.key}
+                                 className="rounded-lg border border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.03] px-2.5 py-2">
+                              {renderFieldRow(f)}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
+                </div>
+              ) : tab.sections.map(function (group) {
                 var visibleFields = search
                   ? group.fields.filter(function (f) {
                       var q = search.toLocaleLowerCase('tr')
@@ -1396,87 +1531,8 @@ export default function StandardFieldsEditor(props) {
                             locked={f.movable === false || !!HGROUP_FOLLOWER[f.key]}
                             lockedTitle={HGROUP_FOLLOWER[f.key]
                               ? 'Para Birimi ile birlikte hareket eder'
-                              : 'Bu alan bağımsız bir hücre değil — taşınamaz'}>
-                            {/* ── TEK SATIR, SABIT IZGARA (2026-08-22, kullanici istegi) ──
-                                Onceden: satir 1'de ad + switch'ler (flex-wrap), satir 2'de
-                                "Detay" ile acilan baslik metni + Ayarla. Iki sorun vardi:
-                                (1) katlanir satirda geriye yalnizca iki kontrol kalmisti,
-                                (2) flex-wrap'te ad uzunlugu degistikce switch'ler saga sola
-                                kayiyor, satirlar arasi DIKEY hiza tutmuyordu.
-                                Simdi: SABIT sutunlu grid — her satirda Görünür/Zorunlu/
-                                Genişlik/Ayarla tam olarak ayni x'te durur. `expanded`
-                                (katlama) state'i tamamen kalkti. */}
-                            <div className="w-full grid items-center gap-2"
-                                 style={{ gridTemplateColumns: 'minmax(0,1.3fr) minmax(0,1fr) 74px 74px 150px 148px' }}>
-                              {/* 1) Alan adı + kilit + sekme rozeti */}
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                {f.locked && <span title="Çekirdek alan — gizlenemez"><Lock size={11} className="text-slate-400 dark:text-white/45 flex-shrink-0" /></span>}
-                                <span className="truncate text-[11.5px] font-semibold text-slate-600 dark:text-white/70" title={f.key}>{f.label}</span>
-                                {showTabBadge && tabLabels[f.tab] && (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-100 text-slate-500 border border-slate-200 dark:bg-white/[0.05] dark:text-white/50 dark:border-white/10 flex-shrink-0">
-                                    {tabLabels[f.tab]}
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* 2) Başlık metni — bos birakilirsa katalog adi kullanilir */}
-                              <input
-                                type="text"
-                                value={f.labelText}
-                                maxLength={60}
-                                placeholder={f.label}
-                                title="Ekranda görünecek başlık — boş bırakılırsa alanın kendi adı kullanılır"
-                                onChange={function (e) { patchField(f.key, { labelText: e.target.value }) }}
-                                className={inputCls}
-                              />
-
-                              {/* 3) Görünür */}
-                              <div className="flex items-center gap-1.5 justify-self-start">
-                                <span className="text-[9.5px] font-semibold text-slate-500 dark:text-white/50">Görünür</span>
-                                <Switch
-                                  on={f.isVisible}
-                                  disabled={f.locked}
-                                  color="bg-emerald-500/70"
-                                  title={f.locked ? 'Çekirdek alan — gizlenemez' : 'Görünür'}
-                                  onToggle={function () { patchField(f.key, { isVisible: !f.isVisible }) }}
-                                />
-                              </div>
-
-                              {/* 4) Zorunlu */}
-                              <div className="flex items-center gap-1.5 justify-self-start">
-                                <span className="text-[9.5px] font-semibold text-slate-500 dark:text-white/50">Zorunlu</span>
-                                <Switch
-                                  on={f.isRequired}
-                                  color="bg-red-500/70"
-                                  title="Zorunlu — boş bırakılırsa kayıt engellenir"
-                                  onToggle={function () { patchField(f.key, { isRequired: !f.isRequired }) }}
-                                />
-                              </div>
-
-                              {/* 5) Genişlik (piksel) */}
-                              <div className="justify-self-start">
-                                <PxWidthStepper
-                                  value={f.cellWidthPx}
-                                  fallback={freeDefaultWidth(f.key)}
-                                  onChange={function (v) { patchField(f.key, { cellWidthPx: v }) }}
-                                />
-                              </div>
-
-                              {/* 6) Varsayilan Deger / Gorunurluk / Zorunluluk kosulu — modal */}
-                              <button
-                                type="button"
-                                onClick={function () { setBehaviorKey(f.key) }}
-                                title="Varsayılan değer, görünürlük ve zorunluluk koşulunu tanımla"
-                                className={'w-full flex items-center justify-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold border transition-colors ' + (
-                                  (f.defaultValue || f.visibleIf || f.requiredIf)
-                                    ? 'text-indigo-600 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 dark:text-indigo-300 dark:border-indigo-400/30 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20'
-                                    : 'text-slate-500 border-slate-200 bg-[#fff] hover:bg-slate-50 dark:text-white/55 dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08]'
-                                )}
-                              >
-                                <Settings2 size={12} strokeWidth={2.2} className="flex-shrink-0" />
-                                <span className="truncate">{describeBehavior(f)}</span>
-                              </button>
-                            </div>
+                              : 'Bu alan bagimsiz bir hucre degil — tasinamaz'}>
+                            {renderFieldRow(f)}
                           </SortableRow>
                           </Fragment>
                         )
