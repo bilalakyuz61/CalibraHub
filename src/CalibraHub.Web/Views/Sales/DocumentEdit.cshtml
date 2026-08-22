@@ -737,9 +737,14 @@
     .sqe-form-field--full { grid-column: 1 / -1; }
 
     /* ── Horizontal form (etiket yanında alan) ── */
+    /* 2026-08-22 (kullanici istegi: "genel + kalem birlesince ust kisim daha
+       compact olabilir mi"): Genel Bilgiler ve Kalem Bilgileri tek ekrana
+       indiginde ust bilgi kartinin dikey payi degerli. Olculdu: kart 230px'ti;
+       dolgu/bosluk kisilarak 190px'e indi (~%17), hicbir alan kucultulmeden —
+       yalnizca bos alan alindi (etiket/deger olculeri ve hizalama aynen kaldi). */
     .sqe-hform {
-        display: flex; flex-direction: column; gap: 10px;
-        padding: 16px 20px; max-width: 720px;
+        display: flex; flex-direction: column; gap: 6px;
+        padding: 10px 16px; max-width: 720px;
     }
     .sqe-hrow {
         display: flex; align-items: center; gap: 12px; min-height: 38px;
@@ -2164,7 +2169,7 @@
     .sqe-ident-row {
         display: flex; align-items: flex-start; justify-content: space-between;
         gap: 20px; flex-wrap: wrap;
-        padding-bottom: 12px; margin-bottom: 2px;
+        padding-bottom: 8px; margin-bottom: 0;
         border-bottom: 1px solid var(--sqe-strip-border, #e2e8f0);
     }
     body.app-theme-dark .sqe-ident-row { --sqe-strip-border: rgba(255,255,255,.1); }
@@ -2315,7 +2320,7 @@
        değişiyor, iç input/select/label id+class AYNEN kalıyor). */
     .sqe-hform .sqe-ident-row .sqe-hrow,
     .sqe-hform .sqe-strip .sqe-hrow {
-        flex-direction: column; align-items: flex-start; gap: 4px; min-height: auto;
+        flex-direction: column; align-items: flex-start; gap: 2px; min-height: auto;
     }
     .sqe-hform .sqe-strip .sqe-hrow {
         /* grid-column: span 3 → FAIL-OPEN varsayılan (backend'in defaultCardWidth
@@ -2327,7 +2332,7 @@
            (bkz. applyStripColumns). Eskiden 3'tu ve sabit 12 sutunla birlikte bos
            sutun birakiyordu. */
         grid-column: span 1;
-        padding: 8px 14px;
+        padding: 5px 12px;
         min-width: 0;
     }
     /* 2026-08-19: tarih hücreleri daralsın — "19.08.2026 📅" için 176px fazlaydı
