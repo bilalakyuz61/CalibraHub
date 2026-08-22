@@ -35,16 +35,25 @@ window.fetch = function (url, opts) {
   return realFetch.apply(window, arguments)
 }
 
-/* Testin okudugu ayna: her alanin (sekme, bolum, sira) durumu.
-   Surukleme SIRASINDA da guncellenir → canli onizlemenin calistigini gosterir. */
+/* Testin okudugu ayna — URETIM KODUNA DOKUNMADAN, DOM sirasindan turetilir.
+   Bolum rozetleri ("Kimlik" / "Serit N") ve alan adi span'lari (title=key)
+   belge sirasiyla gezilir. Surukleme SIRASINDA da okunabilir → canli
+   onizlemenin (komsularin yer acmasi) calisip calismadigini gosterir. */
 window.__dragProbe = function () {
+  var secRe = /^(Kimlik|Şerit \d+|Var[sş]ay[iı]lan)/
+  var cur = null
   var out = []
-  document.querySelectorAll('[data-probe-section]').forEach(function (sec) {
-    var names = []
-    sec.querySelectorAll('[data-probe-field]').forEach(function (r) { names.push(r.getAttribute('data-probe-field')) })
-    out.push(sec.getAttribute('data-probe-section') + ': [' + names.join(', ') + ']')
-  })
-  return out.join(' | ')
+  var all = document.querySelectorAll('span, div')
+  for (var i = 0; i < all.length; i++) {
+    var el = all[i]
+    var t = (el.childElementCount === 0 ? (el.textContent || '') : '').trim()
+    if (t && secRe.test(t) && t.length < 30) { cur = { name: t, fields: [] }; out.push(cur); continue }
+    var key = el.getAttribute && el.getAttribute('title')
+    if (key && el.tagName === 'SPAN' && el.classList.contains('truncate') && cur) {
+      if (cur.fields.indexOf(key) < 0) cur.fields.push(key)
+    }
+  }
+  return out.map(function (g) { return g.name + ': [' + g.fields.join(',') + ']' }).join('  |  ')
 }
 
 createRoot(document.getElementById('root')).render(

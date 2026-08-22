@@ -36,12 +36,12 @@
  * gizlenemez. Kural ifadeleri widget kural motoru sözdizimiyle aynıdır; scope'ta
  * bu formun alan key'leri bulunur (örn. currency == 'USD', vatIncluded == true).
  */
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { createPortal } from 'react-dom'
 import FieldBehaviorModal from './FieldBehaviorModal'
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors, useDroppable,
-  pointerWithin, rectIntersection, MeasuringStrategy,
+  pointerWithin, MeasuringStrategy,
 } from '@dnd-kit/core'
 import {
   SortableContext, useSortable, verticalListSortingStrategy,
@@ -493,6 +493,14 @@ var HGROUP_FOLLOWER = { exchangeRate: 1, rateDate: 1 }
    olarak gorur (birakma yine de dogru calisir; sikayetin "tasima sorunsuz" kismi bu).
    Cozum: aktif ogenin kopyasi DragOverlay ile imlecin altinda TASINIR; kaynak satir
    ise yerinde kesik-cizgili BOSLUK olarak kalir (nereden alindigi gorunur). */
+/** Surukleme sirasinda hedef seritte acilan bosluk — alan buraya dusecek. */
+function DropPlaceholder() {
+  return (
+    <div className="rounded-lg border border-dashed border-indigo-400 bg-indigo-50/60 dark:border-indigo-400/60 dark:bg-indigo-500/10"
+         style={{ height: 34 }} aria-hidden="true" />
+  )
+}
+
 function SortableRow(props) {
   var locked = props.locked === true
   var sortable = useSortable({ id: props.id, disabled: locked })
@@ -653,10 +661,9 @@ export default function StandardFieldsEditor(props) {
   var dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
   // Suruklenen alanin key'i — DragOverlay icerigi bundan cizilir (null = surukleme yok).
   var [dragKey, setDragKey] = useState(null)
-  /* handleDragOver kap degisimini ANINDA uyguladigi icin Esc/iptal durumunda
-     alan tasinmis kalirdi. Surukleme baslarken alinan anlik goruntu iptalde
-     geri yuklenir — "vazgectim" gercekten vazgecmek olsun. */
-  var dragSnapshot = useRef(null)
+  /* Surukleme sirasinda hedef seritte acilan BOSLUGUN yeri: {tab, section, index}.
+     Yalnizca gorsel — `fields` state'ine DOKUNMAZ (bkz. handleDragOver notu). */
+  var [dropHint, setDropHint] = useState(null)
 
   /* Carpisma stratejisi (2026-08-22): `closestCenter` cok-kapli listede kaba
      kaliyordu — imlec bir seridin USTUNDEYKEN bile merkezi daha yakin olan BASKA
@@ -665,17 +672,35 @@ export default function StandardFieldsEditor(props) {
      Sonuc: birakma noktasi imlecin altindaki hedefle birebir ortusur. */
   function preciseCollision(args) {
     var hits = pointerWithin(args)
-    if (hits.length === 0) hits = rectIntersection(args)
-    if (hits.length === 0) return hits
     /* Kap (SectionDropZone) satirlari SARDIGI icin imlec bir satirin uzerindeyken
        hem satir hem kap carpisir. dnd-kit listenin ILKINI secer; siralama merkeze
        uzakliga gore oldugundan buyuk kabin merkezi bazen satirdan yakin kalip
        "sona ekle" davranisi ureterek birakma noktasini kaydiriyordu.
-       Kural: SATIR carpismasi varsa DAIMA o kazanir; kap yalniz imlec satirlarin
-       arasindaki/altindaki bosluktayken (veya serit bosken) hedef olur. */
+       Kural: SATIR carpismasi varsa DAIMA o kazanir. */
     var rows = hits.filter(function (h) { return !dropTargetFromId(h.id) })
-    return rows.length > 0 ? rows : hits
+    if (rows.length > 0) return rows
+    if (hits.length > 0) return hits
+    /* Imlec hicbir hedefin ICINDE degil — serit basliklari, seritler arasi bosluk,
+       kap kenar paylari. Burada eskiden `rectIntersection`'a dusuyorduk; O imlece
+       DEGIL suruklenen ogenin dikdortgenine bakar ve uzaktaki bir bolume atliyordu
+       (olculdu: imlec Serit 2'nin hemen ustundeyken hedef "Varsayilan" secildi).
+       Dogrusu: imlece DIKEYDE en yakin kabi sec — yatay uzaklik zayif agirlikli,
+       cunku seritler alt alta dizili. */
+    var p = args.pointerCoordinates
+    if (!p) return []
+    var best = null
+    args.droppableContainers.forEach(function (c) {
+      if (!dropTargetFromId(c.id)) return
+      var r = args.droppableRects.get(c.id)
+      if (!r) return
+      var dy = p.y < r.top ? r.top - p.y : (p.y > r.top + r.height ? p.y - (r.top + r.height) : 0)
+      var dx = p.x < r.left ? r.left - p.x : (p.x > r.left + r.width ? p.x - (r.left + r.width) : 0)
+      var d = dy + dx * 0.25
+      if (!best || d < best.d) best = { d: d, id: c.id }
+    })
+    return best ? [{ id: best.id }] : []
   }
+
 
   /* Droppable id (2026-08-21 Faz 4): "tab:<key>|sec:<n>" — iki seviye tek
      anahtarda. Eski tek seviyeli "sec:<n>" bicimi de okunur (geri uyum). */
@@ -745,43 +770,52 @@ export default function StandardFieldsEditor(props) {
     return f ? { tab: effTab(f), section: f.cardSection } : null
   }
 
-  /* ── Serit/sekme DEGISIMI surukleme SIRASINDA uygulanir (2026-08-22) ────────
+  /* ── Serit degisiminde CANLI GERI BILDIRIM (2026-08-22) ────────────────────
      Kullanici bildirimi: "kendi seridi icinde diger alanlari kaydirabiliyor ama
      baska seritte ilk tasimada bunu yapamiyor."
-     Sebep: `SortableContext` yalnizca KENDI kabindaki ogeleri kaydirir. Alan hala
-     kaynak kabin listesinde oldugu icin hedef seridin satirlari yer acmiyordu;
-     birakma yine dogru calisiyordu cunku hedef `handleDragEnd`'de hesaplaniyor.
-     Cozum (dnd-kit cok-kapli reciplerinin standardi): imlec BASKA bir kaba
-     gecince alani o kaba HEMEN tasi — boylece hedef kabin SortableContext'i onu
-     kendi listesinde gorur ve komsular yer acar. Ayni kap icindeki siralama
-     burada YAPILMAZ (sortable zaten yapiyor), yalniz kap degisimi. */
+     Sebep: `SortableContext` yalnizca KENDI kabindaki ogeleri kaydirir; alan hala
+     kaynak kabin listesinde oldugu icin hedef seridin satirlari yer acmiyordu.
+
+     ILK DENEME (geri alindi): dnd-kit cok-kapli reciplerinin standardi olan
+     "imlec baska kaba gecince alani HEMEN oraya tasi" yolu denendi ve olculdu —
+     kaydirma calisti ama YENI bir hata dogurdu: alan kaynak seritten cikinca o
+     serit kisaliyor, ALTINDAKI her sey yukari kayiyor ve hedef serit imlecin
+     altindan kaciyordu (olcum: imlec Serit 2'deki satirda birakildi, alan
+     "Varsayilan"a dustu). Serit'ler yatay sutunlar degil DIKEY yigin oldugu icin
+     bu kacinilmaz.
+
+     KALICI COZUM: alan tasinmaz — hedef seritte yalnizca BOSLUK acilir. Kaynak
+     satir yerinde (soluk) kaldigindan ustteki hicbir sey kaymaz; hedef yalnizca
+     ASAGI dogru buyur, yani imlecin altindaki hedef sabit kalir. Gercek tasima
+     tek noktada, `handleDragEnd`'de olur → Esc/iptal de bedava dogru calisir. */
   function handleDragOver(event) {
     var active = event.active, over = event.over
-    if (!active || !over || active.id === over.id) return
-    var key = String(active.id)
-    var moving = fields.find(function (f) { return f.key === key })
-    if (!moving) return
+    if (!active || !over) { setDropHint(null); return }
+    var moving = fields.find(function (f) { return f.key === String(active.id) })
+    if (!moving) { setDropHint(null); return }
     var dst = containerOfOverId(String(over.id))
-    if (!dst) return
+    if (!dst) { setDropHint(null); return }
     var dstTab = dst.tab || effTab(moving)
-    // Ayni kap → dokunma; sortable kendi icinde zaten kaydiriyor.
-    if (dst.section === moving.cardSection && dstTab === effTab(moving)) return
-    // Hedef satirin uzerindeysek onun sirasina, kabin bosluguysa sona.
+    // Kendi seridi → sortable zaten kaydiriyor, bosluk acma.
+    if (dst.section === moving.cardSection && dstTab === effTab(moving)) { setDropHint(null); return }
     var overField = fields.find(function (f) { return f.key === String(over.id) })
     var idx = null
     if (overField) {
       var g = fields.filter(function (f) {
-        return f.cardSection === overField.cardSection && effTab(f) === dstTab && f.key !== key
+        return f.cardSection === dst.section && effTab(f) === dstTab && f.key !== moving.key
       }).slice().sort(compareByCardOrder)
       var at = g.findIndex(function (f) { return f.key === overField.key })
       if (at >= 0) idx = at
     }
-    moveFieldTo(key, dst.section, idx, dstTab)
+    setDropHint(function (prev) {
+      if (prev && prev.tab === dstTab && prev.section === dst.section && prev.index === idx) return prev
+      return { tab: dstTab, section: dst.section, index: idx }
+    })
   }
 
   function handleDragEnd(event) {
     setDragKey(null)
-    dragSnapshot.current = null
+    setDropHint(null)
     var active = event.active, over = event.over
     if (!active || !over || active.id === over.id) return
     var key = String(active.id)
@@ -1120,16 +1154,9 @@ export default function StandardFieldsEditor(props) {
                 sensors={dndSensors}
                 collisionDetection={preciseCollision}
                 measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
-                onDragStart={function (e) {
-                  dragSnapshot.current = fields
-                  setDragKey(String(e.active.id))
-                }}
+                onDragStart={function (e) { setDragKey(String(e.active.id)) }}
                 onDragOver={handleDragOver}
-                onDragCancel={function () {
-                  if (dragSnapshot.current) setFields(dragSnapshot.current)
-                  dragSnapshot.current = null
-                  setDragKey(null)
-                }}
+                onDragCancel={function () { setDragKey(null); setDropHint(null) }}
                 onDragEnd={handleDragEnd}>
               {tabTree.map(function (tab) {
               return (
@@ -1264,16 +1291,25 @@ export default function StandardFieldsEditor(props) {
                     <SectionDropZone tab={tab.key} section={group.section}>
                     <SortableContext items={visibleFields.map(function (f) { return f.key })}
                                      strategy={verticalListSortingStrategy}>
+                    {(function () {
+                      var hintOn = dropHint && dropHint.tab === tab.key && dropHint.section === group.section
+                      var hintIdx = hintOn
+                        ? (dropHint.index == null ? visibleFields.length : Math.min(dropHint.index, visibleFields.length))
+                        : -1
+                      return (
                     <div className="flex flex-col gap-1.5 min-h-[34px]">
-                      {visibleFields.length === 0 && (
+                      {hintIdx >= visibleFields.length && <DropPlaceholder />}
+                      {visibleFields.length === 0 && hintIdx < 0 && (
                         <div className="text-[10.5px] text-slate-400 dark:text-white/30 px-2.5 py-2 border border-dashed border-slate-200 dark:border-white/10 rounded-lg">
                           Boş — alan sürükleyip bırakabilirsiniz
                         </div>
                       )}
-                      {visibleFields.map(function (f) {
+                      {visibleFields.map(function (f, fIdx) {
                         var isOpen = expanded[f.key] === true
                         return (
-                          <SortableRow key={f.key} id={f.key}
+                          <Fragment key={f.key}>
+                          {fIdx === hintIdx && <DropPlaceholder />}
+                          <SortableRow id={f.key}
                             locked={f.movable === false || !!HGROUP_FOLLOWER[f.key]}
                             lockedTitle={HGROUP_FOLLOWER[f.key]
                               ? 'Para Birimi ile birlikte hareket eder'
@@ -1372,9 +1408,12 @@ export default function StandardFieldsEditor(props) {
                             </div>
                             )}
                           </SortableRow>
+                          </Fragment>
                         )
                       })}
                     </div>
+                      )
+                    })()}
                     </SortableContext>
                     </SectionDropZone>
                   </div>

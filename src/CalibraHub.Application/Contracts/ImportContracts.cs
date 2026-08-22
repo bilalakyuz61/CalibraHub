@@ -1,4 +1,4 @@
-namespace CalibraHub.Application.Contracts;
+﻿namespace CalibraHub.Application.Contracts;
 
 // ════════════════════════════════════════════════════════════════════════
 // Şablon-tabanlı içe aktarım (AI'sız) DTO'ları — Cari pilotu (2026-06-20)
@@ -10,7 +10,7 @@ namespace CalibraHub.Application.Contracts;
 /// false ise handler her satırda YENİ kayıt açar (eşleşme anahtarı yok sayılır) —
 /// tekrar çalıştırılan veritabanı aktarımında mükerrer üretir.
 /// </param>
-public sealed record ImportEntityDto(string Entity, string Label, bool SupportsUpsert = true);
+public sealed record ImportEntityDto(string Entity, string Label, bool SupportsUpsert = true, bool PreventsDuplicateOnRerun = true);
 
 // ── Hedef alan kataloğu (handler başına) ──────────────────────────────────
 public sealed record ImportTargetFieldDto(

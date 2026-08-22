@@ -1,4 +1,4 @@
-using CalibraHub.Application.Contracts;
+﻿using CalibraHub.Application.Contracts;
 
 namespace CalibraHub.Application.Abstractions.Services;
 
@@ -60,6 +60,16 @@ public interface IImportTargetHandler
     /// insert-only olanlar açıkça false döner.
     /// </summary>
     bool SupportsUpsert => true;
+
+    /// <summary>
+    /// Tekrar çalıştırmada MÜKERRER kayıt üretmez mi? <see cref="SupportsUpsert"/> ile aynı şey
+    /// DEĞİLDİR: bir handler mevcut kaydı güncellemiyor (upsert yok) ama anahtarla eşleşeni
+    /// atlıyor olabilir — belge aktarımı böyledir. Varsayılan upsert yeteneğini izler; yalnız
+    /// "güncellemem ama mükerrer de üretmem" diyen handler'lar ayrıca true döndürür.
+    /// Kullanıcıya gösterilen uyarı bu ikisini ayırt eder (aksi halde zamanlanabilir bir iş
+    /// için "zamanlanmış göreve bağlamayın" denir).
+    /// </summary>
+    bool PreventsDuplicateOnRerun => SupportsUpsert;
 
     /// <summary>
     /// Handler "kaynakta olmayan kayıtları pasife al" politikasını uygulayabiliyor mu?

@@ -457,6 +457,69 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportT
 // Bakiye aynası — hareketleri değil bakiyeyi alır, farkı sayım (Yansıt) mekanizması yazar.
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
                            CalibraHub.Application.Services.Import.StockBalanceImportHandler>();
+// PageComment Seq 1106, Faz 2 — ticari belge içe aktarımı (Satış Teklifi/Siparişi, Alış
+// Teklifi/Siparişi, İhtiyaç Kaydı). Tek sınıf (DocumentImportHandler), 5 profil ile 5 ayrı
+// hedef olarak kaydedilir (irsaliye türleri KAPSAM DIŞI — stok etkili, ayrı karar bekliyor).
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler>(sp =>
+    new CalibraHub.Application.Services.Import.DocumentImportHandler(
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Services.IDocumentService>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IDocumentRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IDocumentTypeRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IFinanceRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.ILogisticsConfigurationRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.ICurrencyRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Services.ISalesRepresentativeService>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IPersonnelRepository>(),
+        CalibraHub.Application.Services.Import.DocumentImportProfile.SalesQuote,
+        sp.GetService<Microsoft.Extensions.Logging.ILogger<CalibraHub.Application.Services.Import.DocumentImportHandler>>()));
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler>(sp =>
+    new CalibraHub.Application.Services.Import.DocumentImportHandler(
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Services.IDocumentService>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IDocumentRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IDocumentTypeRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IFinanceRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.ILogisticsConfigurationRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.ICurrencyRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Services.ISalesRepresentativeService>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IPersonnelRepository>(),
+        CalibraHub.Application.Services.Import.DocumentImportProfile.SalesOrder,
+        sp.GetService<Microsoft.Extensions.Logging.ILogger<CalibraHub.Application.Services.Import.DocumentImportHandler>>()));
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler>(sp =>
+    new CalibraHub.Application.Services.Import.DocumentImportHandler(
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Services.IDocumentService>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IDocumentRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IDocumentTypeRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IFinanceRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.ILogisticsConfigurationRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.ICurrencyRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Services.ISalesRepresentativeService>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IPersonnelRepository>(),
+        CalibraHub.Application.Services.Import.DocumentImportProfile.PurchaseQuote,
+        sp.GetService<Microsoft.Extensions.Logging.ILogger<CalibraHub.Application.Services.Import.DocumentImportHandler>>()));
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler>(sp =>
+    new CalibraHub.Application.Services.Import.DocumentImportHandler(
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Services.IDocumentService>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IDocumentRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IDocumentTypeRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IFinanceRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.ILogisticsConfigurationRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.ICurrencyRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Services.ISalesRepresentativeService>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IPersonnelRepository>(),
+        CalibraHub.Application.Services.Import.DocumentImportProfile.PurchaseOrder,
+        sp.GetService<Microsoft.Extensions.Logging.ILogger<CalibraHub.Application.Services.Import.DocumentImportHandler>>()));
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler>(sp =>
+    new CalibraHub.Application.Services.Import.DocumentImportHandler(
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Services.IDocumentService>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IDocumentRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IDocumentTypeRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IFinanceRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.ILogisticsConfigurationRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.ICurrencyRepository>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Services.ISalesRepresentativeService>(),
+        sp.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IPersonnelRepository>(),
+        CalibraHub.Application.Services.Import.DocumentImportProfile.PurchaseRequest,
+        sp.GetService<Microsoft.Extensions.Logging.ILogger<CalibraHub.Application.Services.Import.DocumentImportHandler>>()));
 
 // 2026-08-15 Veritabanı üzerinden içe aktarım — harici SQL kaynağı. Yazma katmanı
 // yukarıdaki IImportTargetHandler ailesidir (Excel ile ortak); burada yalnız kaynak

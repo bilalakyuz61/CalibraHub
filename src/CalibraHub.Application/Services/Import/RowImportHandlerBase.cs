@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Services;
+﻿using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 
 namespace CalibraHub.Application.Services.Import;
@@ -23,6 +23,9 @@ public abstract class RowImportHandlerBase : IImportTargetHandler
     /// varsayılanı (true) kullanılmaya devam eder. Insert-only handler'lar override eder.
     /// </summary>
     public virtual bool SupportsUpsert => true;
+
+    /// <summary>Arayüz slotu bu sınıfta bağlanır (bkz. SupportsUpsert notu) — burada tanımlı olmalı.</summary>
+    public virtual bool PreventsDuplicateOnRerun => SupportsUpsert;
 
     /// <summary>Arayüz slotu bu sınıfta bağlanır (bkz. SupportsUpsert notu) — burada tanımlı olmalı.</summary>
     public virtual bool SupportsDeactivate => false;

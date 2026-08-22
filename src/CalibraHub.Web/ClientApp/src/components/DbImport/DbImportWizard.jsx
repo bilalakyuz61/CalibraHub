@@ -2,7 +2,7 @@
 import {
   Database, ArrowLeft, ArrowRight, Save, Play, Loader2, Search,
   CheckCircle2, XCircle, AlertTriangle, KeyRound, Wand2, Trash2, Filter, Plus, ListChecks, X, CalendarClock,
-  Lock,
+  Lock, Info,
 } from 'lucide-react'
 import { apiGet, apiPost } from './dbiApi'
 import './DbImport.css'
@@ -397,10 +397,22 @@ export default function DbImportWizard() {
                   {entities.map((e) => <option key={e.entity} value={e.entity}>{e.label}</option>)}
                 </select>
               </div>
-              {job.targetEntity && entities.find((e) => e.entity === job.targetEntity)?.supportsUpsert === false && (
+              {/* İki AYRI durum: (1) güncellemez VE mükerrer üretir → zamanlanmamalı,
+                  (2) güncellemez ama anahtarla eşleşeni atlar (belge aktarımı) → zamanlanabilir.
+                  Tek bayrakla ikisine de aynı uyarıyı göstermek, zamanlanabilir bir işi
+                  "bağlamayın" diye etiketliyordu. */}
+              {job.targetEntity && entities.find((e) => e.entity === job.targetEntity)?.supportsUpsert === false
+                && entities.find((e) => e.entity === job.targetEntity)?.preventsDuplicateOnRerun !== true && (
                 <div className="dbi-alert dbi-alert--warn" style={{ marginTop: 4, marginBottom: 10 }}>
                   <AlertTriangle size={13} /> Bu kayıt türü güncelleme desteklemiyor — her çalıştırma yeni
                   kayıt açar, anahtar alan mükerrer oluşmasını engellemez. Zamanlanmış göreve bağlamayın.
+                </div>
+              )}
+              {job.targetEntity && entities.find((e) => e.entity === job.targetEntity)?.supportsUpsert === false
+                && entities.find((e) => e.entity === job.targetEntity)?.preventsDuplicateOnRerun === true && (
+                <div className="dbi-alert" style={{ marginTop: 4, marginBottom: 10 }}>
+                  <Info size={13} /> Bu kayıt türü mevcut kayıtları güncellemez. Anahtarla eşleşen kayıt
+                  yeniden aktarılmaz, atlanır — zamanlanmış göreve bağlanabilir.
                 </div>
               )}
               <div className="dbi-field">

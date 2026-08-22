@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
@@ -34,7 +34,7 @@ public sealed class ImportService : IImportService
 
     // ── Entity + alan kataloğu ───────────────────────────────────────────
     public IReadOnlyList<ImportEntityDto> GetEntities()
-        => _handlerList.Select(h => new ImportEntityDto(h.Entity, h.Label, h.SupportsUpsert)).ToList();
+        => _handlerList.Select(h => new ImportEntityDto(h.Entity, h.Label, h.SupportsUpsert, h.PreventsDuplicateOnRerun)).ToList();
 
     public IReadOnlyList<ImportTargetFieldDto> GetTargetFields(string targetEntity)
         => ResolveHandler(targetEntity)?.GetFields() ?? Array.Empty<ImportTargetFieldDto>();
