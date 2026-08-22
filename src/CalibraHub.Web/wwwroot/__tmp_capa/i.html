@@ -3,7 +3,7 @@
 <link rel="stylesheet" href="/css/site.css">
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/lib/flatpickr/flatpickr.min.css">
-<link rel="stylesheet" href="/css/calibra-datepicker.css">
+<link rel="stylesheet" href="/css/calibra-datepicker.css?v=1787365434">
 <style>
   /* Aksiyon satırı grid — plc/imc (InspectionPlanEdit/InspectionEdit) ile aynı desen. */
   .cae-row{display:grid;grid-template-columns:2fr 1fr 1.2fr 1fr 1fr 1fr auto;gap:8px;align-items:end;border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--app-surface,#fff);}
@@ -53,7 +53,7 @@
   body.app-theme-dark .cae-info{color:#60a5fa;}
 </style>
 <style>body{margin:0;padding:24px;} .wrap{max-width:1380px}</style>
-</head><body class="app-theme-light">
+</head><body class="app-theme-light" id="pg">
 <div class="wrap"><div class="ux-edit-pane is-active" data-tab="actions">
 <div class="cae-row">
   <div class="cae-f"><label>Aksiyon *</label><input type="text" class="cae-desc" placeholder="Yapılacak aksiyon..." /></div>
@@ -70,6 +70,7 @@
 <script src="/lib/flatpickr/l10n/tr.js"></script>
 <script src="/js/calibra-datepicker.js"></script>
 <script>
+if(location.search.indexOf('dark')>=0){document.body.className='app-theme-dark';}
 setTimeout(function(){
   function info(sel){
     var e=document.querySelector(sel); if(!e) return sel+': YOK';

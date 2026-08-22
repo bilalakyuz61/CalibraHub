@@ -74,6 +74,41 @@ input[type="text"].calibra-date-input {
     max-width: 100%;
     padding-right: 34px;
 }
+/* ── Alt-cizgi standardini kullanan ekranlar (.ux-edit-pane) ───────────
+   TESPIT (2026-08-22, DOF ekraninda bildirildi, olculdu):
+   site.css'teki `.ux-edit-pane input[type="text"]` bloku (0,2,1) `background:
+   transparent` KISAYOLUNU kullaniyor. Kisayol `background-image`'i de sifirlar →
+   yukaridaki `input.calibra-date-input` (0,1,1) kuralinin takvim ikonu SILINIR;
+   kullanici tarih secicinin varligini hic gormez. Ayni blok padding'i
+   `9px 12px` yapiyor; sabit 110px genislikte 12+34=46px dolgu kalinca
+   "gg.aa.yyyy" sigmiyordu (olculdu: scrollWidth 114 > clientWidth 110 → metin
+   kirpiliyor). Bu blok her ikisini de duzeltir; specificity (0,3,1) oldugu icin
+   site.css'i eziyor. Kapsam bilincli olarak .ux-edit-pane ile SINIRLI — diger
+   ekranlarin 110px standardina dokunulmaz. */
+.ux-edit-pane input[type="text"].calibra-date-input {
+    background-image: var(--cdp-input-icon);
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 15px 15px;
+    width: 136px;
+}
+/* Henuz enhance edilmemis (flatpickr yuklenmeden once) native alanlar da
+   ayni genislige uysun ki mount aninda satir zipllamasin. */
+.ux-edit-pane input[type="date"]:not(.flatpickr-input) {
+    width: 136px;
+}
+/* KOYU TEMA ayrica gerekli: site.css'te `body.app-theme-dark .ux-edit-pane
+   input[type="text"]` (0,3,2) yine `background: transparent` kisayolunu
+   kullaniyor ve yukaridaki (0,3,1) kuralini eziyor → ikon koyu temada tekrar
+   kayboluyor. Ayni tuzak select chevron'unda 2026-07-30'da yasanmis ve orada da
+   ozelligi tekrar bildirerek cozulmus (bkz. site.css'teki not). */
+body.app-theme-dark .ux-edit-pane input[type="text"].calibra-date-input {
+    background-image: var(--cdp-input-icon);
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 15px 15px;
+}
+
 input.calibra-date-input:disabled,
 input.calibra-date-input[readonly] {
     cursor: default;
