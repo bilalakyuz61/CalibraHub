@@ -188,14 +188,28 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
                   AND sr.[KitOrderLineId] IS NULL
             ) rsvLine
             OUTER APPLY (
-                SELECT SUM(CASE WHEN sm.[MovementType] IN (2,3,4) AND sm.[LocationId]     = ISNULL(dl.[LocationId], d.[LocationId]) THEN sm.[BaseQuantity]
-                                 WHEN sm.[MovementType] IN (1,3,4) AND sm.[FromLocationId] = ISNULL(dl.[LocationId], d.[LocationId]) THEN -sm.[BaseQuantity]
-                                 ELSE 0 END) AS PhysicalBase
-                FROM {T("DocumentLine")} sm
-                INNER JOIN {T("Document")} smd ON smd.[Id] = sm.[DocumentId]
-                WHERE sm.[ItemId] = dl.[ItemId] AND smd.[IsActive] = 1
-                  AND sm.[MovementType] IN (1,2,3,4)
-                  AND (sm.[LocationId] = ISNULL(dl.[LocationId], d.[LocationId]) OR sm.[FromLocationId] = ISNULL(dl.[LocationId], d.[LocationId]))
+                -- Giris ve cikis AYRI iki skaler alt sorgu. Tek SUM(CASE ...) icinde dis referans
+                -- (dl./d.) ile ic kolon (sm.) birlikte gecemez — SQL Server bunu reddeder
+                -- ("Multiple columns are specified in an aggregated expression containing an
+                -- outer reference"), sorgu hic calismaz. Burada dis referans YALNIZ WHERE'de,
+                -- toplanan ifade ise tek ic kolon (sm.[BaseQuantity]).
+                SELECT
+                    ISNULL((
+                        SELECT SUM(smIn.[BaseQuantity])
+                        FROM {T("DocumentLine")} smIn
+                        INNER JOIN {T("Document")} smdIn ON smdIn.[Id] = smIn.[DocumentId]
+                        WHERE smIn.[ItemId] = dl.[ItemId] AND smdIn.[IsActive] = 1
+                          AND smIn.[MovementType] IN (2,3,4)
+                          AND smIn.[LocationId] = ISNULL(dl.[LocationId], d.[LocationId])
+                    ), 0)
+                  - ISNULL((
+                        SELECT SUM(smOut.[BaseQuantity])
+                        FROM {T("DocumentLine")} smOut
+                        INNER JOIN {T("Document")} smdOut ON smdOut.[Id] = smOut.[DocumentId]
+                        WHERE smOut.[ItemId] = dl.[ItemId] AND smdOut.[IsActive] = 1
+                          AND smOut.[MovementType] IN (1,3,4)
+                          AND smOut.[FromLocationId] = ISNULL(dl.[LocationId], d.[LocationId])
+                    ), 0) AS PhysicalBase
             ) bal
             OUTER APPLY (
                 SELECT SUM(sr2.[BaseQuantity]) AS Reserved

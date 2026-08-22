@@ -415,6 +415,10 @@ var tabLabels = { general: 'Genel Bilgiler', lines: 'Kalem Bilgileri', condition
  */
 /** Alanin EFEKTIF sekmesi: kullanici tasidiysa o, yoksa katalogdaki. */
 function effTab(f) { return f.targetTab || f.tab || 'general' }
+// Sekme rozeti alanın ANA sekmesini (f.tab) gösterir; liste ise alanın BULUNDUĞU sekmeye
+// (effTab) göre gruplanır. Alan kendi sekmesindeyse rozet saf tekrardır (bölüm başlığı zaten
+// söylüyor) → yalnız alan başka bir sekmeye TAŞINMIŞSA rozet bilgi verir. (2026-08-05 kullanıcı)
+function fieldOffHomeTab(f) { return !!(f && f.tab) && f.tab !== effTab(f) }
 
 /**
  * Sekme → bolum agaci (2026-08-21 Faz 4). Once sekmeye, sonra bolume gruplar.
@@ -705,8 +709,8 @@ export default function StandardFieldsEditor(props) {
                       <div className="flex items-center gap-1.5 min-w-0">
                         {f.locked && <span title="Çekirdek alan — gizlenemez"><Lock size={11} className="text-slate-400 dark:text-white/45 flex-shrink-0" /></span>}
                         <span className="truncate text-[11.5px] font-semibold text-slate-600 dark:text-white/70" title={f.key}>{f.label}</span>
-                        {showTabBadge && tabLabels[f.tab] && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-100 text-slate-500 border border-slate-200 dark:bg-white/[0.05] dark:text-white/50 dark:border-white/10 flex-shrink-0">
+                        {fieldOffHomeTab(f) && tabLabels[f.tab] && (
+                          <span title={'Ana sekmesi: ' + tabLabels[f.tab]} className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-50 text-amber-600 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-400/25 flex-shrink-0">
                             {tabLabels[f.tab]}
                           </span>
                         )}
@@ -1122,7 +1126,6 @@ export default function StandardFieldsEditor(props) {
     }
   }
 
-  var showTabBadge = tabs.length > 0
   var tabTree = buildTabTree(fields, tabs, maxStrip)
   /* ÜST BILGI formunda 'lines' sekmesi bir BILESEN sekmesidir: icerigi kalem
      gridi'dir, ic duzeni KALEM formunun kendi Alan Duzeni'nden yonetilir. Bu
@@ -1452,7 +1455,7 @@ export default function StandardFieldsEditor(props) {
                 if (search && visibleFields.length === 0) return null
                 return (
                   <div key={group.key} className="mb-4">
-                    <div className="flex items-center gap-1.5 mb-1.5">
+                    <div className="flex items-center gap-1.5 mb-1.5 sticky top-0 z-10 py-1 bg-[#fff] dark:bg-slate-900">
                       <span className={'px-1.5 py-0.5 rounded text-[9.5px] font-bold border ' + (
                         group.kind === 'identity'
                           ? 'bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-400/30'
@@ -1592,8 +1595,8 @@ export default function StandardFieldsEditor(props) {
                       <span className="text-[11.5px] font-semibold text-slate-700 dark:text-white/85 truncate">
                         {df.labelText || df.label || df.key}
                       </span>
-                      {showTabBadge && tabLabels[df.tab] && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-100 text-slate-500 border border-slate-200 dark:bg-white/[0.05] dark:text-white/50 dark:border-white/10 flex-shrink-0">
+                      {fieldOffHomeTab(df) && tabLabels[df.tab] && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-50 text-amber-600 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-400/25 flex-shrink-0">
                           {tabLabels[df.tab]}
                         </span>
                       )}
