@@ -509,23 +509,26 @@
 
     @* ── Liste ── *@
     <div class="sp-body">
-        <div class="sp-left">
+        <div class="sp-left" id="spLeft">
             <div class="sp-list-bar">
                 <span id="spSelCnt" class="sp-count-sel"></span>
                 <span id="spAllCnt" class="sp-count-all"></span>
+                <button type="button" class="sp-col-btn" id="spColBtn" onclick="spToggleColPanel(event)" title="Sütun Ayarları">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><circle cx="18" cy="12" r="2"/><line x1="4" y1="18" x2="11" y2="18"/><circle cx="15" cy="18" r="2"/></svg>
+                </button>
+                <button type="button" class="sp-col-btn" id="spExcelBtn" onclick="spExportExcel()" title="Excel'e Aktar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </button>
+                <div class="sp-col-panel" id="spColPanel">
+                    <div class="sp-cfg-hdr">
+                        <span>Sütun Ayarları</span>
+                        <button type="button" class="sp-cfg-reset" onclick="spResetColCfg()">Varsayılana dön</button>
+                    </div>
+                    <div class="sp-cfg-rows" id="spColRows"></div>
+                </div>
             </div>
-            <div class="sp-flat-hdr">
-                <span></span>
-                <span>Sipariş No</span>
-                <span>Malzeme</span>
-                <span class="sp-fhdr__qty">Sipariş</span>
-                <span class="sp-fhdr__qty">Teslim</span>
-                <span class="sp-fhdr__qty">Rezerve</span>
-                <span class="sp-fhdr__qty">Açık</span>
-                <span class="sp-fhdr__qty">Kull. Stok</span>
-                <span>Br.</span>
-                <span></span>
-            </div>
+            @* Başlık JS tarafından üretilir (sütun ayarlarına göre) — bkz. spRenderColHdr. *@
+            <div class="sp-flat-hdr" id="spFlatHdr"></div>
             <div class="sp-list" id="spList">
                 <div class="sp-empty-list">Yükleniyor…</div>
             </div>
