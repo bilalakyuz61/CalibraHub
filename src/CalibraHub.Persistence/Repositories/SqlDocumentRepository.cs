@@ -419,7 +419,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    ISNULL(l.[FulfilledFromStock], 0) AS [FulfilledFromStock],
                    ISNULL(l.[FulfilledByPurchase], 0) AS [FulfilledByPurchase],
                    CAST(ISNULL(l.[FulfillmentStatus], 0) AS INT) AS [FulfillmentStatus],
-                   i.[Code] AS [material_code], i.[Name] AS [material_name],
+                   i.[Code] AS [material_code], i.[Name] AS [material_name], i.[TypeId] AS [item_type_id],
                    u.[Code] AS [unit_code], u.[Name] AS [unit_name],
                    pc.[RecordCode] AS [combination_code],
                    loc.[LocationCode] AS [location_code], loc.[LocationName] AS [location_name]
@@ -1050,6 +1050,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         var unitNameOrd = TryGetOrdinal(r, "unit_name");
         var matCodeOrd = TryGetOrdinal(r, "material_code");
         var matNameOrd = TryGetOrdinal(r, "material_name");
+        var itemTypeIdOrd = TryGetOrdinal(r, "item_type_id");
         var combIdOrd  = TryGetOrdinal(r, "CombinationId");
         var combCodeOrd = TryGetOrdinal(r, "combination_code");
         var locIdOrd   = TryGetOrdinal(r, "LocationId");
@@ -1081,6 +1082,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             DeliveryDays = SafeOrdinalInt(r, "DeliveryDays"),
             MaterialCode = matCodeOrd >= 0 && !r.IsDBNull(matCodeOrd) ? r.GetString(matCodeOrd) : null,
             MaterialName = matNameOrd >= 0 && !r.IsDBNull(matNameOrd) ? r.GetString(matNameOrd) : null,
+            ItemTypeId = itemTypeIdOrd >= 0 && !r.IsDBNull(itemTypeIdOrd) ? r.GetInt32(itemTypeIdOrd) : null,
             UnitCode = unitCodeOrd >= 0 && !r.IsDBNull(unitCodeOrd) ? r.GetString(unitCodeOrd) : null,
             UnitName = unitNameOrd >= 0 && !r.IsDBNull(unitNameOrd) ? r.GetString(unitNameOrd) : null,
             CombinationCode = combCodeOrd >= 0 && !r.IsDBNull(combCodeOrd) ? r.GetString(combCodeOrd) : null,

@@ -22,7 +22,7 @@ import {
   Plus, Trash2, Pencil, Calculator, StickyNote, Lock, Pin, PinOff,
   Settings, X as XIcon, GitBranch, History, AlertTriangle,
   MoreHorizontal, ExternalLink, Layers,
-  LayoutGrid, Table2,
+  LayoutGrid, Table2, ChevronDown, ChevronRight,
 } from 'lucide-react'
 import { Parser as ExprParser } from 'expr-eval'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
@@ -383,6 +383,95 @@ export default function CalibraLineItemsGrid(props) {
   //   Yeni revize "Revize Olustur" ile eklenir; orjinal satir degismez, yeni
   //   satir revised_from_id = secili satirin id'si ile eklenir.
   var [reviseModal, setReviseModal] = useState(null) // { row, tab: 'revise'|'history', draft:{...} }
+
+  // ── Kit satırı bileşen açılır dökümü (2026-08-22) — NORMAL teklif/sipariş kit
+  //   satırı (row.isKit=true, kitParentLineId=null) için salt-okunur bileşen listesi.
+  //   Faz 4a irsaliye patlatma satırlarından (kitParentLineId dolu, yukarıdaki
+  //   isKitLockedRow/isKitHeader mantığı) TAMAMEN BAĞIMSIZ — o akışa dokunulmadı.
+  //   Backend hazır: GET /Sales/KitLineComponents?lineId=. lineId bazlı cache —
+  //   aynı satır tekrar açılınca yeniden fetch etmez.
+  var [kitExpandedRows, setKitExpandedRows] = useState(function () { return {} })      // { [lineId]: true }
+  var [kitComponentsCache, setKitComponentsCache] = useState(function () { return {} }) // { [lineId]: { loading, found, kitVersionNo, components } }
+  function toggleKitExpand(lineId) {
+    var id = Number(lineId)
+    if (!id || id <= 0) return
+    setKitExpandedRows(function (prev) {
+      var next = Object.assign({}, prev)
+      if (next[id]) delete next[id]
+      else next[id] = true
+      return next
+    })
+    setKitComponentsCache(function (prev) {
+      if (prev[id]) return prev  // zaten yuklendi/yukleniyor — tekrar fetch etme
+      var next = Object.assign({}, prev)
+      next[id] = { loading: true, found: false, components: [] }
+      fetch('/Sales/KitLineComponents?lineId=' + id, { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : { found: false, components: [] } })
+        .then(function (data) {
+          setKitComponentsCache(function (p2) {
+            var n2 = Object.assign({}, p2)
+            n2[id] = {
+              loading: false,
+              found: !!(data && data.found),
+              kitVersionNo: data && data.kitVersionNo,
+              components: (data && data.components) || [],
+            }
+            return n2
+          })
+        })
+        .catch(function () {
+          setKitComponentsCache(function (p2) {
+            var n2 = Object.assign({}, p2)
+            n2[id] = { loading: false, found: false, components: [], error: true }
+            return n2
+          })
+        })
+      return next
+    })
+  }
+  // Satırın hemen altına salt-okunur bileşen döküm paneli — kart+tablo görünümünde
+  // ortak (DRY). row.isKit !== true veya satır henüz kaydedilmemişse (Id<=0) null.
+  function renderKitComponentsPanel(row) {
+    if (row.isKit !== true) return null
+    var lineId = row.id != null && row.id !== '' && Number(row.id) > 0 ? Number(row.id) : null
+    if (!lineId || !kitExpandedRows[lineId]) return null
+    var cache = kitComponentsCache[lineId]
+    return (
+      <div className="clc-kit-panel flex flex-col gap-1 pl-3 pr-3 pb-2.5 pt-1.5 border-t border-slate-100 dark:border-white/[0.06]">
+        <div className="text-[10px] font-bold tracking-wide text-indigo-500 dark:text-indigo-300/80">
+          Kit Bileşenleri{cache && cache.kitVersionNo ? ' · v' + cache.kitVersionNo : ''}
+        </div>
+        {(!cache || cache.loading) && (
+          <div className="text-[12px] text-slate-400 dark:text-white/30 px-1 py-1">Yükleniyor…</div>
+        )}
+        {cache && !cache.loading && (!cache.found || cache.components.length === 0) && (
+          <div className="text-[12px] text-slate-400 dark:text-white/30 px-1 py-1">Bileşen bulunamadı (kaydedince görünür)</div>
+        )}
+        {cache && !cache.loading && cache.found && cache.components.length > 0 && (
+          <div className="flex flex-col gap-1">
+            {cache.components.map(function (c, i) {
+              return (
+                <div
+                  key={c.componentItemId != null ? c.componentItemId : i}
+                  className="flex items-center gap-1.5 rounded-md bg-indigo-50/60 dark:bg-indigo-500/[0.06] px-2 py-1 text-[12px] text-slate-700 dark:text-white/70"
+                >
+                  <span className="text-indigo-400 dark:text-indigo-300/70 flex-shrink-0 select-none" aria-hidden="true">↳</span>
+                  <span className="font-mono font-semibold flex-shrink-0">{c.code}</span>
+                  <span className="truncate flex-1 min-w-0 text-slate-500 dark:text-white/50">{c.name}</span>
+                  {c.configCode && (
+                    <span className="flex-shrink-0 text-[10px] rounded px-1 py-[1px] bg-slate-100 text-slate-500 dark:bg-white/[0.06] dark:text-white/40">
+                      {c.configCode}
+                    </span>
+                  )}
+                  <span className="flex-shrink-0 font-mono tabular-nums text-slate-600 dark:text-white/60">× {c.quantity}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   // ── Belge para birimi (#sqCurrency'den okunur, change'de senkron) ──
   // Toplam alaninin sag tarafinda ve para birimi gosterilen yerlerde
@@ -2408,7 +2497,7 @@ export default function CalibraLineItemsGrid(props) {
                           </div>
                         )}
                       </div>
-                      {(isKitComponent || isKitHeader) && (
+                      {(isKitComponent || isKitHeader || row.isKit === true) && (
                         <div className="flex items-center gap-1.5 mt-1">
                           {isKitComponent && <span className="clc-badge-arrow" title="Kit bileseni">↳ Kit Bileşeni</span>}
                           {isKitHeader && (
@@ -2417,6 +2506,26 @@ export default function CalibraLineItemsGrid(props) {
                               title="Kit — bilesenleri asagida listelenir"
                             >KİT</span>
                           )}
+                          {/* NORMAL teklif/siparis kit satiri (Faz 4a patlatmasindan bagimsiz) —
+                              rozet aynı zamanda bilesen dokumu ac/kapa toggle'idir. */}
+                          {row.isKit === true && (function () {
+                            var lid = row.id != null && row.id !== '' && Number(row.id) > 0 ? Number(row.id) : null
+                            return (
+                              <button
+                                type="button"
+                                onClick={function () { if (lid) toggleKitExpand(lid) }}
+                                disabled={!lid}
+                                className={'clc-badge-kit inline-flex items-center gap-1 transition-colors ' +
+                                  (lid ? 'hover:bg-indigo-200/70 dark:hover:bg-indigo-500/30 cursor-pointer' : 'opacity-60 cursor-not-allowed')}
+                                title={lid ? 'Kit bileşenlerini göster/gizle' : 'Kaydedince bileşenler görünür'}
+                              >
+                                <span>KİT</span>
+                                {lid && (kitExpandedRows[lid]
+                                  ? <ChevronDown size={11} strokeWidth={2.4} />
+                                  : <ChevronRight size={11} strokeWidth={2.4} />)}
+                              </button>
+                            )
+                          })()}
                         </div>
                       )}
                     </div>
@@ -2504,6 +2613,7 @@ export default function CalibraLineItemsGrid(props) {
                       })}
                     </div>
                   )}
+                  {renderKitComponentsPanel(row)}
                 </motion.div>
               )
               })

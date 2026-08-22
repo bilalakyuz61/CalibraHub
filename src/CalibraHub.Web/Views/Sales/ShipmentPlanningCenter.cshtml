@@ -40,7 +40,7 @@
     }
 
     /* ── Başlık ── */
-    .sp-hd { display:flex; align-items:center; gap:12px; margin-bottom:14px; flex-shrink:0; }
+    .sp-hd { display:flex; align-items:center; gap:12px; margin-bottom:14px; flex-shrink:0; position:relative; }
     .sp-back {
         display:inline-flex; align-items:center; gap:5px;
         padding:5px 11px; border-radius:7px;
@@ -85,10 +85,6 @@
         background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.07);
         border-radius:12px; overflow:hidden;
     }
-    .sp-list-bar { flex-shrink:0; display:flex; align-items:center; gap:10px; padding:9px 14px; border-bottom:1px solid rgba(255,255,255,.06); position:relative; }
-    .sp-count-all { margin-left:auto; font-size:.75rem; color:#475569; }
-    .sp-count-sel { font-size:.79rem; font-weight:700; color:#a5b4fc; display:none; }
-    .sp-count-sel.show { display:inline; }
 
     /* Baslik ve satirlar AYNI grid sablonunu kullanir: --sp-cols'u JS uretir
        (gorunur sutunlar + genislikleri). Fallback, sutun ayari yuklenmeden
@@ -103,6 +99,9 @@
         background:rgba(255,255,255,.02);
     }
     .sp-flat-hdr > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sp-fh { display:flex; align-items:center; gap:5px; min-width:0; }
+    .sp-fh-tx { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sp-fh-ic { width:12px; height:12px; flex-shrink:0; opacity:.65; }
 
 
     .sp-list { flex:1; overflow-y:auto; scrollbar-gutter:stable; }
@@ -300,19 +299,12 @@
     .sp-result-item--bad { background:rgba(239,68,68,.08);  color:#fca5a5; }
 
     /* ── Sütun ayarları paneli (standart liste deseni) ─────────────────── */
-    .sp-col-btn {
-        width:28px; height:28px; padding:0; border-radius:7px; flex-shrink:0;
-        border:1px solid rgba(255,255,255,.07); background:rgba(255,255,255,.03);
-        display:flex; align-items:center; justify-content:center; cursor:pointer;
-        color:#64748b; transition:background .1s, color .1s, border-color .1s;
-    }
-    .sp-col-btn:hover, .sp-col-btn.active {
-        background:rgba(99,102,241,.18); color:#818cf8; border-color:rgba(99,102,241,.3);
-    }
-    .sp-col-btn svg { width:14px; height:14px; }
+    /* Sütun butonu üst şeritteki diğer araç butonlarıyla aynı görünür (.sp-hd-icon-btn);
+       yalnız "panel açık" durumu için etkin görünüm eklenir. */
+    .sp-hd-icon-btn.active { background:rgba(99,102,241,.18); color:#818cf8; border-color:rgba(99,102,241,.3); }
 
     .sp-col-panel {
-        position:absolute; top:40px; right:12px; z-index:140;
+        position:absolute; top:38px; right:0; z-index:140;
         width:300px; max-height:440px;
         background:#0f172a; border:1px solid rgba(255,255,255,.09);
         border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,.45);
@@ -388,9 +380,7 @@
     .sp-cfg-abtn.on { background:rgba(99,102,241,.22); color:#818cf8; border-color:rgba(99,102,241,.3); }
 
     /* ── Light tema override — fc3 deseniyle tutarlı (dark default, light override) ── */
-    body.app-theme-light .sp-col-btn { background:#f1f5f9; border-color:#e2e8f0; color:#64748b; }
-    body.app-theme-light .sp-col-btn:hover, body.app-theme-light .sp-col-btn.active {
-        background:rgba(99,102,241,.1); color:#6366f1; border-color:rgba(99,102,241,.25); }
+    body.app-theme-light .sp-hd-icon-btn.active { background:rgba(99,102,241,.1); color:#6366f1; border-color:rgba(99,102,241,.25); }
     body.app-theme-light .sp-col-panel { background:#fff; border-color:#e2e8f0; box-shadow:0 8px 24px rgba(0,0,0,.12); }
     body.app-theme-light .sp-cfg-hdr { color:#64748b; border-bottom-color:#e2e8f0; }
     body.app-theme-light .sp-cfg-reset { color:#4338ca; }
@@ -418,9 +408,6 @@
     body.app-theme-light .sp-hd-icon-btn:hover { background:#e2e8f0; color:#0f172a; }
 
     body.app-theme-light .sp-left { background:#ffffff; border-color:#e2e8f0; }
-    body.app-theme-light .sp-list-bar { border-bottom-color:#e2e8f0; }
-    body.app-theme-light .sp-count-all { color:#64748b; }
-    body.app-theme-light .sp-count-sel { color:#4338ca; }
     body.app-theme-light .sp-flat-hdr { color:#94a3b8; border-bottom-color:#f1f5f9; background:#f8fafc; }
     body.app-theme-light .sp-list::-webkit-scrollbar-thumb { background:#cbd5e1; }
     body.app-theme-light .sp-row-wrap { border-bottom-color:#f1f5f9; }
@@ -505,28 +492,24 @@
         <button type="button" class="sp-hd-icon-btn" id="spRefreshBtn" onclick="spRefreshClicked(this)" title="Yenile">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
         </button>
+        <button type="button" class="sp-hd-icon-btn" id="spExcelBtn" onclick="spExportExcel()" title="Excel'e Aktar">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+        <button type="button" class="sp-hd-icon-btn" id="spColBtn" onclick="spToggleColPanel(event)" title="Sütun Ayarları">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><circle cx="18" cy="12" r="2"/><line x1="4" y1="18" x2="11" y2="18"/><circle cx="15" cy="18" r="2"/></svg>
+        </button>
+        <div class="sp-col-panel" id="spColPanel">
+            <div class="sp-cfg-hdr">
+                <span>Sütun Ayarları</span>
+                <button type="button" class="sp-cfg-reset" onclick="spResetColCfg()">Varsayılana dön</button>
+            </div>
+            <div class="sp-cfg-rows" id="spColRows"></div>
+        </div>
     </div>
 
     @* ── Liste ── *@
     <div class="sp-body">
         <div class="sp-left" id="spLeft">
-            <div class="sp-list-bar">
-                <span id="spSelCnt" class="sp-count-sel"></span>
-                <span id="spAllCnt" class="sp-count-all"></span>
-                <button type="button" class="sp-col-btn" id="spColBtn" onclick="spToggleColPanel(event)" title="Sütun Ayarları">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><circle cx="18" cy="12" r="2"/><line x1="4" y1="18" x2="11" y2="18"/><circle cx="15" cy="18" r="2"/></svg>
-                </button>
-                <button type="button" class="sp-col-btn" id="spExcelBtn" onclick="spExportExcel()" title="Excel'e Aktar">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                </button>
-                <div class="sp-col-panel" id="spColPanel">
-                    <div class="sp-cfg-hdr">
-                        <span>Sütun Ayarları</span>
-                        <button type="button" class="sp-cfg-reset" onclick="spResetColCfg()">Varsayılana dön</button>
-                    </div>
-                    <div class="sp-cfg-rows" id="spColRows"></div>
-                </div>
-            </div>
             @* Başlık JS tarafından üretilir (sütun ayarlarına göre) — bkz. spRenderColHdr. *@
             <div class="sp-flat-hdr" id="spFlatHdr"></div>
             <div class="sp-list" id="spList">
@@ -665,14 +648,14 @@
     var SP_COL_LS = 'sp-col-cfg-v1';
     function spDefaultColDefs() {
         return [
-            { key:'num', label:'Sipariş No', visible:true, align:'left',  width:130 },
-            { key:'mat', label:'Malzeme',    visible:true, align:'left',  width:0   },  // 0 = esnek (1fr)
-            { key:'ord', label:'Sipariş',    visible:true, align:'right', width:76  },
-            { key:'dlv', label:'Teslim',     visible:true, align:'right', width:76  },
-            { key:'rsv', label:'Rezerve',    visible:true, align:'right', width:76  },
-            { key:'opn', label:'Açık',       visible:true, align:'right', width:76  },
-            { key:'stk', label:'Kull. Stok', visible:true, align:'right', width:110 },
-            { key:'unt', label:'Br.',        visible:true, align:'left',  width:46  }
+            { key:'num', label:'Sipariş No', visible:true, align:'left',  width:130, icon:'doc' },
+            { key:'mat', label:'Malzeme',    visible:true, align:'left',  width:0,   icon:'box' },  // 0 = esnek (1fr)
+            { key:'ord', label:'Sipariş',    visible:true, align:'right', width:80,  icon:'num' },
+            { key:'dlv', label:'Teslim',     visible:true, align:'right', width:80,  icon:'num' },
+            { key:'rsv', label:'Rezerve',    visible:true, align:'right', width:80,  icon:'num' },
+            { key:'opn', label:'Açık',       visible:true, align:'right', width:80,  icon:'num' },
+            { key:'stk', label:'Kull. Stok', visible:true, align:'right', width:110, icon:'stk' },
+            { key:'unt', label:'Br.',        visible:true, align:'left',  width:46,  icon:'unt' }
         ];
     }
     var _colDefs = spDefaultColDefs();
@@ -732,11 +715,26 @@
         var vis = spVisibleCols();
         if (left) left.style.setProperty('--sp-cols', spGridTemplate(vis));
         var h = '<span></span>';
-        vis.forEach(function(c) { h += '<span style="text-align:' + c.align + '">' + esc(c.label) + '</span>'; });
+        vis.forEach(function(c) {
+            // Sağa hizalı sütunda ikon etiketin SOLUNDA kalsın diye içerik flex ile sarılır.
+            var just = c.align === 'right' ? 'flex-end' : (c.align === 'center' ? 'center' : 'flex-start');
+            h += '<span class="sp-fh" style="justify-content:' + just + '">'
+               +   (SP_COL_ICON[c.icon] || '')
+               +   '<span class="sp-fh-tx">' + esc(c.label) + '</span>'
+               + '</span>';
+        });
         hdr.innerHTML = h + '<span></span>';
     }
 
     // ── Panel ────────────────────────────────────────────────────────────────
+    // Sütun başlığı ikonları (Malzeme Kartları başlık dili — etiketin solunda küçük ikon).
+    var SP_COL_ICON = {
+        doc: '<svg class="sp-fh-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+        box: '<svg class="sp-fh-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/></svg>',
+        num: '<svg class="sp-fh-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>',
+        stk: '<svg class="sp-fh-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><polyline points="19 9 13 15 9 11 5 15"/></svg>',
+        unt: '<svg class="sp-fh-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20"/><path d="M6 12V8"/><path d="M10 12V6"/><path d="M14 12V8"/><path d="M18 12V6"/></svg>'
+    };
     var SP_GRIP = '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/><circle cx="11" cy="4" r="1.2"/><circle cx="11" cy="8" r="1.2"/><circle cx="11" cy="12" r="1.2"/></svg>';
     var SP_EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
     var SP_EYEOFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
@@ -1004,12 +1002,13 @@
         setTimeout(function() { btn.classList.remove('sp-spin'); }, 500);
     };
 
+    // Kayıt sayısı başlığın altında gösterilir (standart liste ekranı düzeni);
+    // seçim varsa aynı satıra eklenir. Ayrı bir sayaç şeridi YOK.
     function spUpdateCounts() {
-        document.getElementById('spAllCnt').textContent = LINES.length + ' kalem';
-        var selCnt = document.getElementById('spSelCnt');
+        var sub = document.getElementById('spSubtitle');
+        if (!sub) return;
         var n = Object.keys(SELECTED).length;
-        if (n > 0) { selCnt.textContent = n + ' seçili'; selCnt.classList.add('show'); }
-        else { selCnt.classList.remove('show'); }
+        sub.textContent = LINES.length + ' kalem' + (n > 0 ? ' · ' + n + ' seçili' : '');
     }
 
     function spStockClass(line) {

@@ -96,7 +96,11 @@ public sealed record DocumentLineDto(
     // Faz 4a — kit tam-set teslimat patlaması: bu satır hangi kit BAŞLIK satırından türedi
     // (aynı belgede). NULL = kit bileşeni değil. Grid, kit başlık+bileşen satırlarını bunun
     // üzerinden görsel gruplar (başlık rozet, bileşen girinti).
-    int? KitParentLineId = null);
+    int? KitParentLineId = null,
+    // Bu satırın malzemesi kit/paket ürün mü (Items.TypeId = ItemType.Kit = 10)? Grid, kit
+    // satırının bileşenlerini KitLineComponents(lineId) ile açılır gösterir. Salt-okuma
+    // display alanı — tabloda tutulmaz, Items JOIN'inden türetilir (MaterialCode/Name gibi).
+    bool IsKit = false);
 
 public sealed record DocumentLineDetailDto(
     int Id, int QuoteLineId,

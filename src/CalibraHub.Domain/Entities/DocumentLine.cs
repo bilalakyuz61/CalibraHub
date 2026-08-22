@@ -95,6 +95,9 @@ public sealed class DocumentLine
     // ── Transient display fields (Item + Unit + ProductConfiguration + Location JOIN ile okunur; tabloya yazilmaz) ──
     public string? MaterialCode { get; set; }
     public string? MaterialName { get; set; }
+
+    [Description("Items.TypeId JOIN kopyasi (tabloya yazilmaz) — ItemType.Kit (10) ise bu satirin malzemesi kit/paket urun. Grid, kit satirinin bilesenlerini KitLineComponents ile acilir gosterir.")]
+    public int? ItemTypeId { get; set; }
     public string? UnitCode { get; set; }
     public string? UnitName { get; set; }
     public string? CombinationCode { get; set; }

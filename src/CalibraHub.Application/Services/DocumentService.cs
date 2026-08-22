@@ -1975,5 +1975,6 @@ public sealed class DocumentService : IDocumentService
         FulfilledFromStock:  ln.FulfilledFromStock,
         FulfilledByPurchase: ln.FulfilledByPurchase,
         FulfillmentStatus:   ln.FulfillmentStatus,
-        KitParentLineId:     ln.KitParentLineId);
+        KitParentLineId:     ln.KitParentLineId,
+        IsKit:               ItemTypeCatalog.IsKit(ln.ItemTypeId));
 }
