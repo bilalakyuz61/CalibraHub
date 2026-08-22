@@ -448,10 +448,16 @@ public sealed class SqlMachineScheduleRepository : IMachineScheduleRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // Kilit durumu setup child'a da CASCADE edilir (parent + [ParentBlockId]=@Id) — yoksa
+        // parent kilitliyken Planlı kalan setup child reschedule occupied'ine girmez ve motor o
+        // hazırlık penceresine başka op yerleştirip çift-rezervasyon üretir (HIGH review). EXISTS
+        // guard'ı @Id'nin aktif bir PARENT (setup child değil) olmasını şart koşar — değilse 0 satır.
         cmd.CommandText = $"""
             UPDATE {T("MachineScheduleBlock")}
             SET [Status] = @Status, [UpdatedById] = @UpdatedById, [Updated] = SYSUTCDATETIME()
-            WHERE [Id] = @Id AND [IsActive] = 1 AND [ParentBlockId] IS NULL;
+            WHERE [IsActive] = 1 AND ([Id] = @Id OR [ParentBlockId] = @Id)
+              AND EXISTS (SELECT 1 FROM {T("MachineScheduleBlock")} p
+                          WHERE p.[Id] = @Id AND p.[ParentBlockId] IS NULL AND p.[IsActive] = 1);
             """;
         cmd.Parameters.AddWithValue("@Status", status);
         cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
@@ -468,10 +474,13 @@ public sealed class SqlMachineScheduleRepository : IMachineScheduleRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         var pn = ids.Select((_, i) => "@id" + i).ToArray();
+        // Verilen parent id'ler + onların setup child'ları (ParentBlockId IN) birlikte set edilir
+        // (kilit durumu cascade — HIGH review). Frontend yalnız parent id gönderir (setup child'lar hariç).
         cmd.CommandText = $"""
             UPDATE {T("MachineScheduleBlock")}
             SET [Status] = @Status, [UpdatedById] = @UpdatedById, [Updated] = SYSUTCDATETIME()
-            WHERE [Id] IN ({string.Join(",", pn)}) AND [IsActive] = 1 AND [ParentBlockId] IS NULL;
+            WHERE [IsActive] = 1
+              AND ([Id] IN ({string.Join(",", pn)}) OR [ParentBlockId] IN ({string.Join(",", pn)}));
             """;
         cmd.Parameters.AddWithValue("@Status", status);
         cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));

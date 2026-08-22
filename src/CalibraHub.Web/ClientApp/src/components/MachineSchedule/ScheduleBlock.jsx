@@ -28,7 +28,9 @@ export default function ScheduleBlock({
   var palette = getPalette(isDark)
   var typeColors = palette.block[block.blockType] || palette.block[1]
   var showLockIcon = block.status === 2
-  var locked = showLockIcon || !!readOnly
+  // Kilitli(2) VE Onaylı(3) bloklar sabittir — ikisi de sürüklenemez/boyutlandırılamaz
+  // (reschedule ikisini de occupied/sabit sayar; UI oynatmaya izin vermemeli — MEDIUM review).
+  var locked = showLockIcon || block.status === 3 || !!readOnly
   var canToggleLock = !readOnly && block.status !== 3
 
   var [localX, setLocalX] = useState(x)
