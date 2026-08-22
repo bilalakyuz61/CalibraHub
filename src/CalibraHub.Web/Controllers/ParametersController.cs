@@ -76,6 +76,10 @@ public sealed class ParametersController : Controller
                 d.Label,
                 approvalParams.FirstOrDefault(p =>
                     p.ParamKey == CalibraHub.Application.Constants.ApprovalParameters.EnabledKey(d.Code))
+                    ?.ParamValue != "false",
+                // Ana anahtar — tanımsızsa AÇIK (mevcut kurulumlarda onay çalışmaya devam etsin).
+                approvalParams.FirstOrDefault(p =>
+                    p.ParamKey == CalibraHub.Application.Constants.ApprovalParameters.UseKey(d.Code))
                     ?.ParamValue != "false"))
             .ToList();
 
@@ -300,6 +304,17 @@ public sealed class ParametersController : Controller
                     CalibraHub.Application.Constants.ApprovalParameters.EnabledKey(item.Kind),
                     item.Enabled ? "true" : "false",
                     CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
+
+                // Ana anahtar YALNIZCA gönderildiyse yazılır — bu alanı taşımayan eski
+                // çağrılar mevcut değeri sıfırlamaz (geriye uyum).
+                if (item.Use.HasValue)
+                {
+                    await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                        CalibraHub.Application.Constants.ApprovalParameters.FormCode,
+                        CalibraHub.Application.Constants.ApprovalParameters.UseKey(item.Kind),
+                        item.Use.Value ? "true" : "false",
+                        CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
+                }
             }
 
             return Json(new { ok = true });
@@ -447,8 +462,9 @@ public sealed class ParametersController : Controller
 
     public sealed record GeneralParametersInput(bool IsEDocumentApprovalEnabled);
     public sealed record ApprovalParametersInput(List<ApprovalKindInput> Kinds);
-    public sealed record ApprovalKindInput(string Kind, bool Enabled);
-    public sealed record ApprovalKindState(string Code, string Label, bool Enabled);
+    /// <summary>Use: onay sistemi ana anahtarı. null = gönderilmedi, mevcut değer korunur.</summary>
+    public sealed record ApprovalKindInput(string Kind, bool Enabled, bool? Use = null);
+    public sealed record ApprovalKindState(string Code, string Label, bool Enabled, bool Use = true);
     public sealed record ProductionParametersInput(int ShopFloorMaxPinAttempts, bool BomAllowDuplicateComponents = false,
         bool AllowStartedWoRecipeEdit = false);
     public sealed record StockParametersInput(

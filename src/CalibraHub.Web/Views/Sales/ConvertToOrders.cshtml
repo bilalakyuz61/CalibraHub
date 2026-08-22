@@ -1,41 +1,58 @@
 @*
     ConvertToOrders — "Tekliflerden Sipariş Oluştur" TAM EKRAN sayfası (2026-08-22).
 
-    Önceden bu ekran Satış Siparişi listesindeki bir toolbar aksiyonunun açtığı
-    MODAL'dı (960px, dar). Kullanıcı isteği: "tam ekran ve Yükleme Planlama ekranı
-    gibi olsun". Bileşen aynı kaldı (ConvertToOrdersModal) — `variant="page"` ile
-    perde/genişlik tavanı olmadan, yüksekliği viewport'a oturarak render ediliyor.
-    Modal yolu (window.CalibraHub.openConvertToOrdersModal) kaldırılmadı.
+    Geçmiş: önce Satış Siparişi listesindeki bir MODAL'dı (960px). Kullanıcı isteği
+    üzerine önce tam ekran sayfaya, ardından SMARTBOARD yapısına çevrildi — böylece
+    arama / filtre / sütun ayarları / Excel aktarımı / gruplama gibi tüm C-Grid
+    yetenekleri bedavaya geliyor (bkz. CLAUDE.md "CalibraSmartBoard (C-Grid) kuralları").
 
-    Veri tamamen client-side: GET /Sales/GetConvertibleQuotes,
-    POST /Sales/CreateOrdersFromQuotes (bkz. services/salesService.js).
+    Seçim + toplu aksiyon SmartBoard'un kendi sözleşmesiyle:
+      selectable: true  → satır başı onay kutusu
+      bulkActions       → POST /Sales/CreateOrdersFromQuotesBulk  { ids: [...] }
+    Board config server-side üretilir (SalesController.BuildConvertibleQuotesBoardAsync),
+    in-place tazeleme /Sales/ConvertibleQuotesBoardConfig ile.
 *@
+@using System.Text.Json
 @{
     ViewData["Title"]     = "Tekliflerden Sipariş Oluştur";
     ViewData["BodyClass"] = "page-cto";
+    var ctoBoardJson = JsonSerializer.Serialize(ViewData["BoardConfig"], new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    });
 }
 @inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
 
 @section Styles {
 <style>
     /* Sayfa kabı — ShipmentPlanningCenter (.page-sp) ile aynı iskelet: dashboard
-       sarmalayıcısının padding/max-width kısıtları sıfırlanır ki içerik tam ekran olsun. */
+       sarmalayıcısının padding/max-width kısıtları sıfırlanır ki board tam ekran olsun. */
     .page-cto .integrator-dashboard {
         padding: 0 !important; background: transparent !important;
         box-shadow: none !important; border: none !important; max-width: none !important;
     }
     .page-cto .integrator-dashboard__content { width: 100% !important; max-width: none !important; padding: 0 !important; }
-    .cto-host { display: flex; flex-direction: column; min-height: 0; }
+    .cto-outer {
+        display: flex; flex-direction: column;
+        height: calc(100vh - 56px);
+        padding: 16px 20px 0;
+        overflow: hidden;
+    }
+    .cto-board { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
     .cto-fallback {
         display: flex; align-items: center; justify-content: center;
-        height: calc(100vh - 160px);
+        flex: 1 1 auto;
         font-size: .9rem; color: var(--app-text-muted, #64748b);
     }
 </style>
 }
 
-<div id="ctoHost" class="cto-host">
-    <div class="cto-fallback" id="ctoFallback">Yükleniyor…</div>
+<div class="cto-outer">
+    <div class="cto-board" id="ctoBoard">
+        <div class="cto-fallback" id="ctoFallback">Yükleniyor…</div>
+    </div>
 </div>
 
 @section Scripts {
@@ -43,8 +60,9 @@
 <script>
 (function () {
     'use strict';
+    var BOARD  = @Html.Raw(ctoBoardJson);
     var BUNDLE = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
-    var host = document.getElementById('ctoHost');
+    var host   = document.getElementById('ctoBoard');
 
     function fail(msg) {
         var f = document.getElementById('ctoFallback');
@@ -52,15 +70,15 @@
     }
 
     function doMount() {
-        if (!window.CalibraHub || typeof window.CalibraHub.mountConvertToOrdersPage !== 'function') {
-            fail('Ekran bileşeni yüklenemedi.');
+        if (!window.CalibraHub || typeof window.CalibraHub.mountSmartBoard !== 'function') {
+            fail('Board bileşeni yüklenemedi.');
             return;
         }
         host.innerHTML = '';
-        window.CalibraHub.mountConvertToOrdersPage(host, { backUrl: '/Sales/Orders' });
+        window.CalibraHub.mountSmartBoard(host, BOARD);
     }
 
-    if (window.CalibraHub && typeof window.CalibraHub.mountConvertToOrdersPage === 'function') {
+    if (window.CalibraHub && typeof window.CalibraHub.mountSmartBoard === 'function') {
         doMount();
         return;
     }

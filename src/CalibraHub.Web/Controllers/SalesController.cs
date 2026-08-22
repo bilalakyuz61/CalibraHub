@@ -202,6 +202,11 @@ public sealed class SalesController : Controller
         var approvalEnabled = true;
         if (kind != CalibraHub.Application.Approval.EntityTypes.DocumentEntityTypes.WildcardKind)
         {
+            // Ana anahtar: onay sistemi bu belge türünde kullanılmıyorsa hiçbir onay davranışı devreye girmez.
+            var useApproval = await _companyParams.GetBoolAsync(
+                ApprovalParameters.FormCode, ApprovalParameters.UseKey(kind), ct) ?? true;
+            if (!useApproval) return false;
+
             approvalEnabled = await _companyParams.GetBoolAsync(
                 ApprovalParameters.FormCode, ApprovalParameters.EnabledKey(kind), ct) ?? true;
         }
@@ -667,17 +672,13 @@ public sealed class SalesController : Controller
                     variant = "primary",
                     url = "/Sales/DocumentEdit?type=order",
                 },
-                // Toolbar — onaylanmis teklifleri cari bazinda siparise donusturen modal
-                new
-                {
-                    id = "convert-to-orders",
-                    label = "Tekliften Siparis",
-                    icon = "ArrowRightCircle",
-                    variant = "secondary",
-                    // 2026-08-22: modal (trigger) yerine TAM EKRAN sayfa (url).
-                    // Modal mount yolu bundle'da duruyor, baska yerden cagrilabilir.
-                    url = "/Sales/ConvertToOrders",
-                },
+            },
+            // 2026-08-22 (kullanici istegi): baslik ikonu artik bir BUTON ve altinda
+            // "Islemler" tarzi menu acilir. "Tekliften Siparis Olustur" toolbar
+            // butonundan buraya tasindi; ayri bir SAYFA olarak acilir.
+            iconMenu = new[]
+            {
+                new { id = "convert-to-orders", label = "Tekliften Sipariş Oluştur", icon = "ArrowRightCircle", url = "/Sales/ConvertToOrders" },
             },
             masterWidgets,
             entities,
@@ -2702,11 +2703,113 @@ public sealed class SalesController : Controller
     /// </summary>
     [HttpGet("/Sales/ConvertToOrders")]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SalesOrder)]
-    public IActionResult ConvertToOrders()
+    public async Task<IActionResult> ConvertToOrders(CancellationToken ct)
     {
         ViewData["Title"] = "Tekliflerden Sipariş Oluştur";
+        ViewData["BoardConfig"] = await BuildConvertibleQuotesBoardAsync(ct);
         return View();
     }
+
+    /// <summary>Siparişe dönüştürülebilir (onaylı, henüz çevrilmemiş) teklifleri
+    /// SmartBoard tablo board'u olarak üretir. Seçim + toplu aksiyon:
+    /// POST /Sales/CreateOrdersFromQuotesBulk (gövde: { ids: [...] }).</summary>
+    private async Task<object> BuildConvertibleQuotesBoardAsync(CancellationToken ct)
+    {
+        IReadOnlyCollection<DocumentListItemDto> quotes;
+        try { quotes = await _quoteService.GetConvertibleQuotesAsync(null, null, null, null, ct); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ConvertToOrders board: teklif listesi okunamadi");
+            quotes = [];
+        }
+
+        var entities = quotes.Select(q => new
+        {
+            id = q.Id,
+            title = q.DocumentNumber,
+            subtitle = q.ContactName ?? string.Empty,
+            widgets = new object[]
+            {
+                new { id = "w_kod", type = "data", dataType = "text",     label = "Teklif No", value = (object?)q.DocumentNumber },
+                new { id = "w_ad",  type = "data", dataType = "text",     label = "Cari",      value = (object?)(q.ContactName ?? "—") },
+                new { id = "date",  type = "data", dataType = "date",     label = "Tarih",     value = (object?)q.DocumentDate.ToString("yyyy-MM-dd") },
+                new { id = "lines", type = "data", dataType = "numeric",  label = "Kalem",     value = (object?)q.LineCount },
+                new { id = "total", type = "data", dataType = "currency", label = "Tutar",     value = (object?)q.GrandTotal, detail = q.CurrencyCode },
+            },
+            primaryAction = new
+            {
+                label = "Teklifi Aç", icon = "ExternalLink", color = "indigo",
+                url = $"/Sales/DocumentEdit?id={q.Id}", hideButton = true,
+            },
+        }).ToArray();
+
+        return new
+        {
+            boardKey = "sales-convertible-quotes",
+            title = "Tekliflerden Sipariş Oluştur",
+            subtitle = $"{entities.Length:N0} teklif",
+            itemLabel = "teklif",
+            icon = "ShoppingCart",
+            iconColor = "emerald",
+            viewMode = "table",
+            searchPlaceholder = "Teklif ara... (no, cari)",
+            emptyText = "Siparişe dönüştürülebilir teklif yok — yalnızca onaylı ve daha önce çevrilmemiş teklifler listelenir.",
+            refreshUrl = "/Sales/ConvertibleQuotesBoardConfig",
+            // Secim + toplu aksiyon sozlesmesi: bkz. SmartBoard.jsx "Satir secimi"
+            // notu — POST govdesi { ids: [...] }, yanit { ok, message?, error? }.
+            selectable = true,
+            bulkActions = new object[]
+            {
+                new
+                {
+                    id = "create-orders",
+                    label = "Sipariş Oluştur",
+                    icon = "ShoppingCart",
+                    variant = "primary",
+                    apiUrl = "/Sales/CreateOrdersFromQuotesBulk",
+                    apiMethod = "POST",
+                    confirm = "Seçili tekliflerden sipariş oluşturulacak. Aynı cariye ait teklifler TEK siparişte birleşir. Devam edilsin mi?",
+                },
+            },
+            masterWidgets = new object[]
+            {
+                CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_kod", "Teklif No", "text"),
+                CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_ad",  "Cari",      "text"),
+                CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("date",  "Tarih",     "date"),
+                CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("lines", "Kalem",     "numeric"),
+                CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("total", "Tutar",     "currency"),
+            },
+            entities,
+        };
+    }
+
+    /// <summary>In-place refresh ucu (C-Grid standardi) — ayni board config'i doner.</summary>
+    [HttpGet("/Sales/ConvertibleQuotesBoardConfig")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SalesOrder)]
+    public async Task<IActionResult> ConvertibleQuotesBoardConfig(CancellationToken ct)
+        => Json(await BuildConvertibleQuotesBoardAsync(ct));
+
+    /// <summary>SmartBoard toplu aksiyonu — secili teklif id'lerinden siparis uretir.
+    /// Govde { ids:[...] }, yanit { ok, message?, error? } (SmartBoard sozlesmesi).
+    /// Mevcut CreateOrdersFromQuotes ucu { quoteIds, orderDate } bekledigi icin bu
+    /// ince bir sarmalayicidir — is mantigi TEK yerde (CreateOrdersFromQuotesAsync).</summary>
+    [HttpPost("/Sales/CreateOrdersFromQuotesBulk")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateOrdersFromQuotesBulk(
+        [FromBody] BulkIdsRequest req, CancellationToken ct)
+    {
+        if (!await HasFormPermissionAsync(FormCodes.SalesOrder, WriteActionCodes, ct))
+            return Json(new { ok = false, error = "Sipariş oluşturmak için yetkiniz bulunmuyor." });
+        var ids = req?.Ids ?? [];
+        if (ids.Count == 0) return Json(new { ok = false, error = "Seçim yapılmadı." });
+
+        var result = await _quoteService.CreateOrdersFromQuotesAsync(
+            new CreateOrdersFromQuotesRequest(ids, DateTime.Today), CurrentUserId(), ct);
+        if (!result.Success) return Json(new { ok = false, error = result.Error ?? "Sipariş oluşturulamadı." });
+        return Json(new { ok = true, message = $"{result.OrdersCreated} sipariş oluşturuldu." });
+    }
+
+    public sealed record BulkIdsRequest(IReadOnlyCollection<int> Ids);
 
     /// <summary>
     /// Yükleme Planlama Merkezi ekranı. Board/veri yükü frontend tarafından
@@ -2916,6 +3019,11 @@ public sealed class SalesController : Controller
             var approvalEnabled = true;
             if (kind != CalibraHub.Application.Approval.EntityTypes.DocumentEntityTypes.WildcardKind)
             {
+                // Ana anahtar: onay sistemi bu belge türünde kullanılmıyorsa hiçbir onay davranışı devreye girmez.
+                var useApproval = await _companyParams.GetBoolAsync(
+                    ApprovalParameters.FormCode, ApprovalParameters.UseKey(kind), ct) ?? true;
+                if (!useApproval) return false;
+
                 approvalEnabled = await _companyParams.GetBoolAsync(
                     ApprovalParameters.FormCode, ApprovalParameters.EnabledKey(kind), ct) ?? true;
             }

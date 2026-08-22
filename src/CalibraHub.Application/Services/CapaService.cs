@@ -272,8 +272,13 @@ public sealed class CapaService : ICapaService
                 var approvalEnabled = true;
                 if (_companyParameters is not null)
                 {
-                    approvalEnabled = await _companyParameters.GetBoolAsync(
-                        ApprovalParameters.FormCode, ApprovalParameters.EnabledKey(ApprovalEntityKind), ct) ?? true;
+                    // Ana anahtar: onay sistemi bu belge türünde kullanılmıyorsa hiçbir onay davranışı devreye girmez.
+                    var useApproval = await _companyParameters.GetBoolAsync(
+                        ApprovalParameters.FormCode, ApprovalParameters.UseKey(ApprovalEntityKind), ct) ?? true;
+
+                    approvalEnabled = useApproval
+                        && (await _companyParameters.GetBoolAsync(
+                                ApprovalParameters.FormCode, ApprovalParameters.EnabledKey(ApprovalEntityKind), ct) ?? true);
                 }
 
                 if (approvalEnabled)

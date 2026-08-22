@@ -32,6 +32,17 @@
         as List<CalibraHub.Web.Controllers.ParametersController.ApprovalKindState>
         ?? new List<CalibraHub.Web.Controllers.ParametersController.ApprovalKindState>();
     Func<string, bool> approvalEnabled = code => approvalKinds.FirstOrDefault(k => k.Code == code)?.Enabled ?? true;
+    // Onay parametreleri artık _ApprovalParamRows partial'ı ile çizilir (iki kademeli).
+    // Kind tanımlı değilse (Filter == null) varsayılan açık bir durum üretilir — fail-open.
+    Func<string, CalibraHub.Web.Controllers.ParametersController.ApprovalKindState> approvalState = code =>
+        approvalKinds.FirstOrDefault(k => k.Code == code)
+        ?? new CalibraHub.Web.Controllers.ParametersController.ApprovalKindState(code, code, true, true);
+
+    // TL fiyata müdahale — belge türü başına tek satır (bkz. _TlPriceEditRow).
+    var tlStates = ViewData["TlPriceEditStates"] as List<CalibraHub.Web.Controllers.ParametersController.StockEffectState>
+                   ?? new List<CalibraHub.Web.Controllers.ParametersController.StockEffectState>();
+    Func<string, CalibraHub.Web.Controllers.ParametersController.StockEffectState?> tlState = code =>
+        tlStates.FirstOrDefault(t => t.Code == code);
 }
 
 @section Styles {
@@ -429,10 +440,13 @@ body.app-theme-dark .ap-tab.is-active::before {
             <button type="button" class="ap-tab"           data-pane="production" data-label="Üretim">Üretim</button>
             <button type="button" class="ap-tab"           data-pane="workorder" data-label="İş Emri">İş Emri</button>
             <button type="button" class="ap-tab"           data-pane="salesquote" data-label="Satış Teklifi">Satış Teklifi</button>
-            <button type="button" class="ap-tab"           data-pane="purchase"  data-label="Satın Alma">Satın Alma</button>
+            <button type="button" class="ap-tab"           data-pane="satissiparis" data-label="Satış Siparişi">Satış Siparişi</button>
+            <button type="button" class="ap-tab"           data-pane="salesdelivery" data-label="Satış İrsaliyesi">Satış İrsaliyesi</button>
+            <button type="button" class="ap-tab"           data-pane="purchasequote" data-label="Satın Alma Teklifi">Satın Alma Teklifi</button>
+            <button type="button" class="ap-tab"           data-pane="purchaseorder" data-label="Satın Alma Siparişi">Satın Alma Siparişi</button>
+            <button type="button" class="ap-tab"           data-pane="purchasedelivery" data-label="Alış İrsaliyesi">Alış İrsaliyesi</button>
             <button type="button" class="ap-tab"           data-pane="ihtiyac"   data-label="İhtiyaç Kayıtları">İhtiyaç Kayıtları</button>
             <button type="button" class="ap-tab"           data-pane="stok"      data-label="Stok">Stok</button>
-            <button type="button" class="ap-tab"           data-pane="satissiparis" data-label="Satış Sipariş">Satış Sipariş</button>
             <button type="button" class="ap-tab"           data-pane="guvenlik"  data-label="Güvenlik">Güvenlik</button>
         </aside>
 
@@ -580,111 +594,46 @@ body.app-theme-dark .ap-tab.is-active::before {
                     </div>
                 </div>
 
-                @{
-                    var tlEditStates = ViewData["TlPriceEditStates"] as List<CalibraHub.Web.Controllers.ParametersController.StockEffectState>
-                                       ?? new List<CalibraHub.Web.Controllers.ParametersController.StockEffectState>();
-                }
-                @* TL fiyata mudahale — BELGE TURU bazinda (2026-08-22 kullanici istegi).
-                   Kapali/tanimsiz => TL sutunu salt okunur (bugunku davranis, fail-open). *@
-                <div class="ap-row">
-                    <div class="ap-row-main">
-                        <div class="ap-row-title">TL Fiyata Müdahale</div>
-                        <div class="ap-row-desc">
-                            Dövizli belgelerde kalem gridindeki <strong>Birim Fiyat (TL)</strong> sütunu
-                            normalde salt okunur bir göstergedir (döviz fiyatı × kur). Açık olan belge
-                            türlerinde bu alan düzenlenebilir olur; girilen TL tutarı <strong>kura bölünerek
-                            döviz birim fiyatı geri hesaplanır</strong>. Kapalıyken bugünkü davranış korunur.
-                        </div>
-                    </div>
-                </div>
-                @foreach (var st in tlEditStates)
-                {
-                    <div class="ap-row">
-                        <div class="ap-row-main">
-                            <div class="ap-row-title" style="font-size:.85rem;">@st.Label</div>
-                        </div>
-                        <div class="ap-row-control">
-                            <label class="ap-switch">
-                                <input type="checkbox" class="ap-tl-edit" data-doctype="@st.Code" @(st.Enabled ? "checked" : "") />
-                                <span class="ap-switch-track"><span class="ap-switch-thumb"></span></span>
-                            </label>
-                        </div>
-                    </div>
-                }
-
+                @* TL fiyata müdahale — YALNIZ bu belge türü. Diğer belge türlerinin anahtarı
+                   kendi sekmesindedir (2026-08-22 kullanıcı isteği). *@
+                @{ var tlSq = tlState("satis_teklifi"); }
+                @if (tlSq is not null) { @await Html.PartialAsync("_TlPriceEditRow", tlSq) }
 
                 <div class="ap-group-title">Onay</div>
-                <div class="ap-row">
-                    <div class="ap-row-main">
-                        <div class="ap-row-title">Onay Akışı Otomatik Başlatma</div>
-                        <div class="ap-row-desc">
-                            Açıkken yeni Satış Teklifi kaydedildiğinde eşleşen onay akışı otomatik
-                            başlatılır. Kapalıyken otomatik başlatma yapılmaz (manuel "Onaya Gönder"
-                            her zaman kullanılabilir). Akış şablonlarını yönetmek için
-                            <a href="/ApprovalFlow" style="color:var(--ap-accent);">Onay Akış Tanımları</a> sayfasını kullanın.
-                        </div>
-                    </div>
-                    <div class="ap-row-control">
-                        <label class="ap-switch">
-                            <input type="checkbox" id="ap-approval-salesquote" @(approvalEnabled("SalesQuote") ? "checked" : null) />
-                            <span class="ap-switch-track @(approvalEnabled("SalesQuote") ? "is-on" : "")">
-                                <span class="ap-switch-thumb"></span>
-                            </span>
-                            <span class="ap-switch-label @(approvalEnabled("SalesQuote") ? "is-active" : "")"
-                                  id="ap-approval-salesquote-label">@(approvalEnabled("SalesQuote") ? "Aktif" : "Pasif")</span>
-                        </label>
-                    </div>
-                </div>
+                @await Html.PartialAsync("_ApprovalParamRows", approvalState("SalesQuote"))
             </section>
 
             @* ── Satın Alma ─────────────────────────────── *@
-            <section class="ap-pane" id="ap-pane-purchase">
-                <h2>Satın Alma</h2>
-                <div class="ap-hint">
-                    Satın alma teklifi ve siparişi belge türü bazında otomatik onay tetikleme. Akış
-                    şablonlarını yönetmek için
-                    <a href="/ApprovalFlow" style="color:var(--ap-accent);">Onay Akış Tanımları</a> sayfasını kullanın.
-                </div>
+            @* ── Satış İrsaliyesi ───────────────────────── *@
+            <section class="ap-pane" id="ap-pane-salesdelivery">
+                <h2>Satış İrsaliyesi</h2>
+                @{ var tlSd = tlState("satis_irsaliyesi"); }
+                @if (tlSd is not null) { @await Html.PartialAsync("_TlPriceEditRow", tlSd) }
+            </section>
 
-                <div class="ap-row">
-                    <div class="ap-row-main">
-                        <div class="ap-row-title">Satın Alma Teklifi — Onay Akışı Otomatik Başlatma</div>
-                        <div class="ap-row-desc">
-                            Açıkken yeni Satın Alma Teklifi kaydedildiğinde eşleşen onay akışı otomatik
-                            başlatılır. Kapalıyken otomatik başlatma yapılmaz.
-                        </div>
-                    </div>
-                    <div class="ap-row-control">
-                        <label class="ap-switch">
-                            <input type="checkbox" id="ap-approval-purchasequote" @(approvalEnabled("PurchaseQuote") ? "checked" : null) />
-                            <span class="ap-switch-track @(approvalEnabled("PurchaseQuote") ? "is-on" : "")">
-                                <span class="ap-switch-thumb"></span>
-                            </span>
-                            <span class="ap-switch-label @(approvalEnabled("PurchaseQuote") ? "is-active" : "")"
-                                  id="ap-approval-purchasequote-label">@(approvalEnabled("PurchaseQuote") ? "Aktif" : "Pasif")</span>
-                        </label>
-                    </div>
-                </div>
+            @* ── Satın Alma Teklifi ─────────────────────── *@
+            <section class="ap-pane" id="ap-pane-purchasequote">
+                <h2>Satın Alma Teklifi</h2>
+                <div class="ap-group-title">Onay</div>
+                @await Html.PartialAsync("_ApprovalParamRows", approvalState("PurchaseQuote"))
+                @{ var tlPq = tlState("alis_teklifi"); }
+                @if (tlPq is not null) { @await Html.PartialAsync("_TlPriceEditRow", tlPq) }
+            </section>
 
-                <div class="ap-row">
-                    <div class="ap-row-main">
-                        <div class="ap-row-title">Satın Alma Siparişi — Onay Akışı Otomatik Başlatma</div>
-                        <div class="ap-row-desc">
-                            Açıkken yeni Satın Alma Siparişi kaydedildiğinde eşleşen onay akışı otomatik
-                            başlatılır. Kapalıyken otomatik başlatma yapılmaz.
-                        </div>
-                    </div>
-                    <div class="ap-row-control">
-                        <label class="ap-switch">
-                            <input type="checkbox" id="ap-approval-purchaseorder" @(approvalEnabled("PurchaseOrder") ? "checked" : null) />
-                            <span class="ap-switch-track @(approvalEnabled("PurchaseOrder") ? "is-on" : "")">
-                                <span class="ap-switch-thumb"></span>
-                            </span>
-                            <span class="ap-switch-label @(approvalEnabled("PurchaseOrder") ? "is-active" : "")"
-                                  id="ap-approval-purchaseorder-label">@(approvalEnabled("PurchaseOrder") ? "Aktif" : "Pasif")</span>
-                        </label>
-                    </div>
-                </div>
+            @* ── Satın Alma Siparişi ────────────────────── *@
+            <section class="ap-pane" id="ap-pane-purchaseorder">
+                <h2>Satın Alma Siparişi</h2>
+                <div class="ap-group-title">Onay</div>
+                @await Html.PartialAsync("_ApprovalParamRows", approvalState("PurchaseOrder"))
+                @{ var tlPo = tlState("alis_siparisi"); }
+                @if (tlPo is not null) { @await Html.PartialAsync("_TlPriceEditRow", tlPo) }
+            </section>
+
+            @* ── Alış İrsaliyesi ────────────────────────── *@
+            <section class="ap-pane" id="ap-pane-purchasedelivery">
+                <h2>Alış İrsaliyesi</h2>
+                @{ var tlPd = tlState("alis_irsaliyesi"); }
+                @if (tlPd is not null) { @await Html.PartialAsync("_TlPriceEditRow", tlPd) }
             </section>
 
             @* ── İhtiyaç Kayıtları ──────────────────────── *@
@@ -788,27 +737,7 @@ body.app-theme-dark .ap-tab.is-active::before {
                 </div>
 
                 <div class="ap-group-title">Onay</div>
-                <div class="ap-row">
-                    <div class="ap-row-main">
-                        <div class="ap-row-title">Onay Akışı Otomatik Başlatma</div>
-                        <div class="ap-row-desc">
-                            Açıkken yeni İhtiyaç Kaydı kaydedildiğinde eşleşen onay akışı otomatik
-                            başlatılır. Kapalıyken otomatik başlatma yapılmaz (manuel "Onaya Gönder"
-                            her zaman kullanılabilir). Akış şablonlarını yönetmek için
-                            <a href="/ApprovalFlow" style="color:var(--ap-accent);">Onay Akış Tanımları</a> sayfasını kullanın.
-                        </div>
-                    </div>
-                    <div class="ap-row-control">
-                        <label class="ap-switch">
-                            <input type="checkbox" id="ap-approval-purchaserequest" @(approvalEnabled("PurchaseRequest") ? "checked" : null) />
-                            <span class="ap-switch-track @(approvalEnabled("PurchaseRequest") ? "is-on" : "")">
-                                <span class="ap-switch-thumb"></span>
-                            </span>
-                            <span class="ap-switch-label @(approvalEnabled("PurchaseRequest") ? "is-active" : "")"
-                                  id="ap-approval-purchaserequest-label">@(approvalEnabled("PurchaseRequest") ? "Aktif" : "Pasif")</span>
-                        </label>
-                    </div>
-                </div>
+                @await Html.PartialAsync("_ApprovalParamRows", approvalState("PurchaseRequest"))
             </section>
 
             @* ── Stok ───────────────────────────────────── *@
@@ -1121,28 +1050,11 @@ body.app-theme-dark .ap-tab.is-active::before {
                 })();
                 </script>
 
+                @{ var tlSo = tlState("satis_siparisi"); }
+                @if (tlSo is not null) { @await Html.PartialAsync("_TlPriceEditRow", tlSo) }
+
                 <div class="ap-group-title">Onay</div>
-                <div class="ap-row">
-                    <div class="ap-row-main">
-                        <div class="ap-row-title">Onay Akışı Otomatik Başlatma</div>
-                        <div class="ap-row-desc">
-                            Açıkken yeni Satış Siparişi kaydedildiğinde eşleşen onay akışı otomatik
-                            başlatılır. Kapalıyken otomatik başlatma yapılmaz (manuel "Onaya Gönder"
-                            her zaman kullanılabilir). Akış şablonlarını yönetmek için
-                            <a href="/ApprovalFlow" style="color:var(--ap-accent);">Onay Akış Tanımları</a> sayfasını kullanın.
-                        </div>
-                    </div>
-                    <div class="ap-row-control">
-                        <label class="ap-switch">
-                            <input type="checkbox" id="ap-approval-salesorder" @(approvalEnabled("SalesOrder") ? "checked" : null) />
-                            <span class="ap-switch-track @(approvalEnabled("SalesOrder") ? "is-on" : "")">
-                                <span class="ap-switch-thumb"></span>
-                            </span>
-                            <span class="ap-switch-label @(approvalEnabled("SalesOrder") ? "is-active" : "")"
-                                  id="ap-approval-salesorder-label">@(approvalEnabled("SalesOrder") ? "Aktif" : "Pasif")</span>
-                        </label>
-                    </div>
-                </div>
+                @await Html.PartialAsync("_ApprovalParamRows", approvalState("SalesOrder"))
             </section>
 
             @* ── İzlenebilirlik ───────────────────────────── *@
@@ -1249,10 +1161,12 @@ body.app-theme-dark .ap-tab.is-active::before {
     var actionBar = document.getElementById('ap-action-bar');
 
     // ── Tab gecisi + Kaydet butonunun aktif/pasif durumu ────
-    // NOT: Kaydedilebilir parametresi olan HER yeni sekme buraya eklenmeli,
-    // yoksa o sekmede Kaydet butonu pasif kalir (bkz. satissiparis regresyonu).
+    // Sekme adi listesi TUTULMAZ (eskiden elle whitelist vardi ve yeni sekme eklenince
+    // Kaydet pasif kaliyordu — "satissiparis regresyonu"). Artik pane'in icinde
+    // kaydedilebilir bir kontrol var mi diye DOM'a bakilir.
     function syncSaveButton() {
-        var hasParams = (activePane === 'general' || activePane === 'production' || activePane === 'ihtiyac' || activePane === 'stok' || activePane === 'satissiparis' || activePane === 'salesquote' || activePane === 'purchase' || activePane === 'guvenlik');
+        var paneEl = document.getElementById('ap-pane-' + activePane);
+        var hasParams = !!(paneEl && paneEl.querySelector('input, select, textarea'));
         saveBtn.disabled = !hasParams;
         saveBtn.title = hasParams ? '' : 'Bu sekmede henüz kaydedilebilir parametre yok.';
     }
@@ -1353,12 +1267,27 @@ body.app-theme-dark .ap-tab.is-active::before {
     wireSwitch('ap-wo-recipe-edit', 'ap-wo-recipe-edit-label');
     wireSwitch('ap-fc-min-stock', 'ap-fc-min-stock-label');
     wireSwitch('ap-fc-consolidate', 'ap-fc-consolidate-label');
-    // Belge türü onay switch'leri — artık her biri kendi modül sekmesinde (PageComment Seq 1098).
-    wireSwitch('ap-approval-salesquote', 'ap-approval-salesquote-label');
-    wireSwitch('ap-approval-salesorder', 'ap-approval-salesorder-label');
-    wireSwitch('ap-approval-purchaserequest', 'ap-approval-purchaserequest-label');
-    wireSwitch('ap-approval-purchasequote', 'ap-approval-purchasequote-label');
-    wireSwitch('ap-approval-purchaseorder', 'ap-approval-purchaseorder-label');
+    // Belge türü onay switch'leri + TL müdahale — her biri kendi modül sekmesinde,
+    // markup _ApprovalParamRows / _TlPriceEditRow partial'larından gelir. Id yerine
+    // SINIF üzerinden bağlanır (yeni sekme eklendiğinde JS'e dokunmak gerekmez).
+    document.querySelectorAll('.ap-approval-use, .ap-approval-auto, .ap-tl-edit').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+            var on = cb.checked;
+            cb.closest('.ap-switch').querySelector('.ap-switch-track').classList.toggle('is-on', on);
+            var lbl = document.getElementById(cb.id + '-label');
+            if (lbl) { lbl.textContent = on ? 'Aktif' : 'Pasif'; lbl.classList.toggle('is-active', on); }
+        });
+    });
+
+    // Kademe: "Onay Sistemi Kullanılsın" kapalıyken otomatik başlatma satırı GİZLENİR
+    // (kapalı sistemde sorulmasının anlamı yok — kullanıcı isteği 2026-08-22).
+    document.querySelectorAll('.ap-approval-use').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+            var kind = cb.getAttribute('data-kind');
+            var row = document.querySelector('.ap-approval-auto-row[data-kind="' + kind + '"]');
+            if (row) row.style.display = cb.checked ? '' : 'none';
+        });
+    });
     // Eksi bakiye switch'leri — etiket data-on / data-off'tan alınır
     document.querySelectorAll('.ap-neg-switch').forEach(function (cb) {
         cb.addEventListener('change', function () {
@@ -1369,11 +1298,64 @@ body.app-theme-dark .ap-tab.is-active::before {
         });
     });
 
+    // ── Aktif sekmedeki ORTAK parametreler (onay + TL müdahale) ────────────
+    // Bu iki grup artık birçok sekmede tekrar ettiği için sekme başına ayrı dal
+    // yazılmaz; aktif pane'in içindekiler toplanıp kaydedilir.
+    async function saveCommonPaneParams(pane) {
+        var scope = document.getElementById('ap-pane-' + pane);
+        if (!scope) return { handled: false, ok: true };
+
+        var kinds = [];
+        scope.querySelectorAll('.ap-approval-auto').forEach(function (autoEl) {
+            var kind = autoEl.getAttribute('data-kind');
+            var useEl = scope.querySelector('.ap-approval-use[data-kind="' + kind + '"]');
+            kinds.push({
+                kind: kind,
+                enabled: !!autoEl.checked,
+                use: useEl ? !!useEl.checked : true
+            });
+        });
+
+        var tlEls = scope.querySelectorAll('.ap-tl-edit');
+        if (kinds.length === 0 && tlEls.length === 0) return { handled: false, ok: true };
+
+        var allOk = true;
+        if (kinds.length) {
+            var dk = await saveApprovalKinds(kinds);
+            if (!dk.ok) allOk = false;
+        }
+        for (var i = 0; i < tlEls.length; i++) {
+            var el = tlEls[i];
+            var rr = await fetch('/Admin/SaveParameter', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                body: JSON.stringify({
+                    formCode: 'SALES_QUOTE',
+                    paramKey: 'TL_PRICE_EDIT_' + el.getAttribute('data-doctype'),
+                    paramValue: el.checked ? 'true' : 'false',
+                    dataType: 0
+                })
+            });
+            var dd = await rr.json().catch(function () { return { ok: false }; });
+            if (!dd.ok) allOk = false;
+        }
+        return { handled: true, ok: allOk };
+    }
+
+    // Kendi kaydetme dalı OLAN sekmeler — bunlarda başarı/hata mesajını dal verir,
+    // ortak kaydedici yalnızca sonucu AND'ler. Listede olmayan sekmede mesajı
+    // ortak kaydedici verir.
+    var PANES_WITH_BRANCH = ['general', 'production', 'ihtiyac', 'stok', 'satissiparis', 'salesquote', 'guvenlik'];
+
     // ── Aksiyon seridi Kaydet handler ──────────────────────
     saveBtn.addEventListener('click', async function () {
         if (saveBtn.disabled) return;
         saveBtn.disabled = true;
         try {
+            // Onay + TL parametreleri sekmeye bakılmaksızın burada kaydedilir.
+            var common = await saveCommonPaneParams(activePane);
+            var hasBranch = PANES_WITH_BRANCH.indexOf(activePane) >= 0;
             var ok = false;
             if (activePane === 'general') {
                 var edocCheckbox = document.getElementById('ap-edoc-approval');
@@ -1444,11 +1426,9 @@ body.app-theme-dark .ap-tab.is-active::before {
                     body: JSON.stringify({ formCode: 'PURCHASE_FULFILLMENT', paramKey: 'STOCK_DOC_CONSOLIDATE', paramValue: (conEl && conEl.checked) ? 'true' : 'false', dataType: 3 })
                 });
                 var d4 = await r4.json();
-                var apPrEl = document.getElementById('ap-approval-purchaserequest');
-                var d5 = await saveApprovalKinds([{ kind: 'PurchaseRequest', enabled: !!(apPrEl && apPrEl.checked) }]);
-                ok = !!d1.ok && !!d3.ok && !!d4.ok && !!d5.ok;
+                ok = !!d1.ok && !!d3.ok && !!d4.ok;   // onay: ortak kaydedicide
                 if (ok) { flash('Kaydedildi.', true); fcRenderWarning(null); }  // basarili kayitta gecersiz-id uyarisi artik gecersiz
-                else    flash((d1.error || d3.error || d4.error || d5.error || 'Kaydetme basarisiz.'), false);
+                else    flash((d1.error || d3.error || d4.error || 'Kaydetme basarisiz.'), false);
             } else if (activePane === 'stok') {
                 var negCtrlEl = document.getElementById('ap-neg-control');
                 var pFifoEl = document.getElementById('ap-purchase-fifo');
@@ -1522,11 +1502,9 @@ body.app-theme-dark .ap-tab.is-active::before {
                     body: JSON.stringify({ formCode: 'STOCK', paramKey: 'ORDER_SERIAL_RESERVATION', paramValue: serOn ? 'true' : 'false', dataType: 3 })
                 });
                 var dser = await rser.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
-                var apSoEl = document.getElementById('ap-approval-salesorder');
-                var dApSo = await saveApprovalKinds([{ kind: 'SalesOrder', enabled: !!(apSoEl && apSoEl.checked) }]);
-                ok = !!dso.ok && !!dtrack.ok && !!dser.ok && !!dApSo.ok;
+                ok = !!dso.ok && !!dtrack.ok && !!dser.ok;   // onay: ortak kaydedicide
                 if (ok) flash('Kaydedildi.', true);
-                else    flash(dso.error || dtrack.error || dser.error || dApSo.error || 'Kaydetme basarisiz.', false);
+                else    flash(dso.error || dtrack.error || dser.error || 'Kaydetme basarisiz.', false);
             } else if (activePane === 'salesquote') {
                 var rtEl = document.getElementById('ap-sq-rate-type');
                 var allowed = ['Selling', 'Buying', 'EffectiveSelling', 'EffectiveBuying'];
@@ -1538,40 +1516,9 @@ body.app-theme-dark .ap-tab.is-active::before {
                     body: JSON.stringify({ formCode: 'SALES_QUOTE', paramKey: 'RATE_TYPE', paramValue: rtVal, dataType: 1 })
                 });
                 var drt = await rrt.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
-                var apSqEl = document.getElementById('ap-approval-salesquote');
-                var dApSq = await saveApprovalKinds([{ kind: 'SalesQuote', enabled: !!(apSqEl && apSqEl.checked) }]);
-                // TL fiyata mudahale — belge turu basina ayri parametre (TL_PRICE_EDIT_<kod>).
-                var tlOk = true;
-                var tlEls = document.querySelectorAll('.ap-tl-edit');
-                for (var ti = 0; ti < tlEls.length; ti++) {
-                    var el = tlEls[ti];
-                    var rr = await fetch('/Admin/SaveParameter', {
-                        method: 'POST',
-                        credentials: 'same-origin',
-                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-                        body: JSON.stringify({
-                            formCode: 'SALES_QUOTE',
-                            paramKey: 'TL_PRICE_EDIT_' + el.getAttribute('data-doctype'),
-                            paramValue: el.checked ? 'true' : 'false',
-                            dataType: 0
-                        })
-                    });
-                    var dd = await rr.json().catch(function () { return { ok: false }; });
-                    if (!dd.ok) tlOk = false;
-                }
-                ok = !!drt.ok && !!dApSq.ok && tlOk;
+                ok = !!drt.ok;   // onay + TL: ortak kaydedicide
                 if (ok) flash('Kaydedildi.', true);
-                else    flash(drt.error || dApSq.error || 'Kaydetme basarisiz.', false);
-            } else if (activePane === 'purchase') {
-                var apPqEl = document.getElementById('ap-approval-purchasequote');
-                var apPoEl = document.getElementById('ap-approval-purchaseorder');
-                var dPur = await saveApprovalKinds([
-                    { kind: 'PurchaseQuote', enabled: !!(apPqEl && apPqEl.checked) },
-                    { kind: 'PurchaseOrder', enabled: !!(apPoEl && apPoEl.checked) }
-                ]);
-                ok = !!dPur.ok;
-                if (ok) flash('Kaydedildi.', true);
-                else    flash(dPur.error || 'Kaydetme basarisiz.', false);
+                else    flash(drt.error || 'Kaydetme basarisiz.', false);
             } else if (activePane === 'guvenlik') {
                 var idleEl = document.getElementById('ap-session-idle');
                 var idleVal = parseInt(idleEl && idleEl.value, 10);
@@ -1589,6 +1536,12 @@ body.app-theme-dark .ap-tab.is-active::before {
                 ok = !!dsec.ok;
                 if (ok) flash('Kaydedildi. Yeni süre bir sonraki oturum yenilemesinde geçerli olur.', true);
                 else    flash(dsec.error || 'Kaydetme basarisiz.', false);
+            }
+
+            // Ortak parametrelerin sonucu: kendi dalı olmayan sekmede mesajı da bu verir.
+            if (common.handled) {
+                if (!common.ok) { ok = false; flash('Kaydetme basarisiz.', false); }
+                else if (!hasBranch) { ok = true; flash('Kaydedildi.', true); }
             }
             // Yeni sekmeler eklendiginde buraya else if blogu ile bagla
             if (ok) flashSuccess();

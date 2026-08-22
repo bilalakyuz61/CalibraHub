@@ -1,0 +1,25 @@
+@model CalibraHub.Web.Controllers.ParametersController.StockEffectState
+@*
+    TL fiyata müdahale — TEK belge türü için (2026-08-22: parametreler artık hepsi
+    Satış Teklifi sekmesinde değil, her belge türü kendi sekmesinde).
+    Kaydetme: pane içindeki `.ap-tl-edit` elemanları ortak kaydedici tarafından toplanır.
+*@
+<div class="ap-row">
+    <div class="ap-row-main">
+        <div class="ap-row-title">TL Fiyata Müdahale</div>
+        <div class="ap-row-desc">
+            Dövizli belgelerde kalem gridindeki <strong>Birim Fiyat (TL)</strong> sütunu normalde
+            salt okunur bir göstergedir (döviz fiyatı × kur). Açıkken bu alan düzenlenebilir olur;
+            girilen TL tutarı <strong>kura bölünerek</strong> döviz birim fiyatı geri hesaplanır.
+        </div>
+    </div>
+    <div class="ap-row-control">
+        <label class="ap-switch">
+            <input type="checkbox" class="ap-tl-edit" data-doctype="@Model.Code"
+                   id="ap-tl-@Model.Code" @(Model.Enabled ? "checked" : null) />
+            <span class="ap-switch-track @(Model.Enabled ? "is-on" : "")"><span class="ap-switch-thumb"></span></span>
+            <span class="ap-switch-label @(Model.Enabled ? "is-active" : "")"
+                  id="ap-tl-@(Model.Code)-label">@(Model.Enabled ? "Aktif" : "Pasif")</span>
+        </label>
+    </div>
+</div>

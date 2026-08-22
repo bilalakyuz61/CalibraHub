@@ -1146,8 +1146,13 @@ public sealed class DocumentService : IDocumentService
                 var approvalEnabled = true;
                 if (_companyParameters is not null && kind != DocumentEntityTypes.WildcardKind)
                 {
-                    approvalEnabled = await _companyParameters.GetBoolAsync(
-                        ApprovalParameters.FormCode, ApprovalParameters.EnabledKey(kind), ct) ?? true;
+                    // Ana anahtar: onay sistemi bu belge türünde kullanılmıyorsa hiçbir onay davranışı devreye girmez.
+                    var useApproval = await _companyParameters.GetBoolAsync(
+                        ApprovalParameters.FormCode, ApprovalParameters.UseKey(kind), ct) ?? true;
+
+                    approvalEnabled = useApproval
+                        && (await _companyParameters.GetBoolAsync(
+                                ApprovalParameters.FormCode, ApprovalParameters.EnabledKey(kind), ct) ?? true);
                 }
 
                 if (approvalEnabled)

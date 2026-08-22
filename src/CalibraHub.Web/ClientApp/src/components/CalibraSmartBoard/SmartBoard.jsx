@@ -133,6 +133,11 @@ export default function SmartBoard(props) {
   //                        { ok, columns:[{key,label,align,width}], rows:[{...}],
   //                          empty?:"metin", error?:"metin" }
   // Hicbiri verilmezse mevcut board'larin render'i BIREBIR aynidir.
+  /* iconMenu (2026-08-22, kullanici istegi): baslik ikonu TIKLANABILIR bir
+     buton olur ve altinda "Islemler" tarzi bir menu acilir.
+     Sozlesme: [{ id, label, icon, url }] — url'e gidilir (yeni sayfa).
+     Verilmezse ikon eskisi gibi salt gorsel kalir (fail-open). */
+  var iconMenu = Array.isArray(props.iconMenu) ? props.iconMenu.filter(Boolean) : []
   var selectable = props.selectable === true
   var bulkActions = Array.isArray(props.bulkActions) ? props.bulkActions.filter(Boolean) : []
   var detailUrlTemplate = props.detailUrl || null
@@ -780,6 +785,7 @@ export default function SmartBoard(props) {
   var isTableMode = viewMode === 'table'
 
   // ── Secim / detay durumu ────────────────────────────────────────────────
+  var [iconMenuOpen, setIconMenuOpen] = useState(false)
   var [selectedIds, setSelectedIds] = useState(function () { return new Set() })
   var [expandedIds, setExpandedIds] = useState(function () { return new Set() })
   var [detailData, setDetailData] = useState({})   // id -> {loading|error|payload}
@@ -1121,15 +1127,58 @@ export default function SmartBoard(props) {
       {/* ── Header ──────────────────────────── */}
       <div className="flex items-center gap-4 px-5 py-3 border-b border-slate-200/60 dark:border-white/[0.06] flex-shrink-0">
         <div className="flex items-center gap-3 flex-shrink-0">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center"
-            style={{
-              background: headerPalette.bg,
-              border: '1px solid ' + headerPalette.border,
-            }}
-          >
-            <HeaderIcon size={17} style={{ color: headerPalette.icon }} />
-          </div>
+          {iconMenu.length === 0 ? (
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center"
+              style={{ background: headerPalette.bg, border: '1px solid ' + headerPalette.border }}
+            >
+              <HeaderIcon size={17} style={{ color: headerPalette.icon }} />
+            </div>
+          ) : (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={function () { setIconMenuOpen(function (v) { return !v }) }}
+                title="İşlemler"
+                aria-haspopup="menu"
+                aria-expanded={iconMenuOpen}
+                className="w-9 h-9 rounded-xl flex items-center justify-center transition-shadow hover:shadow-md"
+                style={{ background: headerPalette.bg, border: '1px solid ' + headerPalette.border }}
+              >
+                <HeaderIcon size={17} style={{ color: headerPalette.icon }} />
+              </button>
+              {iconMenuOpen && (
+                <>
+                  {/* Disari tiklayinca kapanma — ayri dinleyici yerine seffaf perde
+                      (SmartBoard'un diger acilirlariyla ayni desen). */}
+                  <div className="fixed inset-0 z-40" onClick={function () { setIconMenuOpen(false) }} />
+                  <div
+                    role="menu"
+                    className="absolute left-0 top-11 z-50 min-w-[230px] rounded-xl border border-slate-200 bg-[#fff] shadow-xl py-1 dark:border-white/10 dark:bg-[#171c2a]"
+                  >
+                    {iconMenu.map(function (mi) {
+                      var MIcon = resolveIcon(mi.icon, null, null)
+                      return (
+                        <button
+                          key={mi.id || mi.label}
+                          type="button"
+                          role="menuitem"
+                          onClick={function () {
+                            setIconMenuOpen(false)
+                            if (mi.url) navigateInWorkspace(mi.url, mi.label, deriveMatchPathFromUrl(mi.url))
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] font-medium text-slate-700 hover:bg-slate-50 dark:text-white/80 dark:hover:bg-white/[0.06]"
+                        >
+                          <MIcon size={14} strokeWidth={2} className="flex-shrink-0 text-slate-400 dark:text-white/45" />
+                          <span className="truncate">{mi.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <div>
             <h1 className="text-base font-bold text-slate-800 dark:text-white/90 tracking-tight leading-tight">
               {title}

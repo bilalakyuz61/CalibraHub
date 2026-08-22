@@ -143,7 +143,9 @@ public sealed class PurchaseController : Controller
         IEnumerable<int> documentIds, CancellationToken ct)
     {
         var kindEnabled = await _companyParams.GetStringAsync(
-            ApprovalParameters.FormCode, ApprovalParameters.EnabledKey("PurchaseRequest"), ct) != "false";
+                              ApprovalParameters.FormCode, ApprovalParameters.UseKey("PurchaseRequest"), ct) != "false"
+                          && await _companyParams.GetStringAsync(
+                              ApprovalParameters.FormCode, ApprovalParameters.EnabledKey("PurchaseRequest"), ct) != "false";
 
         // Açık (Pending) onay süreci olan belgeler — parametre sonradan kapatılsa bile önce
         // onay akışını tamamlamalı. Bu kontrol her durumda uygulanır.
@@ -209,6 +211,11 @@ public sealed class PurchaseController : Controller
             var approvalEnabled = true;
             if (kind != DocumentEntityTypes.WildcardKind)
             {
+                // Ana anahtar: onay sistemi bu belge türünde kullanılmıyorsa hiçbir onay davranışı devreye girmez.
+                var useApproval = await _companyParams.GetBoolAsync(
+                    ApprovalParameters.FormCode, ApprovalParameters.UseKey(kind), ct) ?? true;
+                if (!useApproval) return false;
+
                 approvalEnabled = await _companyParams.GetBoolAsync(
                     ApprovalParameters.FormCode, ApprovalParameters.EnabledKey(kind), ct) ?? true;
             }
@@ -529,8 +536,10 @@ public sealed class PurchaseController : Controller
         // İhtiyaç Kaydı onay tetikleme açık mı — "Onaya Gönder" butonu yalnızca açıkken gösterilir.
         // (Liste boyunca sabit; döngü öncesi tek kez okunur.)
         var purchaseReqApprovalEnabled = !string.Equals(typeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase)
-            || await _companyParams.GetStringAsync(
-                   ApprovalParameters.FormCode, ApprovalParameters.EnabledKey("PurchaseRequest"), ct) != "false";
+            || (await _companyParams.GetStringAsync(
+                    ApprovalParameters.FormCode, ApprovalParameters.UseKey("PurchaseRequest"), ct) != "false"
+                && await _companyParams.GetStringAsync(
+                    ApprovalParameters.FormCode, ApprovalParameters.EnabledKey("PurchaseRequest"), ct) != "false");
         var auditFormCode = DocumentTypeFormMap.Resolve(typeCode).Header;
 
         var entities = new List<object>();
@@ -863,7 +872,9 @@ public sealed class PurchaseController : Controller
         // İhtiyaç Kaydı onay tetikleme açık mı → karşılama ekranında seçim kapısını belirler.
         // Açık: yalnızca Onaylı belgeler seçilebilir. Kapalı: tümü seçilebilir.
         ViewData["ApprovalRequired"] = await _companyParams.GetStringAsync(
-            ApprovalParameters.FormCode, ApprovalParameters.EnabledKey("PurchaseRequest"), ct) != "false";
+                                           ApprovalParameters.FormCode, ApprovalParameters.UseKey("PurchaseRequest"), ct) != "false"
+                                       && await _companyParams.GetStringAsync(
+                                           ApprovalParameters.FormCode, ApprovalParameters.EnabledKey("PurchaseRequest"), ct) != "false";
 
         return View("~/Views/Purchase/FulfillmentCenter.cshtml");
     }

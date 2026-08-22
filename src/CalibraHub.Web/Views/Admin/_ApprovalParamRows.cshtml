@@ -1,0 +1,55 @@
+@model CalibraHub.Web.Controllers.ParametersController.ApprovalKindState
+@*
+    Bir belge türünün onay parametreleri — İKİ KADEMELİ (2026-08-22 kullanıcı isteği):
+      1) Onay Sistemi Kullanılsın  → ana anahtar (APPROVAL_USE_{Kind})
+      2) Onay Akışı Otomatik Başlatma → yalnızca (1) açıkken görünür (APPROVAL_ENABLED_{Kind})
+
+    Her iki parametre de tanımsızken AÇIK kabul edilir; böylece mevcut kurulumlarda
+    onay davranışı birebir korunur (fail-open).
+
+    Kaydetme: pane içindeki `.ap-approval-use` / `.ap-approval-auto` elemanları
+    Parameters.cshtml'deki ortak kaydedici tarafından toplanır — sekmeye özel JS gerekmez.
+*@
+@{
+    var slug = Model.Code.ToLowerInvariant();
+}
+
+<div class="ap-row">
+    <div class="ap-row-main">
+        <div class="ap-row-title">Onay Sistemi Kullanılsın</div>
+        <div class="ap-row-desc">
+            Kapalıyken bu belge türünde onay akışı hiç devreye girmez — otomatik başlatma da,
+            manuel "Onaya Gönder" de yapılmaz. Açtığınızda otomatik başlatma seçeneği görünür.
+            Akış şablonlarını yönetmek için
+            <a href="/ApprovalFlow" style="color:var(--ap-accent);">Onay Akış Tanımları</a> sayfasını kullanın.
+        </div>
+    </div>
+    <div class="ap-row-control">
+        <label class="ap-switch">
+            <input type="checkbox" class="ap-approval-use" data-kind="@Model.Code"
+                   id="ap-approval-use-@(slug)" @(Model.Use ? "checked" : null) />
+            <span class="ap-switch-track @(Model.Use ? "is-on" : "")"><span class="ap-switch-thumb"></span></span>
+            <span class="ap-switch-label @(Model.Use ? "is-active" : "")"
+                  id="ap-approval-use-@(slug)-label">@(Model.Use ? "Aktif" : "Pasif")</span>
+        </label>
+    </div>
+</div>
+
+<div class="ap-row ap-approval-auto-row" data-kind="@Model.Code" style="@(Model.Use ? "" : "display:none;")">
+    <div class="ap-row-main">
+        <div class="ap-row-title">Onay Akışı Otomatik Başlatma</div>
+        <div class="ap-row-desc">
+            Açıkken bu belge türünde yeni kayıt kaydedildiğinde eşleşen onay akışı otomatik
+            başlatılır. Kapalıyken otomatik başlatma yapılmaz; manuel "Onaya Gönder" kullanılabilir.
+        </div>
+    </div>
+    <div class="ap-row-control">
+        <label class="ap-switch">
+            <input type="checkbox" class="ap-approval-auto" data-kind="@Model.Code"
+                   id="ap-approval-auto-@(slug)" @(Model.Enabled ? "checked" : null) />
+            <span class="ap-switch-track @(Model.Enabled ? "is-on" : "")"><span class="ap-switch-thumb"></span></span>
+            <span class="ap-switch-label @(Model.Enabled ? "is-active" : "")"
+                  id="ap-approval-auto-@(slug)-label">@(Model.Enabled ? "Aktif" : "Pasif")</span>
+        </label>
+    </div>
+</div>
