@@ -1,0 +1,302 @@
+/* Makine Planlama — Kapasite / Yük Raporu (Isı Haritası)
+   Tema: light = default değişkenler, body.app-theme-dark override eder (CLAUDE.md kuralı). */
+
+.cap-root {
+  color-scheme: light;
+  --cap-bg: var(--app-content-bg, #f4f6fa);
+  --cap-surface: var(--app-surface, #ffffff);
+  --cap-surface-2: var(--app-muted-surface, #f8fafc);
+  --cap-border: var(--app-border, #e2e8f0);
+  --cap-text: var(--app-text, #0f172a);
+  --cap-text-muted: var(--app-text-muted, #64748b);
+  --cap-accent: #6366f1;
+  --cap-accent-soft: rgba(99, 102, 241, 0.12);
+
+  /* Doluluk renk bandları */
+  --cap-ok: #22c55e;
+  --cap-ok-text: #063a17;
+  --cap-mid: #a3d977;
+  --cap-mid-text: #24350c;
+  --cap-warn: #f59e0b;
+  --cap-warn-text: #3a2405;
+  --cap-over: #ef4444;
+  --cap-over-text: #ffffff;
+  --cap-nodata: #cbd5e1;
+  --cap-nodata-text: #475569;
+  --cap-nodata-stripe: rgba(100, 116, 139, 0.18);
+
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--cap-bg);
+  color: var(--cap-text);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+body.app-theme-dark .cap-root {
+  color-scheme: dark;
+  --cap-bg: var(--app-content-bg, #0b1220);
+  --cap-surface: var(--app-surface, #111a2c);
+  --cap-surface-2: var(--app-muted-surface, #0f1830);
+  --cap-border: var(--app-border, #223050);
+  --cap-text: var(--app-text, #e2e8f0);
+  --cap-text-muted: var(--app-text-muted, #8b9bbd);
+  --cap-accent: #818cf8;
+  --cap-accent-soft: rgba(129, 140, 248, 0.18);
+
+  --cap-ok: #16a34a;
+  --cap-ok-text: #d7ffe6;
+  --cap-mid: #65a30d;
+  --cap-mid-text: #ecffd6;
+  --cap-warn: #d97706;
+  --cap-warn-text: #fff7ed;
+  --cap-over: #dc2626;
+  --cap-over-text: #fff1f1;
+  --cap-nodata: #334155;
+  --cap-nodata-text: #94a3b8;
+  --cap-nodata-stripe: rgba(148, 163, 184, 0.14);
+}
+
+/* ── Toolbar ─────────────────────────────────────────────── */
+.cap-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 10px 14px;
+  background: var(--cap-surface);
+  border-bottom: 1px solid var(--cap-border);
+}
+
+.cap-toolbar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cap-text);
+  white-space: nowrap;
+}
+
+.cap-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cap-toolbar-label {
+  font-size: 12px;
+  color: var(--cap-text-muted);
+  white-space: nowrap;
+}
+
+.cap-bucket-toggle {
+  display: flex;
+  border: 1px solid var(--cap-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.cap-bucket-btn {
+  border: none;
+  background: var(--cap-surface);
+  color: var(--cap-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.cap-bucket-btn + .cap-bucket-btn {
+  border-left: 1px solid var(--cap-border);
+}
+
+.cap-bucket-btn.is-active {
+  background: var(--cap-accent);
+  color: #ffffff;
+}
+
+.cap-date-input {
+  color-scheme: inherit;
+  border: 1px solid var(--cap-border);
+  border-radius: 6px;
+  background: var(--cap-surface);
+  color: var(--cap-text);
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.cap-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--cap-border);
+  border-radius: 6px;
+  background: var(--cap-surface);
+  color: var(--cap-text-muted);
+  cursor: pointer;
+}
+.cap-icon-btn:hover {
+  color: var(--cap-accent);
+  border-color: var(--cap-accent);
+}
+
+.cap-spacer {
+  flex: 1 1 auto;
+}
+
+.cap-spin {
+  animation: cap-spin 0.9s linear infinite;
+}
+@@keyframes cap-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.cap-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cap-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--cap-text-muted);
+  white-space: nowrap;
+}
+
+.cap-legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.cap-legend-swatch--ok { background: var(--cap-ok); }
+.cap-legend-swatch--mid { background: var(--cap-mid); }
+.cap-legend-swatch--warn { background: var(--cap-warn); }
+.cap-legend-swatch--over { background: var(--cap-over); }
+.cap-legend-swatch--nodata {
+  background: var(--cap-nodata);
+  background-image: repeating-linear-gradient(45deg, var(--cap-nodata-stripe) 0, var(--cap-nodata-stripe) 2px, transparent 2px, transparent 5px);
+}
+
+/* ── Body / boş durum ────────────────────────────────────── */
+.cap-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.cap-loading,
+.cap-empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--cap-text-muted);
+  font-size: 13px;
+}
+
+/* ── Isı haritası grid ───────────────────────────────────── */
+.cap-grid-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.cap-grid {
+  display: grid;
+  grid-auto-rows: 40px;
+  width: max-content;
+  min-width: 100%;
+}
+
+.cap-cell {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--cap-border);
+  border-right: 1px solid var(--cap-border);
+  box-sizing: border-box;
+  font-size: 12px;
+}
+
+.cap-cell--corner,
+.cap-cell--bucket-header {
+  background: var(--cap-surface-2);
+  color: var(--cap-text-muted);
+  font-weight: 600;
+  justify-content: center;
+  padding: 4px 6px;
+  text-align: center;
+  z-index: 3;
+}
+
+.cap-cell--machine-name {
+  background: var(--cap-surface-2);
+  color: var(--cap-text);
+  font-weight: 500;
+  padding: 0 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  z-index: 2;
+}
+
+.cap-cell--sticky-top {
+  position: sticky;
+  top: 0;
+}
+
+.cap-cell--sticky-left {
+  position: sticky;
+  left: 0;
+}
+
+.cap-cell--sticky-both {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 4;
+}
+
+.cap-cell--data {
+  position: relative;
+  justify-content: center;
+  color: var(--cap-text);
+}
+
+.cap-cell--ok { background: var(--cap-ok); color: var(--cap-ok-text); }
+.cap-cell--mid { background: var(--cap-mid); color: var(--cap-mid-text); }
+.cap-cell--warn { background: var(--cap-warn); color: var(--cap-warn-text); }
+.cap-cell--over { background: var(--cap-over); color: var(--cap-over-text); }
+.cap-cell--nodata {
+  background: var(--cap-nodata);
+  background-image: repeating-linear-gradient(45deg, var(--cap-nodata-stripe) 0, var(--cap-nodata-stripe) 2px, transparent 2px, transparent 5px);
+  color: var(--cap-nodata-text);
+}
+
+.cap-cell-pct {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cap-cell-overload-icon {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+}
