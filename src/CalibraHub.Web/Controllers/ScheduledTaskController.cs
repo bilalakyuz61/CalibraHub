@@ -372,8 +372,13 @@ public sealed class ScheduledTaskController : Controller
     // ── Helpers ─────────────────────────────────────────────────────────────
     private static object BuildScheduledTasksBoardConfig(IReadOnlyCollection<CalibraHub.Domain.Entities.ScheduledTask> tasks)
     {
+        var statusOptions = SmartBoardFilterHelpers.ToOptionsList(new[]
+        {
+            "Çalışıyor", "Askıda Kalmış", "Pasif", "Hata", "Başarılı", "Beklemede",
+        });
         var masterWidgets = new List<object>
         {
+            SmartBoardFilterHelpers.MakeOptionsWidget("status",   "Durum",        statusOptions),
             SmartBoardFilterHelpers.MakeStdWidget("schedule", "Zamanlama",    "text"),
             SmartBoardFilterHelpers.MakeStdWidget("lastRun",  "Son Çalışma",  "text"),
             SmartBoardFilterHelpers.MakeStdWidget("nextRun",  "Sonraki",      "text"),
@@ -383,6 +388,10 @@ public sealed class ScheduledTaskController : Controller
             boardKey   = "scheduled-tasks",
             title      = "Zamanlanmış Görevler",
             refreshUrl = "/Admin/ScheduledTasks/BoardEntities",
+            // Durum sütunu ("Çalışıyor") kendiliğinden değişir; liste tazelenmezse kullanıcı
+            // çalışan görevi hiç göremez (PageComment Seq 1108). SmartBoard bu alanı yalnız
+            // verildiğinde işler ve sekme arka plandayken istek atmaz.
+            autoRefreshMs = 12000,
             actions  = new object[]
             {
                 new { id = "new", label = "Yeni Görev", icon = "Plus", variant = "primary", url = "/Admin/ScheduledTaskEdit" },
@@ -397,15 +406,17 @@ public sealed class ScheduledTaskController : Controller
                 var toggleLabel  = t.IsEnabled ? "Durdur" : "Etkinleştir";
                 var toggleIcon   = t.IsEnabled ? "ToggleRight" : "ToggleLeft";
                 var toggleColor  = t.IsEnabled ? "orange" : "emerald";
+                var (statusLabel, statusColor) = GetScheduledTaskStatus(t);
                 return (object)new
                 {
                     id           = t.Id,
                     title        = t.Name,
                     subtitle     = GetScheduledTaskTypeLabel(t.TaskType),
                     description  = t.Description,
-                    statusBadge  = GetScheduledTaskStatusBadge(t),
+                    statusBadge  = new { label = statusLabel, color = statusColor },
                     widgets      = new object[]
                     {
+                        new { id = "status",   type = "data", dataType = "text", label = "Durum", value = statusLabel, color = statusColor },
                         new { id = "schedule", label = "Zamanlama", value = t.ScheduleDescription ?? "—", icon = "Clock" },
                         new { id = "lastRun",  label = "Son Çalışma", value = lastRunText, icon = "History" },
                         new { id = "nextRun",  label = "Sonraki",    value = nextRunText, icon = "Calendar" },
@@ -439,15 +450,43 @@ public sealed class ScheduledTaskController : Controller
         _                                                          => type.ToString(),
     };
 
-    private static object GetScheduledTaskStatusBadge(CalibraHub.Domain.Entities.ScheduledTask t)
+    /// <summary>
+    /// IsRunning=1 kaydının kilidin ne zamandır açık olduğunu tahmin etmek için kullanılan
+    /// sınır — üzeri "Çalışıyor" yerine "Askıda Kalmış" gösterilir.
+    /// </summary>
+    private static readonly TimeSpan ScheduledTaskStaleRunningThreshold = TimeSpan.FromMinutes(60);
+
+    /// <summary>
+    /// Görev durum etiketi+rengi — hem kart üstü statusBadge hem "Durum" widget'ı (kart VE
+    /// tablo görünümü <c>widgets</c> dizisinden geldiği için) TEK bu kaynaktan besleniyor.
+    ///
+    /// Asılı kalmış IsRunning bayrağı: sunucu, kilidi serbest bırakmadan (ReleaseLockAsync)
+    /// yeniden başlarsa/çökerse IsRunning=1 DB'de sonsuza dek kalabilir — ekranda görev
+    /// sonsuza dek yanlış biçimde "Çalışıyor" görünür. Kesin bir "kilit ne zaman alındı"
+    /// kolonu yok; TryAcquireLockAsync IsRunning=1 ile aynı UPDATE içinde Updated'ı da
+    /// SYSUTCDATETIME'a çeker, bu yüzden Updated kilit-alma anına yakın bir yaklaşık değer
+    /// olarak kullanılıyor (not: Save/Toggle gibi ilgisiz alan güncellemeleri de Updated'ı
+    /// tazeler; bu nadir kesişim durumunda asılı görev bir sonraki ilgisiz güncellemeye kadar
+    /// "Çalışıyor" görünmeye devam edebilir — kabul edilebilir yaklaşıklık, DB'de IsRunning
+    /// DEĞİŞTİRİLMEZ, yalnız bu GÖRÜNTÜLEME katmanı etkilenir).
+    ///
+    /// ScheduledTaskPollingWorker.MarkStuckRunsFailedAsync AYRI bir mekanizmadır — asılı kalmış
+    /// ScheduledTaskRun kayıtlarını kapatır; bu metot ve o dosya birbirine dokunmaz.
+    /// </summary>
+    private static (string Label, string Color) GetScheduledTaskStatus(CalibraHub.Domain.Entities.ScheduledTask t)
     {
-        if (t.IsRunning)   return new { label = "Çalışıyor",  color = "blue" };
-        if (!t.IsEnabled)  return new { label = "Devre Dışı", color = "gray" };
+        if (t.IsRunning)
+        {
+            if (DateTime.UtcNow - t.Updated > ScheduledTaskStaleRunningThreshold)
+                return ("Askıda Kalmış", "amber");
+            return ("Çalışıyor", "blue");
+        }
+        if (!t.IsEnabled) return ("Pasif", "slate");
         return t.LastRunStatus switch
         {
-            0 => new { label = "Başarılı", color = "green" },
-            1 => (object)new { label = "Hata",     color = "red" },
-            _ => new { label = "Bekliyor", color = "gray" },
+            0 => ("Başarılı", "emerald"),
+            1 => ("Hata", "rose"),
+            _ => ("Beklemede", "slate"),
         };
     }
 }

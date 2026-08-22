@@ -300,7 +300,16 @@ export default function DbImportWizard() {
   const step2Ok = !!job.targetEntity && job.columns.length > 0 && matchKeyMapped
     && (job.insertNew !== false || job.updateExisting !== false)
 
+  // React state güncellemesi asenkron olduğundan `busy` tek başına çift tıklamayı
+  // engellemeye yetmez (iki click aynı render aralığında geçebilir) — yeni bir işte
+  // bu, aynı işin iki kez INSERT edilmesi (mükerrer iş) demektir. Senkron ref kilidi
+  // her save() çağrısı için (goNext, Kaydet butonu, doPreview, doRun, Zamanla) tek
+  // giriş noktasından geçtiği için re-entrancy'yi kesin engeller.
+  const savingRef = React.useRef(false)
+
   async function save() {
+    if (savingRef.current) return 0
+    savingRef.current = true
     setBusy(true); setError(null)
     try {
       const res = await apiPost('/DbImport/api/jobs/save', job)
@@ -316,12 +325,40 @@ export default function DbImportWizard() {
       return 0
     } finally {
       setBusy(false)
+      savingRef.current = false
     }
   }
 
+  /*
+   * "İleri" ile adım ilerletme — PageComment #1107: önizleme sunucudaki KAYITLI
+   * iş üzerinden çalışır (doPreview → job.id ile preview endpoint). Kaynak
+   * tablo/view veya eşleme değiştirilip Kaydet'e basılmadan ilerlenirse
+   * önizleme/aktarım sessizce ESKİ tanımı kullanır. Bu yüzden adım ilerisi her
+   * geçişte mevcut save() ile (aynı job.id üzerinden UPDATE — SqlDataImportRepository
+   * job.Id<=0 ise INSERT, aksi halde UPDATE) kaydeder. Yalnızca hem Adım 1 hem
+   * Adım 2 geçerliyse kaydeder — sunucu Validate() eşlemesi/anahtarı zorunlu
+   * kıldığından (job.Domain.DataImportJob.Validate) erken (1→2) geçişte kaydetmek
+   * her zaman "anahtar/eşleme zorunlu" hatasıyla ilerlemeyi bloke ederdi;
+   * o adımlar arası serbest gezinme korunur. Kaydetme başarısızsa (validasyon/
+   * sunucu hatası) hata zaten save() içinde gösterilir — adım DEĞİŞMEZ, kullanıcı
+   * eski veriyle ilerlemiş gibi sessizce yanıltılmaz.
+   */
+  async function goNext() {
+    if (busy || step >= 5) return
+    if (step1Ok && step2Ok) {
+      const id = await save()
+      if (!id) return
+    }
+    setStep((s) => Math.min(5, s + 1))
+  }
+
   async function doPreview() {
-    let id = job.id
-    if (!id) { id = await save(); if (!id) return }
+    // HER ZAMAN kaydet — yalnız "id yoksa" kaydetmek yetmiyordu: mevcut bir işte kaynak
+    // tablo/eşleme değiştirilip kaydedilmeden önizlemeye gelinirse (adım sekmesine tıklayarak
+    // da gelinebilir) sunucu ESKİ tanımı okur ve önizleme sessizce yanlış veri gösterir
+    // (PageComment Seq 1107'nin ta kendisi). Kaydetme başarısızsa önizleme hiç çalışmaz.
+    const id = await save()
+    if (!id) return
     setBusy(true); setError(null); setPreview(null)
     try {
       const res = await apiPost(`/DbImport/api/jobs/${id}/preview?sampleRows=50`)
@@ -335,8 +372,10 @@ export default function DbImportWizard() {
   }
 
   async function doRun() {
-    let id = job.id
-    if (!id) { id = await save(); if (!id) return }
+    // Önizlemedeki gerekçenin aynısı, daha kritiği: kaydedilmemiş değişiklikle ESKİ tanım
+    // üzerinden GERÇEK aktarım çalıştırmak veriyi yanlış hedefe/kaynağa yazar.
+    const id = await save()
+    if (!id) return
     setBusy(true); setError(null); setRunResult(null)
     try {
       const res = await apiPost(`/DbImport/api/jobs/${id}/run`)
@@ -715,6 +754,12 @@ export default function DbImportWizard() {
           <>
             <div className="dbi-card">
               <div className="dbi-card-title">Önizleme</div>
+              {/* Hangi kaynak tablo/view üzerinden çalışıldığı — kullanıcı hangi
+                  tanıma baktığını görsün (PageComment #1107). */}
+              <div className="dbi-hint" style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 10 }}>
+                <Database size={12} /> Kaynak: <span className="dbi-mono">{job.sourceSchema}.{job.sourceObject || '—'}</span>
+                {' '}→ Hedef: <span className="dbi-mono">{entities.find((e) => e.entity === job.targetEntity)?.label || job.targetEntity || '—'}</span>
+              </div>
               <button type="button" className="dbi-btn dbi-btn--primary" onClick={doPreview} disabled={busy}>
                 <Search size={14} /> Önizlemeyi Çalıştır
               </button>
@@ -1008,9 +1053,9 @@ export default function DbImportWizard() {
           <Save size={14} /> Kaydet
         </button>
         <button type="button" className="dbi-btn dbi-btn--primary"
-                onClick={() => setStep(Math.min(5, step + 1))}
-                disabled={step === 5 || (step === 1 && !step1Ok) || (step === 2 && !step2Ok)}>
-          İleri <ArrowRight size={14} />
+                onClick={goNext}
+                disabled={busy || step === 5 || (step === 1 && !step1Ok) || (step === 2 && !step2Ok)}>
+          {busy ? <>Kaydediliyor…</> : <>İleri <ArrowRight size={14} /></>}
         </button>
       </div>
     </div>

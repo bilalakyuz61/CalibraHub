@@ -1,4 +1,4 @@
-/**
+﻿/**
  * SmartBoard — Generic entity list container with server-side pagination.
  *
  * Props:
@@ -116,6 +116,10 @@ export default function SmartBoard(props) {
 
   // In-place refresh
   var refreshUrl = props.refreshUrl || null
+  // Opt-in otomatik tazeleme (ms). Yalnız config'te verilmişse çalışır — diğer board'lar
+  // etkilenmez. Durumu kendiliğinden değişen listeler için (ör. Zamanlanmış Görevler'de
+  // "Çalışıyor"), aksi halde kullanıcı "Yenile"ye basmadıkça anlık durumu göremez.
+  var autoRefreshMs = Number(props.autoRefreshMs) || 0
 
   // ── Satir secimi + acilir detay (opt-in, YALNIZCA tablo modu) ───────────
   // selectable:true      → satir basi onay kutusu + baslikta "tumunu sec"
@@ -225,6 +229,33 @@ export default function SmartBoard(props) {
       })
       .catch(function () { window.location.reload() })
   }, [refreshUrl])
+
+  // ── Otomatik tazeleme ──
+  // refreshBoard'ın hata yolu tam sayfa reload yapar; bu ARKA PLAN tazelemesi için
+  // kabul edilemez (geçici bir ağ hatası kullanıcının altından sayfayı yeniler).
+  // Bu yüzden ayrı, sessizce vazgeçen bir çekim kullanılıyor — hata yutulmaz, konsola yazılır.
+  useEffect(function () {
+    if (!refreshUrl || autoRefreshMs < 5000) return undefined
+    var cancelled = false
+    var timer = setInterval(function () {
+      // Sekme arka plandayken istek atma; sayfalanmış listede 1. sayfa dışındayken de
+      // tazeleme kullanıcının bulunduğu sayfayı altından değiştirir — atla.
+      if (typeof document !== 'undefined' && document.hidden) return
+      if (isPaginated && currentPage > 1) return
+      fetch(refreshUrl, { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null })
+        .then(function (data) {
+          if (cancelled || !data || !Array.isArray(data.entities)) return
+          setEntities(data.entities)
+        })
+        .catch(function (err) {
+          if (!cancelled && typeof console !== 'undefined') {
+            console.warn('SmartBoard otomatik tazeleme basarisiz:', err)
+          }
+        })
+    }, autoRefreshMs)
+    return function () { cancelled = true; clearInterval(timer) }
+  }, [refreshUrl, autoRefreshMs, isPaginated, currentPage])
 
   // Header "Yenile" butonu — in-place refresh (refreshUrl yoksa tam sayfa reload)
   var handleManualRefresh = useCallback(function () {
