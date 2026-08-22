@@ -38,4 +38,8 @@ public sealed class DocumentLineKitComponent
     public string? ComponentCode { get; set; }
     public string? ComponentName { get; set; }
     public string? ConfigCode { get; set; }
+
+    /// <summary>Bilesenin varsayilan birim kodu — Items.UnitId -> Unit.Code join'inden
+    /// doldurulur (bu tabloda kolon DEGILDIR). Kit dokumunde gosterim icin.</summary>
+    public string? UnitCode { get; set; }
 }

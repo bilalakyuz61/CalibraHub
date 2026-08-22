@@ -973,6 +973,12 @@ public sealed class SalesController : Controller
                 configId = c.ConfigId,
                 configCode = c.ConfigCode,
                 quantity = c.Quantity,
+                // 2026-08-22 (kullanici istegi): kit dokumunde miktar yaninda BIRIM ve
+                // fiyat/tutar da gosterilir. UnitPrice snapshot'ta null olabilir
+                // (fiyat modu RollUp degilse) — istemci o zaman fiyat sutununu gizler.
+                unit = c.UnitCode,
+                unitPrice = c.UnitPrice,
+                lineTotal = c.UnitPrice.HasValue ? c.UnitPrice.Value * c.Quantity : (decimal?)null,
             })
         });
     }

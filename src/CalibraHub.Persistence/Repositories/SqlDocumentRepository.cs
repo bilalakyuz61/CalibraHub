@@ -166,10 +166,12 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         cmd.CommandText = $"""
             SELECT s.[Id], s.[DocumentLineId], s.[KitItemId], s.[KitVersionNo], s.[ComponentItemId],
                    s.[ConfigId], s.[Quantity], s.[UnitPrice], s.[Created],
-                   ci.[Code] AS CompCode, ci.[Name] AS CompName, cfg.[RecordCode] AS ConfigCode
+                   ci.[Code] AS CompCode, ci.[Name] AS CompName, cfg.[RecordCode] AS ConfigCode,
+                   u.[Code] AS CompUnit
             FROM [{_schema}].[DocumentLineKitComponent] s
             LEFT JOIN [{_schema}].[Items] ci ON ci.[Id] = s.[ComponentItemId]
             LEFT JOIN [{_schema}].[ItemConfiguration] cfg ON cfg.[Id] = s.[ConfigId]
+            LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = ci.[UnitId]
             WHERE s.[DocumentLineId] = @L
             ORDER BY s.[Id];
             """;
@@ -193,6 +195,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 ComponentCode   = reader.IsDBNull(9) ? null : reader.GetString(9),
                 ComponentName   = reader.IsDBNull(10) ? null : reader.GetString(10),
                 ConfigCode      = reader.IsDBNull(11) ? null : reader.GetString(11),
+                UnitCode        = reader.IsDBNull(12) ? null : reader.GetString(12),
             });
         }
         return list;

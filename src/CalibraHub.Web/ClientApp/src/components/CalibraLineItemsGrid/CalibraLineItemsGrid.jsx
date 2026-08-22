@@ -463,7 +463,22 @@ export default function CalibraLineItemsGrid(props) {
                       {c.configCode}
                     </span>
                   )}
-                  <span className="flex-shrink-0 font-mono tabular-nums text-slate-600 dark:text-white/60">× {c.quantity}</span>
+                  {/* 2026-08-22 (kullanici istegi): miktar + BIRIM + fiyat/tutar.
+                      Fiyat snapshot'ta yoksa (kit fiyat modu RollUp degil) o iki
+                      sutun hic cizilmez — "0,00" yazip yaniltmaktansa sessiz kal. */}
+                  <span className="flex-shrink-0 font-mono tabular-nums text-slate-600 dark:text-white/60">
+                    × {TR_FMT(c.quantity, 4)}{c.unit ? ' ' + c.unit : ''}
+                  </span>
+                  {c.unitPrice != null && (
+                    <span className="flex-shrink-0 font-mono tabular-nums text-slate-500 dark:text-white/45" title="Birim fiyat">
+                      {TR_FMT(c.unitPrice, 4)}
+                    </span>
+                  )}
+                  {c.lineTotal != null && (
+                    <span className="flex-shrink-0 font-mono tabular-nums font-semibold text-slate-700 dark:text-white/70" title="Tutar">
+                      {TR_FMT(c.lineTotal, 4)}
+                    </span>
+                  )}
                 </div>
               )
             })}
@@ -2857,25 +2872,15 @@ export default function CalibraLineItemsGrid(props) {
                               )}
                               {/* NORMAL teklif/siparis kit satiri (Faz 4a patlatmasindan bagimsiz,
                                   isKitHeader'dan AYRI) — tiklanabilir rozet, bilesen dokumunu ac/kapa. */}
-                              {isMaterialCell && row.isKit === true && (function () {
-                                var lid = row.id != null && row.id !== '' && Number(row.id) > 0 ? Number(row.id) : null
-                                return (
-                                  <button
-                                    type="button"
-                                    onClick={function (e) { e.stopPropagation(); if (lid) toggleKitExpand(lid) }}
-                                    disabled={!lid}
-                                    style={{ zIndex: 3 }}
-                                    className={'absolute right-1 top-1 inline-flex items-center gap-0.5 rounded px-1 py-[1px] text-[9px] font-bold tracking-wide select-none transition-colors bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 ' +
-                                      (lid ? 'hover:bg-indigo-200 dark:hover:bg-indigo-500/30 cursor-pointer' : 'opacity-60 cursor-not-allowed')}
-                                    title={lid ? 'Kit bileşenlerini göster/gizle' : 'Kaydedince bileşenler görünür'}
-                                  >
-                                    <span>KİT</span>
-                                    {lid && (kitExpandedRows[lid]
-                                      ? <ChevronDown size={9} strokeWidth={2.6} />
-                                      : <ChevronRight size={9} strokeWidth={2.6} />)}
-                                  </button>
-                                )
-                              })()}
+                              {/* 2026-08-22: rozet artik SALT BILGI — ac/kapa satirin
+                                  Islemler (⋯) menusundeki "Detay Göster" ile yapilir. */}
+                              {isMaterialCell && row.isKit === true && (
+                                <span
+                                  style={{ zIndex: 3 }}
+                                  className="absolute right-1 top-1 inline-flex items-center rounded px-1 py-[1px] text-[9px] font-bold tracking-wide select-none bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 pointer-events-none"
+                                  title="Kit satırı — bileşenler için İşlemler ▸ Detay Göster"
+                                >KİT</span>
+                              )}
                               {__cellBeh.behReqNow && !__cellBeh.hidden && (
                                 <span
                                   className="absolute left-0.5 top-0.5 text-[11px] font-bold leading-none text-rose-500 dark:text-rose-400 pointer-events-none select-none"
@@ -3523,7 +3528,22 @@ export default function CalibraLineItemsGrid(props) {
           // ve hover vurgusu icin), ve grup ayraci `groupBefore` ile baslayan
           // ilk item'larda belirir. Aksiyonlar 2 grupta: Navigasyon (kart/fiyat)
           // ve Satir Islemi (not/revize).
+          /* 2026-08-22 (kullanici istegi): kit dokumunu acan KIT rozeti satir
+             icinde yer kapliyordu; ac/kapa artik bu menuden. Rozet yalnizca
+             "bu satir kittir" bilgisini verir, tiklama gerektirmez. */
+          var kitLineId = (srow && srow.isKit === true && srow.id != null && Number(srow.id) > 0)
+            ? Number(srow.id) : null
           var items = [
+            (srow && srow.isKit === true) ? {
+              key: 'kit-detail',
+              label: kitLineId && kitExpandedRows[kitLineId] ? 'Detayı Gizle' : 'Detay Göster',
+              hint: 'Kit bileşenleri',
+              icon: Layers,
+              accent: 'violet',
+              onClick: function () { if (kitLineId) { toggleKitExpand(kitLineId); setShortcutsMenu(null) } },
+              disabled: !kitLineId,
+              disabledTitle: 'Kaydedince bileşenler görünür',
+            } : null,
             {
               key: 'stock-card',
               label: 'Stok Kartina Git',
@@ -3691,7 +3711,7 @@ export default function CalibraLineItemsGrid(props) {
                     : 'linear-gradient(90deg, transparent 0%, rgba(99,102,241,0.55) 30%, rgba(168,85,247,0.55) 70%, transparent 100%)',
                   pointerEvents: 'none',
                 }} />
-                {items.map(function (it, idx) {
+                {items.filter(Boolean).map(function (it, idx) {
                   var Icon = it.icon
                   var pal = accentMap[it.accent] || accentMap.slate
                   // Custom render with stagger via per-item motion
