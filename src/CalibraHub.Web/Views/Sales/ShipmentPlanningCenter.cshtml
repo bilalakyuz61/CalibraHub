@@ -103,7 +103,7 @@
         background:rgba(255,255,255,.02);
     }
     .sp-flat-hdr > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .sp-fhdr__qty { text-align:right; }
+
 
     .sp-list { flex:1; overflow-y:auto; scrollbar-gutter:stable; }
     .sp-list::-webkit-scrollbar { width:4px; }
@@ -658,6 +658,291 @@
         return el ? el.value : '';
     }
 
+    // ══ Sütun ayarları (kullanıcı bazlı) ═════════════════════════════════════
+    // Standart liste ekranı deseni: görünürlük + sürükle-bırak sıra + başlık adı +
+    // genişlik + hizalama. Ayarlar user_settings'te (ui.sp.col-cfg) saklanır;
+    // localStorage yalnız ilk çizim sunucu yanıtını beklemesin diye ayna tutar.
+    var SP_COL_LS = 'sp-col-cfg-v1';
+    function spDefaultColDefs() {
+        return [
+            { key:'num', label:'Sipariş No', visible:true, align:'left',  width:130 },
+            { key:'mat', label:'Malzeme',    visible:true, align:'left',  width:0   },  // 0 = esnek (1fr)
+            { key:'ord', label:'Sipariş',    visible:true, align:'right', width:76  },
+            { key:'dlv', label:'Teslim',     visible:true, align:'right', width:76  },
+            { key:'rsv', label:'Rezerve',    visible:true, align:'right', width:76  },
+            { key:'opn', label:'Açık',       visible:true, align:'right', width:76  },
+            { key:'stk', label:'Kull. Stok', visible:true, align:'right', width:110 },
+            { key:'unt', label:'Br.',        visible:true, align:'left',  width:46  }
+        ];
+    }
+    var _colDefs = spDefaultColDefs();
+    var _cfgOpen = {};   // panelde detayı açık olan kolonlar
+
+    function spSerializeCols() {
+        return JSON.stringify(_colDefs.map(function(c) {
+            return { key:c.key, label:c.label, visible:c.visible, align:c.align, width:c.width || 0 };
+        }));
+    }
+    function spApplySavedCols(json) {
+        if (!json) return;
+        var saved;
+        try { saved = JSON.parse(json); } catch (e) { return; }
+        if (!Array.isArray(saved)) return;
+        saved.forEach(function(sv) {
+            var def = _colDefs.find(function(d) { return d.key === sv.key; });
+            if (!def) return;   // kaldırılmış kolon ayarı — sessizce atlanır
+            if (sv.label   !== undefined && String(sv.label).trim() !== '') def.label = String(sv.label);
+            if (sv.visible !== undefined) def.visible = !!sv.visible;
+            if (sv.align   !== undefined && ['left','center','right'].indexOf(sv.align) >= 0) def.align = sv.align;
+            if (sv.width   !== undefined) def.width = parseInt(sv.width, 10) || 0;
+        });
+        var order = saved.map(function(sv) { return sv.key; });
+        _colDefs.sort(function(a, b) {
+            var ia = order.indexOf(a.key), ib = order.indexOf(b.key);
+            if (ia === -1) return 1;
+            if (ib === -1) return -1;
+            return ia - ib;
+        });
+    }
+    function spSaveCols() {
+        var json = spSerializeCols();
+        try { localStorage.setItem(SP_COL_LS, json); } catch (e) {}
+        fetch('/Sales/SaveShipmentColConfig', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': spCsrf() },
+            body: JSON.stringify({ config: json })
+        }).catch(function() {});   // ayar kaydı başarısızsa ekran çalışmaya devam eder
+    }
+
+    // Grid şablonu — başlık ve satırlar bunu ortak --sp-cols değişkeninden okur.
+    // İlk (26px onay kutusu) ve son (26px detay oku) sütun sabittir, gizlenemez.
+    function spGridTemplate(vis) {
+        var t = ['26px'];
+        vis.forEach(function(c) { t.push(c.width > 0 ? (c.width + 'px') : 'minmax(120px,1fr)'); });
+        t.push('26px');
+        return t.join(' ');
+    }
+    function spVisibleCols() {
+        return _colDefs.filter(function(c) { return c.visible; });
+    }
+    function spRenderColHdr() {
+        var hdr = document.getElementById('spFlatHdr');
+        var left = document.getElementById('spLeft');
+        if (!hdr) return;
+        var vis = spVisibleCols();
+        if (left) left.style.setProperty('--sp-cols', spGridTemplate(vis));
+        var h = '<span></span>';
+        vis.forEach(function(c) { h += '<span style="text-align:' + c.align + '">' + esc(c.label) + '</span>'; });
+        hdr.innerHTML = h + '<span></span>';
+    }
+
+    // ── Panel ────────────────────────────────────────────────────────────────
+    var SP_GRIP = '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/><circle cx="11" cy="4" r="1.2"/><circle cx="11" cy="8" r="1.2"/><circle cx="11" cy="12" r="1.2"/></svg>';
+    var SP_EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    var SP_EYEOFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+    var SP_CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>';
+    var SP_ALIGN = {
+        left:   '<svg viewBox="0 0 16 14" fill="currentColor"><rect y="0" width="16" height="2" rx="1"/><rect y="4" width="10" height="2" rx="1"/><rect y="8" width="13" height="2" rx="1"/><rect y="12" width="8" height="2" rx="1"/></svg>',
+        center: '<svg viewBox="0 0 16 14" fill="currentColor"><rect y="0" width="16" height="2" rx="1"/><rect x="3" y="4" width="10" height="2" rx="1"/><rect x="1.5" y="8" width="13" height="2" rx="1"/><rect x="4" y="12" width="8" height="2" rx="1"/></svg>',
+        right:  '<svg viewBox="0 0 16 14" fill="currentColor"><rect y="0" width="16" height="2" rx="1"/><rect x="6" y="4" width="10" height="2" rx="1"/><rect x="2.5" y="8" width="13" height="2" rx="1"/><rect x="8" y="12" width="8" height="2" rx="1"/></svg>'
+    };
+
+    function spApplyColChange() { spSaveCols(); spRenderColPanel(); spRenderColHdr(); spRenderList(); }
+
+    function spRenderColPanel() {
+        var el = document.getElementById('spColRows');
+        if (!el) return;
+        var html = '';
+        _colDefs.forEach(function(c, i) {
+            var open = !!_cfgOpen[c.key];
+            html += '<div class="sp-cfg-row' + (c.visible ? '' : ' is-hidden') + '" data-idx="' + i + '" data-key="' + c.key + '" draggable="true">'
+                 +    '<span class="sp-cfg-grip">' + SP_GRIP + '</span>'
+                 +    '<button type="button" class="sp-cfg-eye' + (c.visible ? '' : ' sp-eye-off') + '" data-key="' + c.key + '" title="' + (c.visible ? 'Gizle' : 'Göster') + '">' + (c.visible ? SP_EYE : SP_EYEOFF) + '</button>'
+                 +    '<span class="sp-cfg-label">' + esc(c.label) + '</span>'
+                 +    '<button type="button" class="sp-cfg-exp' + (open ? ' open' : '') + '" data-key="' + c.key + '" title="Detay">' + SP_CHEV + '</button>'
+                 +  '</div>'
+                 +  '<div class="sp-cfg-detail' + (open ? ' open' : '') + '">'
+                 +    '<div class="sp-cfg-frow"><span class="sp-cfg-flabel">Başlık</span>'
+                 +      '<input type="text" class="sp-cfg-input" data-key="' + c.key + '" data-field="label" value="' + esc(c.label) + '"></div>'
+                 +    '<div class="sp-cfg-frow"><span class="sp-cfg-flabel">Genişlik</span>'
+                 +      '<input type="number" class="sp-cfg-input sp-cfg-width" data-key="' + c.key + '" data-field="width" value="' + (c.width || '') + '" placeholder="Esnek" min="40" max="600">'
+                 +      '<span class="sp-cfg-unit">px</span></div>'
+                 +    '<div class="sp-cfg-frow"><span class="sp-cfg-flabel">Hizalama</span><span class="sp-cfg-align">'
+                 +      ['left','center','right'].map(function(a) {
+                            return '<button type="button" class="sp-cfg-abtn' + (c.align === a ? ' on' : '') + '" data-key="' + c.key + '" data-align="' + a + '">' + SP_ALIGN[a] + '</button>';
+                        }).join('')
+                 +    '</span></div>'
+                 +  '</div>';
+        });
+        el.innerHTML = html;
+
+        el.querySelectorAll('.sp-cfg-eye').forEach(function(b) {
+            b.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var d = _colDefs.find(function(x) { return x.key === b.getAttribute('data-key'); });
+                if (!d) return;
+                d.visible = !d.visible;
+                spApplyColChange();
+            });
+        });
+        el.querySelectorAll('.sp-cfg-abtn').forEach(function(b) {
+            b.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var d = _colDefs.find(function(x) { return x.key === b.getAttribute('data-key'); });
+                if (!d) return;
+                d.align = b.getAttribute('data-align');
+                spApplyColChange();
+            });
+        });
+        el.querySelectorAll('.sp-cfg-exp').forEach(function(b) {
+            b.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var k = b.getAttribute('data-key');
+                _cfgOpen[k] = !_cfgOpen[k];
+                spRenderColPanel();
+            });
+        });
+        // Başlık yazarken paneli yeniden çizersek odak kaybolur → yalnız etiketi tazele.
+        el.querySelectorAll('input[data-field="label"]').forEach(function(inp) {
+            inp.addEventListener('input', function() {
+                var d = _colDefs.find(function(x) { return x.key === inp.getAttribute('data-key'); });
+                if (!d) return;
+                d.label = inp.value;
+                var lbl = el.querySelector('.sp-cfg-row[data-key="' + d.key + '"] .sp-cfg-label');
+                if (lbl) lbl.textContent = d.label;
+                spSaveCols(); spRenderColHdr();
+            });
+        });
+        el.querySelectorAll('input[data-field="width"]').forEach(function(inp) {
+            inp.addEventListener('change', function() {
+                var d = _colDefs.find(function(x) { return x.key === inp.getAttribute('data-key'); });
+                if (!d) return;
+                d.width = parseInt(inp.value, 10) || 0;
+                spSaveCols(); spRenderColHdr();
+            });
+        });
+
+        // Sürükle-bırak sıralama
+        var srcIdx = null;
+        var panelEl = document.getElementById('spColPanel');
+        if (panelEl) panelEl.ondragover = function(e) { e.preventDefault(); };
+        el.querySelectorAll('.sp-cfg-row').forEach(function(row) {
+            row.addEventListener('dragstart', function(e) {
+                srcIdx = parseInt(row.getAttribute('data-idx'), 10);
+                e.dataTransfer.effectAllowed = 'move';
+            });
+            row.addEventListener('dragover', function(e) {
+                e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+                el.querySelectorAll('.sp-cfg-row').forEach(function(r) { r.classList.remove('drag-over'); });
+                row.classList.add('drag-over');
+            });
+            row.addEventListener('dragleave', function() { row.classList.remove('drag-over'); });
+            row.addEventListener('drop', function(e) {
+                e.preventDefault(); row.classList.remove('drag-over');
+                var tgt = parseInt(row.getAttribute('data-idx'), 10);
+                if (srcIdx === null || srcIdx === tgt) return;
+                var moved = _colDefs.splice(srcIdx, 1)[0];
+                _colDefs.splice(tgt, 0, moved);
+                srcIdx = null;
+                spApplyColChange();
+            });
+        });
+    }
+
+    window.spToggleColPanel = function(e) {
+        e.stopPropagation();
+        var panel = document.getElementById('spColPanel');
+        var btn = document.getElementById('spColBtn');
+        if (!panel) return;
+        var opening = !panel.classList.contains('open');
+        panel.classList.toggle('open', opening);
+        if (btn) btn.classList.toggle('active', opening);
+        if (opening) spRenderColPanel();
+    };
+    document.addEventListener('click', function(e) {
+        var panel = document.getElementById('spColPanel');
+        var btn = document.getElementById('spColBtn');
+        if (!panel || !panel.classList.contains('open')) return;
+        if (panel.contains(e.target) || (btn && btn.contains(e.target))) return;
+        panel.classList.remove('open');
+        if (btn) btn.classList.remove('active');
+    });
+
+    window.spResetColCfg = function() {
+        _colDefs = spDefaultColDefs();
+        _cfgOpen = {};
+        spApplyColChange();
+    };
+
+    // ── Excel — görünür sütunlar, görünen sıra ve başlıklarla ────────────────
+    window.spExportExcel = function() {
+        if (!LINES.length) return;
+        var vis = spVisibleCols();
+        var payload = {
+            fileName: 'yukleme-planlama.xlsx',
+            sheetName: 'Yükleme Planlama',
+            headers: vis.map(function(c) { return { id: c.key, label: c.label }; }),
+            rows: LINES.map(function(l) {
+                var row = {};
+                vis.forEach(function(c) { row[c.key] = spCellText(c.key, l); });
+                return row;
+            })
+        };
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/api/export/smartboard-excel';
+        form.style.display = 'none';
+        var ta = document.createElement('textarea');
+        ta.name = 'payload';
+        ta.value = JSON.stringify(payload);
+        form.appendChild(ta);
+        document.body.appendChild(form);
+        form.submit();
+        setTimeout(function() { if (form.parentNode) form.parentNode.removeChild(form); }, 1500);
+    };
+
+    // Excel için düz karşılık (ekrandaki değerlerin biçimsiz hâli).
+    function spCellText(key, l) {
+        var isKit = !!l.isKit;
+        switch (key) {
+            case 'num': return l.orderNumber || '';
+            case 'mat': return l.materialName || l.materialCode || ('#' + l.itemId);
+            case 'ord': return parseFloat(l.orderQty || 0);
+            case 'dlv': return parseFloat(l.deliveredQty || 0);
+            case 'rsv': return parseFloat(spReservedForLine(l) || 0);
+            case 'opn': return parseFloat(l.openQty || 0);
+            case 'stk': return parseFloat(spAvailable(l) || 0);
+            case 'unt': return isKit ? 'set' : (l.unitCode || '');
+            default:    return '';
+        }
+    }
+
+    // Satır hücresi — grid düzeninde tek eleman. Hizalama sütun ayarından gelir.
+    function spCellHtml(c, l) {
+        var isKit = !!l.isKit;
+        var st = ' style="text-align:' + c.align + '"';
+        switch (c.key) {
+            case 'num':
+                return '<button type="button" class="sp-flat-num"' + st
+                     + ' onclick="spOpenOrderTab(event, ' + l.orderDocumentId + ')" title="Siparişi aç">'
+                     + esc(l.orderNumber) + '</button>';
+            case 'mat':
+                return '<div class="sp-flat-mat"' + st + '>'
+                     +   '<span class="sp-flat-mat-name">' + esc(l.materialName || l.materialCode || ('#' + l.itemId))
+                     +     (isKit ? '<span class="sp-kit-badge" title="Kit ürün — miktarlar set bazındadır">Kit</span>' : '')
+                     +   '</span>'
+                     +   '<span class="sp-flat-mat-code">' + esc(l.materialCode || '') + '</span>'
+                     + '</div>';
+            case 'ord': return '<span class="sp-qty"' + st + '>' + fmtN(l.orderQty) + '</span>';
+            case 'dlv': return '<span class="sp-qty"' + st + '>' + fmtN(l.deliveredQty) + '</span>';
+            case 'rsv': return '<span class="sp-qty"' + st + '>' + (isKit ? fmtSet(spReservedForLine(l)) : fmtN(l.reservedQty)) + '</span>';
+            case 'opn': return '<span class="sp-qty sp-qty--open"' + st + '>' + (isKit ? fmtSet(l.openQty) : fmtN(l.openQty)) + '</span>';
+            case 'stk': return '<span class="sp-stock ' + spStockClass(l) + '"' + st + '>' + (isKit ? fmtSet(spAvailable(l)) : fmtN(l.availableStock)) + '</span>';
+            case 'unt': return '<span class="sp-unit"' + st + '>' + (isKit ? 'set' : esc(l.unitCode || '')) + '</span>';
+            default:    return '<span></span>';
+        }
+    }
+
     // ── Liste yükleme (in-place; window.location.reload YOK) ──────────────────
     // NOT: backend materialSearch VE orderNumber'ı AND ile birleştirir (ikisi de dolu gönderilirse
     // "malzeme eşleşir VE sipariş no eşleşir" ister — tek arama kutusuna aynı metni iki alana da
@@ -742,13 +1027,11 @@
             listEl.innerHTML = '<div class="sp-empty-list">Açık sipariş kalemi bulunamadı.</div>';
             return;
         }
+        var visCols = spVisibleCols();
         var html = LINES.map(function(l) {
             var checked = !!SELECTED[l.lineId];
             var isKit = !!l.isKit;
             var avail = spAvailable(l);
-            var reserved = spReservedForLine(l);
-            var kitBadge = isKit ? '<span class="sp-kit-badge" title="Kit ürün — miktarlar set bazındadır">Kit</span>' : '';
-            var unitLabel = isKit ? 'set' : esc(l.unitCode || '');
             var expOpen = !!EXPANDED[l.lineId];
             return ''
                 + '<div class="sp-row-wrap" data-line-id="' + l.lineId + '">'
@@ -756,17 +1039,7 @@
                 +     '<input type="checkbox" class="sp-cb" data-line-id="' + l.lineId + '"'
                 +       (checked ? ' checked' : '') + (isKit && avail <= 0 ? ' title="Yetersiz set stoğu — yine de seçilip talep edilebilir"' : '')
                 +       ' onchange="spToggleLine(' + l.lineId + ', this.checked)">'
-                +     '<button type="button" class="sp-flat-num" onclick="spOpenOrderTab(event, ' + l.orderDocumentId + ')" title="Siparişi aç">' + esc(l.orderNumber) + '</button>'
-                +     '<div class="sp-flat-mat">'
-                +       '<span class="sp-flat-mat-name">' + esc(l.materialName || l.materialCode || ('#' + l.itemId)) + kitBadge + '</span>'
-                +       '<span class="sp-flat-mat-code">' + esc(l.materialCode || '') + '</span>'
-                +     '</div>'
-                +     '<span class="sp-qty">' + fmtN(l.orderQty) + '</span>'
-                +     '<span class="sp-qty">' + fmtN(l.deliveredQty) + '</span>'
-                +     '<span class="sp-qty">' + (isKit ? fmtSet(reserved) : fmtN(l.reservedQty)) + '</span>'
-                +     '<span class="sp-qty sp-qty--open">' + (isKit ? fmtSet(l.openQty) : fmtN(l.openQty)) + '</span>'
-                +     '<span class="sp-stock ' + spStockClass(l) + '">' + (isKit ? fmtSet(avail) : fmtN(l.availableStock)) + '</span>'
-                +     '<span class="sp-unit">' + unitLabel + '</span>'
+                +     visCols.map(function(c) { return spCellHtml(c, l); }).join('')
                 +     '<button type="button" class="sp-exp-btn' + (expOpen ? ' active' : '') + '" onclick="spToggleDetail(' + l.lineId + ')" title="Rezervasyonlar">'
                 +       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
                 +     '</button>'
@@ -1299,7 +1572,26 @@
     });
 
     // ── İlk yükleme ──────────────────────────────────────────────────────────────
+    // Sütun ayarı önce localStorage aynasından uygulanır (ilk çizim sunucuyu beklemesin),
+    // ardından sunucudaki kayıt gelirse farklıysa yeniden çizilir.
+    try { spApplySavedCols(localStorage.getItem(SP_COL_LS)); } catch (e) {}
+    spRenderColHdr();
     spLoadLines();
+
+    fetch('/Sales/GetShipmentColConfig', { headers: { 'Accept': 'application/json' } })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data || !data.config) return;
+            var local = null;
+            try { local = localStorage.getItem(SP_COL_LS); } catch (e) {}
+            if (data.config === local) return;
+            _colDefs = spDefaultColDefs();
+            spApplySavedCols(data.config);
+            try { localStorage.setItem(SP_COL_LS, spSerializeCols()); } catch (e) {}
+            spRenderColHdr();
+            if (LINES.length) spRenderList();
+        })
+        .catch(function() {});   // ayar okunamazsa varsayılan sütun düzeni kullanılır
 })();
 </script>
 }
