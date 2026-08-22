@@ -638,17 +638,17 @@ public sealed record DocumentImportProfile(
     bool DateFieldIsDelivery)
 {
     public static readonly DocumentImportProfile SalesQuote = new(
-        "DOC_SALES_QUOTE", "Satış Teklifi (İçe Aktarım)", "satis_teklifi", false, false);
+        "DOC_SALES_QUOTE", "Satış Teklifi", "satis_teklifi", false, false);
 
     public static readonly DocumentImportProfile SalesOrder = new(
-        "DOC_SALES_ORDER", "Satış Siparişi (İçe Aktarım)", "satis_siparisi", false, true);
+        "DOC_SALES_ORDER", "Satış Siparişi", "satis_siparisi", false, true);
 
     public static readonly DocumentImportProfile PurchaseQuote = new(
-        "DOC_PURCHASE_QUOTE", "Alış Teklifi (İçe Aktarım)", "alis_teklifi", false, false);
+        "DOC_PURCHASE_QUOTE", "Alış Teklifi", "alis_teklifi", false, false);
 
     public static readonly DocumentImportProfile PurchaseOrder = new(
-        "DOC_PURCHASE_ORDER", "Alış Siparişi (İçe Aktarım)", "alis_siparisi", false, true);
+        "DOC_PURCHASE_ORDER", "Alış Siparişi", "alis_siparisi", false, true);
 
     public static readonly DocumentImportProfile PurchaseRequest = new(
-        "DOC_PURCHASE_REQUEST", "İhtiyaç Kaydı / Talep (İçe Aktarım)", "alis_talebi", true, false);
+        "DOC_PURCHASE_REQUEST", "İhtiyaç Kaydı / Talep", "alis_talebi", true, false);
 }
