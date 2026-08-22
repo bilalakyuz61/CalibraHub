@@ -199,6 +199,7 @@ public sealed class LogisticsController : Controller
             boardKey = "logistics-material-cards",
             title = "Malzeme Kartlari",
             subtitle = totalCount.ToString("N0") + " malzeme",
+            itemLabel = "malzeme",
             icon = "Package",
             iconColor = "indigo",
             viewMode = "table",

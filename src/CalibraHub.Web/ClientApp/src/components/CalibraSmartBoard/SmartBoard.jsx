@@ -187,7 +187,6 @@ export default function SmartBoard(props) {
   var [hasMore, setHasMore] = useState(isPaginated && initialEntities.length < initialTotalCount)
   var [searchQuery, setSearchQuery] = useState('') // debounced + committed search
   var searchTimerRef = useRef(null)
-  var sentinelRef = useRef(null)
 
   // In-place refresh state
   var [recentIds, setRecentIds] = useState(function () { return new Set() })
@@ -364,17 +363,49 @@ export default function SmartBoard(props) {
   // gorunur, sonraki sayfayi getir, yine filtrelendi, ..." flickering).
   // Filter aktifken kullanici "Daha Fazla Yukle" butonuna basarak manuel ilerler.
   var hasActiveFilter = Array.isArray(filters) && filters.length > 0
+
+  /* ── Sonsuz kaydirma (2026-08-22 yeniden yazildi) ────────────────────────
+     ONCEKI TASARIM: listenin altina bir "sentinel" <div> konur, IntersectionObserver
+     (root: viewport) onu izlerdi. Iki sorunu vardi:
+       (a) Sentinel gorunur oldugu surece tetikleniyordu; tablo modunda kaydirma
+           artik ic kutuda (.cst-wrap) oldugu icin sentinel EKRANDA SABIT kaliyor
+           → her sayfa gelisinde tekrar tetikleniyor, "surekli yukleniyor" hali.
+       (b) Sentinel gercek bir kutu oldugu icin sayfanin altinda KALICI yer
+           kapliyordu ("Daha Fazla Yukle (N kalan)" seridi).
+     YENI TASARIM: DOM'da hicbir yer tutmaz. Kaydirilan kabin scroll olayi
+     dinlenir; dibe ~320px kala bir sonraki sayfa istenir. Hangi kabin kaydigi
+     moda gore degistigi (tablo: .cst-wrap, kart: govde) icin ikisi de dinlenir.
+     Icerik ekrani doldurmuyorsa (kaydirma cubugu yok) hic tetiklenmezdi — bu
+     yuzden yukleme sonrasi "hala kaydirilamiyor mu" kontrolu de yapilir. */
+  var listBodyRef = useRef(null)
   useEffect(function () {
-    if (!isPaginated || !sentinelRef.current) return
-    if (hasActiveFilter) return  // filtre aktifken auto-load yok
-    var observer = new IntersectionObserver(function (entries) {
-      if (entries[0].isIntersecting && hasMore && !loading) {
-        handleLoadMore()
+    if (!isPaginated || hasActiveFilter) return undefined
+    var body = listBodyRef.current
+    if (!body) return undefined
+    var targets = [body]
+    var wrap = body.querySelector('.cst-wrap')
+    if (wrap) targets.push(wrap)
+
+    function maybeLoad(el) {
+      if (!hasMore || loading) return
+      if (el.scrollHeight - el.scrollTop - el.clientHeight <= 320) handleLoadMore()
+    }
+    function onScroll(e) { maybeLoad(e.currentTarget) }
+    targets.forEach(function (t) { t.addEventListener('scroll', onScroll, { passive: true }) })
+
+    // Icerik henuz kaydirilamiyorsa (ilk sayfa ekrani doldurmadi) bir sonrakini iste.
+    var t = setTimeout(function () {
+      for (var i = 0; i < targets.length; i++) {
+        if (targets[i].scrollHeight > targets[i].clientHeight + 8) return
       }
-    }, { rootMargin: '200px' })
-    observer.observe(sentinelRef.current)
-    return function () { observer.disconnect() }
-  }, [isPaginated, hasMore, loading, handleLoadMore, hasActiveFilter])
+      if (hasMore && !loading) handleLoadMore()
+    }, 250)
+
+    return function () {
+      clearTimeout(t)
+      targets.forEach(function (x) { x.removeEventListener('scroll', onScroll) })
+    }
+  }, [isPaginated, hasActiveFilter, hasMore, loading, handleLoadMore, entities.length, viewMode])
 
   // Client-side filtering — search + filter panel (her iki mod icin)
   // Not: Server-side paginated mode'da search server'da yapilir, ama filter panel
@@ -405,8 +436,13 @@ export default function SmartBoard(props) {
   // Sayfali modda sayac etiketi board config'ten gelir (itemLabel: "reçete", "cari"...).
   // Varsayilan 'cari' — pagination ilk Cari board'unda dogdu; itemLabel gondermeyen
   // mevcut ekranlarin davranisi degismesin.
+  /* 2026-08-22 DUZELTME: itemLabel gonderilmediginde sabit 'cari' yaziliyordu —
+     Malzeme Kartlari'nda "4.466 cari" cikiyordu. Once itemLabel, o yoksa
+     sunucunun kendi subtitle'i ("4.466 malzeme"), o da yoksa sayinin tek basina. */
   var subtitle = isPaginated
-    ? (totalCount > 0 ? totalCount.toLocaleString('tr-TR') + ' ' + (props.itemLabel || 'cari') : '')
+    ? (props.itemLabel
+        ? (totalCount > 0 ? totalCount.toLocaleString('tr-TR') + ' ' + props.itemLabel : '')
+        : (props.subtitle || (totalCount > 0 ? totalCount.toLocaleString('tr-TR') : '')))
     : (props.subtitle || '')
 
   var handleActionClick = useCallback(function (action) {
@@ -780,37 +816,40 @@ export default function SmartBoard(props) {
           'radial-gradient(at 50% 80%, rgba(168,85,247,0.04) 0px, transparent 50%)',
       }
 
-  // Sonsuz kaydirma sentinel + "Daha Fazla Yukle" + ilk-yukleme spinner —
-  // kart ve tablo modunda AYNI JSX (paylasilan sentinelRef); sadece hangi
-  // listenin altina yerlestirildigi degisir (bkz. render altinda iki dal).
-  var paginationFooter = (
-    <>
-      {isPaginated && hasMore && (
-        <div ref={sentinelRef} className="flex items-center justify-center py-6 gap-3">
-          {loading ? (
-            <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-white/40">
-              <Loader2 size={16} className="animate-spin" />
-              <span>Yukleniyor...</span>
-            </div>
-          ) : (
-            <button
-              onClick={handleLoadMore}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border-[1px] border-slate-200 dark:border-white/[0.06] text-slate-600 dark:text-white/60 transition-all"
-            >
-              <ChevronDown size={14} />
-              <span>Daha Fazla Yukle ({(totalCount - entities.length).toLocaleString('tr-TR')} kalan)</span>
-            </button>
-          )}
-        </div>
+  /* Yukleme gostergesi — DOM'da YER KAPLAMAZ (kullanici istegi): listenin
+     uzerinde, alt ortada duran saydam bir serit. `pointer-events-none` ile
+     altindaki satirlarin tiklanabilirligi bozulmaz.
+     Filtre aktifken otomatik yukleme kapali oldugundan (bkz. yukaridaki not)
+     orada TIKLANABILIR bir "Daha Fazla Yukle" cipi gosterilir — o da katmanda,
+     yine yer kaplamadan. */
+  var kalan = Math.max(0, totalCount - entities.length)
+  var paginationOverlay = (isPaginated && (loading || (hasActiveFilter && hasMore))) ? (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center pb-2">
+      {loading ? (
+        <span className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium text-slate-500 bg-white/70 backdrop-blur-sm dark:text-white/55 dark:bg-[#0f172a]/70">
+          <Loader2 size={13} className="animate-spin" />
+          {kalan > 0 ? ('Yukleniyor… (' + kalan.toLocaleString('tr-TR') + ' kalan)') : 'Yukleniyor…'}
+        </span>
+      ) : (
+        <button
+          onClick={handleLoadMore}
+          className="pointer-events-auto flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[11px] font-semibold text-slate-600 bg-white/80 backdrop-blur-sm border border-slate-200 hover:bg-white dark:text-white/70 dark:bg-[#0f172a]/80 dark:border-white/10"
+        >
+          <ChevronDown size={13} />
+          <span>Daha Fazla Yukle ({kalan.toLocaleString('tr-TR')} kalan)</span>
+        </button>
       )}
-      {isPaginated && loading && filteredEntities.length === 0 && (
-        <div className="flex items-center justify-center py-20 gap-3">
-          <Loader2 size={24} className="animate-spin text-indigo-400" />
-          <span className="text-sm text-slate-400 dark:text-white/40">Yukleniyor...</span>
-        </div>
-      )}
-    </>
-  )
+    </div>
+  ) : null
+
+  /* Ilk yukleme (liste tamamen bos) — burada yer kaplamasi DOGRU, gosterecek
+     baska bir sey yok. */
+  var initialLoader = (isPaginated && loading && filteredEntities.length === 0) ? (
+    <div className="flex items-center justify-center py-20 gap-3">
+      <Loader2 size={24} className="animate-spin text-indigo-400" />
+      <span className="text-sm text-slate-400 dark:text-white/40">Yukleniyor…</span>
+    </div>
+  ) : null
 
   return (
     <div className="h-full flex flex-col" style={meshStyle}>
@@ -1056,10 +1095,10 @@ export default function SmartBoard(props) {
 
       {/* ── Kart / Tablo Listesi ─────────────────
           viewMode==='table' → SmartTable (satir bazli); aksi halde mevcut kart
-          listesi AYNEN kalir. Her iki dal ayni filteredEntities + paginationFooter'i
-          kullanir — sonsuz kaydirma append'i (SmartBoard.entities state'i buyur)
-          otomatik olarak yeni satir/kart olarak gorunur, ekstra kod gerekmez. */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 min-h-0">
+          listesi AYNEN kalir. Sonsuz kaydirma append'i (SmartBoard.entities state'i
+          buyur) otomatik olarak yeni satir/kart olarak gorunur; yukleme gostergesi
+          listenin USTUNDE saydam katmanda durur (yer kaplamaz). */}
+      <div ref={listBodyRef} className="relative flex-1 overflow-y-auto px-4 py-3 min-h-0">
         {filteredEntities.length === 0 && !loading ? (
           <div className="text-center py-20">
             <HeaderIcon size={36} className="mx-auto text-slate-300 dark:text-white/30 mb-3" />
@@ -1079,7 +1118,7 @@ export default function SmartBoard(props) {
               recentIds={recentIds}
               isDark={isDark}
             />
-            {paginationFooter}
+            {initialLoader}
           </div>
         ) : (
           <div className="flex flex-col gap-2">
@@ -1095,9 +1134,10 @@ export default function SmartBoard(props) {
                 />
               )
             })}
-            {paginationFooter}
+            {initialLoader}
           </div>
         )}
+        {paginationOverlay}
       </div>
 
       {/* ── Widget Config Panel (kart modu) ─── */}
