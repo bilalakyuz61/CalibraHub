@@ -2990,6 +2990,7 @@ export default function CalibraLineItemsGrid(props) {
                           })}
                         </div>
                       )}
+                      {renderKitComponentsPanel(row)}
                     </motion.div>
                   )
                 })
