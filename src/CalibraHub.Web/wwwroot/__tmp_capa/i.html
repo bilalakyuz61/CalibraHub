@@ -1,0 +1,96 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="/lib/bootstrap/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="/css/site.css">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/lib/flatpickr/flatpickr.min.css">
+<link rel="stylesheet" href="/css/calibra-datepicker.css">
+<style>
+  /* Aksiyon satırı grid — plc/imc (InspectionPlanEdit/InspectionEdit) ile aynı desen. */
+  .cae-row{display:grid;grid-template-columns:2fr 1fr 1.2fr 1fr 1fr 1fr auto;gap:8px;align-items:end;border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--app-surface,#fff);}
+  .cae-f{display:flex;flex-direction:column;gap:3px;min-width:0;}
+  .cae-f label{font-size:11px;font-weight:600;color:var(--app-text-muted,#64748b);}
+  .cae-row input,.cae-row select{font-size:13px;padding:7px 8px;border:1px solid var(--app-border,#e2e8f0);border-radius:7px;background:var(--app-surface,#fff);color:var(--app-text,#0f172a);width:100%;}
+  .cae-rm{width:34px;height:34px;border-radius:8px;border:1px solid rgba(239,68,68,.35);background:var(--app-surface,#fff);color:var(--danger,#ef4444);cursor:pointer;font-size:16px;}
+  .cae-rm:hover{background:rgba(239,68,68,.1);}
+  body.app-theme-dark .cae-row,body.app-theme-dark .cae-row input,body.app-theme-dark .cae-row select,body.app-theme-dark .cae-rm{background:var(--app-surface,#1e293b);}
+
+  /* Kök Neden — 5 Neden zinciri + Ishikawa 6M editörü (cae-row deseninin sadeleştirilmiş hali). */
+  .rc-block{margin:14px 0 20px;}
+  .rc-block__title{font-size:14px;font-weight:600;color:var(--app-text,#0f172a);margin:0 0 4px;}
+  .rc-row{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;margin-bottom:8px;}
+  .rc-row__seq{font-size:12.5px;font-weight:600;color:var(--app-text-muted,#64748b);min-width:64px;}
+  .rc-row input{font-size:13px;padding:7px 10px;border:1px solid var(--app-border,#e2e8f0);border-radius:7px;background:var(--app-surface,#fff);color:var(--app-text,#0f172a);width:100%;}
+  body.app-theme-dark .rc-row input{background:var(--app-surface,#1e293b);}
+  .rc-cat{border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:10px 14px;margin-bottom:10px;background:var(--app-surface,#fff);}
+  body.app-theme-dark .rc-cat{background:var(--app-surface,#1e293b);}
+  .rc-cat__title{font-size:13px;font-weight:600;color:var(--app-text,#0f172a);margin:0 0 8px;}
+  .rc-cat .rc-row{grid-template-columns:1fr auto;}
+
+  /* Durum rozeti + geçiş butonları */
+  .cae-state{border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:12px 16px;margin:14px 0;background:var(--app-surface,#fff);max-width:560px;}
+  .cae-state__row{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;}
+  .cae-state__actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+  .cae-badge{display:inline-flex;align-items:center;padding:2px 12px;border-radius:999px;font-size:12.5px;font-weight:700;background:var(--app-surface-2,rgba(148,163,184,.15));color:var(--app-text-muted,#64748b);}
+  body.app-theme-dark .cae-state{background:var(--app-surface,#1e293b);}
+
+  /* Kapanış onayı (ApprovalFlow) rozeti — durum rozetinden bağımsız ayrı bilgi kutusu. */
+  .cae-approval-box{border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:12px 16px;margin:0 0 16px;max-width:560px;background:var(--app-surface,#fff);}
+  body.app-theme-dark .cae-approval-box{background:var(--app-surface,#1e293b);}
+  .cae-approval-box__row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .cae-approval-box__step{font-size:12.5px;font-weight:600;color:var(--app-text-muted,#64748b);}
+  .cae-approval-box__note{font-size:12.5px;color:var(--app-text-muted,#64748b);margin-top:6px;display:none;}
+  .cae-badge--amber{background:rgba(245,158,11,.16);color:var(--warning,#b45309);}
+  body.app-theme-dark .cae-badge--amber{color:#fbbf24;}
+  .cae-badge--emerald{background:rgba(16,185,129,.16);color:var(--success,#059669);}
+  body.app-theme-dark .cae-badge--emerald{color:#34d399;}
+  .cae-badge--rose{background:rgba(239,68,68,.16);color:var(--danger,#dc2626);}
+  body.app-theme-dark .cae-badge--rose{color:#f87171;}
+  .cae-badge--blue{background:rgba(59,130,246,.16);color:var(--info,#2563eb);}
+  body.app-theme-dark .cae-badge--blue{color:#60a5fa;}
+
+  /* Durum geçişi info mesajı (Kapat → onaya gönderildi) — ux-err'in kırmızı tonundan ayrı, mavi bilgi tonu. */
+  .cae-info{margin-top:10px;padding:9px 13px;border-radius:8px;font-size:13px;background:rgba(59,130,246,.08);color:var(--info,#2563eb);border:1px solid rgba(59,130,246,.22);max-width:560px;}
+  body.app-theme-dark .cae-info{color:#60a5fa;}
+</style>
+<style>body{margin:0;padding:24px;} .wrap{max-width:1380px}</style>
+</head><body class="app-theme-light">
+<div class="wrap"><div class="ux-edit-pane is-active" data-tab="actions">
+<div class="cae-row">
+  <div class="cae-f"><label>Aksiyon *</label><input type="text" class="cae-desc" placeholder="Yapılacak aksiyon..." /></div>
+  <div class="cae-f"><label>Tip</label><select class="cae-type"><option>Düzeltici</option></select></div>
+  <div class="cae-f"><label>Sorumlu</label><select class="cae-owner"><option>— Seçiniz —</option></select></div>
+  <div class="cae-f"><label>Termin</label><input type="date" class="cae-due" value="2026-08-22" /></div>
+  <div class="cae-f"><label>Durum</label><select class="cae-status"><option>Planlandı</option></select></div>
+  <div class="cae-f"><label>Tamamlanma</label><input type="date" class="cae-completed" value="" /></div>
+  <button type="button" class="cae-rm">×</button>
+</div>
+</div></div>
+<pre id="out" style="font:12px Consolas;margin-top:20px"></pre>
+<script src="/lib/flatpickr/flatpickr.min.js"></script>
+<script src="/lib/flatpickr/l10n/tr.js"></script>
+<script src="/js/calibra-datepicker.js"></script>
+<script>
+setTimeout(function(){
+  function info(sel){
+    var e=document.querySelector(sel); if(!e) return sel+': YOK';
+    var r=e.getBoundingClientRect(), cs=getComputedStyle(e);
+    return sel+': w='+r.width.toFixed(1)+' h='+r.height.toFixed(1)
+      +' pr='+cs.paddingRight+' display='+cs.display
+      +' border='+cs.borderTopWidth+' bg='+cs.backgroundColor
+      +' val="'+(e.value||'')+'" scrollW='+e.scrollWidth;
+  }
+  var lines=[
+    'AKSIYON  '+info('.cae-f:nth-child(1) input'),
+    'TERMIN   '+info('.cae-f:nth-child(4) input.calibra-date-input'),
+    'TAMAMLA  '+info('.cae-f:nth-child(6) input.calibra-date-input'),
+  ];
+  var kolon=document.querySelector('.cae-f:nth-child(4)').getBoundingClientRect();
+  lines.push('TERMIN KOLONU genislik='+kolon.width.toFixed(1));
+  var ikon=getComputedStyle(document.querySelector('.cae-f:nth-child(4) input.calibra-date-input')).backgroundImage;
+  lines.push('IKON: '+(ikon&&ikon!=='none' ? 'VAR' : 'YOK')+' ('+ikon.slice(0,40)+')');
+  var alt=document.querySelector('.cae-f:nth-child(4) input.calibra-date-input');
+  if(alt){ lines.push('metin sigiyor mu: scrollWidth='+alt.scrollWidth+' clientWidth='+alt.clientWidth+' -> '+(alt.scrollWidth<=alt.clientWidth?'EVET':'HAYIR')); }
+  document.getElementById('out').textContent=lines.join(String.fromCharCode(10));
+},400);
+</script>
+</body></html>

@@ -1206,6 +1206,15 @@ export default function CalibraLineItemsGrid(props) {
         if (fillPatch) {
           Object.keys(fillPatch).forEach(function(k) { next[k] = fillPatch[k] })
         }
+        // Malzeme rehberden secilince miktar 0 kalmasin — varsayilan 1. Aksi halde
+        // kullanici stogu secip hemen kaydetmek istediginde sunucu "miktar sifirdan
+        // buyuk olmali" ile reddediyor (kullanici henuz miktara dokunmamis oluyor).
+        // Yalniz BOS/0 iken yazilir: Form Davranis Katmani varsayilani veya kullanicinin
+        // girdigi deger asla ezilmez.
+        if (columnKey === 'materialCode' && String(newValue == null ? '' : newValue).trim() !== '') {
+          var qPick = _num(next.quantity)
+          if (qPick == null || qPick === 0) next.quantity = 1
+        }
         // Bağlantı tabanı: karşılanmış / türetilmiş (bağlantılı) satırın miktarı, taahhüt
         // edilen tabanın (__minQty) altına düşürülemez. Blur commit'inde tabana sabitlenir
         // + uyarı gösterilir. SaveQuoteAsync aynı tabanı sunucuda da zorlar.
