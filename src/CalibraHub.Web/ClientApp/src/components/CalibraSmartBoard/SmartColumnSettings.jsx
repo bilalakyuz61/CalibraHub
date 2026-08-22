@@ -921,12 +921,26 @@ export default function SmartColumnSettings(props) {
   // Her degisiklikte (visibleIds/order/columns/tableFormat'tan herhangi biri) iki
   // is yapilir: (a) onChange SENKRON cagrilir → grid aninda gunceller, (b) gercek
   // persist (localStorage+backend) AUTOSAVE_DEBOUNCE_MS ile inceltilir.
+  /* 2026-08-22 DUZELTME — "sutun ayarlarina girince sutunlar degisiyor":
+     Panel acilir acilmaz bu effect, config HENUZ YUKLENMEDEN calisiyordu.
+     O anda `visibleIds`/`order` hala baslangic degeri `[]` ve
+     `skipNextPersistRef` de false (bayrak yukleme effect'inin `.then`'inde,
+     yani ASENKRON set ediliyor) → `onChange({visibleIds: [], ...})` gidiyor ve
+     grid sutunlarini kaybediyordu. Daha kotusu: yukleme bitince bayrak true
+     olup BIR SONRAKI calisma atlaniyordu → dogru config grid'e hic
+     yansimiyordu, yani panelde 4 sutun "aktif" gorunurken tabloda 2 kaliyordu.
+     Cozum: yukleme bitene kadar (loadingCfg) hicbir sey yayma; bittikten sonra
+     `onChange` HER ZAMAN calissin (grid panelle ayni sey gostersin), yalnizca
+     PERSIST atlansin — cunku yuklenen deger kullanici degisikligi degildir.
+     Sistemik: bu kod yolu tum tablo board'lari icin ortak. */
   useEffect(function () {
     if (!isOpen) return undefined
-    if (skipNextPersistRef.current) { skipNextPersistRef.current = false; return undefined }
+    if (loadingCfg) return undefined
 
     var live = { visibleIds: visibleIds, order: order, columns: columns, table: tableFormat }
     if (onChange) onChange(live)
+
+    if (skipNextPersistRef.current) { skipNextPersistRef.current = false; return undefined }
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(function () {
@@ -940,7 +954,7 @@ export default function SmartColumnSettings(props) {
       if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleIds, order, columns, tableFormat, isOpen])
+  }, [visibleIds, order, columns, tableFormat, isOpen, loadingCfg])
 
   // Panel kapanirken (X/backdrop/Esc) bekleyen debounce'u HEMEN uygular — Iptal
   // kalktigi icin son degisiklik kapanis oncesi kaybolmamali.

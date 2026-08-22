@@ -4083,6 +4083,12 @@ body.app-theme-dark .nw-card-del:hover { color: #f87171; background: rgba(248,11
    varsayilan, dark override body.app-theme-dark ile (CLAUDE.md "CSS ve Tema
    Kurallari" — tek dark selector kurali). ══════════════════════════════ */
 .cst-root {
+  /* 2026-08-22: tablo kabinin (.cst-wrap) gercek dikey kaydirici olabilmesi
+     icin kok kutu govde yuksekligini dolduran bir flex sutun olur. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
   --cst-border:               rgba(15, 23, 42, 0.1);
   --cst-header-bg:            #f8fafc;
   --cst-header-text:          #64748b;

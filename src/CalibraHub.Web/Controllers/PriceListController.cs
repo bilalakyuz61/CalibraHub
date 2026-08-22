@@ -92,10 +92,15 @@ public sealed class PriceListController : Controller
                     url     = "/PriceList/PriceGroupEdit"
                 }
             },
+            // 2026-08-22 DUZELTME — id'ler "code"/"name" idi. SmartBoard tablo modunda
+            // board'un kendi kimlik sutunu var mi diye SADECE w_kod / w_ad id'lerine
+            // bakar (hasLeadIdentity); bulamayinca entity.title/subtitle'dan Ad/Kod
+            // sanal sutunlari URETIR → listede Kod ve Ad IKISER kez cikiyordu.
+            // Kanonik id'lere gecince sentez devreye girmez.
             masterWidgets = new List<object>
             {
-                SmartBoardFilterHelpers.MakeStdWidget("code",         "Kod",            "text"),
-                SmartBoardFilterHelpers.MakeStdWidget("name",         "Ad",             "text"),
+                SmartBoardFilterHelpers.MakeStdWidget("w_kod",        "ID",             "text"),
+                SmartBoardFilterHelpers.MakeStdWidget("w_ad",         "Ad",             "text"),
                 SmartBoardFilterHelpers.MakeStdWidget("isActive",     "Durum",          "boolean"),
                 SmartBoardFilterHelpers.MakeStdWidget("allowsTypes",  "Izinli Tipler",  "text"),
             },
@@ -191,8 +196,11 @@ public sealed class PriceListController : Controller
                 statusBadge,
                 widgets = new object[]
                 {
-                    new { id = "code",          type = "data", dataType = "text",    label = "Kod",     value = g.Code },
-                    new { id = "name",          type = "data", dataType = "text",    label = "Ad",      value = g.Name },
+                    // Kullanici kod girmez (CLAUDE.md) — Code servis tarafinda addan
+                    // turetilir ve listede bilgi tasimaz. Kimlik sutununda kayit ID'si
+                    // gosterilir; etiket de bu yuzden "ID".
+                    new { id = "w_kod",         type = "data", dataType = "text",    label = "ID",      value = g.Id.ToString() },
+                    new { id = "w_ad",          type = "data", dataType = "text",    label = "Ad",      value = g.Name },
                     new { id = "isActive",      type = "data", dataType = "boolean", label = "Durum",   value = g.IsActive },
                     new { id = "allowsTypes",   type = "data", dataType = "text",    label = "Izinli Tipler", value = allowsTxt }
                 },

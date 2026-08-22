@@ -1066,7 +1066,7 @@ export default function SmartBoard(props) {
             <p className="text-sm text-slate-400 dark:text-white/45">{emptyText}</p>
           </div>
         ) : viewMode === 'table' ? (
-          <div className="flex flex-col gap-3 min-w-0">
+          <div className="flex flex-col gap-3 min-w-0 h-full min-h-0">
             <SmartTable
               entities={tableEntities}
               masterWidgets={tableMasterWidgets}
