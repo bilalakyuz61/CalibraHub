@@ -57,7 +57,9 @@ public sealed class MachineCapacityReportService : IMachineCapacityReportService
 
         var localFrom = UtcToLocal(fromUtc).Date;
         var localToRaw = UtcToLocal(toUtc).Date;
-        var localToExclusive = localToRaw > localFrom ? localToRaw : localFrom.AddDays(1);
+        // Frontend `to`'yu seçilen son günün 23:59:59'u olarak yollar → Bitiş günü DAHİL.
+        // Bu yüzden exclusive sınır = son gün + 1 (yoksa son gün rapordan düşerdi — HIGH review).
+        var localToExclusive = (localToRaw >= localFrom ? localToRaw : localFrom).AddDays(1);
 
         // Rapor kapsamı — week kovasında ISO haftaya hizalanır (bkz. sınıf XML doc'u).
         var reportStart = normalizedBucket == "week" ? AlignToMonday(localFrom) : localFrom;
@@ -163,6 +165,9 @@ public sealed class MachineCapacityReportService : IMachineCapacityReportService
         return new CapacityLoadResultDto(normalizedBucket, buckets, machineResults);
     }
 
+    // Gün-içi dakika hesapları interval aritmetiğiyle yapılır (dakika-of-gün 0..1440):
+    // (a) örtüşen bloklar TEK sayılsın (union — MEDIUM review), (b) bakım yalnız çalışma
+    // penceresine düşen kısmıyla düşülsün (window kesişimi — HIGH review).
     private static int DayCapacityMinutes(
         DateTime day,
         bool hasWindows,
@@ -172,54 +177,85 @@ public sealed class MachineCapacityReportService : IMachineCapacityReportService
     {
         if (holidayDates.Contains(day.Date)) return 0;
 
-        int minutes;
+        var windows = new List<(int S, int E)>();
         if (!hasWindows)
         {
-            minutes = 1440; // makinenin hiç tanımlı penceresi yok → 7/24 (Faz 3 motor paritesi)
+            windows.Add((0, 1440)); // makinenin hiç tanımlı penceresi yok → 7/24 (Faz 3 motor paritesi)
         }
-        else
+        else if (windowsByDay is not null && windowsByDay.TryGetValue((byte)day.DayOfWeek, out var todays))
         {
-            minutes = 0;
-            if (windowsByDay is not null && windowsByDay.TryGetValue((byte)day.DayOfWeek, out var todays))
-            {
-                foreach (var w in todays)
-                    minutes += w.End - w.Start;
-            }
+            foreach (var w in todays) windows.Add((w.Start, w.End));
         }
+        var windowMerged = Merge(windows);
+        var windowMin = Total(windowMerged);
+        if (windowMin <= 0) return 0;
 
-        if (blocks is not null && minutes > 0)
-        {
-            var dayStart = day.Date;
-            var dayEnd = dayStart.AddDays(1);
-            foreach (var blk in blocks)
-            {
-                if (blk.BlockType != 3 && blk.BlockType != 4) continue; // Bakım(3) / Duruş(4)
-                var clipStart = blk.StartLocal < dayStart ? dayStart : blk.StartLocal;
-                var clipEnd = blk.EndLocal > dayEnd ? dayEnd : blk.EndLocal;
-                if (clipEnd > clipStart)
-                    minutes -= (int)Math.Round((clipEnd - clipStart).TotalMinutes);
-            }
-        }
-
-        return Math.Max(0, minutes);
+        // Bakım(3)/Duruş(4) — yalnız çalışma penceresine düşen (kesişim) kısmı kapasiteden çıkar.
+        var maint = ClipBlocksToDay(day, blocks, 3, 4);
+        var maintInWindow = IntersectTotal(windowMerged, Merge(maint));
+        return Math.Max(0, windowMin - maintInWindow);
     }
 
     private static int DayLoadMinutes(DateTime day, List<(DateTime StartLocal, DateTime EndLocal, byte BlockType)>? blocks)
-    {
-        if (blocks is null) return 0;
+        // Üretim(1)+Hazırlık(2), güne kırpılıp union'lanır (örtüşen bloklar tek sayılır).
+        => Total(Merge(ClipBlocksToDay(day, blocks, 1, 2)));
 
-        var minutes = 0;
+    /// <summary>Verilen tipteki blokları güne [00:00,24:00) kırpıp dakika-of-gün aralıklarına çevirir.</summary>
+    private static List<(int S, int E)> ClipBlocksToDay(
+        DateTime day, List<(DateTime StartLocal, DateTime EndLocal, byte BlockType)>? blocks, byte type1, byte type2)
+    {
+        var res = new List<(int, int)>();
+        if (blocks is null) return res;
         var dayStart = day.Date;
         var dayEnd = dayStart.AddDays(1);
         foreach (var blk in blocks)
         {
-            if (blk.BlockType != 1 && blk.BlockType != 2) continue; // Üretim(1) / Hazırlık(2)
-            var clipStart = blk.StartLocal < dayStart ? dayStart : blk.StartLocal;
-            var clipEnd = blk.EndLocal > dayEnd ? dayEnd : blk.EndLocal;
-            if (clipEnd > clipStart)
-                minutes += (int)Math.Round((clipEnd - clipStart).TotalMinutes);
+            if (blk.BlockType != type1 && blk.BlockType != type2) continue;
+            var cs = blk.StartLocal < dayStart ? dayStart : blk.StartLocal;
+            var ce = blk.EndLocal > dayEnd ? dayEnd : blk.EndLocal;
+            if (ce <= cs) continue;
+            var s = (int)Math.Round((cs - dayStart).TotalMinutes);
+            var e = (int)Math.Round((ce - dayStart).TotalMinutes);
+            if (e > s) res.Add((s, e));
         }
-        return minutes;
+        return res;
+    }
+
+    /// <summary>Örtüşen/bitişik aralıkları birleştirir (sıralı, çakışmasız).</summary>
+    private static List<(int S, int E)> Merge(List<(int S, int E)> ivs)
+    {
+        if (ivs.Count <= 1) return ivs;
+        ivs.Sort((a, b) => a.S.CompareTo(b.S));
+        var res = new List<(int, int)>();
+        var cs = ivs[0].S; var ce = ivs[0].E;
+        for (var i = 1; i < ivs.Count; i++)
+        {
+            if (ivs[i].S <= ce) { if (ivs[i].E > ce) ce = ivs[i].E; }
+            else { res.Add((cs, ce)); cs = ivs[i].S; ce = ivs[i].E; }
+        }
+        res.Add((cs, ce));
+        return res;
+    }
+
+    private static int Total(List<(int S, int E)> merged)
+    {
+        var t = 0;
+        foreach (var iv in merged) t += iv.E - iv.S;
+        return t;
+    }
+
+    /// <summary>İki birleştirilmiş (merged) aralık kümesinin kesişim toplam dakikası (iki-işaretçi).</summary>
+    private static int IntersectTotal(List<(int S, int E)> a, List<(int S, int E)> b)
+    {
+        int i = 0, j = 0, t = 0;
+        while (i < a.Count && j < b.Count)
+        {
+            var s = Math.Max(a[i].S, b[j].S);
+            var e = Math.Min(a[i].E, b[j].E);
+            if (e > s) t += e - s;
+            if (a[i].E < b[j].E) i++; else j++;
+        }
+        return t;
     }
 
     private static DateTime AlignToMonday(DateTime date)

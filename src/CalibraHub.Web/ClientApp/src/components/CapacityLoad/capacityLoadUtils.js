@@ -1,8 +1,10 @@
 // Makine Planlama — Kapasite / Yük Raporu — ısı haritası yardımcıları.
 
-// Doluluk % → renk bandı. utilizationPct null ise "kapasite yok" (gri) bandı döner.
-export function utilizationBand(pct) {
-  if (pct === null || pct === undefined) return 'nodata'
+// Doluluk % → renk bandı. utilizationPct null ise kapasite yok demektir; ama o günde
+// gerçek bir yük (aşım) varsa gri değil KIRMIZI aşım gösterilir (yoksa tatilde/penceresiz
+// güne elle konmuş iş gri kalıp gözden kaçardı — LOW review). overloadMinutes opsiyonel.
+export function utilizationBand(pct, overloadMinutes) {
+  if (pct === null || pct === undefined) return overloadMinutes > 0 ? 'over' : 'nodata'
   if (pct > 100) return 'over'
   if (pct >= 85) return 'warn'
   if (pct >= 50) return 'mid'

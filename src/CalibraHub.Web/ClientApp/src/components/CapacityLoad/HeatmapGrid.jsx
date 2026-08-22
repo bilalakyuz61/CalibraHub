@@ -42,8 +42,8 @@ function FragmentRow({ machine, buckets, cellByKey }) {
       </div>
       {buckets.map(function (b) {
         var cell = cellByKey[b.key]
-        var band = utilizationBand(cell ? cell.utilizationPct : null)
         var isOverload = cell && cell.overloadMinutes > 0
+        var band = utilizationBand(cell ? cell.utilizationPct : null, cell ? cell.overloadMinutes : 0)
         return (
           <div
             key={b.key}
