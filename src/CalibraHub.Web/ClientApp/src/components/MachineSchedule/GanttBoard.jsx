@@ -40,7 +40,7 @@ function buildTicks(rangeStart, rangeEnd, pxPerHour) {
  */
 export default function GanttBoard({
   machines, blocks, rangeStart, rangeEnd, pxPerHour, isDark,
-  conflictIds, onBlockClick, onBlockMove, onBlockResize, loading,
+  conflictIds, onBlockClick, onBlockMove, onBlockResize, onBlockToggleLock, loading,
   workWindows, holidays, previewProposals,
 }) {
   var palette = getPalette(isDark)
@@ -222,6 +222,7 @@ export default function GanttBoard({
                     onMove={onBlockMove}
                     onResize={onBlockResize}
                     onClick={onBlockClick}
+                    onToggleLock={onBlockToggleLock}
                     readOnly={b.parentBlockId != null}
                   />
                 )

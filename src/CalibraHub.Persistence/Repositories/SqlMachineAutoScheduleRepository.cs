@@ -35,8 +35,12 @@ public sealed class SqlMachineAutoScheduleRepository : IMachineAutoScheduleRepos
 
     // Ortak "planlanmamış operasyon" satırı (raw okuma — ham kolonlar). GetCandidateWorkOrdersAsync
     // (WO bazlı özet) ve GetUnplannedOperationsAsync (motor girdisi) aynı temel sorguyu paylaşır.
+    /// <summary><paramref name="excludeAnyActiveBlock"/>=true (Faz 3 Otomatik Yerleştir, mevcut
+    /// davranış): "planlanmamış" = hiç aktif bloğu olmayan operasyon. <paramref name="excludeAnyActiveBlock"/>=false
+    /// (Blok Kilitle + Yeniden Çizelgele, 2026-08-22): "yeniden çizelgelenebilir" = Kilitli(2)/Onaylı(3)
+    /// aktif bloğu OLMAYAN operasyon (planlanmamış + yalnız-Planlı(1) dahil).</summary>
     private async Task<List<RawOpRow>> QueryUnplannedOperationRowsAsync(
-        SqlConnection conn, IReadOnlyList<int>? workOrderIdFilter, CancellationToken ct)
+        SqlConnection conn, IReadOnlyList<int>? workOrderIdFilter, bool excludeAnyActiveBlock, CancellationToken ct)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
         var rows = new List<RawOpRow>();
@@ -51,6 +55,10 @@ public sealed class SqlMachineAutoScheduleRepository : IMachineAutoScheduleRepos
                 cmd.Parameters.AddWithValue(pn[i], workOrderIdFilter[i]);
         }
 
+        var blockExistsCondition = excludeAnyActiveBlock
+            ? "msb.[IsActive] = 1"
+            : "msb.[IsActive] = 1 AND msb.[Status] IN (2,3)"; // Locked, Confirmed
+
         cmd.CommandText = $"""
             SELECT woo.[Id], woo.[WorkOrderId], d.[DocumentNumber], i.[Name], op.[Name],
                    woo.[Sequence], woo.[MachineId], wo.[PlannedQuantity],
@@ -64,7 +72,7 @@ public sealed class SqlMachineAutoScheduleRepository : IMachineAutoScheduleRepos
             WHERE wo.[IsActive] = 1 AND wo.[Status] IN (1,2) -- Released, InProgress
               AND NOT EXISTS (
                   SELECT 1 FROM {T("MachineScheduleBlock")} msb
-                  WHERE msb.[WorkOrderOperationId] = woo.[Id] AND msb.[IsActive] = 1
+                  WHERE msb.[WorkOrderOperationId] = woo.[Id] AND {blockExistsCondition}
               ){filterSql}
             -- wo.[Id] kesin tiebreaker: Priority (0/1/2) + PlannedEndDate (sık NULL) eşitliği NORM olduğundan
             -- stabil sıra şart — yoksa Preview ile Apply farklı kapasite tahsisi üretebilir (HIGH review bulgusu).
@@ -105,7 +113,7 @@ public sealed class SqlMachineAutoScheduleRepository : IMachineAutoScheduleRepos
     public async Task<IReadOnlyList<AutoScheduleCandidateWorkOrderDto>> GetCandidateWorkOrdersAsync(CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-        var rows = await QueryUnplannedOperationRowsAsync(conn, null, ct);
+        var rows = await QueryUnplannedOperationRowsAsync(conn, null, excludeAnyActiveBlock: true, ct);
 
         // Sıra korunarak WorkOrderId'ye göre grupla (SQL zaten Priority DESC/PlannedEndDate ASC
         // sıralı döndü — Dictionary ile ilk-görülen sırayı koruyoruz, LINQ GroupBy da sıralı kalır).
@@ -160,8 +168,21 @@ public sealed class SqlMachineAutoScheduleRepository : IMachineAutoScheduleRepos
     {
         if (workOrderIds.Count == 0) return Array.Empty<AutoScheduleOperationInputDto>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-        var rows = await QueryUnplannedOperationRowsAsync(conn, workOrderIds, ct);
-        return rows.Select(row => new AutoScheduleOperationInputDto(
+        var rows = await QueryUnplannedOperationRowsAsync(conn, workOrderIds, excludeAnyActiveBlock: true, ct);
+        return MapOperationInputRows(rows);
+    }
+
+    /// <summary>Blok Kilitle + Yeniden Çizelgele (2026-08-22) — bkz. <c>IMachineAutoScheduleRepository</c>
+    /// XML doc'u. İş emri filtresi YOK (tüm açık iş emirleri).</summary>
+    public async Task<IReadOnlyList<AutoScheduleOperationInputDto>> GetReschedulableOperationsAsync(CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        var rows = await QueryUnplannedOperationRowsAsync(conn, null, excludeAnyActiveBlock: false, ct);
+        return MapOperationInputRows(rows);
+    }
+
+    private static List<AutoScheduleOperationInputDto> MapOperationInputRows(List<RawOpRow> rows)
+        => rows.Select(row => new AutoScheduleOperationInputDto(
             WorkOrderOperationId: row.WooId,
             WorkOrderId: row.WorkOrderId,
             WorkOrderNo: row.WorkOrderNo,
@@ -177,7 +198,6 @@ public sealed class SqlMachineAutoScheduleRepository : IMachineAutoScheduleRepos
             DurationUnit: row.DurationUnit,
             Priority: row.Priority,
             PlannedEndDate: row.PlannedEndDate)).ToList();
-    }
 
     public async Task<IReadOnlyList<int>> GetCandidateMachineIdsAsync(int operationId, CancellationToken ct)
     {
@@ -203,14 +223,15 @@ public sealed class SqlMachineAutoScheduleRepository : IMachineAutoScheduleRepos
         return list;
     }
 
-    public async Task<IReadOnlyList<OccupiedBlockDto>> GetOccupiedBlocksAsync(DateTime fromUtc, CancellationToken ct)
+    public async Task<IReadOnlyList<OccupiedBlockDto>> GetOccupiedBlocksAsync(DateTime fromUtc, bool lockedConfirmedOnly, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        var statusFilter = lockedConfirmedOnly ? " AND [Status] IN (2,3)" : ""; // Locked, Confirmed
         cmd.CommandText = $"""
             SELECT [MachineId], [StartUtc], [EndUtc]
             FROM {T("MachineScheduleBlock")}
-            WHERE [IsActive] = 1 AND [EndUtc] > @FromUtc
+            WHERE [IsActive] = 1 AND [EndUtc] > @FromUtc{statusFilter}
             ORDER BY [MachineId], [StartUtc];
             """;
         cmd.Parameters.AddWithValue("@FromUtc", fromUtc);
@@ -232,29 +253,9 @@ public sealed class SqlMachineAutoScheduleRepository : IMachineAutoScheduleRepos
 
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
-        var created = 0;
         try
         {
-            foreach (var op in operations)
-            {
-                // Production segmentleri ÖNCE eklenir; ilk eklenenin Id'si setup child'ların
-                // ParentBlockId'si olur (bkz. IMachineAutoScheduleRepository XML doc'u).
-                var productions = op.Segments.Where(s => s.BlockType == (byte)MachineScheduleBlockType.Production).ToList();
-                var setups = op.Segments.Where(s => s.BlockType == (byte)MachineScheduleBlockType.Setup).ToList();
-
-                int? firstProdId = null;
-                foreach (var seg in productions)
-                {
-                    var id = await InsertBlockAsync(conn, tx, op.WorkOrderOperationId, seg, parentBlockId: null, userId, ct);
-                    firstProdId ??= id;
-                    created++;
-                }
-                foreach (var seg in setups)
-                {
-                    await InsertBlockAsync(conn, tx, op.WorkOrderOperationId, seg, parentBlockId: firstProdId, userId, ct);
-                    created++;
-                }
-            }
+            var created = await InsertOperationsAsync(conn, tx, operations, userId, ct);
             await tx.CommitAsync(ct);
             return created;
         }
@@ -263,6 +264,110 @@ public sealed class SqlMachineAutoScheduleRepository : IMachineAutoScheduleRepos
             await tx.RollbackAsync(ct);
             throw;
         }
+    }
+
+    /// <summary>Blok Kilitle + Yeniden Çizelgele (2026-08-22) — bkz. <c>IMachineAutoScheduleRepository</c>
+    /// XML doc'u. Kilitli/Onaylı bloğu OLMAYAN açık-WO operasyonlarına ait aktif Status=Planned bloklar
+    /// <see cref="ReleasableBlockPredicate"/> ile TANIMLANIR — <see cref="CountReleasableBlocksAsync"/>
+    /// ile AYNI predikat (önizleme sayımı ile gerçek silme birbirini tutar).</summary>
+    public async Task<(int CreatedCount, int ReleasedCount)> ApplyRescheduleAsync(
+        IReadOnlyList<PlannedOperationBlocksDto> operations, int? userId, CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            int released;
+            await using (var del = conn.CreateCommand())
+            {
+                del.Transaction = tx;
+                del.CommandText = $"""
+                    UPDATE b
+                    SET b.[IsActive] = 0, b.[UpdatedById] = @UpdatedById, b.[Updated] = SYSUTCDATETIME()
+                    FROM {T("MachineScheduleBlock")} b
+                    WHERE {ReleasableBlockPredicate()};
+                    """;
+                del.Parameters.AddWithValue("@CompanyId", companyId);
+                del.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
+                released = await del.ExecuteNonQueryAsync(ct);
+            }
+
+            var created = await InsertOperationsAsync(conn, tx, operations, userId, ct);
+
+            await tx.CommitAsync(ct);
+            return (created, released);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    /// <summary>Blok Kilitle + Yeniden Çizelgele (2026-08-22) — bkz. <c>IMachineAutoScheduleRepository</c>
+    /// XML doc'u. Persist ETMEZ (Önizleme sayımı) — <see cref="ApplyRescheduleAsync"/> ile AYNI predikat.</summary>
+    public async Task<int> CountReleasableBlocksAsync(CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT COUNT(*)
+            FROM {T("MachineScheduleBlock")} b
+            WHERE {ReleasableBlockPredicate()};
+            """;
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+        return (int)(await cmd.ExecuteScalarAsync(ct))!;
+    }
+
+    /// <summary>"Serbest set" predikatı — <c>b</c> alias'lı bir <c>MachineScheduleBlock</c> satırının
+    /// yeniden çizelgelemede soft-delete edilecek "kilitli-olmayan Planlı blok" olup olmadığını
+    /// tanımlar: aktif + Status=Planned(1) + açık bir WO'nun (Released/InProgress, IsActive) operasyonuna
+    /// ait + o operasyonun Kilitli(2)/Onaylı(3) aktif bloğu YOK. Bakım/Duruş bloğu gibi
+    /// WorkOrderOperationId'si NULL olan bloklar EXISTS koşulunda doğal olarak elenir (dokunulmaz).
+    /// Parametre: <c>@CompanyId</c> çağıran tarafından eklenir.</summary>
+    private string ReleasableBlockPredicate() => $"""
+        b.[IsActive] = 1 AND b.[Status] = 1
+          AND EXISTS (
+              SELECT 1 FROM {T("WorkOrderOperation")} woo
+              INNER JOIN {T("WorkOrder")} wo ON wo.[Id] = woo.[WorkOrderId] AND wo.[CompanyId] = @CompanyId
+              WHERE woo.[Id] = b.[WorkOrderOperationId] AND wo.[IsActive] = 1 AND wo.[Status] IN (1,2)
+                AND NOT EXISTS (
+                    SELECT 1 FROM {T("MachineScheduleBlock")} msb2
+                    WHERE msb2.[WorkOrderOperationId] = woo.[Id] AND msb2.[IsActive] = 1 AND msb2.[Status] IN (2,3)
+                )
+          )
+        """;
+
+    /// <summary>Bir operasyon grubunun (Setup/Production segmentleri) bloklarını AYNI transaction
+    /// üzerinde ekler — <see cref="InsertBlocksAsync"/> (Faz 3) ve <see cref="ApplyRescheduleAsync"/>
+    /// (Yeniden Çizelgele) TARAFINDAN paylaşılır.</summary>
+    private async Task<int> InsertOperationsAsync(
+        SqlConnection conn, SqlTransaction tx, IReadOnlyList<PlannedOperationBlocksDto> operations, int? userId, CancellationToken ct)
+    {
+        var created = 0;
+        foreach (var op in operations)
+        {
+            // Production segmentleri ÖNCE eklenir; ilk eklenenin Id'si setup child'ların
+            // ParentBlockId'si olur (bkz. IMachineAutoScheduleRepository XML doc'u).
+            var productions = op.Segments.Where(s => s.BlockType == (byte)MachineScheduleBlockType.Production).ToList();
+            var setups = op.Segments.Where(s => s.BlockType == (byte)MachineScheduleBlockType.Setup).ToList();
+
+            int? firstProdId = null;
+            foreach (var seg in productions)
+            {
+                var id = await InsertBlockAsync(conn, tx, op.WorkOrderOperationId, seg, parentBlockId: null, userId, ct);
+                firstProdId ??= id;
+                created++;
+            }
+            foreach (var seg in setups)
+            {
+                await InsertBlockAsync(conn, tx, op.WorkOrderOperationId, seg, parentBlockId: firstProdId, userId, ct);
+                created++;
+            }
+        }
+        return created;
     }
 
     private async Task<int> InsertBlockAsync(

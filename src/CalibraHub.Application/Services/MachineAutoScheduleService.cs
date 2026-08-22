@@ -63,8 +63,47 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
     public async Task<AutoSchedulePreviewResultDto> PreviewAsync(
         IReadOnlyList<int> includedWorkOrderIds, DateTime fromUtc, int? scenarioId, CancellationToken ct)
     {
-        var (segments, unplaceable) = await RunEngineAsync(includedWorkOrderIds, fromUtc, scenarioId, ct);
-        var proposals = segments.Select(s => new AutoScheduleProposalDto(
+        var (segments, unplaceable) = await RunEngineAsync(includedWorkOrderIds, fromUtc, scenarioId, reschedule: false, ct);
+        return new AutoSchedulePreviewResultDto(BuildProposals(segments), unplaceable);
+    }
+
+    public async Task<AutoScheduleApplyResultDto> ApplyAsync(
+        IReadOnlyList<int> includedWorkOrderIds, DateTime fromUtc, int? scenarioId, int? userId, CancellationToken ct)
+    {
+        var (segments, unplaceable) = await RunEngineAsync(includedWorkOrderIds, fromUtc, scenarioId, reschedule: false, ct);
+
+        var operations = BuildOperationBlocks(segments);
+
+        var created = operations.Count == 0 ? 0 : await _repo.InsertBlocksAsync(operations, userId, ct);
+        return new AutoScheduleApplyResultDto(created, unplaceable.Count);
+    }
+
+    /// <summary>Blok Kilitle + Yeniden Çizelgele (2026-08-22) — bkz. <c>IMachineAutoScheduleService</c>
+    /// XML doc'u. <c>includedWorkOrderIds</c> boş liste ile çağrılır (reschedule modunda motor
+    /// <c>GetReschedulableOperationsAsync</c>'ten okur, WO filtresi yok).</summary>
+    public async Task<ReschedulePreviewResultDto> ReschedulePreviewAsync(DateTime fromUtc, CancellationToken ct)
+    {
+        var (segments, unplaceable) = await RunEngineAsync(Array.Empty<int>(), fromUtc, scenarioId: null, reschedule: true, ct);
+        var proposals = BuildProposals(segments);
+        var releasedCount = await _repo.CountReleasableBlocksAsync(ct);
+        return new ReschedulePreviewResultDto(proposals, unplaceable, releasedCount);
+    }
+
+    public async Task<RescheduleApplyResultDto> RescheduleApplyAsync(DateTime fromUtc, int? userId, CancellationToken ct)
+    {
+        var (segments, unplaceable) = await RunEngineAsync(Array.Empty<int>(), fromUtc, scenarioId: null, reschedule: true, ct);
+        var operations = BuildOperationBlocks(segments);
+
+        // Serbest set (kilitli/onaylı bloğu OLMAYAN açık-WO op'larına ait aktif Planlı bloklar)
+        // her koşulda soft-delete edilir — bu turda yerleştirilemeyen (unplaceable) op'ların eski
+        // bloğu da serbest kalır, tekrar planlanana kadar bloksuz kalır (kullanıcı kararı: "diğer
+        // TÜM Planlı bloklar serbest bırakılır"). operations boş olsa dahi repo release adımını yapar.
+        var (created, released) = await _repo.ApplyRescheduleAsync(operations, userId, ct);
+        return new RescheduleApplyResultDto(created, released, unplaceable.Count);
+    }
+
+    private static List<AutoScheduleProposalDto> BuildProposals(List<EngineSegment> segments)
+        => segments.Select(s => new AutoScheduleProposalDto(
             TempId: $"{s.WorkOrderOperationId}:{s.BlockType}:{s.SegmentIndex}",
             MachineId: s.MachineId,
             MachineName: s.MachineName,
@@ -77,15 +116,9 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
             EndUtc: s.EndUtc,
             SegmentIndex: s.SegmentIndex,
             SegmentCount: s.SegmentCount)).ToList();
-        return new AutoSchedulePreviewResultDto(proposals, unplaceable);
-    }
 
-    public async Task<AutoScheduleApplyResultDto> ApplyAsync(
-        IReadOnlyList<int> includedWorkOrderIds, DateTime fromUtc, int? scenarioId, int? userId, CancellationToken ct)
-    {
-        var (segments, unplaceable) = await RunEngineAsync(includedWorkOrderIds, fromUtc, scenarioId, ct);
-
-        var operations = segments
+    private static List<PlannedOperationBlocksDto> BuildOperationBlocks(List<EngineSegment> segments)
+        => segments
             .GroupBy(s => s.WorkOrderOperationId)
             .Select(g => new PlannedOperationBlocksDto(
                 g.Key,
@@ -94,28 +127,31 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
                  .ToList()))
             .ToList();
 
-        var created = operations.Count == 0 ? 0 : await _repo.InsertBlocksAsync(operations, userId, ct);
-        return new AutoScheduleApplyResultDto(created, unplaceable.Count);
-    }
-
     private sealed record EngineSegment(
         int WorkOrderOperationId, string? WorkOrderNo, string? ItemName, string? OperationName,
         int MachineId, string? MachineName, byte BlockType, DateTime StartUtc, DateTime EndUtc,
         int SegmentIndex, int SegmentCount);
 
     /// <summary>Motor çekirdeği. Preview ve Apply tarafından AYNI şekilde çağrılır (bkz. sınıf
-    /// XML doc'u — determinizm notu).</summary>
+    /// XML doc'u — determinizm notu). <paramref name="reschedule"/>=false: Faz 3 "Otomatik Yerleştir"
+    /// (placeable=<c>includedWorkOrderIds</c>'nin planlanmamış op'ları, occupied=TÜM aktif bloklar).
+    /// <paramref name="reschedule"/>=true: Blok Kilitle + Yeniden Çizelgele (2026-08-22) —
+    /// placeable=<c>GetReschedulableOperationsAsync</c> (TÜM açık WO, Kilitli/Onaylı bloğu olmayan
+    /// op'lar; <paramref name="includedWorkOrderIds"/> bu modda YOK SAYILIR), occupied=yalnız
+    /// Kilitli(2)/Onaylı(3) aktif bloklar.</summary>
     private async Task<(List<EngineSegment> Segments, List<AutoScheduleUnplaceableDto> Unplaceable)> RunEngineAsync(
-        IReadOnlyList<int> includedWorkOrderIds, DateTime fromUtc, int? scenarioId, CancellationToken ct)
+        IReadOnlyList<int> includedWorkOrderIds, DateTime fromUtc, int? scenarioId, bool reschedule, CancellationToken ct)
     {
         var result = new List<EngineSegment>();
         var unplaceable = new List<AutoScheduleUnplaceableDto>();
-        if (includedWorkOrderIds.Count == 0) return (result, unplaceable);
+        if (!reschedule && includedWorkOrderIds.Count == 0) return (result, unplaceable);
 
         // Priority DESC / PlannedEndDate ASC / Sequence sıralı — aynı WorkOrderId'nin satırları
         // bu sıralamada bitişik kalır (Priority+PlannedEndDate WO seviyesinde sabit), bu yüzden
         // ayrıca gruplamaya gerek yok; akış tek geçişte sırayla işlenir.
-        var ops = await _repo.GetUnplannedOperationsAsync(includedWorkOrderIds, ct);
+        var ops = reschedule
+            ? await _repo.GetReschedulableOperationsAsync(ct)
+            : await _repo.GetUnplannedOperationsAsync(includedWorkOrderIds, ct);
         if (ops.Count == 0) return (result, unplaceable);
 
         var machines = await _calendar.ListActiveMachinesAsync(ct);
@@ -153,7 +189,7 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
         }
 
         var occupiedByMachine = new Dictionary<int, List<(DateTime StartUtc, DateTime EndUtc)>>();
-        foreach (var o in await _repo.GetOccupiedBlocksAsync(fromUtc, ct))
+        foreach (var o in await _repo.GetOccupiedBlocksAsync(fromUtc, lockedConfirmedOnly: reschedule, ct))
         {
             if (!occupiedByMachine.TryGetValue(o.MachineId, out var list))
                 occupiedByMachine[o.MachineId] = list = new List<(DateTime, DateTime)>();

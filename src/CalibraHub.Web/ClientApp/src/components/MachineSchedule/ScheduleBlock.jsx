@@ -18,15 +18,18 @@ var MIN_W = 18
  * Kullanıcı üretim bloğunu taşıyınca backend child'ı otomatik günceller (refetch'te yansır).
  * onMove(block, newStartDate) / onResize(block, newStartDate, newEndDate) — piksel
  * yerine Date nesnesi ile çağrılır (15dk snap uygulanmış).
+ * onToggleLock(block, newStatus) — blok üstündeki kilit ikonuna tıklanınca çağrılır
+ * (status 1↔2). status===3 (Onaylı) veya readOnly (setup child) bloklarda ikon gizlidir.
  */
 export default function ScheduleBlock({
   block, x, y, width, height, isDark, isConflict,
-  onMove, onResize, onClick, minX, rangeStart, pxPerHour, readOnly,
+  onMove, onResize, onClick, onToggleLock, minX, rangeStart, pxPerHour, readOnly,
 }) {
   var palette = getPalette(isDark)
   var typeColors = palette.block[block.blockType] || palette.block[1]
   var showLockIcon = block.status === 2
   var locked = showLockIcon || !!readOnly
+  var canToggleLock = !readOnly && block.status !== 3
 
   var [localX, setLocalX] = useState(x)
   var [localW, setLocalW] = useState(width)
@@ -107,6 +110,13 @@ export default function ScheduleBlock({
     }
   }
 
+  function handleLockToggle(e) {
+    e.cancelBubble = true // Konva event'i Group'a (popover onClick) sızmasın
+    if (typeof onToggleLock === 'function') {
+      onToggleLock(block, block.status === 2 ? 1 : 2)
+    }
+  }
+
   var label = readOnly ? 'Hazırlık' : (block.workOrderNo ? block.workOrderNo + ' · ' : '') + (block.operationName || '')
   var sub = readOnly ? (block.operationName || '') : (block.itemName || '')
 
@@ -164,10 +174,6 @@ export default function ScheduleBlock({
           wrap="none"
         />
       )}
-      {showLockIcon && (
-        <Text text="🔒" x={localW - 18} y={height - 17} fontSize={11} />
-      )}
-
       {/* Resize handles */}
       {!locked && (
         <Rect
@@ -198,6 +204,29 @@ export default function ScheduleBlock({
           onMouseEnter={function (e) { e.target.getStage().container().style.cursor = 'ew-resize' }}
           onMouseLeave={function (e) { e.target.getStage().container().style.cursor = 'default' }}
         />
+      )}
+
+      {/* Hızlı kilit toggle — status 1(Planlı)↔2(Kilitli). status===3(Onaylı)/readOnly'de gizli.
+          Resize handle'lardan SONRA render edilir → sağ üst köşedeki örtüşen bölgede
+          Konva hit-test önceliği bu ikonda kalır (üstte olan kazanır). */}
+      {canToggleLock && localW > 30 && (
+        <Group
+          x={localW - 20}
+          y={2}
+          onClick={handleLockToggle}
+          onTap={handleLockToggle}
+          onMouseEnter={function (e) { e.target.getStage().container().style.cursor = 'pointer' }}
+          onMouseLeave={function (e) { e.target.getStage().container().style.cursor = 'default' }}
+        >
+          <Rect width={18} height={16} fill="transparent" />
+          <Text
+            text={showLockIcon ? '🔒' : '🔓'}
+            x={1}
+            y={1}
+            fontSize={11}
+            opacity={showLockIcon ? 1 : 0.55}
+          />
+        </Group>
       )}
     </Group>
   )

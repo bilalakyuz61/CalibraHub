@@ -440,6 +440,46 @@ public sealed class SqlMachineScheduleRepository : IMachineScheduleRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    /// <summary>Blok Kilitle + Yeniden Çizelgele (2026-08-22) — bkz. <c>IMachineScheduleRepository</c>
+    /// XML doc'u. <c>[ParentBlockId] IS NULL</c> koşulu setup child'ları hariç tutar (parent ile
+    /// hareket eder, elle kilitlenemez) — eşleşen satır yoksa (bulunamadı/pasif/setup-child) 0 satır
+    /// etkilenir → false.</summary>
+    public async Task<bool> SetBlockStatusAsync(int id, byte status, int? userId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            UPDATE {T("MachineScheduleBlock")}
+            SET [Status] = @Status, [UpdatedById] = @UpdatedById, [Updated] = SYSUTCDATETIME()
+            WHERE [Id] = @Id AND [IsActive] = 1 AND [ParentBlockId] IS NULL;
+            """;
+        cmd.Parameters.AddWithValue("@Status", status);
+        cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
+        cmd.Parameters.AddWithValue("@Id", id);
+        var rows = await cmd.ExecuteNonQueryAsync(ct);
+        return rows > 0;
+    }
+
+    /// <summary>Toplu durum değişimi — <see cref="SetBlockStatusAsync"/> ile AYNI kural (setup
+    /// child'lar <c>[ParentBlockId] IS NULL</c> ile hariç tutulur).</summary>
+    public async Task<int> BulkSetBlockStatusAsync(IReadOnlyList<int> ids, byte status, int? userId, CancellationToken ct)
+    {
+        if (ids.Count == 0) return 0;
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        var pn = ids.Select((_, i) => "@id" + i).ToArray();
+        cmd.CommandText = $"""
+            UPDATE {T("MachineScheduleBlock")}
+            SET [Status] = @Status, [UpdatedById] = @UpdatedById, [Updated] = SYSUTCDATETIME()
+            WHERE [Id] IN ({string.Join(",", pn)}) AND [IsActive] = 1 AND [ParentBlockId] IS NULL;
+            """;
+        cmd.Parameters.AddWithValue("@Status", status);
+        cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
+        for (var i = 0; i < ids.Count; i++)
+            cmd.Parameters.AddWithValue(pn[i], ids[i]);
+        return await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     /// <summary>Kapasite/Yük Raporu (backend, 2026-08-22) — bkz. <c>IMachineScheduleRepository</c> XML doc'u.</summary>
     public async Task<IReadOnlyList<CapacityBlockDto>> ListBlocksForCapacityReportAsync(DateTime fromUtc, DateTime toUtc, CancellationToken ct)
     {

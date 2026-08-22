@@ -21,6 +21,16 @@ public interface IMachineScheduleRepository
     /// <summary>Soft-delete (IsActive=0).</summary>
     Task DeleteBlockAsync(int id, int? userId, CancellationToken ct);
 
+    /// <summary>Blok Kilitle + Yeniden Çizelgele (2026-08-22) — YALNIZ Status alanını değiştirir
+    /// (start/end/tip dokunulmaz). Setup child (ParentBlockId dolu) bloklar hariç tutulur — elle
+    /// kilitlenemez/durum değiştirilemez, parent bloğuyla birlikte hareket eder. Bulunamayan/aktif
+    /// olmayan/setup-child id için false döner (no-op, exception fırlatmaz).</summary>
+    Task<bool> SetBlockStatusAsync(int id, byte status, int? userId, CancellationToken ct);
+
+    /// <summary>Toplu durum değişimi — <see cref="SetBlockStatusAsync"/> ile AYNI kural (setup
+    /// child'lar hariç). Döner: fiilen güncellenen blok sayısı.</summary>
+    Task<int> BulkSetBlockStatusAsync(IReadOnlyList<int> ids, byte status, int? userId, CancellationToken ct);
+
     /// <summary>Kapasite/Yük Raporu (backend, 2026-08-22) — verilen UTC aralığıyla kesişen aktif
     /// bloklar, yalnız MachineId/StartUtc/EndUtc/BlockType (join'siz, hafif — <see cref="GetScheduleDataAsync"/>'in
     /// aksine WorkOrder/Item/Operation etiketleri taşımaz). Per-company güvenliği Machine.CompanyId

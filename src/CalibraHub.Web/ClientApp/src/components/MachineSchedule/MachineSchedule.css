@@ -12,6 +12,8 @@
   --ms-accent: #6366f1;
   --ms-accent-soft: rgba(99, 102, 241, 0.12);
   --ms-danger: #ef4444;
+  --ms-warn: #d97706;
+  --ms-warn-soft: rgba(217, 119, 6, 0.12);
   --ms-row-alt: var(--app-muted-surface, #f8fafc);
   --ms-header-bg: var(--app-muted-surface, #eef1f8);
   --ms-grid-line: #e5e9f0;
@@ -55,6 +57,8 @@ body.app-theme-dark .ms-root {
   --ms-accent: #818cf8;
   --ms-accent-soft: rgba(129, 140, 248, 0.18);
   --ms-danger: #f87171;
+  --ms-warn: #fbbf24;
+  --ms-warn-soft: rgba(251, 191, 36, 0.16);
   --ms-row-alt: var(--app-muted-surface, #101a30);
   --ms-header-bg: var(--app-muted-surface, #0f1a34);
   --ms-grid-line: #1c2947;
@@ -321,6 +325,51 @@ body.app-theme-dark .ms-root {
 
 .ms-auto-btn:hover { opacity: .9; }
 
+.ms-auto-btn:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.ms-auto-btn--reschedule {
+  background: var(--ms-surface-2);
+  border-color: var(--ms-border);
+  color: var(--ms-text);
+}
+
+.ms-auto-btn--reschedule:hover:not(:disabled) {
+  border-color: var(--ms-accent);
+  color: var(--ms-accent);
+  opacity: 1;
+}
+
+/* ── Blok Kilitle + Yeniden Çizelgele — toplu kilit butonları ─ */
+.ms-lock-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--ms-border);
+  background: var(--ms-surface-2);
+  color: var(--ms-text);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .12s, color .12s;
+}
+
+.ms-lock-btn:hover:not(:disabled) {
+  border-color: var(--ms-accent);
+  color: var(--ms-accent);
+}
+
+.ms-lock-btn:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
 .ms-spacer { flex: 1 1 auto; }
 
 .ms-legend {
@@ -543,6 +592,85 @@ body.app-theme-dark .ms-root {
   color: var(--ms-danger);
   flex: 0 0 auto;
   width: 34px;
+}
+
+/* ── Yeniden Çizelgele önizleme çubuğu ──────────────────── */
+.ms-reschedule-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--ms-border);
+  background: var(--ms-accent-soft);
+  flex-wrap: wrap;
+}
+
+.ms-reschedule-icon {
+  color: var(--ms-accent);
+  flex: 0 0 auto;
+}
+
+.ms-reschedule-loading-text {
+  font-size: 12.5px;
+  color: var(--ms-text-muted);
+}
+
+.ms-reschedule-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ms-text);
+}
+
+.ms-reschedule-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.ms-reschedule-stat--warn {
+  color: var(--ms-warn);
+}
+
+.ms-reschedule-unplaceable {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--ms-text-muted);
+  overflow: hidden;
+  cursor: help;
+}
+
+.ms-reschedule-unplaceable-item {
+  white-space: nowrap;
+  background: var(--ms-warn-soft);
+  border: 1px solid var(--ms-warn);
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: var(--ms-text);
+}
+
+.ms-reschedule-unplaceable-more {
+  color: var(--ms-text-muted);
+  white-space: nowrap;
+}
+
+.ms-reschedule-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.ms-reschedule-btn {
+  flex: 0 0 auto;
+  padding: 6px 12px;
 }
 
 .ms-loading {

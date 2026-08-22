@@ -52,6 +52,28 @@ public sealed record AutoScheduleApplyResultDto(
     int CreatedCount,
     int UnplaceableCount);
 
+// ── Blok Kilitle + Yeniden Çizelgele (2026-08-22) ───────────────────────────────────────────
+// API sözleşmesi KİLİTLİ — frontend machineScheduleService.js bu şekle göre yazılır. Request'te
+// yalnızca fromUtc taşınır (scenarioId yok — motor varsayılan senaryoyu kullanır).
+
+/// <summary>Yeniden çizelgeleme istek gövdesi — <c>{ fromUtc }</c>.</summary>
+public sealed record RescheduleRequest(DateTime FromUtc);
+
+/// <summary>Önizleme sonucu — proposals AutoSchedule ile AYNI şekil (<see cref="AutoScheduleProposalDto"/>).
+/// <c>ReleasedCount</c> = Uygula deyince serbest bırakılıp silinecek kilitli-olmayan Planlı blok sayısı
+/// (persist YOK — yalnız sayım).</summary>
+public sealed record ReschedulePreviewResultDto(
+    IReadOnlyList<AutoScheduleProposalDto> Proposals,
+    IReadOnlyList<AutoScheduleUnplaceableDto> Unplaceable,
+    int ReleasedCount);
+
+/// <summary>Uygula sonucu — <c>ReleasedCount</c> gerçekten soft-delete edilen blok sayısı (Preview'daki
+/// tahminle aynı girdiden yeniden hesaplandığı için normal koşulda eşit çıkar).</summary>
+public sealed record RescheduleApplyResultDto(
+    int CreatedCount,
+    int ReleasedCount,
+    int UnplaceableCount);
+
 // ── Repository transfer DTO'ları (motor girdi/çıktı — public API sözleşmesi DEĞİL) ─────────
 
 /// <summary>Bir iş emri operasyonunun motor girdisi — planlanmamış (aktif bloğu olmayan) operasyonlar.</summary>

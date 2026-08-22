@@ -54,3 +54,23 @@ export function autoSchedulePreview(payload) {
 export function autoScheduleApply(payload) {
   return postJson(BASE + '/AutoScheduleApply', payload)
 }
+
+// ── Blok Kilitle + Yeniden Çizelgele ────────────────────────
+// status: 1=Planlı, 2=Kilitli, 3=Onaylı
+export function setBlockStatus(id, status) {
+  return postJson(BASE + '/SetBlockStatus', { id: id, status: status })
+}
+
+export function bulkSetBlockStatus(ids, status) {
+  return postJson(BASE + '/BulkSetBlockStatus', { ids: ids, status: status })
+}
+
+// payload: { fromUtc:"...Z" } — persist YOK, sadece öneri döner
+export function reschedulePreview(payload) {
+  return postJson(BASE + '/ReschedulePreview', payload)
+}
+
+// payload: { fromUtc:"...Z" } — backend serbest bırak + yeniden yaz
+export function rescheduleApply(payload) {
+  return postJson(BASE + '/RescheduleApply', payload)
+}

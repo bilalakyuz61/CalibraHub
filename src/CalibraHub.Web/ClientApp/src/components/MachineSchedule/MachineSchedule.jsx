@@ -10,6 +10,7 @@ import GanttToolbar from './GanttToolbar'
 import GanttBoard from './GanttBoard'
 import BlockEditPopover from './BlockEditPopover'
 import AutoScheduleWizard from './AutoScheduleWizard'
+import ReschedulePanel from './ReschedulePanel'
 import {
   ZOOM_LEVELS, DEFAULT_ZOOM_INDEX, ROW_HEIGHT,
   localDateInputToUtcIso, utcIsoToLocalDateInput,
@@ -48,6 +49,11 @@ export default function MachineSchedule() {
   // ── Faz 3: Otomatik Yerleştir sihirbazı ─────────────────────
   var [wizardOpen, setWizardOpen] = useState(false)
   var [previewProposals, setPreviewProposals] = useState([])
+
+  // ── Blok Kilitle + Yeniden Çizelgele ─────────────────────────
+  var [rescheduleLoading, setRescheduleLoading] = useState(false)
+  var [rescheduleResult, setRescheduleResult] = useState(null) // null = kapalı; { proposals, unplaceable, releasedCount }
+  var [rescheduleApplying, setRescheduleApplying] = useState(false)
 
   var sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -254,6 +260,117 @@ export default function MachineSchedule() {
     fetchSchedule(true)
   }
 
+  // ── Hızlı kilit toggle (blok üstü ikon) ──────────────────────
+  function handleBlockToggleLock(block, newStatus) {
+    api.setBlockStatus(block.id, newStatus).then(function (res) {
+      if (!res || !res.ok) {
+        window.CalibraHub?.toast?.('Kilit durumu güncellenemedi.', 'err')
+        return
+      }
+      fetchSchedule(true)
+    }).catch(function (e) {
+      console.error('[MachineSchedule] setBlockStatus error:', e)
+      window.CalibraHub?.toast?.('Kilit durumu güncellenirken hata oluştu.', 'err')
+    })
+  }
+
+  // ── Toplu kilit — o an yüklenmiş (görünür) bloklar üzerinde çalışır ──
+  // Setup child'lar (parentBlockId dolu) hariç tutulur — üretim bloğu ile hareket eder.
+  function visibleLockableIds() {
+    return blocks.filter(function (b) { return b.status === 1 && b.parentBlockId == null }).map(function (b) { return b.id })
+  }
+
+  function visibleUnlockableIds() {
+    return blocks.filter(function (b) { return b.status === 2 && b.parentBlockId == null }).map(function (b) { return b.id })
+  }
+
+  function handleBulkLock() {
+    var ids = visibleLockableIds()
+    if (ids.length === 0) {
+      window.CalibraHub?.toast?.('Kilitlenecek planlı blok yok.', 'warn')
+      return
+    }
+    api.bulkSetBlockStatus(ids, 2).then(function (res) {
+      if (!res || !res.ok) {
+        window.CalibraHub?.toast?.('Toplu kilitleme başarısız.', 'err')
+        return
+      }
+      window.CalibraHub?.toast?.(res.count + ' blok kilitlendi.', 'ok')
+      fetchSchedule(true)
+    }).catch(function (e) {
+      console.error('[MachineSchedule] bulk lock error:', e)
+      window.CalibraHub?.toast?.('Toplu kilitleme sırasında hata oluştu.', 'err')
+    })
+  }
+
+  function handleBulkUnlock() {
+    var ids = visibleUnlockableIds()
+    if (ids.length === 0) {
+      window.CalibraHub?.toast?.('Kilidi açılacak blok yok.', 'warn')
+      return
+    }
+    api.bulkSetBlockStatus(ids, 1).then(function (res) {
+      if (!res || !res.ok) {
+        window.CalibraHub?.toast?.('Toplu kilit açma başarısız.', 'err')
+        return
+      }
+      window.CalibraHub?.toast?.(res.count + ' bloğun kilidi açıldı.', 'ok')
+      fetchSchedule(true)
+    }).catch(function (e) {
+      console.error('[MachineSchedule] bulk unlock error:', e)
+      window.CalibraHub?.toast?.('Toplu kilit açma sırasında hata oluştu.', 'err')
+    })
+  }
+
+  // ── Yeniden Çizelgele — önizleme (ghost) → uygula ────────────
+  function handleReschedule() {
+    if (wizardOpen || rescheduleLoading) return
+    setRescheduleLoading(true)
+    var fromUtc = localDateInputToUtcIso(dateFrom, false)
+    api.reschedulePreview({ fromUtc: fromUtc })
+      .then(function (res) {
+        if (!res || !res.ok) {
+          window.CalibraHub?.toast?.('Yeniden çizelgeleme önizlemesi hesaplanamadı.', 'err')
+          return
+        }
+        setRescheduleResult(res)
+        setPreviewProposals(res.proposals || [])
+      })
+      .catch(function (e) {
+        console.error('[MachineSchedule] reschedule preview error:', e)
+        window.CalibraHub?.toast?.('Yeniden çizelgeleme önizlemesi sırasında hata oluştu.', 'err')
+      })
+      .finally(function () { setRescheduleLoading(false) })
+  }
+
+  function handleRescheduleCancel() {
+    setRescheduleResult(null)
+    setPreviewProposals([])
+  }
+
+  function handleRescheduleApply() {
+    setRescheduleApplying(true)
+    var fromUtc = localDateInputToUtcIso(dateFrom, false)
+    api.rescheduleApply({ fromUtc: fromUtc })
+      .then(function (res) {
+        if (!res || !res.ok) {
+          window.CalibraHub?.toast?.('Yeniden çizelgeleme uygulanamadı.', 'err')
+          return
+        }
+        var msg = res.createdCount + ' blok yeniden yerleştirildi, ' + res.releasedCount + ' blok serbest bırakıldı' +
+          (res.unplaceableCount ? ', ' + res.unplaceableCount + ' operasyon yerleşemedi.' : '.')
+        window.CalibraHub?.toast?.(msg, res.unplaceableCount ? 'warn' : 'ok')
+        setRescheduleResult(null)
+        setPreviewProposals([])
+        fetchSchedule(true)
+      })
+      .catch(function (e) {
+        console.error('[MachineSchedule] reschedule apply error:', e)
+        window.CalibraHub?.toast?.('Yeniden çizelgeleme uygulanırken hata oluştu.', 'err')
+      })
+      .finally(function () { setRescheduleApplying(false) })
+  }
+
   if (loading) {
     return (
       <div className="ms-root">
@@ -283,14 +400,29 @@ export default function MachineSchedule() {
           onRefresh={function () { fetchSchedule(true) }}
           isDark={isDark}
           refreshing={refreshing}
-          onAutoSchedule={function () { setWizardOpen(true) }}
+          onAutoSchedule={function () { if (!rescheduleResult && !rescheduleLoading) setWizardOpen(true) }}
           scenarios={scenarios}
           selectedScenarioId={selectedScenarioId}
           onScenarioChange={setSelectedScenarioId}
+          lockableCount={visibleLockableIds().length}
+          unlockableCount={visibleUnlockableIds().length}
+          onBulkLock={handleBulkLock}
+          onBulkUnlock={handleBulkUnlock}
+          onReschedule={handleReschedule}
+          rescheduleBusy={rescheduleLoading}
+          autoScheduleDisabled={!!rescheduleResult || rescheduleLoading}
+          rescheduleDisabled={wizardOpen || !!rescheduleResult}
         />
         <div className="ms-body">
           <UnplannedQueue unplanned={unplanned} loading={refreshing} />
           <div className="ms-gantt">
+            <ReschedulePanel
+              loading={rescheduleLoading}
+              result={rescheduleResult}
+              applying={rescheduleApplying}
+              onApply={handleRescheduleApply}
+              onCancel={handleRescheduleCancel}
+            />
             <GanttBoard
               machines={machines}
               blocks={blocks}
@@ -304,6 +436,7 @@ export default function MachineSchedule() {
               onBlockClick={handleBlockClick}
               onBlockMove={handleBlockMove}
               onBlockResize={handleBlockResize}
+              onBlockToggleLock={handleBlockToggleLock}
               loading={refreshing}
               previewProposals={previewProposals}
             />

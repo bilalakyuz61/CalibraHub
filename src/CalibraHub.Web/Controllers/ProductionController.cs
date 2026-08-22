@@ -120,6 +120,13 @@ public sealed class ProductionController : Controller
         _ => "Üretim",
     };
 
+    private static string BlockStatusLabel(byte s) => s switch
+    {
+        2 => "Kilitli",
+        3 => "Onaylı",
+        _ => "Planlı",
+    };
+
     private int ResolveCurrentCompanyIdSafe()
     {
         try { return _connectionFactory.ResolveCurrentCompanyId(); }
@@ -1693,6 +1700,63 @@ public sealed class ProductionController : Controller
         }
     }
 
+    // ─── Blok Kilitle + Yeniden Çizelgele (2026-08-22) — kilitleme ───────────────
+    // API sözleşmesi KİLİTLİ — frontend machineScheduleService.js bu iki endpoint'e göre yazılır.
+    // Yalnız Status alanı değişir (start/end/tip dokunulmaz). Setup child (ParentBlockId dolu)
+    // bloklar elle kilitlenemez — repo katmanında [ParentBlockId] IS NULL ile hariç tutulur.
+    // POST /Production/SetBlockStatus                            → tekil durum değişimi
+    // POST /Production/BulkSetBlockStatus                        → toplu durum değişimi
+    public sealed record SetBlockStatusRequest(int Id, byte Status);
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineSchedule)]
+    public async Task<IActionResult> SetBlockStatus([FromBody] SetBlockStatusRequest req, CancellationToken ct)
+    {
+        if (req is null || req.Id <= 0)
+            return Json(new { ok = false, error = "Kayıt belirtilmedi." });
+        if (req.Status is < 1 or > 3)
+            return Json(new { ok = false, error = "Geçersiz durum." });
+        try
+        {
+            var ok = await _machineSchedule.SetBlockStatusAsync(req.Id, req.Status, CurrentUserId(), ct);
+            if (!ok)
+                return Json(new { ok = false, error = "Kayıt bulunamadı veya hazırlık (setup) alt bloğunun durumu ayrı değiştirilemez." });
+            _audit.LogEvent("MachineScheduleBlock.SetStatus", detail: $"Blok #{req.Id} → {BlockStatusLabel(req.Status)}.");
+            return Json(new { ok = true, id = req.Id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[MachineSchedule.SetBlockStatus] id={Id} status={Status} güncellenemedi.", req.Id, req.Status);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    public sealed record BulkSetBlockStatusRequest(IReadOnlyList<int> Ids, byte Status);
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineSchedule)]
+    public async Task<IActionResult> BulkSetBlockStatus([FromBody] BulkSetBlockStatusRequest req, CancellationToken ct)
+    {
+        if (req is null || req.Ids is null || req.Ids.Count == 0)
+            return Json(new { ok = false, error = "En az bir blok seçilmeli." });
+        if (req.Status is < 1 or > 3)
+            return Json(new { ok = false, error = "Geçersiz durum." });
+        try
+        {
+            var count = await _machineSchedule.BulkSetBlockStatusAsync(req.Ids, req.Status, CurrentUserId(), ct);
+            _audit.LogEvent("MachineScheduleBlock.BulkSetStatus",
+                detail: $"{count} blok → {BlockStatusLabel(req.Status)} ({req.Ids.Count} seçildi).");
+            return Json(new { ok = true, count });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[MachineSchedule.BulkSetBlockStatus] count={Count} status={Status} güncellenemedi.", req.Ids?.Count, req.Status);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
     // ─── Makine Çalışma Takvimi (haftalık müsaitlik + resmi tatil) — Faz 2 (2026-08-05) ───────
     // GET  /Production/MachineCalendar                            → admin ekran (React mount)
     // GET  /Production/MachineCalendarData                        → makineler + haftalık pencereler + tatiller
@@ -2053,6 +2117,57 @@ public sealed class ProductionController : Controller
         catch (Exception ex)
         {
             _logger.LogError(ex, "[AutoSchedule.Apply] wo sayısı={Count} uygulanamadı.", req.IncludedWorkOrderIds?.Count);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    // ─── Blok Kilitle + Yeniden Çizelgele (2026-08-22) — yeniden çizelgele ────────
+    // API sözleşmesi KİLİTLİ — frontend machineScheduleService.js bu iki endpoint'e göre yazılır.
+    // Kapsam: Kilitli(2)/Onaylı(3) SABİT, diğer TÜM Planlı(1) bloklar serbest bırakılır; TÜM açık
+    // iş emirleri (opt-out listesi yok). Preview PERSIST ETMEZ; Apply AYNI girdiden yeniden hesaplar
+    // (client blok koordinatına GÜVENMEZ), TEK transaction'da serbest bırakır + yeniden yazar.
+    // POST /Production/ReschedulePreview           { fromUtc } → önizleme (persist yok)
+    // POST /Production/RescheduleApply              { fromUtc } → uygula
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineSchedule)]
+    public async Task<IActionResult> ReschedulePreview([FromBody] RescheduleRequest req, CancellationToken ct)
+    {
+        if (req is null)
+            return Json(new { ok = false, error = "Geçersiz istek." });
+        try
+        {
+            var fromUtc = req.FromUtc.ToUniversalTime();
+            var result = await _autoSchedule.ReschedulePreviewAsync(fromUtc, ct);
+            return Json(new { ok = true, proposals = result.Proposals, unplaceable = result.Unplaceable, releasedCount = result.ReleasedCount });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[AutoSchedule.ReschedulePreview] fromUtc={FromUtc} önizleme hesaplanamadı.", req.FromUtc);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineSchedule)]
+    public async Task<IActionResult> RescheduleApply([FromBody] RescheduleRequest req, CancellationToken ct)
+    {
+        if (req is null)
+            return Json(new { ok = false, error = "Geçersiz istek." });
+        try
+        {
+            var fromUtc = req.FromUtc.ToUniversalTime();
+            var result = await _autoSchedule.RescheduleApplyAsync(fromUtc, CurrentUserId(), ct);
+            // Toplu özet — her blok tek tek loglanmaz (gürültü önleme, bkz. CLAUDE.md audit kuralı).
+            _audit.LogEvent("MachineAutoSchedule.RescheduleApply",
+                detail: $"{result.CreatedCount} blok oluşturuldu, {result.ReleasedCount} blok serbest bırakıldı, " +
+                        $"{result.UnplaceableCount} operasyon yerleştirilemedi (fromUtc={fromUtc:yyyy-MM-dd HH:mm} UTC).");
+            return Json(new { ok = true, createdCount = result.CreatedCount, releasedCount = result.ReleasedCount, unplaceableCount = result.UnplaceableCount });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[AutoSchedule.RescheduleApply] fromUtc={FromUtc} uygulanamadı.", req.FromUtc);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }

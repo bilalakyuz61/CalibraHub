@@ -21,4 +21,15 @@ public interface IMachineAutoScheduleService
     /// <summary>Uygula — aynı girdiden yeniden hesaplar ve Status=Planned olarak persist eder.</summary>
     Task<AutoScheduleApplyResultDto> ApplyAsync(
         IReadOnlyList<int> includedWorkOrderIds, DateTime fromUtc, int? scenarioId, int? userId, CancellationToken ct);
+
+    /// <summary>Blok Kilitle + Yeniden Çizelgele (2026-08-22) — Önizleme, PERSIST ETMEZ. Kapsam TÜM
+    /// açık iş emirleri (opt-out listesi yok); Kilitli(2)/Onaylı(3) bloğu OLMAYAN operasyonlar
+    /// (planlanmamış + yalnız-Planlı) yeniden yerleştirilir, Kilitli/Onaylı bloklar SABİT kapasite
+    /// kısıtıdır. Request'te scenarioId yok — motor varsayılan Vardiya Senaryosu'nu kullanır.</summary>
+    Task<ReschedulePreviewResultDto> ReschedulePreviewAsync(DateTime fromUtc, CancellationToken ct);
+
+    /// <summary>Uygula — Preview ile AYNI girdiden (fromUtc) yeniden hesaplar (client koordinatına
+    /// güvenmez); TEK transaction'da serbest set'in aktif Planlı bloklarını soft-delete edip yeni
+    /// önerileri yazar (bkz. <c>IMachineAutoScheduleRepository.ApplyRescheduleAsync</c>).</summary>
+    Task<RescheduleApplyResultDto> RescheduleApplyAsync(DateTime fromUtc, int? userId, CancellationToken ct);
 }
