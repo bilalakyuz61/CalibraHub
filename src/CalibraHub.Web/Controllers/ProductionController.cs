@@ -58,6 +58,8 @@ public sealed class ProductionController : Controller
     private readonly IMachineCalendarRepository _machineCalendar;
     // 2026-08-05 — Makine Planlama Faz 3: otomatik çizelgeleme önerisi (forward, sonlu-kapasite motor).
     private readonly IMachineAutoScheduleService _autoSchedule;
+    // 2026-08-22 — Kapasite / Yük Raporu (makine doluluk ısı haritası).
+    private readonly IMachineCapacityReportService _capacityReport;
     private readonly CalibraHub.Application.Auditing.IAuditTrailService _audit;
 
     public ProductionController(
@@ -80,6 +82,7 @@ public sealed class ProductionController : Controller
         IMachineScheduleRepository machineSchedule,
         IMachineCalendarRepository machineCalendar,
         IMachineAutoScheduleService autoSchedule,
+        IMachineCapacityReportService capacityReport,
         CalibraHub.Application.Auditing.IAuditTrailService audit,
         ILogger<ProductionController> logger,
         IUserSettingRepository userSettings)
@@ -103,6 +106,7 @@ public sealed class ProductionController : Controller
         _machineSchedule = machineSchedule;
         _machineCalendar = machineCalendar;
         _autoSchedule = autoSchedule;
+        _capacityReport = capacityReport;
         _audit = audit;
         _logger = logger;
         _userSettings = userSettings;
@@ -2049,6 +2053,39 @@ public sealed class ProductionController : Controller
         catch (Exception ex)
         {
             _logger.LogError(ex, "[AutoSchedule.Apply] wo sayısı={Count} uygulanamadı.", req.IncludedWorkOrderIds?.Count);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    // ─── Kapasite / Yük Raporu — makine doluluk ısı haritası (backend, 2026-08-22) ───────
+    // API sözleşmesi KİLİTLİ — frontend (Views/Production/CapacityLoad.cshtml + ısı haritası
+    // bileşenleri) bu iki endpoint'e göre yazılıyor, alan adı/tipini değiştirme. Tüm zaman UTC "…Z".
+    // GET /Production/CapacityLoad                         → Isı haritası view (React mount)
+    // GET /Production/CapacityLoadData?from=&to=&bucket=    → kova + makine × hücre doluluk verisi
+    [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.CapacityLoad)]
+    public IActionResult CapacityLoad() => View();
+
+    [HttpGet("Production/CapacityLoadData")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.CapacityLoad)]
+    public async Task<IActionResult> CapacityLoadData(DateTime from, DateTime to, string bucket, CancellationToken ct)
+    {
+        try
+        {
+            // Frontend UTC "...Z" ISO gönderir; MVC query binder bunu yerel saate çevirip Kind=Local
+            // (doğru instant, yanlış etiket) döner — MachineScheduleData ile AYNI savunma.
+            var fromUtc = from.ToUniversalTime();
+            var toUtc = to.ToUniversalTime();
+            var result = await _capacityReport.GetCapacityLoadAsync(fromUtc, toUtc, bucket, ct);
+            return Json(new { ok = true, bucket = result.Bucket, buckets = result.Buckets, machines = result.Machines });
+        }
+        catch (ArgumentException ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[CapacityLoad.Data] from={From} to={To} bucket={Bucket} veri alınamadı.", from, to, bucket);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }

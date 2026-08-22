@@ -732,6 +732,9 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IMach
     CalibraHub.Persistence.Repositories.SqlMachineAutoScheduleRepository>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IMachineAutoScheduleService,
     CalibraHub.Application.Services.MachineAutoScheduleService>();
+// Kapasite / Yük Raporu — makine doluluk ısı haritası (backend, 2026-08-22).
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IMachineCapacityReportService,
+    CalibraHub.Application.Services.MachineCapacityReportService>();
 
 // Is Emri Operasyonlari (Faz 3a — shop-floor temel)
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWorkOrderOperationRepository,

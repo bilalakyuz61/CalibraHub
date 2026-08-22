@@ -13531,6 +13531,8 @@ END;";
             // ShopFloor gibi widget hedefi olmayan özel ekran.
             ("MACHINE_SCHEDULE",    "Makine Planlama",                  "Üretim",               null,                       519,  false),
             ("MACHINE_CALENDAR",    "Makine Çalışma Takvimi",           "Üretim",               null,                       520,  false),
+            // 2026-08-22: Kapasite / Yük Raporu — makine doluluk ısı haritası, MachineSchedule/MachineCalendar gibi widget hedefi olmayan özel ekran.
+            ("CAPACITY_LOAD",       "Kapasite / Yük Raporu",            "Üretim",               null,                       521,  false),
             ("PRODUCTION_DEFS",     "Üretim Tanımlamaları",              "Üretim",               null,                       575,  false),
             ("OPERATIONS",          "Operasyonlar",                     "Üretim",               "Operasyonlar",             520,  true),  // SmartBoard liste
             ("OPERATION_EDIT",      "Düzenleme",                        "Üretim",               "Operasyonlar",             525,  true),
