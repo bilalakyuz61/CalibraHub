@@ -1076,7 +1076,13 @@ public sealed class SalesController : Controller
             && (await _companyParams.GetBoolAsync(StockParameters.FormCode, StockParameters.SalesOrderAffectsStockKey, ct) ?? false)
             && (await _companyParams.GetBoolAsync(StockParameters.FormCode, StockParameters.OrderSerialTrackingKey, ct) ?? false);
         var lineViewMode = await GetLineViewModeAsync(ct);
-        var lineGridConfig = BuildDocumentLineGridConfig(bindings, lineFormCode, hidePricing, typeCode, id, _orderSerialTracking, lineViewMode);
+        /* TL fiyata mudahale (2026-08-22) — BELGE TURU bazinda parametre.
+           Kapali/tanimsiz → TL aynasi bugunku gibi salt okunur (fail-open). */
+        var allowTlPriceEdit = !string.IsNullOrWhiteSpace(typeCode)
+            && (await _companyParams.GetBoolAsync(
+                    SalesQuoteParameters.FormCode,
+                    SalesQuoteParameters.TlPriceEditKey(typeCode), ct) ?? false);
+        var lineGridConfig = BuildDocumentLineGridConfig(bindings, lineFormCode, hidePricing, typeCode, id, _orderSerialTracking, lineViewMode, allowTlPriceEdit);
         var jsonOpts = new System.Text.Json.JsonSerializerOptions
         {
             PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
@@ -1230,7 +1236,8 @@ public sealed class SalesController : Controller
         string? documentTypeCode = null,
         int? documentId = null,
         bool orderSerialTracking = false,
-        string? viewMode = null)
+        string? viewMode = null,
+        bool allowTlPriceEdit = false)
     {
         // Binding sözlüğü: fieldKey → (guideCode, isRequired, filterJson)
         var bindingMap = (bindings ?? [])
@@ -1323,7 +1330,10 @@ public sealed class SalesController : Controller
             // grid'in kendisinde tlMirror/sourceKey metadata'sina gore render-time hesaplanir
             // (bkz. CalibraLineItemsGrid.jsx tlCellValue). Yalniz belge dovizi TRY disiyken
             // gorunur (client-side, showTlColumns) — TRY belgede kolon hic eklenmemis gibi gizlenir.
-            cols.Add(new { key = "unitPriceTL",  label = "Birim Fiyat (TL)", type = "currency", tlMirror = true, sourceKey = "unitPrice", width = 130, precision = 2, computed = true, @readonly = true, align = "right", icon = "DollarSign" });
+            // allowTlPriceEdit acikken TL birim fiyat DUZENLENEBILIR: girilen deger
+            // kura bolunup `unitPrice` geri hesaplanir (grid tarafinda). Kapaliyken
+            // computed+readonly — bugunku davranis birebir korunur.
+            cols.Add(new { key = "unitPriceTL",  label = "Birim Fiyat (TL)", type = "currency", tlMirror = true, sourceKey = "unitPrice", width = 130, precision = 2, computed = !allowTlPriceEdit, @readonly = !allowTlPriceEdit, editableTl = allowTlPriceEdit, align = "right", icon = "DollarSign" });
             // Seq 1093: etikette "%" YOK — kolon ikonu (Percent) zaten yuzde oldugunu gosteriyor,
             // "% Iskonto %" seklinde cift gorunuyordu.
             // icon = "" → etikette ikon CIZILMEZ (2026-08-06 kullanici istegi):

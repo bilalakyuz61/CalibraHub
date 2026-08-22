@@ -160,9 +160,6 @@ public static class MenuDefinition
                         PermissionFormCode: FormCodes.SalesOrder),
                     new("logistics.salesdeliveries", isEn ? "Sales Delivery" : "Satış İrsaliyesi", "Truck", "/Sales/Deliveries", null,
                         PermissionFormCode: FormCodes.SalesDelivery),
-                    // 2026-07-28: Yükleme Planlama Merkezi + Stok Rezervasyonu — Fulfillment Center'ın satış-tarafı analoğu.
-                    new("logistics.shipmentplanning", isEn ? "Shipment Planning" : "Yükleme Planlama", "PackageCheck", "/Sales/ShipmentPlanningCenter", null,
-                        PermissionFormCode: FormCodes.ShipmentPlanning),
                 }),
                 // Satın Alma
                 new("logistics.purchase", isEn ? "Purchase" : "Satın Alma", "ShoppingBag", null, new List<MenuNode>
@@ -191,6 +188,12 @@ public static class MenuDefinition
                         PermissionFormCode: FormCodes.StockOut),
                     new("logistics.inventorycount", isEn ? "Inventory Count"   : "Sayım",                 "ClipboardCheck", "/Warehouse/Inventory",  null,
                         PermissionFormCode: FormCodes.InventoryCount),
+                    // 2026-08-22 (kullanici istegi): Yükleme Planlama Satış altindan DEPO altina
+                    // tasindi — sevkiyat hazirligi depo isi. Rota/izin kodu DEGISMEDI
+                    // (/Sales/ShipmentPlanningCenter + FormCodes.ShipmentPlanning), yalniz
+                    // menudeki yeri degisti; mevcut yetkiler ve kayitli sekmeler bozulmaz.
+                    new("logistics.shipmentplanning", isEn ? "Shipment Planning" : "Yükleme Planlama", "PackageCheck", "/Sales/ShipmentPlanningCenter", null,
+                        PermissionFormCode: FormCodes.ShipmentPlanning),
                 }),
             }),
 

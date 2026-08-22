@@ -580,6 +580,39 @@ body.app-theme-dark .ap-tab.is-active::before {
                     </div>
                 </div>
 
+                @{
+                    var tlEditStates = ViewData["TlPriceEditStates"] as List<CalibraHub.Web.Controllers.ParametersController.StockEffectState>
+                                       ?? new List<CalibraHub.Web.Controllers.ParametersController.StockEffectState>();
+                }
+                @* TL fiyata mudahale — BELGE TURU bazinda (2026-08-22 kullanici istegi).
+                   Kapali/tanimsiz => TL sutunu salt okunur (bugunku davranis, fail-open). *@
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">TL Fiyata Müdahale</div>
+                        <div class="ap-row-desc">
+                            Dövizli belgelerde kalem gridindeki <strong>Birim Fiyat (TL)</strong> sütunu
+                            normalde salt okunur bir göstergedir (döviz fiyatı × kur). Açık olan belge
+                            türlerinde bu alan düzenlenebilir olur; girilen TL tutarı <strong>kura bölünerek
+                            döviz birim fiyatı geri hesaplanır</strong>. Kapalıyken bugünkü davranış korunur.
+                        </div>
+                    </div>
+                </div>
+                @foreach (var st in tlEditStates)
+                {
+                    <div class="ap-row">
+                        <div class="ap-row-main">
+                            <div class="ap-row-title" style="font-size:.85rem;">@st.Label</div>
+                        </div>
+                        <div class="ap-row-control">
+                            <label class="ap-switch">
+                                <input type="checkbox" class="ap-tl-edit" data-doctype="@st.Code" @(st.Enabled ? "checked" : "") />
+                                <span class="ap-switch-track"><span class="ap-switch-thumb"></span></span>
+                            </label>
+                        </div>
+                    </div>
+                }
+
+
                 <div class="ap-group-title">Onay</div>
                 <div class="ap-row">
                     <div class="ap-row-main">
@@ -1507,7 +1540,26 @@ body.app-theme-dark .ap-tab.is-active::before {
                 var drt = await rrt.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
                 var apSqEl = document.getElementById('ap-approval-salesquote');
                 var dApSq = await saveApprovalKinds([{ kind: 'SalesQuote', enabled: !!(apSqEl && apSqEl.checked) }]);
-                ok = !!drt.ok && !!dApSq.ok;
+                // TL fiyata mudahale — belge turu basina ayri parametre (TL_PRICE_EDIT_<kod>).
+                var tlOk = true;
+                var tlEls = document.querySelectorAll('.ap-tl-edit');
+                for (var ti = 0; ti < tlEls.length; ti++) {
+                    var el = tlEls[ti];
+                    var rr = await fetch('/Admin/SaveParameter', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                        body: JSON.stringify({
+                            formCode: 'SALES_QUOTE',
+                            paramKey: 'TL_PRICE_EDIT_' + el.getAttribute('data-doctype'),
+                            paramValue: el.checked ? 'true' : 'false',
+                            dataType: 0
+                        })
+                    });
+                    var dd = await rr.json().catch(function () { return { ok: false }; });
+                    if (!dd.ok) tlOk = false;
+                }
+                ok = !!drt.ok && !!dApSq.ok && tlOk;
                 if (ok) flash('Kaydedildi.', true);
                 else    flash(drt.error || dApSq.error || 'Kaydetme basarisiz.', false);
             } else if (activePane === 'purchase') {

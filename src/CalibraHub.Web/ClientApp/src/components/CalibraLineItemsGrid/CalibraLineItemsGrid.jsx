@@ -1340,6 +1340,27 @@ export default function CalibraLineItemsGrid(props) {
       return prev.map(function(r) {
         if (r._uid !== rowUid) return r
         var next = Object.assign({}, r)
+        /* ── TL fiyata mudahale (2026-08-22, belge turu parametresi) ───────────
+           TL aynasi duzenlenebilir yapildiysa (config: editableTl) kullanicinin
+           girdigi TL degeri SAKLANMAZ; kura bolunup KAYNAK alana (unitPrice)
+           yazilir. Boylece tek dogruluk kaynagi doviz fiyati kalir, TL sutunu
+           yine turetilmis olur (tlCellValue) ve toplamlar/kayit akisi degismez.
+           Kur 0/gecersizse mudahale yok sayilir — sifira bolme yerine sessizce
+           kaynak degeri korunur (fail-open). */
+        var __tlCol = null
+        for (var __i = 0; __i < allColumns.length; __i++) {
+          var __c = allColumns[__i]
+          if (__c.key === columnKey && __c.tlMirror && __c.editableTl) { __tlCol = __c; break }
+        }
+        if (__tlCol) {
+          var __rate = exchangeRate || 0
+          var __tl = _num(newValue)
+          if (__rate > 0 && __tl != null) next[__tlCol.sourceKey] = __tl / __rate
+          // applyComputed ZORUNLU: satir toplami vb. turetilmis alanlar bu adimda
+          // hesaplaniyor. Erken `return next` ilk denemede bunu atliyordu →
+          // TL fiyat degisince satir toplami eski kaliyordu (sessiz kirik).
+          return applyComputed(next, allColumns)
+        }
         next[columnKey] = newValue
         if (fillPatch) {
           Object.keys(fillPatch).forEach(function(k) { next[k] = fillPatch[k] })
@@ -1393,7 +1414,9 @@ export default function CalibraLineItemsGrid(props) {
     // Otomatik fiyat: urun secilince base fiyat, kombinasyon secilince varyant fiyat;
     // elle unitPrice girilince o satiri dondur (bir daha otomatik yazma).
     if (pricing.enabled) {
-      if (columnKey === pricing.targetKey) {
+      if (columnKey === pricing.targetKey || columnKey === 'unitPriceTL') {
+        // TL aynasina elle girilen deger de "elle fiyat"tir — otomatik fiyat
+        // cozumleyicisi bunu ezmemeli.
         priceManualRef.current[rowUid] = true
       } else if (columnKey === 'materialCode') {
         priceManualRef.current[rowUid] = false
@@ -1402,8 +1425,10 @@ export default function CalibraLineItemsGrid(props) {
         resolveAndApplyPrice(rowUid, mergedRow(rowUid, columnKey, newValue, fillPatch), false)
       }
     }
+    // exchangeRate ZORUNLU dep: TL→doviz geri hesabi kuru okur; listede yoksa
+    // kur degistiginde bu closure eski kuru kullanir (sessiz yanlis fiyat).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allColumns, traceColumns, resolveAndApplyPrice])
+  }, [allColumns, traceColumns, resolveAndApplyPrice, exchangeRate])
 
   // ── Yeni satir ekle ──
   // Guided workflow: satir eklendikten sonra stok rehberi otomatik acilir.

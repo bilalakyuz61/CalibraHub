@@ -166,6 +166,18 @@ public sealed class ParametersController : Controller
             CalibraHub.Application.Constants.SalesQuoteParameters.RateTypeKey, cancellationToken)
             ?? CalibraHub.Application.Constants.SalesQuoteParameters.RateTypeDefault;
 
+        // Satış Teklifi tab: TL fiyata müdahale — BELGE TÜRÜ bazında (2026-08-22).
+        // Tanımsız → KAPALI (TL sütunu salt okunur, bugünkü davranış).
+        var sqParams = await _companyParameters.ListAsync(
+            CalibraHub.Application.Constants.SalesQuoteParameters.FormCode, cancellationToken);
+        ViewData["TlPriceEditStates"] = CalibraHub.Application.Constants.SalesQuoteParameters.TlPriceEditCapableTypes
+            .Select(t => new StockEffectState(
+                t.Code, t.Label, null,
+                sqParams.FirstOrDefault(p =>
+                    p.ParamKey == CalibraHub.Application.Constants.SalesQuoteParameters.TlPriceEditKey(t.Code))
+                    ?.ParamValue == "true"))
+            .ToList();
+
         // Güvenlik tab: oturum atalet süresi (dk). Tanımsız → varsayılan (30). 0 = kapalı.
         ViewData["SessionIdleMinutes"] = await _companyParameters.GetIntAsync(
             CalibraHub.Application.Constants.SecurityParameters.FormCode,
@@ -451,6 +463,6 @@ public sealed class ParametersController : Controller
         // okuma-zamanı varsayılanı (açık) korunur (mevcut ekran geriye-uyumlu).
         bool? SalesDeliverySerialOverride = null);
     public sealed record StockEffectInput(string Code, bool Enabled);
-    public sealed record StockEffectState(string Code, string Label, string Description, bool Enabled);
+    public sealed record StockEffectState(string Code, string Label, string? Description, bool Enabled);
     public sealed record DeleteCompanyParameterRequest(string FormCode, string ParamKey);
 }

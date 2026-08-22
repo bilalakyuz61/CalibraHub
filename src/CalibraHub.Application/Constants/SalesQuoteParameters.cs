@@ -23,4 +23,28 @@ public static class SalesQuoteParameters
     public const string RateTypeEffectiveBuying  = "EffectiveBuying";  // EffectiveBuyingRate  (Efektif Alış)
 
     public const string RateTypeDefault = RateTypeSelling;
+
+    // ── TL fiyata mudahale (2026-08-22, kullanici istegi) ────────────────────
+    // Dovizli belgede kalem gridindeki TL aynasi normalde SALT OKUNUR bir
+    // gostergedir (birim fiyat x kur). Bu parametre acikken TL fiyat alani
+    // duzenlenebilir olur; girilen TL degeri KURA BOLUNEREK doviz birim fiyati
+    // geri hesaplanir.
+    // BELGE TURU BAZINDA: anahtar, belge turu koduyla uretilir (StockParameters
+    // .EffectKey ile ayni desen) → her belge tipi ayri ayarlanabilir.
+    // Tanimsiz/false → bugunku davranis (TL alani salt okunur) — fail-open.
+    public const string TlPriceEditKeyPrefix = "TL_PRICE_EDIT_";
+
+    public static string TlPriceEditKey(string docTypeCode) => TlPriceEditKeyPrefix + docTypeCode;
+
+    /// <summary>TL fiyata mudahale ayarinin sunuldugu belge turleri — fiyatli ve
+    /// dovizli olabilen ticari belgeler. (Ihtiyac Kaydi fiyatsizdir, listede yok.)</summary>
+    public static readonly (string Code, string Label)[] TlPriceEditCapableTypes =
+    [
+        ("satis_teklifi",    "Satış Teklifi"),
+        ("satis_siparisi",   "Satış Siparişi"),
+        ("satis_irsaliyesi", "Satış İrsaliyesi"),
+        ("alis_teklifi",     "Satın Alma Teklifi"),
+        ("alis_siparisi",    "Satın Alma Siparişi"),
+        ("alis_irsaliyesi",  "Alış İrsaliyesi"),
+    ];
 }
