@@ -4433,6 +4433,20 @@ body.app-theme-dark .calibra-line-card:hover {
    satırı (.clg-table-head) ve satır hover'ı (.clg-table-row) ayrı Tailwind
    `bg-slate-50/70` / `hover:bg-slate-50/70` utility'leri kullanır — aynı sınıf
    bug'ına karşı burada da kanonik override. */
+/* ── Zebra desen (2026-08-22, kullanici istegi) ─────────────────────────────
+   Tablo gorunumunde satirlarin kolay takip edilmesi icin cift satirlar hafif
+   tonlanir. Iki temada da AYNI algi: acikta cok hafif koyu, koyuda cok hafif
+   acik ton — kontrast okunabilirligi bozmayacak kadar dusuk tutuldu.
+   `:not(:hover)` — hover vurgusu zebranin USTUNDE kalsin (ayni ozgullukte iki
+   kural carpisiyordu).
+   `:not(.is-kit-component)` — kit bilesen satirlarinin indigo tonu korunur. */
+.calibra-line-grid--table .clg-table-row:nth-child(even):not(.is-kit-component):not(:hover) {
+  background-color: rgba(15, 23, 42, 0.028);
+}
+body.app-theme-dark .calibra-line-grid--table .clg-table-row:nth-child(even):not(.is-kit-component):not(:hover) {
+  background-color: rgba(255, 255, 255, 0.032);
+}
+
 body.app-theme-dark .calibra-line-grid--table {
   background: rgba(255,255,255,0.03) !important;
   border-color: rgba(255,255,255,0.10) !important;

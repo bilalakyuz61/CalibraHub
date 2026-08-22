@@ -224,6 +224,21 @@ export default function CalibraLineItemsGrid(props) {
         }
       })
   }
+  /* Belge sayfasi (DocumentEdit.cshtml) icin kanca: aktif modu okur ve degistirir.
+     Toggle serit kaldirildigi icin tek giris noktasi burasi. Birden fazla grid
+     mount edilirse SONUNCUSU kazanir — belge ekraninda tek grid vardir. */
+  useEffect(function () {
+    if (typeof window === 'undefined') return undefined
+    window.CalibraLineGridView = {
+      get: function () { return viewMode },
+      set: function (mode) { handleViewModeChange(mode) },
+    }
+    return function () {
+      if (window.CalibraLineGridView && window.CalibraLineGridView.get === undefined) return
+      try { delete window.CalibraLineGridView } catch (e) { window.CalibraLineGridView = null }
+    }
+  })
+
   function handleViewModeChange(mode) {
     if (mode !== 'card' && mode !== 'grid') return
     if (mode === viewMode) return
@@ -238,6 +253,9 @@ export default function CalibraLineItemsGrid(props) {
     setViewMode(mode)
     writeLastViewMode(mode)
     persistViewMode(mode)
+    try {
+      window.dispatchEvent(new CustomEvent('calibra-line-view-changed', { detail: { mode: mode } }))
+    } catch (e) { /* eski tarayici — menu isareti bir sonraki acilista guncellenir */ }
   }
 
   // Widget → LineGridCell kolon adaptasyonu. Sadece inline-uyumlu tipler:
@@ -1880,45 +1898,11 @@ export default function CalibraLineItemsGrid(props) {
       onKeyDown={handleGridKeyDown}
       className={'calibra-line-grid rounded-2xl border border-slate-200 bg-white/70 dark:bg-white/[0.04] dark:border-white/10 backdrop-blur-xl shadow-sm ' +
         (viewMode === 'grid' ? 'calibra-line-grid--table' : 'calibra-line-grid--cards')}>
-      {/* Görünüm seçici (2026-08-19) — Kart / Tablo. Seçim aninda uygulanir + kalici
-          hale getirilir (persistViewMode → /UiConfig/LineViewMode, user_settings).
-          Backend fail-open: config.viewMode gecersizse/yoksa 'card' — bkz. yukaridaki
-          useState. */}
-      <div className="clg-viewtoggle-bar flex items-center justify-end gap-2 px-2.5 sm:px-3 pt-2">
-        <div className="clg-view-toggle inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-white/[0.04]" role="tablist" aria-label="Görünüm">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={viewMode === 'card'}
-            onClick={function () { handleViewModeChange('card') }}
-            className={'clg-view-btn flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-semibold transition-colors ' + (
-              viewMode === 'card'
-                ? 'is-active bg-[#fff] text-indigo-600 shadow-sm dark:bg-indigo-500/20 dark:text-indigo-200'
-                : 'text-slate-500 hover:text-slate-700 dark:text-white/45 dark:hover:text-white/70'
-            )}
-            title="Kart Görünümü"
-          >
-            <LayoutGrid size={13} strokeWidth={2} />
-            <span>Kart</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={viewMode === 'grid'}
-            onClick={function () { handleViewModeChange('grid') }}
-            className={'clg-view-btn flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-semibold transition-colors ' + (
-              viewMode === 'grid'
-                ? 'is-active bg-[#fff] text-indigo-600 shadow-sm dark:bg-indigo-500/20 dark:text-indigo-200'
-                : 'text-slate-500 hover:text-slate-700 dark:text-white/45 dark:hover:text-white/70'
-            )}
-            title="Tablo Görünümü"
-          >
-            <Table2 size={13} strokeWidth={2} />
-            <span>Tablo</span>
-          </button>
-        </div>
-      </div>
-
+      {/* 2026-08-22 (kullanici istegi): Kart/Tablo secici SERIDI kaldirildi —
+          "Kalem Bilgileri" basligiyla birlikte iki tam satir yer kapliyordu.
+          Secim artik belge aksiyon seridindeki ISLEMLER menusunden yapilir;
+          bilesen disariya bir kanca acar (asagidaki useEffect), .cshtml o
+          kancayi cagirir. Kalicilik/blur davranisi degismedi. */}
       {/* Kart listesi (PageComment Seq 1079) — her aktif kalem tek bir karttir.
           Onceki tablo basligi (kolon adlari) kaldirildi; her alanin etiketi artik
           kartin icinde, o alanin hemen ustunde gosterilir (bkz. asagidaki

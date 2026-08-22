@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="/css/site.css">
+<link rel="stylesheet" href="/react/calibrahub-widgets.css">
+<style>body{margin:0;padding:16px}</style>
+</head><body>
+<div class="calibra-line-grid calibra-line-grid--table" id="grid">
+  <div class="clg-table-row" id="r1">satir 1</div>
+  <div class="clg-table-row" id="r2">satir 2</div>
+  <div class="clg-table-row" id="r3">satir 3</div>
+  <div class="clg-table-row is-kit-component" id="r4">satir 4 (kit)</div>
+</div>
+<pre id="out" style="font:12px Consolas"></pre>
+<script>
+function bg(id){return getComputedStyle(document.getElementById(id)).backgroundColor}
+function olc(tema){
+  document.body.className=tema;
+  return tema+' → r1='+bg('r1')+' | r2='+bg('r2')+' | r3='+bg('r3')+' | r4(kit)='+bg('r4');
+}
+var lines=[olc('app-theme-light'), olc('app-theme-dark')];
+document.body.className='app-theme-light';
+document.getElementById('out').textContent=lines.join(String.fromCharCode(10));
+</script></body></html>

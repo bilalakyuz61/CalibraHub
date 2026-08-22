@@ -2892,6 +2892,24 @@
          overflow stacking context'i icin kesilmesin. JS ile sqActionsBtn'in
          viewport koordinatlarina gore pozisyonlanir. -->
     <div class="sqe-actions-dropdown" role="menu" id="sqActionsDropdown">
+        <!-- Gorunum (2026-08-22): kalem gridinin ustundeki Kart/Tablo secici serit
+             kaldirildi, secim buraya tasindi. Aktif olan sol tarafta nokta ile
+             isaretlenir; grid React tarafinda window.CalibraLineGridView kancasini acar. -->
+        <button type="button" role="menuitem" class="sqe-actions-item" id="sqViewCardItem" onclick="sqSetLineView('card', event)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+            </svg>
+            <span>Kalemler: Kart Görünümü</span>
+            <span class="sqe-actions-item__dot" id="sqViewCardDot" style="display:none;"></span>
+        </button>
+        <button type="button" role="menuitem" class="sqe-actions-item" id="sqViewGridItem" onclick="sqSetLineView('grid', event)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>
+            </svg>
+            <span>Kalemler: Tablo Görünümü</span>
+            <span class="sqe-actions-item__dot" id="sqViewGridDot" style="display:none;"></span>
+        </button>
         <button type="button" role="menuitem" class="sqe-actions-item" onclick="sqActionPrint(event)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <polyline points="6 9 6 2 18 2 18 9"/>
@@ -4169,10 +4187,11 @@
                 var block = document.createElement('div');
                 block.className = 'sqe-moved-block';
                 block.setAttribute('data-moved-from', k);
-                var title = document.createElement('div');
-                title.className = 'sqe-moved-title';
-                title.textContent = (cfg[k].labelText || (btnOf(k) && btnOf(k).textContent) || k).trim();
-                block.appendChild(title);
+                /* 2026-08-22 (kullanici istegi): tasinan blogun BASLIK satiri
+                   kaldirildi — "Kalem Bilgileri" yazisi tek basina bir satir
+                   kapliyordu. Bloklar birbirinden ust ayrac cizgisiyle zaten
+                   ayriliyor (.sqe-moved-block border-top). Kaynak sekme adi
+                   `data-moved-from` ile DOM'da izlenebilir kaliyor. */
                 while (src.firstChild) block.appendChild(src.firstChild);
                 dst.appendChild(block);
             });
@@ -6169,6 +6188,32 @@
             requestAnimationFrame(sqPositionActionsDropdown);
         }
     };
+    /* ── Kalem gorunumu (Kart / Tablo) — 2026-08-22 ────────────────────────
+       Grid ustundeki secici serit kaldirildi; secim Islemler menusunden yapilir.
+       React bileseni `window.CalibraLineGridView` kancasini acar (get/set) ve
+       degisince `calibra-line-view-changed` olayini yayar. Bilesen henuz mount
+       olmadiysa buton sessizce yok sayilir — hata verilmez. */
+    function sqSyncLineViewMenu(mode) {
+        try {
+            if (!mode && window.CalibraLineGridView) mode = window.CalibraLineGridView.get();
+            var cardDot = document.getElementById('sqViewCardDot');
+            var gridDot = document.getElementById('sqViewGridDot');
+            if (cardDot) cardDot.style.display = (mode === 'card') ? '' : 'none';
+            if (gridDot) gridDot.style.display = (mode === 'grid') ? '' : 'none';
+        } catch (e) { /* menu isareti kritik degil */ }
+    }
+    function sqSetLineView(mode, ev) {
+        if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+        try {
+            if (window.CalibraLineGridView) window.CalibraLineGridView.set(mode);
+        } catch (e) { /* yoksay */ }
+        sqSyncLineViewMenu(mode);
+        try { sqCloseActionsMenu(); } catch (e) { /* opsiyonel */ }
+    }
+    window.addEventListener('calibra-line-view-changed', function (e) {
+        sqSyncLineViewMenu(e && e.detail ? e.detail.mode : null);
+    });
+
     function sqCloseActionsMenu() {
         var menu = document.getElementById('sqActionsMenu');
         var drop = document.getElementById('sqActionsDropdown');
