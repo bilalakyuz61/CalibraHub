@@ -2855,6 +2855,27 @@ export default function CalibraLineItemsGrid(props) {
                                   title="Kit — bilesenleri asagida listelenir"
                                 >KİT</span>
                               )}
+                              {/* NORMAL teklif/siparis kit satiri (Faz 4a patlatmasindan bagimsiz,
+                                  isKitHeader'dan AYRI) — tiklanabilir rozet, bilesen dokumunu ac/kapa. */}
+                              {isMaterialCell && row.isKit === true && (function () {
+                                var lid = row.id != null && row.id !== '' && Number(row.id) > 0 ? Number(row.id) : null
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={function (e) { e.stopPropagation(); if (lid) toggleKitExpand(lid) }}
+                                    disabled={!lid}
+                                    style={{ zIndex: 3 }}
+                                    className={'absolute right-1 top-1 inline-flex items-center gap-0.5 rounded px-1 py-[1px] text-[9px] font-bold tracking-wide select-none transition-colors bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 ' +
+                                      (lid ? 'hover:bg-indigo-200 dark:hover:bg-indigo-500/30 cursor-pointer' : 'opacity-60 cursor-not-allowed')}
+                                    title={lid ? 'Kit bileşenlerini göster/gizle' : 'Kaydedince bileşenler görünür'}
+                                  >
+                                    <span>KİT</span>
+                                    {lid && (kitExpandedRows[lid]
+                                      ? <ChevronDown size={9} strokeWidth={2.6} />
+                                      : <ChevronRight size={9} strokeWidth={2.6} />)}
+                                  </button>
+                                )
+                              })()}
                               {__cellBeh.behReqNow && !__cellBeh.hidden && (
                                 <span
                                   className="absolute left-0.5 top-0.5 text-[11px] font-bold leading-none text-rose-500 dark:text-rose-400 pointer-events-none select-none"
