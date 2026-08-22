@@ -6204,13 +6204,17 @@
             if (ico) ico.innerHTML = (hedef === 'grid') ? SQ_VIEW_ICON_GRID : SQ_VIEW_ICON_CARD;
         } catch (e) { /* etiket kritik degil */ }
     }
-    function sqToggleLineView(ev) {
+    /* DIKKAT: bu script blogu bir closure icinde — `function` bildirimleri
+       GLOBAL olmaz. Inline `onclick` yalnizca window uzerindekini gorur; bu
+       yuzden window.sqToggleActionsMenu gibi ACIKCA atanir. (Ilk surumde
+       atanmamisti ve "sqToggleLineView is not defined" hatasi verdi.) */
+    window.sqToggleLineView = function (ev) {
         if (ev) { ev.preventDefault(); ev.stopPropagation(); }
         var hedef = (sqCurrentLineView() === 'grid') ? 'card' : 'grid';
         try { if (window.CalibraLineGridView) window.CalibraLineGridView.set(hedef); } catch (e) { /* yoksay */ }
         sqSyncLineViewMenu(hedef);
         try { sqCloseActionsMenu(); } catch (e) { /* opsiyonel */ }
-    }
+    };
     window.addEventListener('calibra-line-view-changed', function (e) {
         sqSyncLineViewMenu(e && e.detail ? e.detail.mode : null);
     });
