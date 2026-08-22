@@ -20,4 +20,10 @@ public interface IMachineScheduleRepository
 
     /// <summary>Soft-delete (IsActive=0).</summary>
     Task DeleteBlockAsync(int id, int? userId, CancellationToken ct);
+
+    /// <summary>Kapasite/Yük Raporu (backend, 2026-08-22) — verilen UTC aralığıyla kesişen aktif
+    /// bloklar, yalnız MachineId/StartUtc/EndUtc/BlockType (join'siz, hafif — <see cref="GetScheduleDataAsync"/>'in
+    /// aksine WorkOrder/Item/Operation etiketleri taşımaz). Per-company güvenliği Machine.CompanyId
+    /// join'i ile sağlanır.</summary>
+    Task<IReadOnlyList<CapacityBlockDto>> ListBlocksForCapacityReportAsync(DateTime fromUtc, DateTime toUtc, CancellationToken ct);
 }

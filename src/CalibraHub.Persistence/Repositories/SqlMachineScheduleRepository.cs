@@ -439,4 +439,33 @@ public sealed class SqlMachineScheduleRepository : IMachineScheduleRepository
         cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
         await cmd.ExecuteNonQueryAsync(ct);
     }
+
+    /// <summary>Kapasite/Yük Raporu (backend, 2026-08-22) — bkz. <c>IMachineScheduleRepository</c> XML doc'u.</summary>
+    public async Task<IReadOnlyList<CapacityBlockDto>> ListBlocksForCapacityReportAsync(DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT b.[MachineId], b.[StartUtc], b.[EndUtc], b.[BlockType]
+            FROM {T("MachineScheduleBlock")} b
+            INNER JOIN {T("Machine")} m ON m.[Id] = b.[MachineId] AND m.[CompanyId] = @CompanyId AND m.[IsActive] = 1
+            WHERE b.[IsActive] = 1 AND b.[StartUtc] < @To AND b.[EndUtc] > @From;
+            """;
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+        cmd.Parameters.AddWithValue("@From", fromUtc);
+        cmd.Parameters.AddWithValue("@To", toUtc);
+
+        var list = new List<CapacityBlockDto>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            list.Add(new CapacityBlockDto(
+                MachineId: r.GetInt32(0),
+                StartUtc: DateTime.SpecifyKind(r.GetDateTime(1), DateTimeKind.Utc),
+                EndUtc: DateTime.SpecifyKind(r.GetDateTime(2), DateTimeKind.Utc),
+                BlockType: r.GetByte(3)));
+        }
+        return list;
+    }
 }

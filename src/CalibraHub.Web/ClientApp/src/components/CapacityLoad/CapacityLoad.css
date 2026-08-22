@@ -155,7 +155,7 @@ body.app-theme-dark .cap-root {
 .cap-spin {
   animation: cap-spin 0.9s linear infinite;
 }
-@@keyframes cap-spin {
+@keyframes cap-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }

@@ -208,6 +208,8 @@ public static class MenuDefinition
                     PermissionFormCode: FormCodes.MachineSchedule),
                 new("production.machinecalendar", isEn ? "Shift Scenarios" : "Vardiya Senaryoları", "CalendarDays",  "/Production/MachineCalendar", null,
                     PermissionFormCode: FormCodes.MachineCalendar),
+                new("production.capacityload", isEn ? "Capacity / Load Report" : "Kapasite / Yük Raporu", "BarChart3", "/Production/CapacityLoad", null,
+                    PermissionFormCode: FormCodes.CapacityLoad),
                 new("production.definitions", isEn ? "Production Definitions"    : "Üretim Tanımlamaları",   "Settings2",     "/Production/Definitions",  null,
                     PermissionFormCode: FormCodes.ProductionDefs),
             }),

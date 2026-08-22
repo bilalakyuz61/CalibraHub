@@ -127,6 +127,8 @@ public static class FormCodes
     public const string MachineSchedule = "MACHINE_SCHEDULE";
     // Makine Çalışma Takvimi (haftalık müsaitlik + resmi tatil) — Faz 2 (2026-08-05).
     public const string MachineCalendar = "MACHINE_CALENDAR";
+    // Kapasite / Yük Raporu — makine doluluk ısı haritası (backend, 2026-08-22).
+    public const string CapacityLoad = "CAPACITY_LOAD";
 
     public const string Operations   = "OPERATIONS";
     public const string OperationEdit = "OPERATION_EDIT";

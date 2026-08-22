@@ -59,6 +59,7 @@ import './components/CapaDashboard/CapaDashboard.css'
 import OperationGrid from './components/OperationGrid/OperationGrid'
 import MachineSchedule from './components/MachineSchedule/MachineSchedule'
 import MachineCalendar from './components/MachineCalendar/MachineCalendar'
+import CapacityLoad from './components/CapacityLoad/CapacityLoad'
 import FixedFieldLookupBridge from './components/FixedFieldLookup/FixedFieldLookupBridge'
 import ProductCombinations from './components/ProductCombinations/ProductCombinations'
 import CombinationPickerModal from './components/CalibraLineItemsGrid/CombinationPickerModal'
@@ -1445,6 +1446,28 @@ function mountMachineSchedule(element) {
   }
 }
 window.CalibraHub.mountMachineSchedule = mountMachineSchedule
+
+/**
+ * CapacityLoad mount — Makine Planlama Kapasite/Yük Raporu (ısı haritası).
+ * @param {HTMLElement} element
+ */
+function mountCapacityLoad(element) {
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(CapacityLoad, null)
+    )
+  )
+  return {
+    unmount: function () { root.unmount(); mountedRoots.delete(element) },
+  }
+}
+window.CalibraHub.mountCapacityLoad = mountCapacityLoad
 
 /**
  * MachineCalendar mount — Makine Çalışma Takvimi (haftalık pencere + resmi tatil) admin ekranı.

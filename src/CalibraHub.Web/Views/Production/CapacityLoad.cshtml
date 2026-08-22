@@ -1,0 +1,63 @@
+@{
+    ViewData["Title"] = "Kapasite / Yük Raporu";
+    ViewData["HelpKey"] = "capacity-load";
+    ViewData["FormCode"] = "CAPACITY_LOAD";
+    ViewData["BodyClass"] = "page-capacityload";
+}
+
+@section Styles {
+<link rel="stylesheet" href="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")" />
+<style>
+    .page-capacityload .workspace-action-bar { display: none !important; }
+    .page-capacityload .integrator-dashboard,
+    .page-capacityload .integrator-dashboard__content {
+        display: flex !important;
+        flex-direction: column;
+        width: 100% !important;
+        max-width: none !important;
+        height: 100% !important;
+        min-height: 0;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: hidden;
+        background: transparent !important;
+        box-shadow: none !important;
+        border: none !important;
+        border-radius: 0 !important;
+    }
+    .capacityload-mount {
+        flex: 1 1 auto;
+        display: flex;
+        min-height: 0;
+        overflow: hidden;
+    }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div class="capacityload-mount" id="capacityLoadRoot"></div>
+</section>
+
+@section Scripts {
+<script src="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")"></script>
+<script>
+    (function () {
+        var el = document.getElementById('capacityLoadRoot')
+        if (!el) return
+        function doMount() {
+            if (!window.CalibraHub || !window.CalibraHub.mountCapacityLoad) {
+                console.error('[CapacityLoad] mount fonksiyonu bulunamadi'); return
+            }
+            try { window.CalibraHub.mountCapacityLoad(el) }
+            catch (ex) { console.error('[CapacityLoad] mount hatasi:', ex) }
+        }
+        if (window.CalibraHub && window.CalibraHub.mountCapacityLoad) { doMount(); return }
+        var tries = 0
+        var timer = setInterval(function () {
+            tries++
+            if (window.CalibraHub && window.CalibraHub.mountCapacityLoad) { clearInterval(timer); doMount() }
+            else if (tries >= 30) { clearInterval(timer); console.error('[CapacityLoad] timeout') }
+        }, 100)
+    })()
+</script>
+}
