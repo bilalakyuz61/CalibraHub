@@ -50,7 +50,7 @@ import { CSS } from '@dnd-kit/utilities'
 import {
   SlidersHorizontal, X as XIcon, Eye, EyeOff, Lock, ArrowUp, ArrowDown,
   AlertTriangle, Plus, Minus, LayoutGrid, Settings2, Trash2,
-  GripVertical, ChevronDown, ChevronRight, Search, RotateCcw, Link2,
+  GripVertical, Search, RotateCcw, Link2,
 } from 'lucide-react'
 // Top govdesine portallanmaz — bkz. LineCardLayoutEditor'daki ayni not: tam ekran
 // perde ust menu seridini kilitliyordu. iframe'in kendi body'sine portallanir.
@@ -465,12 +465,12 @@ function buildSectionGroups(fields, maxStrip) {
 function SectionDropZone(props) {
   // 2026-08-21 Faz 4: birakma hedefi artik SEKME + BOLUM. Tek anahtarda tasinir:
   // "tab:<key>|sec:<n>" (bkz. dropTargetFromId).
-  var over = useDroppable({
-    id: 'tab:' + (props.tab || 'general') + '|sec:' + (props.section === null ? 'null' : props.section),
-  })
+  var zoneId = 'tab:' + (props.tab || 'general') + '|sec:' + (props.section === null ? 'null' : props.section)
+  var over = useDroppable({ id: zoneId })
   return (
     <div
       ref={over.setNodeRef}
+      data-drop-zone={zoneId}
       className={'rounded-lg transition-colors ' + (over.isOver
         ? 'bg-indigo-50/70 outline outline-1 outline-dashed outline-indigo-300 dark:bg-indigo-500/10 dark:outline-indigo-400/40'
         : '')}
@@ -511,6 +511,7 @@ function SortableRow(props) {
   }
   return (
     <div ref={sortable.setNodeRef} style={style}
+         data-field-row={props.id}
          className={'rounded-lg px-2.5 py-2 flex items-start gap-2 ' + (dragging
            ? 'border border-dashed border-indigo-300 bg-indigo-50/40 opacity-55 dark:border-indigo-400/40 dark:bg-indigo-500/[0.07]'
            : 'border border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.03]')}>
@@ -561,9 +562,6 @@ export default function StandardFieldsEditor(props) {
   var [initialFields, setInitialFields] = useState([])
   // Arama kutusu (Sutun Ayarlari paneliyle ayni etkilesim dili)
   var [search, setSearch] = useState('')
-  // Katlanir satirlar: acik olanlarin key seti. Varsayilan KAPALI — liste kisa
-  // kalsin, detay istenince acilsin.
-  var [expanded, setExpanded] = useState({})
 
   useEffect(function () {
     var alive = true
@@ -664,6 +662,43 @@ export default function StandardFieldsEditor(props) {
   /* Surukleme sirasinda hedef seritte acilan BOSLUGUN yeri: {tab, section, index}.
      Yalnizca gorsel — `fields` state'ine DOKUNMAZ (bkz. handleDragOver notu). */
   var [dropHint, setDropHint] = useState(null)
+  // Imlecin anlik konumu: aktivasyon olayi + dnd-kit delta (scroll duzeltmesi dahil).
+  var dragPointer = useRef(null)
+
+  /* Hedef serit icinde SATIR HASSASIYETINDE index (2026-08-22).
+     Kullanici bildirimi: (1) baska serite tasima kendi seridi kadar hassas degil,
+     (2) bir seritte ustten tutulan alan EN ALT satira konulamiyor.
+     Ikisinin de koku ayni: index yalnizca `over` bir SATIR oldugunda hesaplaniyor
+     ve o satirin ONUNE ekliyordu. Son sira icin `length` gerekir; "onune ekle"
+     kurali son siraya ASLA ulasamaz. Ayrica imlec satirlar arasi bosluktaysa
+     index null olup sona atiyordu — bu da hassasiyet kaybiydi.
+     Cozum: index'i imlecin Y'sinden, hedef kaptaki satirlarin GORSEL orta
+     noktalarina gore hesapla — kendi seridi de baska serit de ayni yol. */
+  function indexFromPointer(tabKey, section, movingKey) {
+    var p = dragPointer.current
+    if (!p) return null
+    var host = document.querySelector('[data-drop-zone="tab:' + tabKey + '|sec:' + (section === null ? 'null' : section) + '"]')
+    if (!host) return null
+    var rows = Array.prototype.slice.call(host.querySelectorAll('[data-field-row]'))
+      .filter(function (el) { return el.getAttribute('data-field-row') !== movingKey })
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i].getBoundingClientRect()
+      if (p.y < r.top + r.height / 2) return i
+    }
+    return rows.length
+  }
+
+  /** Birakma hedefi: hangi sekme + hangi serit + o seritte kacinci sira. */
+  function resolveDrop(event) {
+    var over = event.over
+    if (!over) return null
+    var moving = fields.find(function (f) { return f.key === String(event.active.id) })
+    if (!moving) return null
+    var dst = containerOfOverId(String(over.id))
+    if (!dst) return null
+    var dstTab = dst.tab || effTab(moving)
+    return { tab: dstTab, section: dst.section, index: indexFromPointer(dstTab, dst.section, moving.key) }
+  }
 
   /* Carpisma stratejisi (2026-08-22): `closestCenter` cok-kapli listede kaba
      kaliyordu — imlec bir seridin USTUNDEYKEN bile merkezi daha yakin olan BASKA
@@ -792,49 +827,28 @@ export default function StandardFieldsEditor(props) {
     var active = event.active, over = event.over
     if (!active || !over) { setDropHint(null); return }
     var moving = fields.find(function (f) { return f.key === String(active.id) })
-    if (!moving) { setDropHint(null); return }
-    var dst = containerOfOverId(String(over.id))
-    if (!dst) { setDropHint(null); return }
-    var dstTab = dst.tab || effTab(moving)
+    var r = resolveDrop(event)
+    if (!moving || !r) { setDropHint(null); return }
     // Kendi seridi → sortable zaten kaydiriyor, bosluk acma.
-    if (dst.section === moving.cardSection && dstTab === effTab(moving)) { setDropHint(null); return }
-    var overField = fields.find(function (f) { return f.key === String(over.id) })
-    var idx = null
-    if (overField) {
-      var g = fields.filter(function (f) {
-        return f.cardSection === dst.section && effTab(f) === dstTab && f.key !== moving.key
-      }).slice().sort(compareByCardOrder)
-      var at = g.findIndex(function (f) { return f.key === overField.key })
-      if (at >= 0) idx = at
-    }
+    if (r.section === moving.cardSection && r.tab === effTab(moving)) { setDropHint(null); return }
     setDropHint(function (prev) {
-      if (prev && prev.tab === dstTab && prev.section === dst.section && prev.index === idx) return prev
-      return { tab: dstTab, section: dst.section, index: idx }
+      if (prev && prev.tab === r.tab && prev.section === r.section && prev.index === r.index) return prev
+      return r
     })
   }
+
 
   function handleDragEnd(event) {
     setDragKey(null)
     setDropHint(null)
     var active = event.active, over = event.over
-    if (!active || !over || active.id === over.id) return
-    var key = String(active.id)
-    var overId = String(over.id)
-
-    // Bos bir bolume birakildi (droppable kabin kendisi)
-    var zone = dropTargetFromId(overId)
-    if (zone) { moveFieldTo(key, zone.section, null, zone.tab); return }
-
-    // Baska bir alanin uzerine birakildi → o alanin sekmesi + bolumu + sirasi
-    var overField = fields.find(function (f) { return f.key === overId })
-    if (!overField) return
-    var overTab = effTab(overField)
-    var groupFields = fields.filter(function (f) {
-      return f.cardSection === overField.cardSection && effTab(f) === overTab && f.key !== key
-    }).slice().sort(compareByCardOrder)
-    var at = groupFields.findIndex(function (f) { return f.key === overId })
-    moveFieldTo(key, overField.cardSection, at < 0 ? null : at, overTab)
+    if (!active || !over) { dragPointer.current = null; return }
+    var r = resolveDrop(event)
+    dragPointer.current = null
+    if (!r) return
+    moveFieldTo(String(active.id), r.section, r.index, r.tab)
   }
+
 
   /** Kaydedilmis son hale don — kaydetmez, yalniz yerel degisiklikleri atar. */
   function resetChanges() {
@@ -1154,9 +1168,19 @@ export default function StandardFieldsEditor(props) {
                 sensors={dndSensors}
                 collisionDetection={preciseCollision}
                 measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
-                onDragStart={function (e) { setDragKey(String(e.active.id)) }}
+                onDragStart={function (e) {
+                  var ae = e.activatorEvent
+                  dragPointer.current = (ae && typeof ae.clientY === 'number') ? { x: ae.clientX, y: ae.clientY } : null
+                  setDragKey(String(e.active.id))
+                }}
+                onDragMove={function (e) {
+                  var ae = e.activatorEvent
+                  if (ae && typeof ae.clientY === 'number') {
+                    dragPointer.current = { x: ae.clientX + e.delta.x, y: ae.clientY + e.delta.y }
+                  }
+                }}
                 onDragOver={handleDragOver}
-                onDragCancel={function () { setDragKey(null); setDropHint(null) }}
+                onDragCancel={function () { setDragKey(null); setDropHint(null); dragPointer.current = null }}
                 onDragEnd={handleDragEnd}>
               {tabTree.map(function (tab) {
               return (
@@ -1305,7 +1329,6 @@ export default function StandardFieldsEditor(props) {
                         </div>
                       )}
                       {visibleFields.map(function (f, fIdx) {
-                        var isOpen = expanded[f.key] === true
                         return (
                           <Fragment key={f.key}>
                           {fIdx === hintIdx && <DropPlaceholder />}
@@ -1314,8 +1337,18 @@ export default function StandardFieldsEditor(props) {
                             lockedTitle={HGROUP_FOLLOWER[f.key]
                               ? 'Para Birimi ile birlikte hareket eder'
                               : 'Bu alan bağımsız bir hücre değil — taşınamaz'}>
-                            {/* Satır 1: alan adı + bağlam rozeti + Görünür/Zorunlu + Bölüm */}
-                            <div className="flex items-center gap-2 flex-wrap">
+                            {/* ── TEK SATIR, SABIT IZGARA (2026-08-22, kullanici istegi) ──
+                                Onceden: satir 1'de ad + switch'ler (flex-wrap), satir 2'de
+                                "Detay" ile acilan baslik metni + Ayarla. Iki sorun vardi:
+                                (1) katlanir satirda geriye yalnizca iki kontrol kalmisti,
+                                (2) flex-wrap'te ad uzunlugu degistikce switch'ler saga sola
+                                kayiyor, satirlar arasi DIKEY hiza tutmuyordu.
+                                Simdi: SABIT sutunlu grid — her satirda Görünür/Zorunlu/
+                                Genişlik/Ayarla tam olarak ayni x'te durur. `expanded`
+                                (katlama) state'i tamamen kalkti. */}
+                            <div className="w-full grid items-center gap-2"
+                                 style={{ gridTemplateColumns: 'minmax(0,1.3fr) minmax(0,1fr) 74px 74px 150px 148px' }}>
+                              {/* 1) Alan adı + kilit + sekme rozeti */}
                               <div className="flex items-center gap-1.5 min-w-0">
                                 {f.locked && <span title="Çekirdek alan — gizlenemez"><Lock size={11} className="text-slate-400 dark:text-white/45 flex-shrink-0" /></span>}
                                 <span className="truncate text-[11.5px] font-semibold text-slate-600 dark:text-white/70" title={f.key}>{f.label}</span>
@@ -1325,8 +1358,20 @@ export default function StandardFieldsEditor(props) {
                                   </span>
                                 )}
                               </div>
-                              <div className="flex-1" />
-                              <div className="flex items-center gap-1.5">
+
+                              {/* 2) Başlık metni — bos birakilirsa katalog adi kullanilir */}
+                              <input
+                                type="text"
+                                value={f.labelText}
+                                maxLength={60}
+                                placeholder={f.label}
+                                title="Ekranda görünecek başlık — boş bırakılırsa alanın kendi adı kullanılır"
+                                onChange={function (e) { patchField(f.key, { labelText: e.target.value }) }}
+                                className={inputCls}
+                              />
+
+                              {/* 3) Görünür */}
+                              <div className="flex items-center gap-1.5 justify-self-start">
                                 <span className="text-[9.5px] font-semibold text-slate-500 dark:text-white/50">Görünür</span>
                                 <Switch
                                   on={f.isVisible}
@@ -1336,7 +1381,9 @@ export default function StandardFieldsEditor(props) {
                                   onToggle={function () { patchField(f.key, { isVisible: !f.isVisible }) }}
                                 />
                               </div>
-                              <div className="flex items-center gap-1.5">
+
+                              {/* 4) Zorunlu */}
+                              <div className="flex items-center gap-1.5 justify-self-start">
                                 <span className="text-[9.5px] font-semibold text-slate-500 dark:text-white/50">Zorunlu</span>
                                 <Switch
                                   on={f.isRequired}
@@ -1345,58 +1392,22 @@ export default function StandardFieldsEditor(props) {
                                   onToggle={function () { patchField(f.key, { isRequired: !f.isRequired }) }}
                                 />
                               </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[9.5px] font-semibold text-slate-500 dark:text-white/50">Genişlik</span>
+
+                              {/* 5) Genişlik (piksel) */}
+                              <div className="justify-self-start">
                                 <PxWidthStepper
                                   value={f.cellWidthPx}
                                   fallback={freeDefaultWidth(f.key)}
                                   onChange={function (v) { patchField(f.key, { cellWidthPx: v }) }}
                                 />
                               </div>
-                              {/* Bolum artik SURUKLEYEREK degistirilir — buton grubu kalkti.
-                                  Yerine detaylari acan katlama dugmesi. */}
-                              <button
-                                type="button"
-                                onClick={function () {
-                                  setExpanded(function (prev) {
-                                    var next = Object.assign({}, prev)
-                                    if (next[f.key]) delete next[f.key]; else next[f.key] = true
-                                    return next
-                                  })
-                                }}
-                                title={isOpen ? 'Detayları gizle' : 'Başlık metni ve davranış ayarları'}
-                                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-semibold text-slate-500 hover:text-indigo-600 dark:text-white/50 dark:hover:text-indigo-300"
-                              >
-                                {isOpen ? <ChevronDown size={12} strokeWidth={2.2} /> : <ChevronRight size={12} strokeWidth={2.2} />}
-                                Detay
-                              </button>
-                            </div>
 
-                            {/* Satır 2: detaylar — yalnizca satir ACIKKEN. Kapaliyken
-                                liste kisa kalir (Sutun Ayarlari panelindeki desen). */}
-                            {/* 2026-08-22 (kullanici karari): "Başlık Stili" (Standart/
-                                Modern/Sade) secenegi KALDIRILDI. `labelStyle` verisi
-                                DB'de silinmez — load/save'de aynen tasinir, yalniz
-                                duzenlenmez. */}
-                            {isOpen && (
-                            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr] gap-2 items-center">
-                              <input
-                                type="text"
-                                value={f.labelText}
-                                maxLength={60}
-                                placeholder={f.label}
-                                onChange={function (e) { patchField(f.key, { labelText: e.target.value }) }}
-                                className={inputCls}
-                              />
-                              {/* 2026-08-20 (kullanici istegi): Varsayilan Deger / Gorunurluk
-                                  Kosulu / Zorunluluk Kosulu artik satir icinde serbest metin
-                                  DEGIL — tek butonla acilan modalden tanimlanir. Kosullar
-                                  NCalc ifadesi oldugu icin kurucu + gelismis (ham) mod sunar. */}
+                              {/* 6) Varsayilan Deger / Gorunurluk / Zorunluluk kosulu — modal */}
                               <button
                                 type="button"
                                 onClick={function () { setBehaviorKey(f.key) }}
                                 title="Varsayılan değer, görünürlük ve zorunluluk koşulunu tanımla"
-                                className={'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors ' + (
+                                className={'w-full flex items-center justify-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold border transition-colors ' + (
                                   (f.defaultValue || f.visibleIf || f.requiredIf)
                                     ? 'text-indigo-600 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 dark:text-indigo-300 dark:border-indigo-400/30 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20'
                                     : 'text-slate-500 border-slate-200 bg-[#fff] hover:bg-slate-50 dark:text-white/55 dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08]'
@@ -1406,7 +1417,6 @@ export default function StandardFieldsEditor(props) {
                                 <span className="truncate">{describeBehavior(f)}</span>
                               </button>
                             </div>
-                            )}
                           </SortableRow>
                           </Fragment>
                         )
