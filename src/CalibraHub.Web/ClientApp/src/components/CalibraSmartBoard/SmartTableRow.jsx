@@ -50,7 +50,7 @@
  */
 import { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, Trash2, X, ArrowUpRight, List, MoreVertical, ChevronRight } from 'lucide-react'
+import { AlertTriangle, Trash2, X, ArrowUpRight, List, MoreVertical, ChevronRight, ChevronDown } from 'lucide-react'
 import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon } from './DynamicWidgetFactory'
 import { checkConstraintViolation, resolveTokensWithRecord } from './SmartWidget'
 import GuideListField from '../DynamicWidgetRenderer/GuideListField'
@@ -369,6 +369,17 @@ export default function SmartTableRow(props) {
   var onRefresh = typeof props.onRefresh === 'function' ? props.onRefresh : null
   var isHighlighted = !!props.isHighlighted
   var isDark = !!props.isDark
+  // Satir secimi + acilir detay (opsiyonel — board config'te acilmadikca
+  // hicbiri render edilmez, mevcut board'lar icin davranis birebir korunur).
+  var selectable = !!props.selectable
+  var selected = !!props.selected
+  var onToggleSelect = typeof props.onToggleSelect === 'function' ? props.onToggleSelect : null
+  var selectDisabledReason = props.selectDisabledReason || null
+  var expandable = !!props.expandable
+  var expanded = !!props.expanded
+  var onToggleExpand = typeof props.onToggleExpand === 'function' ? props.onToggleExpand : null
+  var detailNode = props.detailNode
+  var colSpanTotal = typeof props.colSpanTotal === 'number' ? props.colSpanTotal : (columns.length + 1)
 
   var id = entity.id
   var rawWidgets = Array.isArray(entity.widgets) ? entity.widgets : []
@@ -829,10 +840,24 @@ export default function SmartTableRow(props) {
   return (
     <>
       <tr
-        className={'cst-row' + (isHighlighted ? ' cst-row--highlight' : '') + (clickableRow ? ' cst-row--clickable' : '')}
+        className={'cst-row' + (isHighlighted ? ' cst-row--highlight' : '') + (clickableRow ? ' cst-row--clickable' : '')
+          + (selected ? ' cst-row--selected' : '') + (expanded ? ' cst-row--expanded' : '')}
         onClick={clickableRow ? handlePrimary : undefined}
         title={primaryAction && primaryAction.label ? primaryAction.label : undefined}
       >
+        {selectable && (
+          // Onay kutusu satir tiklamasini (Duzenle) TETIKLEMEMELI — stopPropagation sart.
+          <td className="cst-td cst-td--pick" onClick={function (e) { e.stopPropagation() }}>
+            <input
+              type="checkbox"
+              className="cst-pick"
+              checked={selected}
+              title={selectDisabledReason || undefined}
+              onChange={function (e) { if (onToggleSelect) onToggleSelect(id, e.target.checked) }}
+              aria-label="Satırı seç"
+            />
+          </td>
+        )}
         <td className="cst-td cst-td--menu">
           <div className="flex items-center justify-center">
             <button
@@ -870,7 +895,29 @@ export default function SmartTableRow(props) {
             />
           )
         })}
+
+        {expandable && (
+          <td className="cst-td cst-td--exp" onClick={function (e) { e.stopPropagation() }}>
+            <button
+              type="button"
+              className={'cst-exp-btn' + (expanded ? ' is-open' : '')}
+              onClick={function () { if (onToggleExpand) onToggleExpand(id) }}
+              title={expanded ? 'Detayı kapat' : 'Detayı aç'}
+              aria-expanded={expanded}
+            >
+              <ChevronDown size={13} strokeWidth={2.5} />
+            </button>
+          </td>
+        )}
       </tr>
+
+      {expandable && expanded && (
+        <tr className="cst-row-detail">
+          <td colSpan={colSpanTotal}>
+            <div className="cst-detail">{detailNode}</div>
+          </td>
+        </tr>
+      )}
 
       {/* "Islemler" dropdown — cross-document portal oldugu icin (getTopBody
           iframe→top pencereye tasabilir, ayri stylesheet) INLINE stil, ama

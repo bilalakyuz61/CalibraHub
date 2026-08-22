@@ -70,6 +70,9 @@ import { resolveIcon, resolveChipWidth, formatValue, TABLE_MENU_COL_WIDTH, TABLE
 // sabiti kullanir; iki dosyanin birbirini import etmesi/dongusel import
 // yerine ortak kaynaktan paylasilir).
 var MENU_COL_WIDTH = TABLE_MENU_COL_WIDTH
+// Opsiyonel sabit sutunlar (yalnizca selectable/expandable acikken render edilir).
+var PICK_COL_WIDTH = 38   // sol — satir secim onay kutusu
+var EXP_COL_WIDTH = 34    // sag — acilir detay oku
 
 /**
  * Her widget id'si icin butun entity'ler taranarak "guide-list displayScope"
@@ -126,7 +129,7 @@ function leadsFirst(list) {
  * Pin'li sutunlar icin kumulatif `stickyLeft` (Islemler sutunundan sonra) da
  * burada hesaplanir — SmartTable/SmartTableRow bu degeri dogrudan render eder.
  */
-function computeColumns(masterWidgets, visibleIds, order, widgetMeta, columnConfig) {
+function computeColumns(masterWidgets, visibleIds, order, widgetMeta, columnConfig, leadWidth) {
   var candidates = masterWidgets.filter(function (w) {
     var m = widgetMeta[w.id]
     return !(m && m.displayScope === 'form')
@@ -203,7 +206,10 @@ function computeColumns(masterWidgets, visibleIds, order, widgetMeta, columnConf
   var unpinned = enriched.filter(function (c) { return !c.pinned })
   var ordered = pinned.concat(unpinned)
 
-  var offset = MENU_COL_WIDTH
+  // Sol sabit blok = (varsa secim sutunu) + Islemler sutunu. Secim sutunu
+  // acikken pin'li sutunlarin sticky ofseti onun genisligi kadar kaymalidir,
+  // yoksa pinlenmis sutun secim kutusunun altina girer.
+  var offset = (typeof leadWidth === 'number' ? leadWidth : MENU_COL_WIDTH)
   ordered.forEach(function (c) {
     if (c.pinned) { c.stickyLeft = offset; offset += c.width }
   })
@@ -387,11 +393,23 @@ export default function SmartTable(props) {
   // groupBy — SmartBoard'dan (effectiveGroupBy) gelen, gecerli alanlara zaten
   // filtrelenmis fieldId dizisi; yine de burada dizi degilse [] guvencesi.
   var groupByRaw = Array.isArray(props.groupBy) ? props.groupBy : []
+  // ── Satir secimi + acilir detay (opsiyonel) ──
+  // Board config'te acilmadikca (selectable/expandable) hicbir ek sutun
+  // eklenmez — mevcut tablo board'lari icin render birebir aynidir.
+  var selectable = !!props.selectable
+  var selectedIds = props.selectedIds instanceof Set ? props.selectedIds : new Set()
+  var onToggleSelect = typeof props.onToggleSelect === 'function' ? props.onToggleSelect : null
+  var onToggleSelectAll = typeof props.onToggleSelectAll === 'function' ? props.onToggleSelectAll : null
+  var expandable = !!props.expandable
+  var expandedIds = props.expandedIds instanceof Set ? props.expandedIds : new Set()
+  var onToggleExpand = typeof props.onToggleExpand === 'function' ? props.onToggleExpand : null
+  var renderDetail = typeof props.renderDetail === 'function' ? props.renderDetail : null
 
   var widgetMeta = useMemo(function () { return buildWidgetMeta(entities) }, [entities])
+  var leadWidth = MENU_COL_WIDTH + (selectable ? PICK_COL_WIDTH : 0)
   var columns = useMemo(
-    function () { return computeColumns(masterWidgets, visibleIds, order, widgetMeta, columnConfig) },
-    [masterWidgets, visibleIds, order, widgetMeta, columnConfig]
+    function () { return computeColumns(masterWidgets, visibleIds, order, widgetMeta, columnConfig, leadWidth) },
+    [masterWidgets, visibleIds, order, widgetMeta, columnConfig, leadWidth]
   )
 
   // ── Gruplama (bkz. dosya ustu blok) ──
@@ -444,10 +462,10 @@ export default function SmartTable(props) {
   }, [groupTree, collapsed])
 
   var totalWidth = useMemo(function () {
-    var sum = MENU_COL_WIDTH
+    var sum = MENU_COL_WIDTH + (selectable ? PICK_COL_WIDTH : 0) + (expandable ? EXP_COL_WIDTH : 0)
     columns.forEach(function (c) { sum += c.width })
     return sum
-  }, [columns])
+  }, [columns, selectable, expandable])
 
   // rootStyle — sadece kullanici override etmisse CSS degiskeni yazilir;
   // yoksa key hic eklenmez ve index.css'teki var(--cst-*, <fallback>) devreye
@@ -456,6 +474,15 @@ export default function SmartTable(props) {
   // oldugu icin veri hucresinde her zaman kazanir — genel ayar "varsayilan",
   // sutun ayari "istisna" (bilincli, bozma). Baslik (--cst-head-fs) tamamen
   // ayri: per-sutun ayardan etkilenmez.
+  // "Tümünü seç" — o an EKRANDA olan (filtre/sayfalama sonrasi) satirlar uzerinden
+  // hesaplanir; gorunmeyen kayit sessizce secilmez.
+  var selectableIds = useMemo(function () {
+    return entities.map(function (e) { return e.id })
+  }, [entities])
+  var selectedVisibleCount = selectableIds.filter(function (id) { return selectedIds.has(id) }).length
+  var allSelected = selectableIds.length > 0 && selectedVisibleCount === selectableIds.length
+  var someSelected = selectedVisibleCount > 0
+
   var rootStyle = {}
   if (tableFormat) {
     if (typeof tableFormat.headerFontSize === 'number' && tableFormat.headerFontSize > 0) rootStyle['--cst-head-fs'] = tableFormat.headerFontSize + 'px'
@@ -464,18 +491,53 @@ export default function SmartTable(props) {
     if (typeof tableFormat.rowSpacing === 'number' && tableFormat.rowSpacing > 0) rootStyle['--cst-row-pad'] = tableFormat.rowSpacing + 'px'
   }
 
+  var colSpanTotal = columns.length + 1 + (selectable ? 1 : 0) + (expandable ? 1 : 0)
+  function rowExtras(entity) {
+    if (!selectable && !expandable) return null
+    var isExpanded = expandable && expandedIds.has(entity.id)
+    return {
+      selectable: selectable,
+      selected: selectable && selectedIds.has(entity.id),
+      onToggleSelect: onToggleSelect,
+      expandable: expandable,
+      expanded: isExpanded,
+      onToggleExpand: onToggleExpand,
+      // Detay yalnizca ACIK satir icin uretilir — kapali satirlarda fetch/render yok.
+      detailNode: isExpanded && renderDetail ? renderDetail(entity) : null,
+      colSpanTotal: colSpanTotal,
+    }
+  }
+
   return (
-    <div className="cst-root" style={rootStyle}>
+    // cst-root--pick: secim sutunu acikken "Islemler" sutununun sticky-left
+    // ofseti secim sutunu kadar kayar (bkz. index.css) — pinlenmis sutunlarin
+    // JS ile hesaplanan stickyLeft degeriyle tutarli kalir.
+    <div className={'cst-root' + (selectable ? ' cst-root--pick' : '')} style={rootStyle}>
       <div className="cst-wrap">
         <table className="cst-table" style={{ width: totalWidth }}>
           <colgroup>
+            {selectable && <col style={{ width: PICK_COL_WIDTH }} />}
             <col style={{ width: MENU_COL_WIDTH }} />
             {columns.map(function (c) {
               return <col key={c.id} style={{ width: c.width }} />
             })}
+            {expandable && <col style={{ width: EXP_COL_WIDTH }} />}
           </colgroup>
           <thead>
             <tr>
+              {selectable && (
+                <th className="cst-th cst-th--pick" aria-label="Seç">
+                  <input
+                    type="checkbox"
+                    className="cst-pick"
+                    checked={allSelected}
+                    ref={function (el) { if (el) el.indeterminate = someSelected && !allSelected }}
+                    onChange={function (e) { if (onToggleSelectAll) onToggleSelectAll(e.target.checked, selectableIds) }}
+                    title={allSelected ? 'Seçimi kaldır' : 'Tümünü seç'}
+                    aria-label="Tümünü seç"
+                  />
+                </th>
+              )}
               <th className="cst-th cst-th--menu" aria-label="İşlemler" />
               {columns.map(function (c) {
                 var Icon = resolveIcon(c.icon, null, c.dataType)
@@ -501,6 +563,7 @@ export default function SmartTable(props) {
                   </th>
                 )
               })}
+              {expandable && <th className="cst-th cst-th--exp" aria-label="Detay" />}
             </tr>
           </thead>
           <tbody>
@@ -525,6 +588,7 @@ export default function SmartTable(props) {
                       onRefresh={onRefresh}
                       isHighlighted={recentIds.has(item.entity.id)}
                       isDark={isDark}
+                      {...rowExtras(item.entity)}
                     />
                   )
                 })
@@ -537,6 +601,7 @@ export default function SmartTable(props) {
                       onRefresh={onRefresh}
                       isHighlighted={recentIds.has(entity.id)}
                       isDark={isDark}
+                      {...rowExtras(entity)}
                     />
                   )
                 })

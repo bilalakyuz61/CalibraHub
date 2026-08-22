@@ -18,7 +18,7 @@
  *   }
  */
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-import { Search, Settings2, Loader2, ChevronDown, Filter, X, Download, FileSpreadsheet, RefreshCw, Layers } from 'lucide-react'
+import { Search, Settings2, Loader2, ChevronDown, Filter, X, Download, FileSpreadsheet, RefreshCw, Layers, AlertTriangle } from 'lucide-react'
 import SmartCard from './SmartCard'
 import SmartTable from './SmartTable'
 import SmartBoardConfigPanel from './SmartBoardConfigPanel'
@@ -116,6 +116,23 @@ export default function SmartBoard(props) {
 
   // In-place refresh
   var refreshUrl = props.refreshUrl || null
+
+  // ── Satir secimi + acilir detay (opt-in, YALNIZCA tablo modu) ───────────
+  // selectable:true      → satir basi onay kutusu + baslikta "tumunu sec"
+  // bulkActions:[...]    → secim varken alttan cikan toplu aksiyon seridi
+  //                        { id, label, icon, variant:'primary'|'danger'|'ghost',
+  //                          apiUrl, apiMethod:'POST', confirm? }
+  //                        POST govdesi: { ids:[...] }
+  // expandable:true      → satir sonunda detay oku; acilinca entity.detailUrl
+  //                        (yoksa detailUrl sablonu, "{id}" degistirilir)
+  //                        GET edilir ve mini tablo olarak cizilir:
+  //                        { ok, columns:[{key,label,align,width}], rows:[{...}],
+  //                          empty?:"metin", error?:"metin" }
+  // Hicbiri verilmezse mevcut board'larin render'i BIREBIR aynidir.
+  var selectable = props.selectable === true
+  var bulkActions = Array.isArray(props.bulkActions) ? props.bulkActions.filter(Boolean) : []
+  var detailUrlTemplate = props.detailUrl || null
+  var expandable = props.expandable === true || !!detailUrlTemplate
 
   // Pagination props
   var apiUrl = props.apiUrl || null
@@ -730,6 +747,156 @@ export default function SmartBoard(props) {
   // Ikisi birbirinden tamamen izole; SmartCard'a giden visibleIds/order kart
   // modunda HICBIR ZAMAN tableColumnConfig'ten etkilenmez.
   var isTableMode = viewMode === 'table'
+
+  // ── Secim / detay durumu ────────────────────────────────────────────────
+  var [selectedIds, setSelectedIds] = useState(function () { return new Set() })
+  var [expandedIds, setExpandedIds] = useState(function () { return new Set() })
+  var [detailData, setDetailData] = useState({})   // id -> {loading|error|payload}
+  var [bulkBusy, setBulkBusy] = useState(false)
+  var [bulkConfirm, setBulkConfirm] = useState(null)   // onay bekleyen toplu aksiyon
+
+  var selectEnabled = isTableMode && selectable
+  var expandEnabled = isTableMode && expandable
+
+  var handleToggleSelect = useCallback(function (id, checked) {
+    setSelectedIds(function (prev) {
+      var next = new Set(prev)
+      if (checked) next.add(id); else next.delete(id)
+      return next
+    })
+  }, [])
+
+  var handleToggleSelectAll = useCallback(function (checked, ids) {
+    setSelectedIds(function (prev) {
+      var next = new Set(prev)
+      ;(ids || []).forEach(function (id) { if (checked) next.add(id); else next.delete(id) })
+      return next
+    })
+  }, [])
+
+  var clearSelection = useCallback(function () { setSelectedIds(new Set()) }, [])
+
+  // Detay: acilista bir kez cekilir, kapanip acilinca cache'ten gelir.
+  // Yenile (refreshBoard) cache'i temizler ki bayat detay gosterilmesin.
+  var loadDetail = useCallback(function (entity) {
+    var id = entity.id
+    var url = entity.detailUrl || (detailUrlTemplate ? String(detailUrlTemplate).replace('{id}', encodeURIComponent(id)) : null)
+    if (!url) {
+      setDetailData(function (p) { var n = Object.assign({}, p); n[id] = { error: 'Detay adresi tanımlı değil.' }; return n })
+      return
+    }
+    setDetailData(function (p) { var n = Object.assign({}, p); n[id] = { loading: true }; return n })
+    fetch(url, { headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json() })
+      .then(function (data) {
+        setDetailData(function (p) {
+          var n = Object.assign({}, p)
+          n[id] = (data && data.ok === false) ? { error: data.error || 'Detay yüklenemedi.' } : { payload: data }
+          return n
+        })
+      })
+      .catch(function () {
+        setDetailData(function (p) { var n = Object.assign({}, p); n[id] = { error: 'Bağlantı hatası — detay yüklenemedi.' }; return n })
+      })
+  }, [detailUrlTemplate])
+
+  var handleToggleExpand = useCallback(function (id) {
+    setExpandedIds(function (prev) {
+      var next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }, [])
+
+  // Acilan satirin detayi henuz yuklenmediyse cek (kapali satir icin istek YOK).
+  useEffect(function () {
+    if (!expandEnabled) return
+    expandedIds.forEach(function (id) {
+      if (detailData[id]) return
+      var ent = entities.find(function (e) { return e.id === id })
+      if (ent) loadDetail(ent)
+    })
+  }, [expandedIds, expandEnabled, entities, detailData, loadDetail])
+
+  // Toplu aksiyon: secili id'leri POST eder, sonucu toast'lar, board'u tazeler.
+  // Sunucu sozlesmesi: { ok, message?, error? } (Fulfillment/ShipReservations deseni).
+  var executeBulkAction = useCallback(function (action) {
+    if (!action || bulkBusy) return
+    var ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    var url = action.apiUrl || action.url
+    if (!url) return
+    setBulkBusy(true)
+    var token = null
+    try {
+      var ti = document.querySelector('input[name="__RequestVerificationToken"]')
+      token = ti ? ti.value : (window.__CALIBRA_SHELL_CONFIG__ && window.__CALIBRA_SHELL_CONFIG__.antiforgeryToken) || null
+    } catch (e) { /* token yoksa sunucu zaten reddeder */ }
+    var headers = { 'Content-Type': 'application/json' }
+    if (token) headers['RequestVerificationToken'] = token
+    fetch(url, {
+      method: action.apiMethod || 'POST',
+      headers: headers,
+      body: JSON.stringify(Object.assign({ ids: ids }, action.apiBody || {})),
+    })
+      .then(function (r) { return r.json() })
+      .then(function (res) {
+        setBulkBusy(false)
+        if (res && res.ok === false) {
+          if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(res.error || 'İşlem tamamlanamadı.', 'error')
+          return
+        }
+        if (res && res.message && window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(res.message, 'success')
+        clearSelection()
+        setDetailData({})
+        if (refreshUrl) refreshBoard()
+      })
+      .catch(function () {
+        setBulkBusy(false)
+        if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('Bağlantı hatası — işlem tamamlanamadı.', 'error')
+      })
+  }, [bulkBusy, selectedIds, clearSelection, refreshUrl])
+
+  // action.confirm verilmişse ÖNCE ekran ortasında onay modalı açılır (CLAUDE.md
+  // silme/geri-alınamaz işlem standardı — native confirm() KULLANILMAZ).
+  var runBulkAction = useCallback(function (action) {
+    if (!action || bulkBusy) return
+    if (action.confirm) { setBulkConfirm(action); return }
+    executeBulkAction(action)
+  }, [bulkBusy, executeBulkAction])
+
+  var renderDetail = useCallback(function (entity) {
+    var st = detailData[entity.id]
+    if (!st || st.loading) return <div className="cst-detail-msg">Yükleniyor…</div>
+    if (st.error) return <div className="cst-detail-msg cst-detail-msg--err">{st.error}</div>
+    var d = st.payload || {}
+    var cols = Array.isArray(d.columns) ? d.columns : []
+    var rows = Array.isArray(d.rows) ? d.rows : []
+    if (rows.length === 0) return <div className="cst-detail-msg">{d.empty || 'Kayıt yok.'}</div>
+    if (cols.length === 0) cols = Object.keys(rows[0]).map(function (k) { return { key: k, label: k } })
+    return (
+      <table className="cst-detail-tbl">
+        <thead>
+          <tr>{cols.map(function (c) {
+            return <th key={c.key} style={{ textAlign: c.align || 'left', width: c.width || undefined }}>{c.label}</th>
+          })}</tr>
+        </thead>
+        <tbody>
+          {rows.map(function (r, i) {
+            return (
+              <tr key={i}>
+                {cols.map(function (c) {
+                  var v = r[c.key]
+                  return <td key={c.key} style={{ textAlign: c.align || 'left' }}>{v == null ? '' : String(v)}</td>
+                })}
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    )
+  }, [detailData])
+
   var visibleIds = isTableMode
     ? (tableColumnConfig && Array.isArray(tableColumnConfig.visibleIds) ? tableColumnConfig.visibleIds : null)
     : (userConfig && Array.isArray(userConfig.visibleIds) ? userConfig.visibleIds : null)
@@ -852,7 +1019,8 @@ export default function SmartBoard(props) {
   ) : null
 
   return (
-    <div className="h-full flex flex-col" style={meshStyle}>
+    // relative — toplu aksiyon seridi (.cst-bulkbar, absolute) bu kutuya gore konumlanir.
+    <div className="h-full flex flex-col relative" style={meshStyle}>
 
       {/* ── Header ──────────────────────────── */}
       <div className="flex items-center gap-4 px-5 py-3 border-b border-slate-200/60 dark:border-white/[0.06] flex-shrink-0">
@@ -1117,6 +1285,14 @@ export default function SmartBoard(props) {
               onRefresh={refreshUrl ? refreshBoard : undefined}
               recentIds={recentIds}
               isDark={isDark}
+              selectable={selectEnabled}
+              selectedIds={selectedIds}
+              onToggleSelect={handleToggleSelect}
+              onToggleSelectAll={handleToggleSelectAll}
+              expandable={expandEnabled}
+              expandedIds={expandedIds}
+              onToggleExpand={handleToggleExpand}
+              renderDetail={renderDetail}
             />
             {initialLoader}
           </div>
@@ -1257,6 +1433,70 @@ export default function SmartBoard(props) {
                 }}
               >
                 Aktar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Toplu aksiyon seridi — secim varken alttan belirir. Silme/geri
+          alinamaz aksiyonlar icin action.confirm metni verilir (CLAUDE.md
+          silme-onay standardi: ortada modal degil, burada seride onay istenir
+          — seride yalnizca tetikleme var, onay modali runBulkAction icinde). */}
+      {selectEnabled && bulkActions.length > 0 && selectedIds.size > 0 && (
+        <div className="cst-bulkbar">
+          <span className="cst-bulkbar__cnt">{selectedIds.size} seçili</span>
+          <button type="button" className="cst-bulk-btn cst-bulk-btn--ghost" onClick={clearSelection}>
+            Seçimi Temizle
+          </button>
+          <span className="cst-bulkbar__sep" />
+          {bulkActions.map(function (a, i) {
+            var ActionIcon = a.icon ? resolveIcon(a.icon) : null
+            return (
+              <button
+                key={a.id || a.label || i}
+                type="button"
+                disabled={bulkBusy}
+                className={'cst-bulk-btn cst-bulk-btn--' + (a.variant === 'danger' ? 'danger' : a.variant === 'ghost' ? 'ghost' : 'primary')}
+                onClick={function () { runBulkAction(a) }}
+              >
+                {ActionIcon ? <ActionIcon size={14} /> : null}
+                {a.label || 'Uygula'}
+              </button>
+            )
+          })}
+        </div>
+      )}
+      {/* Toplu aksiyon onayı — ekranın ORTASINDA modal (CLAUDE.md silme-onay
+          standardı: backdrop + ikon + başlık + Vazgeç/Onayla; Esc ve backdrop
+          tıklaması iptal eder, onay butonu odakta açılır). */}
+      {bulkConfirm && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={function () { setBulkConfirm(null) }}
+          onKeyDown={function (e) { if (e.key === 'Escape') setBulkConfirm(null) }}
+        >
+          <div
+            style={{ background: 'var(--app-surface)', border: '1px solid var(--app-border)', borderRadius: 16, padding: '32px 28px', maxWidth: 400, width: '90vw', boxShadow: '0 24px 64px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}
+            onClick={function (e) { e.stopPropagation() }}
+          >
+            <AlertTriangle size={26} style={{ color: bulkConfirm.variant === 'danger' ? '#ef4444' : '#6366f1' }} />
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--app-text)', margin: 0 }}>Emin misiniz?</h3>
+            <p style={{ fontSize: '.84rem', color: 'var(--app-text-muted)', margin: 0, lineHeight: 1.5 }}>{bulkConfirm.confirm}</p>
+            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+              <button
+                type="button"
+                onClick={function () { setBulkConfirm(null) }}
+                style={{ padding: '8px 16px', borderRadius: 8, fontSize: '.84rem', fontWeight: 600, background: 'var(--app-muted-surface)', color: 'var(--app-text)', border: '1px solid var(--app-border)', cursor: 'pointer' }}
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                autoFocus
+                onClick={function () { var a = bulkConfirm; setBulkConfirm(null); executeBulkAction(a) }}
+                style={{ padding: '8px 16px', borderRadius: 8, fontSize: '.84rem', fontWeight: 600, border: 'none', cursor: 'pointer', color: '#fff', background: bulkConfirm.variant === 'danger' ? 'linear-gradient(135deg,#ef4444,#dc2626)' : 'linear-gradient(135deg,#6366f1,#4f46e5)' }}
+              >
+                {bulkConfirm.label || 'Onayla'}
               </button>
             </div>
           </div>
