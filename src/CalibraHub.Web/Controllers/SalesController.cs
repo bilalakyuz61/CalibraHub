@@ -678,7 +678,16 @@ public sealed class SalesController : Controller
             // butonundan buraya tasindi; ayri bir SAYFA olarak acilir.
             iconMenu = new[]
             {
-                new { id = "convert-to-orders", label = "Tekliften Sipariş Oluştur", icon = "ArrowRightCircle", url = "/Sales/ConvertToOrders" },
+                // openInTab: YENI workspace sekmesi acilir (sol menuden tiklanmis gibi) —
+                // mevcut "Satis Siparisi" sekmesinin icerigi degismez.
+                new
+                {
+                    id = "convert-to-orders",
+                    label = "Tekliften Sipariş Oluştur",
+                    icon = "ArrowRightCircle",
+                    url = "/Sales/ConvertToOrders",
+                    openInTab = new { title = "Tekliften Sipariş", matchPath = "/Sales/ConvertToOrders" },
+                },
             },
             masterWidgets,
             entities,

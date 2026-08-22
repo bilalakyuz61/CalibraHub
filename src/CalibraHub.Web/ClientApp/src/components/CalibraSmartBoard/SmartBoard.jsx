@@ -135,7 +135,11 @@ export default function SmartBoard(props) {
   // Hicbiri verilmezse mevcut board'larin render'i BIREBIR aynidir.
   /* iconMenu (2026-08-22, kullanici istegi): baslik ikonu TIKLANABILIR bir
      buton olur ve altinda "Islemler" tarzi bir menu acilir.
-     Sozlesme: [{ id, label, icon, url }] — url'e gidilir (yeni sayfa).
+     Sozlesme normal header `actions` ile AYNI: [{ id, label, icon, url,
+     openInTab? }] — tiklama handleActionClick'e gider, dolayisiyla `openInTab`
+     verilince YENI workspace SEKMESI acilir (sol menuden tiklanmis gibi).
+     Ilk surumde dogrudan navigateInWorkspace cagriliyordu; o MEVCUT sekmenin
+     icerigini degistiriyordu — kullanici "yeni bir sayfa acilmali" dedi.
      Verilmezse ikon eskisi gibi salt gorsel kalir (fail-open). */
   var iconMenu = Array.isArray(props.iconMenu) ? props.iconMenu.filter(Boolean) : []
   var selectable = props.selectable === true
@@ -1165,7 +1169,7 @@ export default function SmartBoard(props) {
                           role="menuitem"
                           onClick={function () {
                             setIconMenuOpen(false)
-                            if (mi.url) navigateInWorkspace(mi.url, mi.label, deriveMatchPathFromUrl(mi.url))
+                            handleActionClick(mi)
                           }}
                           className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] font-medium text-slate-700 hover:bg-slate-50 dark:text-white/80 dark:hover:bg-white/[0.06]"
                         >
