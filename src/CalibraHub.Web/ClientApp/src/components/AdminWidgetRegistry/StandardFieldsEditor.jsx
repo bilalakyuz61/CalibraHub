@@ -48,9 +48,9 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  SlidersHorizontal, X as XIcon, Eye, EyeOff, Lock, ArrowUp, ArrowDown,
+  SlidersHorizontal, X as XIcon, Eye, EyeOff, Lock,
   AlertTriangle, Plus, Minus, LayoutGrid, Settings2, Trash2,
-  GripVertical, Search, RotateCcw, Link2,
+  GripVertical, ChevronDown, ChevronRight, Search, RotateCcw, Link2,
 } from 'lucide-react'
 // Top govdesine portallanmaz — bkz. LineCardLayoutEditor'daki ayni not: tam ekran
 // perde ust menu seridini kilitliyordu. iframe'in kendi body'sine portallanir.
@@ -437,8 +437,12 @@ function buildTabTree(fields, tabs, maxStrip) {
     return {
       key: key,
       label: (t && (t.labelText || t.label)) || key,
+      rawLabel: (t && t.label) || key,     // katalogdaki ozgun ad (placeholder)
+      labelText: (t && t.labelText) || '', // kullanicinin verdigi ad (input degeri)
       isCustom: !!(t && t.isCustom),
       locked: !!(t && t.locked),
+      isVisible: !t || t.isVisible !== false,
+      targetTabKey: (t && t.targetTabKey) || '',
       fieldCount: mine.length,
       sections: buildSectionGroups(mine, maxStrip),
     }
@@ -493,6 +497,52 @@ var HGROUP_FOLLOWER = { exchangeRate: 1, rateDate: 1 }
    olarak gorur (birakma yine de dogru calisir; sikayetin "tasima sorunsuz" kismi bu).
    Cozum: aktif ogenin kopyasi DragOverlay ile imlecin altinda TASINIR; kaynak satir
    ise yerinde kesik-cizgili BOSLUK olarak kalir (nereden alindigi gorunur). */
+/* ── Sekme KARTI (2026-08-22, kullanici istegi) ─────────────────────────────
+   Onceden sekmeler iki yerde yonetiliyordu: ustte ayri bir "Sekmeler" paneli
+   (sira oklari + ad + gorunurluk + hedef sekme) ve asagida alan listesinin
+   basligi. Artik TEK yer: her sekme kendi karti. Kart basligindan surukleyerek
+   sira degistirilir, chevron ile icerigi katlanir.
+   Kendi DndContext'i var — alan surukleme baglamiyla karismaz; iki baglamin
+   sensorleri yalnizca kendi tutamaklarina bagli. */
+function isTabDrag(id) { return String(id || '').indexOf('tabcard:') === 0 }
+
+function TabCard(props) {
+  var sortable = useSortable({ id: 'tabcard:' + props.tabKey })
+  var style = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.5 : 1,
+  }
+  return (
+    <div ref={sortable.setNodeRef} style={style}
+         className={'mb-3 rounded-xl border overflow-hidden ' + (props.dim
+           ? 'border-slate-200 bg-slate-50/40 dark:border-white/10 dark:bg-white/[0.015]'
+           : 'border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.025]')}>
+      <div className="flex items-center gap-2 px-2.5 py-2 border-b border-slate-100 dark:border-white/[0.06] bg-slate-50/70 dark:bg-white/[0.04]">
+        <button
+          type="button"
+          {...sortable.attributes}
+          {...sortable.listeners}
+          title="Sürükleyerek sekme sırasını değiştir"
+          className="flex-shrink-0 p-0.5 rounded text-slate-400 hover:text-indigo-600 dark:text-white/35 dark:hover:text-indigo-300 cursor-grab active:cursor-grabbing"
+        >
+          <GripVertical size={13} strokeWidth={2} />
+        </button>
+        <button
+          type="button"
+          onClick={props.onToggle}
+          title={props.collapsed ? 'İçeriği göster' : 'İçeriği gizle'}
+          className="flex-shrink-0 p-0.5 rounded text-slate-500 hover:text-indigo-600 dark:text-white/55 dark:hover:text-indigo-300"
+        >
+          {props.collapsed ? <ChevronRight size={14} strokeWidth={2.2} /> : <ChevronDown size={14} strokeWidth={2.2} />}
+        </button>
+        {props.header}
+      </div>
+      {!props.collapsed && <div className="px-2.5 pt-2.5">{props.children}</div>}
+    </div>
+  )
+}
+
 /** Surukleme sirasinda hedef seritte acilan bosluk — alan buraya dusecek. */
 function DropPlaceholder() {
   return (
@@ -635,12 +685,22 @@ export default function StandardFieldsEditor(props) {
     })
   }
 
-  function moveTab(idx, dir) {
+  /* Sekme karti surukleyerek siralanir (eski yukari/asagi oklari kalkti).
+     `tabs` dizisinin SIRASI kaydetmede sortOrder olur — bu yuzden tabTree'deki
+     gorunen sirayi degil `tabs`'i yeniden diziyoruz. */
+  function handleTabDragEnd(event) {
+    var active = event.active, over = event.over
+    if (!active || !over || active.id === over.id) return
+    if (!isTabDrag(over.id)) return
+    var from = String(active.id).replace('tabcard:', '')
+    var to = String(over.id).replace('tabcard:', '')
     setTabs(function (prev) {
       var next = prev.slice()
-      var to = idx + dir
-      if (to < 0 || to >= next.length) return prev
-      var tmp = next[idx]; next[idx] = next[to]; next[to] = tmp
+      var i = next.findIndex(function (t) { return t.key === from })
+      var j = next.findIndex(function (t) { return t.key === to })
+      if (i < 0 || j < 0) return prev
+      var moved = next.splice(i, 1)[0]
+      next.splice(j, 0, moved)
       return next
     })
   }
@@ -662,6 +722,8 @@ export default function StandardFieldsEditor(props) {
   /* Surukleme sirasinda hedef seritte acilan BOSLUGUN yeri: {tab, section, index}.
      Yalnizca gorsel — `fields` state'ine DOKUNMAZ (bkz. handleDragOver notu). */
   var [dropHint, setDropHint] = useState(null)
+  // Katlanmis sekme kartlari (key seti). Varsayilan: hepsi acik.
+  var [collapsedTabs, setCollapsedTabs] = useState({})
   // Imlecin anlik konumu: aktivasyon olayi + dnd-kit delta (scroll duzeltmesi dahil).
   var dragPointer = useRef(null)
 
@@ -706,13 +768,22 @@ export default function StandardFieldsEditor(props) {
      icinde oldugu hedefler), o bos donerse (imlec bosluktaysa) `rectIntersection`.
      Sonuc: birakma noktasi imlecin altindaki hedefle birebir ortusur. */
   function preciseCollision(args) {
-    var hits = pointerWithin(args)
+    /* Sekme karti suruklenirken YALNIZ sekme kartlari hedef olabilir ve hedef
+       IMLECE gore secilir. `closestCenter` denendi (olculdu): suruklenen KARTIN
+       merkezine bakiyor; kart uzun oldugu icin merkezi cok asagida kaliyor ve
+       30px'lik bir hareket bile sekmeyi en sona atiyordu. */
+    if (isTabDrag(args.active && args.active.id)) {
+      var tabsOnly = args.droppableContainers.filter(function (c) { return isTabDrag(c.id) })
+      var tabHit = pointerWithin(Object.assign({}, args, { droppableContainers: tabsOnly }))
+      return tabHit.length > 0 ? tabHit : nearestByPointer(args, tabsOnly)
+    }
+    var hits = pointerWithin(args).filter(function (h) { return !isTabDrag(h.id) })
     /* Kap (SectionDropZone) satirlari SARDIGI icin imlec bir satirin uzerindeyken
        hem satir hem kap carpisir. dnd-kit listenin ILKINI secer; siralama merkeze
        uzakliga gore oldugundan buyuk kabin merkezi bazen satirdan yakin kalip
        "sona ekle" davranisi ureterek birakma noktasini kaydiriyordu.
        Kural: SATIR carpismasi varsa DAIMA o kazanir. */
-    var rows = hits.filter(function (h) { return !dropTargetFromId(h.id) })
+    var rows = hits.filter(function (h) { return !dropTargetFromId(h.id) && !isTabDrag(h.id) })
     if (rows.length > 0) return rows
     if (hits.length > 0) return hits
     /* Imlec hicbir hedefin ICINDE degil — serit basliklari, seritler arasi bosluk,
@@ -721,11 +792,17 @@ export default function StandardFieldsEditor(props) {
        (olculdu: imlec Serit 2'nin hemen ustundeyken hedef "Varsayilan" secildi).
        Dogrusu: imlece DIKEYDE en yakin kabi sec — yatay uzaklik zayif agirlikli,
        cunku seritler alt alta dizili. */
+    return nearestByPointer(args, args.droppableContainers.filter(function (c) {
+      return !isTabDrag(c.id) && !!dropTargetFromId(c.id)
+    }))
+  }
+
+  /** Imlece DIKEYDE en yakin hedef (yatay uzaklik zayif agirlikli — dikey yigin). */
+  function nearestByPointer(args, containers) {
     var p = args.pointerCoordinates
     if (!p) return []
     var best = null
-    args.droppableContainers.forEach(function (c) {
-      if (!dropTargetFromId(c.id)) return
+    containers.forEach(function (c) {
       var r = args.droppableRects.get(c.id)
       if (!r) return
       var dy = p.y < r.top ? r.top - p.y : (p.y > r.top + r.height ? p.y - (r.top + r.height) : 0)
@@ -825,7 +902,7 @@ export default function StandardFieldsEditor(props) {
      tek noktada, `handleDragEnd`'de olur → Esc/iptal de bedava dogru calisir. */
   function handleDragOver(event) {
     var active = event.active, over = event.over
-    if (!active || !over) { setDropHint(null); return }
+    if (!active || !over || isTabDrag(active.id)) { setDropHint(null); return }
     var moving = fields.find(function (f) { return f.key === String(active.id) })
     var r = resolveDrop(event)
     if (!moving || !r) { setDropHint(null); return }
@@ -843,6 +920,7 @@ export default function StandardFieldsEditor(props) {
     setDropHint(null)
     var active = event.active, over = event.over
     if (!active || !over) { dragPointer.current = null; return }
+    if (isTabDrag(active.id)) { dragPointer.current = null; handleTabDragEnd(event); return }
     var r = resolveDrop(event)
     dragPointer.current = null
     if (!r) return
@@ -1027,75 +1105,6 @@ export default function StandardFieldsEditor(props) {
 
           {!loading && !error && (
             <>
-              {/* ── Sekmeler (yalnız üst bilgi formlarında — kalem formunda boş gelir) ── */}
-              {tabs.length > 0 && (
-              <div className="mb-4">
-                <div className="text-[11.5px] font-bold text-slate-700 dark:text-white/80 mb-1.5">Sekmeler</div>
-                <div className="flex flex-col gap-1">
-                  {tabs.map(function (t, idx) {
-                    return (
-                      <div key={t.key} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.03] px-2.5 py-1.5">
-                        <div className="flex flex-col gap-0.5">
-                          <button type="button" onClick={function () { moveTab(idx, -1) }} disabled={idx === 0}
-                            className="text-slate-500 hover:text-indigo-600 dark:text-white/55 dark:hover:text-indigo-300 disabled:opacity-25">
-                            <ArrowUp size={11} strokeWidth={2.2} />
-                          </button>
-                          <button type="button" onClick={function () { moveTab(idx, 1) }} disabled={idx === tabs.length - 1}
-                            className="text-slate-500 hover:text-indigo-600 dark:text-white/55 dark:hover:text-indigo-300 disabled:opacity-25">
-                            <ArrowDown size={11} strokeWidth={2.2} />
-                          </button>
-                        </div>
-                        <span className="text-[11.5px] font-semibold text-slate-600 dark:text-white/70 min-w-[110px]">{t.label}</span>
-                        <input
-                          type="text"
-                          value={t.labelText}
-                          maxLength={40}
-                          placeholder={t.label + ' (varsayılan ad)'}
-                          onChange={function (e) {
-                            var v = e.target.value
-                            setTabs(function (prev) { return prev.map(function (x) { return x.key === t.key ? Object.assign({}, x, { labelText: v }) : x }) })
-                          }}
-                          className={inputCls + ' max-w-[220px]'}
-                        />
-                        {/* Hedef sekme (2026-08-20): icerigi baska sekmeye tasi.
-                            Kaynak sekme bos kalirsa belge ekraninda otomatik gizlenir —
-                            "Kalem Bilgileri → Genel Bilgiler" secimi tek-ekran demektir. */}
-                        <select
-                          value={t.targetTabKey || ''}
-                          title="İçeriği başka bir sekmeye taşı"
-                          onChange={function (e) {
-                            var v = e.target.value
-                            setTabs(function (prev) { return prev.map(function (x) { return x.key === t.key ? Object.assign({}, x, { targetTabKey: v }) : x }) })
-                          }}
-                          className={inputCls + ' max-w-[170px]'}
-                        >
-                          <option value="">Kendi sekmesi</option>
-                          {tabs.filter(function (o) { return o.key !== t.key }).map(function (o) {
-                            return <option key={o.key} value={o.key}>→ {o.labelText || o.label}</option>
-                          })}
-                        </select>
-                        <div className="flex-1" />
-                        {t.locked ? (
-                          <span title="Bu sekme gizlenemez"><Lock size={12} className="text-slate-400 dark:text-white/45" /></span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={function () {
-                              setTabs(function (prev) { return prev.map(function (x) { return x.key === t.key ? Object.assign({}, x, { isVisible: !x.isVisible }) : x }) })
-                            }}
-                            title={t.isVisible ? 'Sekmeyi gizle' : 'Sekmeyi göster'}
-                            className="text-slate-500 hover:text-indigo-600 dark:text-white/55 dark:hover:text-indigo-300"
-                          >
-                            {t.isVisible ? <Eye size={13} strokeWidth={2} /> : <EyeOff size={13} strokeWidth={2} className="text-rose-500 dark:text-rose-300" />}
-                          </button>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-              )}
-
               {/* ── Bölüm şeridi araç çubuğu ── */}
               <div className="flex items-center gap-2 mb-2">
                 <LayoutGrid size={13} className="text-slate-500 dark:text-white/55 flex-shrink-0" />
@@ -1171,7 +1180,7 @@ export default function StandardFieldsEditor(props) {
                 onDragStart={function (e) {
                   var ae = e.activatorEvent
                   dragPointer.current = (ae && typeof ae.clientY === 'number') ? { x: ae.clientX, y: ae.clientY } : null
-                  setDragKey(String(e.active.id))
+                  setDragKey(isTabDrag(e.active.id) ? null : String(e.active.id))
                 }}
                 onDragMove={function (e) {
                   var ae = e.activatorEvent
@@ -1182,39 +1191,90 @@ export default function StandardFieldsEditor(props) {
                 onDragOver={handleDragOver}
                 onDragCancel={function () { setDragKey(null); setDropHint(null); dragPointer.current = null }}
                 onDragEnd={handleDragEnd}>
+              {/* Sekme kartlari TEK surukleme baglamini paylasir; ayrim id on eki
+                  ile yapilir ('tabcard:<key>'). Ic ice DndContext denendi — sekme
+                  surukleme hic tetiklenmedi (olculdu), tek baglam guvenli yol. */}
+              <SortableContext items={tabTree.map(function (t) { return 'tabcard:' + t.key })}
+                               strategy={verticalListSortingStrategy}>
               {tabTree.map(function (tab) {
+              var isCollapsed = collapsedTabs[tab.key] === true
               return (
-                <div key={'tab-' + tab.key} className="mb-5">
-                  {/* ── Sekme başlığı: ad + alan sayısı + (özel ise) yeniden adlandır/sil ── */}
-                  <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-slate-200 dark:border-white/10">
-                    <LayoutGrid size={12} strokeWidth={2} className="flex-shrink-0 text-indigo-500 dark:text-indigo-300" />
-                    {tab.isCustom ? (
+                <TabCard
+                  key={'tab-' + tab.key}
+                  tabKey={tab.key}
+                  collapsed={isCollapsed}
+                  dim={!tab.isVisible}
+                  onToggle={function () {
+                    setCollapsedTabs(function (prev) {
+                      var next = Object.assign({}, prev)
+                      if (next[tab.key]) delete next[tab.key]; else next[tab.key] = true
+                      return next
+                    })
+                  }}
+                  header={
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      {/* Sekme adi — bos birakilirsa katalog adi kullanilir */}
                       <input
-                        type="text" value={tab.label} maxLength={40}
+                        type="text"
+                        value={tab.labelText}
+                        maxLength={40}
+                        placeholder={tab.rawLabel}
+                        title="Sekme başlığı — boş bırakılırsa varsayılan ad kullanılır"
                         onChange={function (e) { renameTab(tab.key, e.target.value) }}
-                        className={inputCls + ' max-w-[180px] font-semibold'}
+                        className={inputCls + ' max-w-[200px] font-semibold'}
                       />
-                    ) : (
-                      <span className="text-[12px] font-bold text-slate-700 dark:text-white/80">{tab.label}</span>
-                    )}
-                    <span className="text-[10px] text-slate-400 dark:text-white/35">({tab.fieldCount})</span>
-                    {tab.isCustom && (function () {
-                      var canDel = tab.fieldCount === 0
-                      return (
-                        <button type="button" disabled={!canDel}
-                          onClick={function () { if (canDel) removeCustomTab(tab.key) }}
-                          title={canDel ? 'Sekmeyi sil' : 'Önce alanları başka sekmeye taşıyın'}
-                          className={'flex items-center justify-center w-5 h-5 rounded transition-colors ' + (
-                            canDel ? 'text-rose-500 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-500/15'
-                                   : 'text-slate-300 cursor-not-allowed dark:text-white/20')}>
-                          <Trash2 size={11} strokeWidth={2.2} />
+                      <span className="text-[10px] text-slate-400 dark:text-white/35 flex-shrink-0">
+                        {tab.fieldCount} alan
+                      </span>
+                      {!tab.isCustom && tab.fieldCount === 0 && (
+                        <span className="text-[10px] text-amber-600 dark:text-amber-300 flex-shrink-0">boş — belgede gizlenir</span>
+                      )}
+                      <div className="flex-1" />
+                      {/* Icerigi baska sekmeye tasi — kaynak bos kalirsa belgede gizlenir */}
+                      <select
+                        value={tab.targetTabKey}
+                        title="İçeriği başka bir sekmeye taşı"
+                        onChange={function (e) {
+                          var v = e.target.value
+                          setTabs(function (prev) { return prev.map(function (x) { return x.key === tab.key ? Object.assign({}, x, { targetTabKey: v }) : x }) })
+                        }}
+                        className={inputCls + ' max-w-[160px] flex-shrink-0'}
+                      >
+                        <option value="">Kendi sekmesi</option>
+                        {tabTree.filter(function (o) { return o.key !== tab.key }).map(function (o) {
+                          return <option key={o.key} value={o.key}>→ {o.label}</option>
+                        })}
+                      </select>
+                      {tab.locked ? (
+                        <span title="Bu sekme gizlenemez" className="flex-shrink-0"><Lock size={12} className="text-slate-400 dark:text-white/45" /></span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={function () {
+                            setTabs(function (prev) { return prev.map(function (x) { return x.key === tab.key ? Object.assign({}, x, { isVisible: !x.isVisible }) : x }) })
+                          }}
+                          title={tab.isVisible ? 'Sekmeyi gizle' : 'Sekmeyi göster'}
+                          className="flex-shrink-0 text-slate-500 hover:text-indigo-600 dark:text-white/55 dark:hover:text-indigo-300"
+                        >
+                          {tab.isVisible ? <Eye size={13} strokeWidth={2} /> : <EyeOff size={13} strokeWidth={2} className="text-rose-500 dark:text-rose-300" />}
                         </button>
-                      )
-                    })()}
-                    {!tab.isCustom && tab.fieldCount === 0 && (
-                      <span className="text-[10px] text-amber-600 dark:text-amber-300">boş — belgede gizlenir</span>
-                    )}
-                  </div>
+                      )}
+                      {tab.isCustom && (function () {
+                        var canDel = tab.fieldCount === 0
+                        return (
+                          <button type="button" disabled={!canDel}
+                            onClick={function () { if (canDel) removeCustomTab(tab.key) }}
+                            title={canDel ? 'Sekmeyi sil' : 'Önce alanları başka sekmeye taşıyın'}
+                            className={'flex-shrink-0 flex items-center justify-center w-5 h-5 rounded transition-colors ' + (
+                              canDel ? 'text-rose-500 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-500/15'
+                                     : 'text-slate-300 cursor-not-allowed dark:text-white/20')}>
+                            <Trash2 size={11} strokeWidth={2.2} />
+                          </button>
+                        )
+                      })()}
+                    </div>
+                  }
+                >
               {tab.sections.map(function (group) {
                 var visibleFields = search
                   ? group.fields.filter(function (f) {
@@ -1429,9 +1489,10 @@ export default function StandardFieldsEditor(props) {
                   </div>
                 )
               })}
-                </div>
+                </TabCard>
               )
               })}
+              </SortableContext>
 
               {/* Imlecin altinda tasinan kopya — surukleme boyunca HER ZAMAN gorunur,
                   kap sinirlarindan ve overflow'dan etkilenmez (portal degil, DndContext
