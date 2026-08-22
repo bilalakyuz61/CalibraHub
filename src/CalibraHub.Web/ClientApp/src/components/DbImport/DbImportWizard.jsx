@@ -222,11 +222,23 @@ export default function DbImportWizard() {
   }, [job.targetEntity])
 
   // ── Türetilmiş ─────────────────────────────────────────────────────
+  /* Secili kaynak DAIMA en ustte (2026-08-22, kullanici istegi): duzenleme
+     modunda is acildiginda kaynak tablo listenin coku aşağısında kalıp
+     gorunmuyordu — kullanici hangi tablonun secili oldugunu gormek icin
+     yuzlerce satir kaydirmak zorundaydi. Sabitleme arama sirasinda da gecerli
+     (arama sonucunda da varsa basta durur); geri kalan sira sunucudan geldigi
+     gibi korunur. */
   const filteredObjects = React.useMemo(() => {
     const q = objectSearch.trim().toLocaleLowerCase('tr')
-    if (!q) return objects
-    return objects.filter((o) => `${o.schemaName}.${o.objectName}`.toLocaleLowerCase('tr').includes(q))
-  }, [objects, objectSearch])
+    const list = q
+      ? objects.filter((o) => `${o.schemaName}.${o.objectName}`.toLocaleLowerCase('tr').includes(q))
+      : objects
+    if (!job.sourceObject) return list
+    const isSel = (o) => o.schemaName === job.sourceSchema && o.objectName === job.sourceObject
+    const idx = list.findIndex(isSel)
+    if (idx <= 0) return list          // yok ya da zaten ilk sirada
+    return [list[idx], ...list.slice(0, idx), ...list.slice(idx + 1)]
+  }, [objects, objectSearch, job.sourceSchema, job.sourceObject])
 
   const mappedByTarget = React.useMemo(() => {
     const m = {}
@@ -458,10 +470,13 @@ export default function DbImportWizard() {
                       {filteredObjects.map((o) => {
                         const selected = job.sourceSchema === o.schemaName && job.sourceObject === o.objectName
                         return (
-                          <tr key={`${o.schemaName}.${o.objectName}`}>
+                          <tr key={`${o.schemaName}.${o.objectName}`} className={selected ? 'dbi-row--selected' : ''}>
                             <td className="dbi-mono">{o.schemaName}</td>
                             <td className="dbi-mono">{o.objectName}</td>
-                            <td>{o.kind === 'Table' ? 'Tablo' : 'View'}</td>
+                            <td>
+                              {o.kind === 'Table' ? 'Tablo' : 'View'}
+                              {selected && <span className="dbi-pin">seçili</span>}
+                            </td>
                             <td>
                               <button type="button"
                                       className={`dbi-btn dbi-btn--xs ${selected ? 'dbi-btn--primary' : ''}`}

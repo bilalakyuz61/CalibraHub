@@ -289,6 +289,21 @@ body.app-theme-dark .dbi-root {
     position: sticky; top: 0; z-index: 1;
 }
 .dbi-table tbody tr:last-child td { border-bottom: 0; }
+
+/* Secili kaynak tablo/view satiri — listenin en ustune sabitlenir (bkz.
+   DbImportWizard.filteredObjects). Sirf ilk sirada olmasi "neden burada?"
+   sorusunu dogurdugu icin ayrica isaretlenir. */
+.dbi-row--selected td {
+    background: var(--dbi-accent-soft);
+    font-weight: 600;
+}
+.dbi-pin {
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 5px;
+    font-size: 10px; font-weight: 600;
+    background: var(--dbi-accent); color: #ffffff;
+}
 .dbi-table td.dbi-cell-err { color: var(--dbi-danger); }
 
 .dbi-key-pill {
