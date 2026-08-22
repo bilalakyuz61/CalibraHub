@@ -1025,8 +1025,24 @@ body.app-theme-dark .ap-tab.is-active::before {
                     var ser   = document.getElementById('ap-so-serial');    // seri rez.
                     var trackRow = document.getElementById('ap-so-track-row');
                     var serRow   = document.getElementById('ap-so-serial-row');
-                    if (!so || !track || !ser) return;
+                    if (!so || !track || !ser) {
+                        // Sessiz return YASAK (CLAUDE.md) — id degisirse zincir sessizce
+                        // devre disi kalir ve alt kademeler yanlis gorunur.
+                        try { console.warn('[Parametreler] hiyerarsi zinciri kurulamadi — eksik id:',
+                            { affects: !!so, track: !!track, serial: !!ser }); } catch (e) {}
+                        return;
+                    }
+                    /* 2026-08-22 DUZELTME — "ust parametre kapaliyken alttaki
+                       isaretlenememeli": Onceden alt switch yalnizca GORSEL olarak
+                       kapatiliyor, `checked` DEGERI dokunulmadan birakiliyordu.
+                       Sonuc: ekranda "Kapali" gorunen ayar, Kaydet'e basildiginda
+                       `checked` hala true oldugu icin `true` olarak KAYDEDILIYORDU
+                       (imkansiz durum: ust kademe kapali, alt kademe acik) ve bir
+                       sonraki etkilesimde "Acik" olarak geri geliyordu.
+                       Artik devre disi birakilan kademe ayni anda isaretsizlenir —
+                       deger, gorunum ve kaydedilen sey birbirini tutar. */
                     function visualOff(input, labelId) {
+                        input.checked = false;
                         var trk = input.closest('.ap-switch').querySelector('.ap-switch-track');
                         var lbl = document.getElementById(labelId);
                         if (trk) trk.classList.remove('is-on');
@@ -1334,7 +1350,10 @@ body.app-theme-dark .ap-tab.is-active::before {
                     formCode: 'SALES_QUOTE',
                     paramKey: 'TL_PRICE_EDIT_' + el.getAttribute('data-doctype'),
                     paramValue: el.checked ? 'true' : 'false',
-                    dataType: 0
+                    // CompanyParameterDataType.Bool = 3 (String=1, Int=2, Bool=3).
+                    // Ilk surumde 0 yazilmisti — enum'da tanimsiz deger, kaydetme
+                    // "basarisiz" donuyordu (ekrandaki diger bool'lar zaten 3 kullaniyor).
+                    dataType: 3
                 })
             });
             var dd = await rr.json().catch(function () { return { ok: false }; });
