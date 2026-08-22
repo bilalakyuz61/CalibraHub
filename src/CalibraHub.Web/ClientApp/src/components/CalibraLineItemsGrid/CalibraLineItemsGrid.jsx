@@ -442,6 +442,83 @@ export default function CalibraLineItemsGrid(props) {
   }
   // Satırın hemen altına salt-okunur bileşen döküm paneli — kart+tablo görünümünde
   // ortak (DRY). row.isKit !== true veya satır henüz kaydedilmemişse (Id<=0) null.
+  /* ── Kit bilesenleri — TABLO gorunumu (2026-08-22, kullanici istegi) ───────
+     "tablo kisminda kit detaylari diger kalemlerin sahalari ile ayni sahalari
+     kullanabilir, sadece ilave butonlari olmaz."
+     Onceki hal serbest akisli bir liste idi (kod + ad + saga dogru miktar/fiyat);
+     tablo yatayda kaydigi icin miktar/fiyat GORUS ALANI DISINDA kaliyordu —
+     kullanicinin "miktar ve fiyat gorunmuyor" dedigi durum buydu.
+     Simdi her bilesen normal bir satir gibi cizilir: ayni kolon genislikleri
+     (widthCss), degerler kendi sutununda. Fark: aksiyon serididir (••• / kilit /
+     ⚙ / sil) BOSTUR ve satir salt-okunurdur. */
+  function kitComponentCellValue(col, c) {
+    switch (col.key) {
+      case 'materialCode': return c.code || ''
+      case 'materialName': return c.name || ''
+      case 'unit':         return c.unit || ''
+      case 'quantity':     return TR_FMT(c.quantity, col.precision != null ? col.precision : 4)
+      case 'unitPrice':    return c.unitPrice != null ? TR_FMT(c.unitPrice, col.precision != null ? col.precision : 4) : ''
+      case 'lineTotal':    return c.lineTotal != null ? TR_FMT(c.lineTotal, col.precision != null ? col.precision : 4) : ''
+      default: break
+    }
+    // TL aynalari — kaynak alanin kur ile carpimi (tlCellValue ile ayni kural).
+    if (col.tlMirror) {
+      var src = col.sourceKey === 'unitPrice' ? c.unitPrice : (col.sourceKey === 'lineTotal' ? c.lineTotal : null)
+      if (src == null) return ''
+      return TR_FMT(src * (exchangeRate || 1), col.precision != null ? col.precision : 2)
+    }
+    return ''
+  }
+
+  function renderKitComponentsTableRows(row) {
+    if (row.isKit !== true) return null
+    var lineId = row.id != null && row.id !== '' && Number(row.id) > 0 ? Number(row.id) : null
+    if (!lineId || !kitExpandedRows[lineId]) return null
+    var cache = kitComponentsCache[lineId]
+    var head = (
+      <div className="flex items-stretch bg-indigo-50/40 dark:bg-indigo-500/[0.05] border-t border-indigo-100 dark:border-indigo-400/20">
+        <div className="w-[180px] flex-shrink-0 border-r border-slate-100 dark:border-white/[0.04]" />
+        <div className="flex-1 min-w-0 px-2.5 py-1 text-[10px] font-bold tracking-wide text-indigo-500 dark:text-indigo-300/80">
+          Kit Bileşenleri{cache && cache.kitVersionNo ? ' · v' + cache.kitVersionNo : ''}
+        </div>
+      </div>
+    )
+    if (!cache || cache.loading) {
+      return (<>{head}<div className="flex items-stretch"><div className="w-[180px] flex-shrink-0" /><div className="px-2.5 py-1.5 text-[12px] text-slate-400 dark:text-white/30">Yükleniyor…</div></div></>)
+    }
+    if (!cache.found || cache.components.length === 0) {
+      return (<>{head}<div className="flex items-stretch"><div className="w-[180px] flex-shrink-0" /><div className="px-2.5 py-1.5 text-[12px] text-slate-400 dark:text-white/30">Bileşen bulunamadı (kaydedince görünür)</div></div></>)
+    }
+    return (
+      <>
+        {head}
+        {cache.components.map(function (c, i) {
+          return (
+            <div key={c.componentItemId != null ? c.componentItemId : i}
+                 className="flex items-stretch bg-indigo-50/25 dark:bg-indigo-500/[0.03] border-t border-slate-100 dark:border-white/[0.04]">
+              {/* Aksiyon seridi — kit bileseninde BOS (salt okunur, buton yok) */}
+              <div className="w-[180px] flex-shrink-0 flex items-center pl-6 border-r border-slate-100 dark:border-white/[0.04]">
+                <span className="text-indigo-400 dark:text-indigo-300/70 text-[11px] select-none" aria-hidden="true">↳</span>
+              </div>
+              {columns.map(function (col) {
+                var v = kitComponentCellValue(col, c)
+                var alignCls = col.align === 'right' ? 'justify-end text-right'
+                  : (col.align === 'center' ? 'justify-center text-center' : 'justify-start text-left')
+                return (
+                  <div key={col.key} style={widthCss(col)}
+                       className={'flex items-center ' + alignCls + ' px-2.5 py-1.5 text-[12px] text-slate-600 dark:text-white/60 border-r border-slate-100 last:border-r-0 dark:border-white/[0.04] truncate ' +
+                         (col.key === 'materialCode' ? 'font-mono font-semibold' : '')}>
+                    <span className="truncate">{v}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })}
+      </>
+    )
+  }
+
   function renderKitComponentsPanel(row) {
     if (row.isKit !== true) return null
     var lineId = row.id != null && row.id !== '' && Number(row.id) > 0 ? Number(row.id) : null
@@ -3042,7 +3119,7 @@ export default function CalibraLineItemsGrid(props) {
                           })}
                         </div>
                       )}
-                      {renderKitComponentsPanel(row)}
+                      {renderKitComponentsTableRows(row)}
                     </motion.div>
                   )
                 })
