@@ -931,7 +931,14 @@ else
 <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
 @if (collaborationLocksEnabled)
 {
-    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
+    @* 2026-08-22: CDN yerine YEREL kopya. Onceden jsdelivr'dan cekiliyordu ve
+       projedeki TEK dis bagimlilikti (bootstrap/flatpickr/jquery zaten ~/lib
+       altinda). Iki sorunu vardi: (1) disari kapali kurulumda hic yuklenmez →
+       isbirligi/kilit ozelligi sessizce oluu, (2) tarayicinin izleme korumasi
+       ucuncu-taraf origin'e depolama erisimini engelleyip konsolu uyariyla
+       dolduruyordu. Dosya ClientApp/node_modules'tan vendor edildi
+       (package.json "@@microsoft/signalr": "^8.0.7" → kopyalanan surum 8.0.17). *@
+    <script src="~/lib/signalr/signalr.min.js" asp-append-version="true"></script>
 }
 <script src="~/js/site.js" asp-append-version="true" defer></script>
 <script src="~/js/calibraAlert.js" asp-append-version="true"></script>
