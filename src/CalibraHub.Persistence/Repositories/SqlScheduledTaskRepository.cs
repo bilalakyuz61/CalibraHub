@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Persistence.Database;
@@ -214,6 +214,25 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
         cmd.CommandText = $"UPDATE {_table} SET [IsRunning] = 0, [Updated] = GETUTCDATE() WHERE [Id] = @Id;";
         cmd.Parameters.Add(new SqlParameter("@Id", taskId));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<int> ReleaseStuckLocksAsync(DateTime lockedBeforeUtc, CancellationToken cancellationToken)
+    {
+        // [Updated] kilit alinirken de set ediliyor (TryAcquireLockAsync), bu yuzden
+        // "kilit ne zamandir acik" icin YAKLASIK bir olcut. Esik, en uzun gorev suresinin
+        // uzerinde tutulmali; aksi halde gercekten calisan uzun bir gorevin kilidi alinip
+        // ikinci bir kopya baslatilabilir.
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            UPDATE {_table}
+               SET [IsRunning] = 0, [Updated] = GETUTCDATE()
+             WHERE [IsRunning] = 1 AND [Updated] < @LockedBefore;
+            SELECT @@ROWCOUNT;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@LockedBefore", lockedBeforeUtc));
+        var result = await cmd.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(result);
     }
 
     public async Task SetEnabledAsync(int taskId, bool enabled, CancellationToken cancellationToken)

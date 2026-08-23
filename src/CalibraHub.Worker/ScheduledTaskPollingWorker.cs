@@ -72,6 +72,13 @@ public sealed class ScheduledTaskPollingWorker : BackgroundService
         if (stuck > 0)
             _logger.LogWarning("{Count} asili kalmis calisma kaydi hatali olarak kapatildi.", stuck);
 
+        // 0b) Asili kalmis KILITLERI serbest birak. Run kaydini kapatmak yetmez: gorevin
+        //     kendi IsRunning bayragi 1'de kalirsa TryAcquireLockAsync bir daha asla
+        //     basarili olamaz ve gorev sessizce sonsuza dek calismaz.
+        var unlocked = await taskRepo.ReleaseStuckLocksAsync(now.Subtract(StuckRunThreshold), ct);
+        if (unlocked > 0)
+            _logger.LogWarning("{Count} gorevin asili kalmis calisma kilidi serbest birakildi.", unlocked);
+
         // 1) NextRunAt=NULL olan (yeni eklenmis, hic calismamis) gorevleri initialize et
         var all = await taskRepo.GetAllAsync(ct);
         foreach (var t in all.Where(x => x.IsEnabled

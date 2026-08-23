@@ -1,4 +1,4 @@
-using CalibraHub.Domain.Entities;
+﻿using CalibraHub.Domain.Entities;
 
 namespace CalibraHub.Application.Abstractions.Persistence;
 
@@ -27,6 +27,14 @@ public interface IScheduledTaskRepository
     /// <summary>IsRunning flag'i set/clear eder — concurrent dispatch engeller.</summary>
     Task<bool> TryAcquireLockAsync(int taskId, CancellationToken cancellationToken);
     Task ReleaseLockAsync(int taskId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Asili kalmis calisma kilitlerini serbest birakir. Surec calisma ortasinda olurse
+    /// (sunucu restart'i, kill) <c>IsRunning</c> 1'de kalir ve <see cref="TryAcquireLockAsync"/>
+    /// bir daha ASLA basarili olamaz — gorev sessizce sonsuza dek calismaz hale gelir.
+    /// Serbest birakilan gorev sayisini doner.
+    /// </summary>
+    Task<int> ReleaseStuckLocksAsync(DateTime lockedBeforeUtc, CancellationToken cancellationToken);
 
     Task SetEnabledAsync(int taskId, bool enabled, CancellationToken cancellationToken);
     Task DeleteAsync(int id, CancellationToken cancellationToken);
