@@ -2511,7 +2511,32 @@ export default function CalibraLineItemsGrid(props) {
                                 />
                               )}
                             </div>
-                            {showMirror && (
+                            {showMirror && (mirror.editableTl ? (
+                              /* 2026-08-22 (kullanici bildirimi: "kart seklinde iken TL
+                                 fiyata mudahale edilemiyor"): TL aynasi kartta salt-okunur
+                                 bir ROZET olarak ciziliyordu; tablo dalinda duzenlenebilir
+                                 yapilmisti ama kart dali atlanmisti. Parametre acikken
+                                 kartta da gercek bir hucre olur — ayni handleCellChange'e
+                                 gider, dolayisiyla kura bolme + yuvarlama + satir toplami
+                                 yeniden hesabi TEK yerde kalir. */
+                              <div
+                                className="flex-shrink-0 flex items-center gap-1 px-1 clc-cell-underline"
+                                style={{ width: 118 }}
+                                data-cell-key={mirror.key}
+                                title="TL fiyata müdahale — girilen tutar kura bölünüp döviz fiyatı hesaplanır"
+                              >
+                                <span className="opacity-70 text-[11px] flex-shrink-0">₺</span>
+                                <div className="flex-1 min-w-0">
+                                  <LineGridCell
+                                    column={mirror}
+                                    row={row}
+                                    value={tlCellValue(mirror, row)}
+                                    onChange={function (k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                                    siblingColumns={allColumns}
+                                  />
+                                </div>
+                              </div>
+                            ) : (
                               <div
                                 className="flex-shrink-0 flex items-center gap-1 px-1.5 text-[11px] font-mono tabular-nums text-slate-500 dark:text-white/45"
                                 title="Belge kuruyla TL karşılığı"
@@ -2519,7 +2544,7 @@ export default function CalibraLineItemsGrid(props) {
                                 <span className="opacity-70">₺</span>
                                 <span>{TR_FMT(tlCellValue(mirror, row), mirror.precision)}</span>
                               </div>
-                            )}
+                            ))}
                           </div>
                         </div>
                       )

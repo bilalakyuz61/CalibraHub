@@ -390,7 +390,21 @@ export default function SmartTableRow(props) {
   // SmartCard'daki extraActions ile ayni sozlesme; "Islemler" menusu bunu
   // otomatik listeler (hardcode yok, bkz. dosya ustu aciklama).
   var extraActions = Array.isArray(entity.extraActions) ? entity.extraActions.filter(function (a) { return !!a }) : []
+  // Menude AYNI aksiyon iki kez gorunmesin. Bazi board config'leri "Duzenle"yi hem
+  // primaryAction (satir tiklamasi + hideButton) hem de extraActions icinde tanimliyor —
+  // kart gorunumunde ikisi de gerekli (kartta primaryAction butonu gizli), ama tablo
+  // menusu ikisini birden listeleyince ayni ogeden iki tane cikiyordu
+  // (PageComment Seq 1109). Ayni etiket + ayni hedef ise ikincisi elenir; etiketi ayni
+  // ama hedefi farkli olan aksiyonlar KORUNUR.
   var menuActions = (primaryAction ? [primaryAction] : []).concat(extraActions)
+    .filter(function (a, i, arr) {
+      return arr.findIndex(function (b) {
+        return (b.label || '') === (a.label || '')
+          && (b.url || '') === (a.url || '')
+          && (b.apiUrl || '') === (a.apiUrl || '')
+          && (b.fetchUrl || '') === (a.fetchUrl || '')
+      }) === i
+    })
 
   var widgetById = useMemo(function () {
     var map = {}

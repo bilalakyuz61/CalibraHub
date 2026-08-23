@@ -135,9 +135,18 @@ public sealed class DocumentService : IDocumentService
     /// dictionary'e HİÇ girmez — eksik/yanlış bir kısmi toplam asla yazılmaz, çağıran taraf
     /// mevcut/istemci UnitPrice'ı korur. Fiyatlanamayan durum LogWarning ile loglanır (sessiz kayıp değil).
     /// </summary>
+    /// <param name="resolvedComponentPrices">
+    /// ListComponent kitlerinde fiyat listesinden ÇÖZÜLEN bileşen birim fiyatları
+    /// ((ComponentItemId, ConfigId) → fiyat). 2026-08-22: bu sözlük snapshot'a
+    /// yazılarak bileşen fiyatları belgeyle birlikte DONDURULUR — kit dökümünde
+    /// "fiyat kit detayından geliyorsa birim fiyatlar görünsün" isteği için.
+    /// FİYATLAMAYI ETKİLEMEZ: ListComponent dalı fiyatı yine CANLI priceByKey'den
+    /// okur, snapshot'taki UnitPrice'a hiç bakmaz (bkz. aşağıdaki foreach).
+    /// </param>
     private async Task<IReadOnlyDictionary<int, decimal>> ResolveKitServerTruthPricesAsync(
         IReadOnlyList<SaveDocumentLineRequest> lineRequests, int? contactId, int currencyId,
-        PriceDirection direction, DateTime date, CancellationToken ct)
+        PriceDirection direction, DateTime date, CancellationToken ct,
+        Dictionary<(int ItemId, int? ConfigId), decimal>? resolvedComponentPrices = null)
     {
         var result = new Dictionary<int, decimal>();
         if (_priceListService is null || lineRequests.Count == 0) return result;
@@ -211,6 +220,12 @@ public sealed class DocumentService : IDocumentService
             priceByKey = resolved
                 .Where(r => r.Price.HasValue)
                 .ToDictionary(r => (r.ItemId, r.ConfigId), r => r.Price!.Value);
+        }
+
+        // Cozumlenen bilesen fiyatlarini cagirana ver (snapshot dondurmasi icin).
+        if (resolvedComponentPrices is not null)
+        {
+            foreach (var kv in priceByKey) resolvedComponentPrices[kv.Key] = kv.Value;
         }
 
         // ── ListPackage: kit'in KENDİ liste fiyatı ──
@@ -838,12 +853,15 @@ public sealed class DocumentService : IDocumentService
         // satış hem satın alma belgelerini işler, sabit 's' YANLIŞTI. Sözlük ItemId DEĞİL,
         // lineRequests DİZİN'i ile anahtarlanır (Bulgu #1 — aynı kit birden fazla satırda farklı
         // dondurma durumunda olabilir).
+        // 2026-08-22: cozulen BILESEN fiyatlari da toplanir — asagida kit snapshot'ina
+        // yazilip belgeyle birlikte dondurulur (kit dokumunde birim fiyat gosterimi).
+        var kitComponentPrices = new Dictionary<(int ItemId, int? ConfigId), decimal>();
         var kitServerPrices = await ResolveKitServerTruthPricesAsync(
             lineRequests,
             resolvedContactId,
             request.CurrencyId > 0 ? request.CurrencyId : 1,
             isPurchaseRequest ? PriceDirection.Purchase : PriceDirection.Sales,
-            request.DocumentDate, ct);
+            request.DocumentDate, ct, kitComponentPrices);
 
         decimal subTotal = 0;
         var lineEntities = new List<DocumentLine>(lineRequests.Length);
@@ -1082,7 +1100,26 @@ public sealed class DocumentService : IDocumentService
                 if (existing.TryGetValue(line.Id, out var snappedKit) && snappedKit == line.ItemId)
                     continue; // freeze — ayni satirda ayni kit zaten donduruldu
                 var src = kitByItem[line.ItemId];
-                await _repo.ReplaceKitSnapshotAsync(line.Id, src.KitItemId, src.VersionNo, src.Components, ct);
+                /* 2026-08-22 (kullanici karari "B"): bilesen birim fiyatlari da DONDURULUR.
+                   FixedComponent'te fiyat zaten kit tanimindan (ItemKitLine.UnitPrice) gelir;
+                   ListComponent'te ise snapshot'a yalniz miktar yaziliyordu ve kit dokumunde
+                   fiyat sutunlari bos kaliyordu. Artik kaydetme anindaki cozulmus liste
+                   fiyati snapshot'a yazilir.
+                   FIYATLAMA DEGISMEZ: ListComponent dali kit fiyatini yine CANLI cozer,
+                   snapshot'taki UnitPrice'a bakmaz (bkz. ResolveKitServerTruthPricesAsync).
+                   GECMIS BELGELER etkilenmez — eski snapshot'lar oldugu gibi kalir. */
+                var compsToSave = src.Components;
+                if (kitComponentPrices.Count > 0)
+                {
+                    compsToSave = src.Components
+                        .Select(c => c.UnitPrice.HasValue
+                            ? c
+                            : (kitComponentPrices.TryGetValue((c.ComponentItemId, c.ConfigId), out var cp)
+                                ? c with { UnitPrice = cp }
+                                : c))
+                        .ToList();
+                }
+                await _repo.ReplaceKitSnapshotAsync(line.Id, src.KitItemId, src.VersionNo, compsToSave, ct);
             }
         }
 
