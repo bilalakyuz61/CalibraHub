@@ -762,6 +762,14 @@ END;";
             // baglanmamisti; ItemUnits'i olmayan sirket DB'lerinde backfill "Invalid object
             // name 'dbo.ItemUnits'" (208) ile tum init'i durduruyordu.
             await EnsureItemUnitsTableAsync(connection, cancellationToken);
+            // 2026-08-23 (sıfır-DB sıra düzeltmesi): Currency, EnsureDocumentTablesAsync'ten
+            // ÖNCE kurulur. Document'in [fk_document_currency] FK bloğu "OBJECT_ID(Currency)
+            // IS NOT NULL" guard'lıdır; Currency daha sonra kuruluyorken sıfırdan kurulumda
+            // FK ilk açılışta hiç oluşmuyor, ancak ikinci başlatmada geliyordu.
+            // Currency/Exchange yalnız kendilerine dokunur (Document'e bağımlılığı yok),
+            // seed de TRY=Id 1 satırını Document.CurrencyId DEFAULT(1) ile uyumlu yazar.
+            await EnsureCurrencyTablesAsync(connection, cancellationToken);
+            await SeedCurrenciesAsync(connection, cancellationToken);
             await EnsureDocumentTablesAsync(connection, cancellationToken);
             await EnsureDocumentLineKitSnapshotAsync(connection, cancellationToken);
             await EnsureDocumentAttachmentsTableAsync(connection, cancellationToken);
@@ -784,8 +792,6 @@ END;";
             await SeedArgeNumberRuleAsync(connection, cancellationToken);
             await SeedQualityNumberRuleAsync(connection, cancellationToken);
             await SeedCapaNumberRuleAsync(connection, cancellationToken);
-            await EnsureCurrencyTablesAsync(connection, cancellationToken);
-            await SeedCurrenciesAsync(connection, cancellationToken);
             await EnsureReportDataViewsAsync(connection, cancellationToken);
             await EnsureUserSettingsTableAsync(connection, cancellationToken);
             await EnsureSalesRepresentativeTableAsync(connection, cancellationToken);
@@ -818,7 +824,6 @@ END;";
             // kaldırıldı; mevcut engine.* tabloları DropEngineSchemaIfExistsAsync
             // ile temizlenir (one-time cleanup, idempotent).
             await DropEngineSchemaIfExistsAsync(connection, cancellationToken);
-            await EnsureGuideTablesAsync(connection, cancellationToken);
             await EnsureFieldSettingsTableAsync(connection, cancellationToken);
             await EnsureContactColumnsAsync(connection, cancellationToken);
             await EnsureOrgChartTablesAsync(connection, cancellationToken);
@@ -831,6 +836,17 @@ END;";
             await EnsureRptRunLogTableAsync(connection, cancellationToken);
             await SeedRptViewRegistryAsync(connection, cancellationToken);
             await EnsureProductionInfrastructureAsync(connection, cancellationToken);
+            // 2026-08-23 (sıfır-DB sıra düzeltmesi): EnsureGuideTablesAsync üretim
+            // altyapısından SONRA çalışır. cbv_Guide_Routing / cbv_Guide_Personnel /
+            // cbv_Guide_WorkOrders view'ları Routing / Personnel / WorkOrder tablolarına
+            // OBJECT_ID guard'lı bağlıdır; metod eskiden ProductionInfrastructure'dan ÖNCE
+            // çağrıldığı için sıfırdan kurulumda bu üç rehber view'ı ilk açılışta hiç
+            // oluşmuyordu (yalnızca ikinci başlatmada geliyordu → rehberler boş).
+            // Guide metodunun kurduğu DocumentAttachment/DocumentSource tablolarını bu
+            // aralıkta okuyan tek yer ProductionInfrastructure'ın DocumentSource backfill'i;
+            // o blok OBJECT_ID guard'lı ve sıfır-DB'de zaten veri bulamaz (no-op),
+            // mevcut DB'lerde tablo çoktan var → davranış değişmez.
+            await EnsureGuideTablesAsync(connection, cancellationToken);
             await EnsureAssetTablesAsync(connection, cancellationToken);
             // DocLayout tabloları yukarı taşındı (SeedDefaultDocLayoutsAsync'ten önce — sıfır-DB order fix).
             await EnsureInventoryCountTablesAsync(connection, cancellationToken);
@@ -2291,22 +2307,10 @@ END;";
                 ');
             END;
 
-            -- FK Items.UnitId -> Unit.Id (idempotent — sadece Unit tablosu varsa kurar)
-            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
-               AND OBJECT_ID(N'[{schemaForSql}].[Unit]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'UnitId') IS NOT NULL
-               AND NOT EXISTS (
-                   SELECT 1 FROM sys.foreign_keys
-                   WHERE [name] = N'FK_Items_Unit'
-                     AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[Items]'))
-            BEGIN
-                EXEC(N'
-                    ALTER TABLE [{schemaForSql}].[Items]
-                    WITH NOCHECK
-                    ADD CONSTRAINT [FK_Items_Unit]
-                        FOREIGN KEY ([UnitId]) REFERENCES [{schemaForSql}].[Unit]([Id]);
-                ');
-            END;
+            -- NOT: FK Items.UnitId -> Unit.Id bloğu bu batch'in SONUNA taşındı — Unit tablosu
+            -- aynı batch içinde çok daha aşağıda CREATE ediliyor; burada dururken sıfırdan
+            -- kurulumda "OBJECT_ID(Unit) IS NOT NULL" guard'ı tutmuyor ve FK ilk açılışta
+            -- hiç kurulmuyordu (yalnız ikinci başlatmada geliyordu).
 
             -- CHECK constraint: Items.TypeId sabit ItemType enum araligina (1..9) kilitlenir.
             -- WITH NOCHECK — eski kayitlar dogrulanmaz, sadece yeni/guncellenen satirlar enforce edilir.
@@ -3773,6 +3777,26 @@ END;";
             BEGIN
                 EXEC(N'DROP INDEX [ix_Machine_LocationId] ON [{schemaForSql}].[Machine];');
                 EXEC(N'CREATE INDEX [IX_Machine_LocationId] ON [{schemaForSql}].[Machine]([LocationId]);');
+            END;
+
+            -- FK Items.UnitId -> Unit.Id (idempotent — sadece Unit tablosu varsa kurar).
+            -- 2026-08-23: Items bloğundan buraya taşındı; Unit CREATE'i bu batch içinde
+            -- yukarıdaki Items bölümünden SONRA geliyor, dolayısıyla FK'nin sıfırdan
+            -- kurulumda da ilk açılışta kurulabilmesi için batch'in sonunda durmalı.
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{schemaForSql}].[Unit]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'UnitId') IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM sys.foreign_keys
+                   WHERE [name] = N'FK_Items_Unit'
+                     AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[Items]'))
+            BEGIN
+                EXEC(N'
+                    ALTER TABLE [{schemaForSql}].[Items]
+                    WITH NOCHECK
+                    ADD CONSTRAINT [FK_Items_Unit]
+                        FOREIGN KEY ([UnitId]) REFERENCES [{schemaForSql}].[Unit]([Id]);
+                ');
             END;
             """;
 
@@ -9058,20 +9082,10 @@ END;";
                AND COL_LENGTH(N'[{s}].[ItemSerial]', N'CurrentLocationId') IS NOT NULL
                 EXEC(N'CREATE INDEX [IX_ItemSerial_Item_Location] ON [{s}].[ItemSerial]([ItemId],[CurrentLocationId])
                     WHERE [CurrentLocationId] IS NOT NULL;');
-            -- Backfill (tek sefer etkili; sonraki başlatmalarda yalnız NULL kalanları tarar):
-            -- stoktaki (InStock) serinin konumu, en son giriş (MovementType=2) satırının lokasyonudur.
-            IF COL_LENGTH(N'[{s}].[ItemSerial]', N'CurrentLocationId') IS NOT NULL
-                EXEC(N'
-                    UPDATE s SET s.[CurrentLocationId] = x.[LocationId]
-                    FROM [{s}].[ItemSerial] s
-                    CROSS APPLY (
-                        SELECT TOP 1 dl.[LocationId]
-                        FROM [{s}].[DocumentLineSerial] dls
-                        INNER JOIN [{s}].[DocumentLine] dl ON dl.[Id] = dls.[DocumentLineId]
-                        WHERE dls.[SerialId] = s.[Id] AND dl.[MovementType] = 2 AND dl.[LocationId] IS NOT NULL
-                        ORDER BY dl.[Id] DESC
-                    ) x
-                    WHERE s.[Status] = 1 AND s.[CurrentLocationId] IS NULL;');
+            -- NOT: CurrentLocationId backfill'i DocumentLineSerial CREATE bloğundan SONRAYA
+            -- taşındı (aşağıya bak). Backfill DocumentLineSerial'a JOIN yapıyor; sıfırdan
+            -- kurulumda tablo henüz yoktu → "Invalid object name 'dbo.DocumentLineSerial'"
+            -- ile tüm init çöküyordu. COL_LENGTH guard'ı tablo yokluğunu YAKALAMAZ.
 
             IF OBJECT_ID(N'[{s}].[DocumentLineSerial]', N'U') IS NULL
             BEGIN
@@ -9090,6 +9104,26 @@ END;";
                     ON [{s}].[DocumentLineSerial]([DocumentLineId], [SerialId]);
                 CREATE INDEX [IX_DocumentLineSerial_Serial] ON [{s}].[DocumentLineSerial]([SerialId]);
             END;
+
+            -- ItemSerial.CurrentLocationId backfill (tek sefer etkili; sonraki başlatmalarda
+            -- yalnız NULL kalanları tarar): stoktaki (InStock) serinin konumu, en son giriş
+            -- (MovementType=2) satırının lokasyonudur. DocumentLineSerial CREATE'inden SONRA
+            -- durur — hem sıfır-DB (tablo yeni kuruldu, satır yok → no-op) hem mevcut DB
+            -- (gerçek backfill) için doğru. OBJECT_ID guard'ı ek güvence.
+            IF COL_LENGTH(N'[{s}].[ItemSerial]', N'CurrentLocationId') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[DocumentLineSerial]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+                EXEC(N'
+                    UPDATE s SET s.[CurrentLocationId] = x.[LocationId]
+                    FROM [{s}].[ItemSerial] s
+                    CROSS APPLY (
+                        SELECT TOP 1 dl.[LocationId]
+                        FROM [{s}].[DocumentLineSerial] dls
+                        INNER JOIN [{s}].[DocumentLine] dl ON dl.[Id] = dls.[DocumentLineId]
+                        WHERE dls.[SerialId] = s.[Id] AND dl.[MovementType] = 2 AND dl.[LocationId] IS NOT NULL
+                        ORDER BY dl.[Id] DESC
+                    ) x
+                    WHERE s.[Status] = 1 AND s.[CurrentLocationId] IS NULL;');
 
             -- 2026-05-23: DocumentLineFulfillment — bag tablosu.
             -- Talep satiri (RequestLineId) → karsilama satiri (RefDocLineId, StockDocLine.Id
