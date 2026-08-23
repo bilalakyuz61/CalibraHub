@@ -513,6 +513,41 @@ public sealed class HealthCheckController : Controller
                     UserRole.SystemAdmin, UserAuthorizationCatalog.GetAllowedPermissions(UserRole.SystemAdmin),
                     testPassword),
                 ct);
+
+            // Test sirketine, isteyen kullanicinin KENDI e-postasiyla ikinci bir yonetici acilir.
+            // Sebep: yukaridaki test kullanicisinin sifresi yalniz bu istegin icinde uretiliyor ve
+            // hicbir yerde saklanmiyor; onunla giris yapmak mumkun degil. /Account/SwitchCompany
+            // ise "hedef sirkette AYNI e-postaya ait aktif kullanici var mi" diye bakiyor —
+            // bu kayit sayesinde kullanici test sirketine normal "Sirket Degistir" akisiyla,
+            // hicbir sifre gosterilmeden gecebilir. Bu olmadan Fonksiyon Testleri ekranina
+            // hic ulasilamaz (testler yalniz test sirketi oturumunda calisir).
+            var callerEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+            if (!string.IsNullOrWhiteSpace(callerEmail)
+                && !string.Equals(callerEmail, testEmail, StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var callerName = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? "Yönetici";
+                    await _adminManagement.CreateUserAsync(
+                        new CreateUserRequest(
+                            testCompanyId, callerName, callerEmail, "TST-002", dept.Id, null,
+                            UserRole.SystemAdmin, UserAuthorizationCatalog.GetAllowedPermissions(UserRole.SystemAdmin),
+                            $"Hc!{Guid.NewGuid().ToString("N")[..8]}"),
+                        ct);
+                }
+                catch (Exception ex)
+                {
+                    // Ortami cokertme: test sirketi kuruldu, yalniz "gecis kullanicisi" acilamadi.
+                    // Sessizce yutma — logla ve kullaniciya bildir.
+                    _logger.LogError(ex, "[StreamTestCompany] Gecis kullanicisi olusturulamadi. Email={Email}", callerEmail);
+                    await WriteFrameAsync(new
+                    {
+                        type = "setup_warning",
+                        message = "Test şirketi kuruldu ancak kendi e-postanızla geçiş kullanıcısı açılamadı; " +
+                                  "Şirket Değiştir listesinde görünmeyebilir.",
+                    }, ct);
+                }
+            }
         }
         catch (Exception ex)
         {
