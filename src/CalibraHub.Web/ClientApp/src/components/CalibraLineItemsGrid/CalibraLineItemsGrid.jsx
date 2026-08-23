@@ -477,17 +477,17 @@ export default function CalibraLineItemsGrid(props) {
     var cache = kitComponentsCache[lineId]
     var head = (
       <div className="flex items-stretch bg-indigo-50/40 dark:bg-indigo-500/[0.05] border-t border-indigo-100 dark:border-indigo-400/20">
-        <div className="w-[180px] flex-shrink-0 border-r border-slate-100 dark:border-white/[0.04]" />
+        <div className="w-[136px] flex-shrink-0 border-r border-slate-100 dark:border-white/[0.04]" />
         <div className="flex-1 min-w-0 px-2.5 py-1 text-[10px] font-bold tracking-wide text-indigo-500 dark:text-indigo-300/80">
           Kit Bileşenleri{cache && cache.kitVersionNo ? ' · v' + cache.kitVersionNo : ''}
         </div>
       </div>
     )
     if (!cache || cache.loading) {
-      return (<>{head}<div className="flex items-stretch"><div className="w-[180px] flex-shrink-0" /><div className="px-2.5 py-1.5 text-[12px] text-slate-400 dark:text-white/30">Yükleniyor…</div></div></>)
+      return (<>{head}<div className="flex items-stretch"><div className="w-[136px] flex-shrink-0" /><div className="px-2.5 py-1.5 text-[12px] text-slate-400 dark:text-white/30">Yükleniyor…</div></div></>)
     }
     if (!cache.found || cache.components.length === 0) {
-      return (<>{head}<div className="flex items-stretch"><div className="w-[180px] flex-shrink-0" /><div className="px-2.5 py-1.5 text-[12px] text-slate-400 dark:text-white/30">Bileşen bulunamadı (kaydedince görünür)</div></div></>)
+      return (<>{head}<div className="flex items-stretch"><div className="w-[136px] flex-shrink-0" /><div className="px-2.5 py-1.5 text-[12px] text-slate-400 dark:text-white/30">Bileşen bulunamadı (kaydedince görünür)</div></div></>)
     }
     return (
       <>
@@ -497,7 +497,7 @@ export default function CalibraLineItemsGrid(props) {
             <div key={c.componentItemId != null ? c.componentItemId : i}
                  className="flex items-stretch bg-indigo-50/25 dark:bg-indigo-500/[0.03] border-t border-slate-100 dark:border-white/[0.04]">
               {/* Aksiyon seridi — kit bileseninde BOS (salt okunur, buton yok) */}
-              <div className="w-[180px] flex-shrink-0 flex items-center pl-6 border-r border-slate-100 dark:border-white/[0.04]">
+              <div className="w-[136px] flex-shrink-0 flex items-center pl-6 border-r border-slate-100 dark:border-white/[0.04]">
                 <span className="text-indigo-400 dark:text-indigo-300/70 text-[11px] select-none" aria-hidden="true">↳</span>
               </div>
               {columns.map(function (col) {
@@ -2800,7 +2800,7 @@ export default function CalibraLineItemsGrid(props) {
           <div style={{ minWidth: 'max-content' }}>
             {/* Başlık satırı — kolon genişlikleri gövde hücreleriyle AYNI widthCss(). */}
             <div className="clg-table-head flex items-stretch border-b border-slate-200 bg-slate-50/70 dark:border-white/[0.08] dark:bg-white/[0.03]">
-              <div className="w-[180px] flex-shrink-0 flex items-center justify-center px-2 py-2 text-[10px] font-bold tracking-wide text-slate-500 dark:text-white/40 border-r border-slate-100 dark:border-white/[0.06]">
+              <div className="w-[136px] flex-shrink-0 flex items-center justify-center px-2 py-2 text-[10px] font-bold tracking-wide text-slate-500 dark:text-white/40 border-r border-slate-100 dark:border-white/[0.06]">
                 İşlemler
               </div>
               {columns.map(function (col) {
@@ -2881,7 +2881,7 @@ export default function CalibraLineItemsGrid(props) {
                             yalnızca dış yerleşim dikey (grid-area) yerine sabit-genişlik yatay şerit.
                             140px → 180px + her buton flex-shrink-0 (2026-08-19 review bulgu 4 — 5 buton
                             5×28px + gap'lerle 140px'te ezilip taşıyordu). */}
-                        <div className="w-[180px] flex-shrink-0 flex items-center justify-center gap-1 border-r border-slate-100 dark:border-white/[0.04]">
+                        <div className="w-[136px] flex-shrink-0 flex items-center justify-center gap-1 border-r border-slate-100 dark:border-white/[0.04]">
                           {/* 2026-08-22 (kullanici istegi): KIT rozeti Malzeme Kodu
                               hucresinin sag ustundeydi ve REHBER (buyutec) butonuyla
                               ust uste biniyordu. Satirin EN BASINA, Islemler seridinin
@@ -2907,7 +2907,7 @@ export default function CalibraLineItemsGrid(props) {
                                 pos: { top: rect.bottom + 4, left: rect.left, width: 200 },
                               })
                             }}
-                            className="w-7 h-7 flex-shrink-0 rounded-lg flex items-center justify-center transition-colors text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:text-white/30 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10"
+                            className="w-6 h-6 flex-shrink-0 rounded-md flex items-center justify-center transition-colors text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:text-white/30 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10"
                             title="Kisayollar / satir islemleri"
                             aria-label="Kisayol menusu"
                             aria-haspopup="menu"
@@ -2959,7 +2959,7 @@ export default function CalibraLineItemsGrid(props) {
                                   setExtrasModalRow(row)
                                 }}
                                 disabled={disabled}
-                                className={'w-7 h-7 flex-shrink-0 rounded-lg flex items-center justify-center transition-colors ' + colorClass}
+                                className={'w-6 h-6 flex-shrink-0 rounded-md flex items-center justify-center transition-colors ' + colorClass}
                                 title={disabled
                                   ? 'Once kilidi acin'
                                   : (isInvalid
@@ -2978,7 +2978,7 @@ export default function CalibraLineItemsGrid(props) {
                               if (canDelete(row)) handleDeleteRow(row._uid)
                             }}
                             disabled={!canDelete(row)}
-                            className={'w-7 h-7 flex-shrink-0 rounded-lg flex items-center justify-center transition-colors ' + (
+                            className={'w-6 h-6 flex-shrink-0 rounded-md flex items-center justify-center transition-colors ' + (
                               !canDelete(row)
                                 ? 'text-slate-300 dark:text-white/15 cursor-not-allowed'
                                 : 'text-rose-500 hover:text-white hover:bg-rose-500 dark:text-rose-400 dark:hover:text-white dark:hover:bg-rose-500'

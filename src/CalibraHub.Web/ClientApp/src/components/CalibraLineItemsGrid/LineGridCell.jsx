@@ -957,6 +957,13 @@ function CombinationLookupCell(props) {
 
   // ── Compact (action-column) mode ──
   if (compact) {
+    /* 2026-08-22 (kullanici istegi: "islemler butonlari daha kompact olsun"):
+       Malzemede kombinasyon takibi YOKSA bu buton hicbir sey yapmiyor ama satirda
+       yer kapliyor ve KILIT ikonuyla ciziliyordu — kullanici bunu "kilitleme
+       islemi" sandi. Aksiyonu olmayan bir ikon serit isgal etmemeli: takip kapali
+       ise hic render edilmez. Malzeme henuz secilmemisse buton KALIR (yakinda
+       aktif olacak, yer korunur → ikonlar satirdan satira kaymaz). */
+    if (!trackable) return null
     var disabled = !trackable || !materialCode
     var disabledTitle = !trackable
       ? 'Bu malzemede kombinasyon takibi yok'
