@@ -84,6 +84,9 @@ public static class MenuDefinition
             settingsChildren.Add(
                 new("settings.gateadmin",   isEn ? "System Management"   : "Sistem Yönetimi",         "ShieldCheck", "/Gate", null,
                     MatchPath: "/Gate"));
+            settingsChildren.Add(
+                new("settings.errorlog",    isEn ? "Error Logs"          : "Hata Logları",             "FileWarning", "/Admin/ErrorLog", null,
+                    MatchPath: "/Admin/ErrorLog"));
         }
 
         return new List<MenuNode>

@@ -328,7 +328,11 @@ public sealed class HealthCheckController : Controller
     private async Task<SqlConnection?> TryOpenAsync(CancellationToken ct)
     {
         try { return await _connectionFactory.OpenConnectionAsync(ct); }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[HealthCheck] Altyapı bağlantısı açılamadı.");
+            return null;
+        }
     }
 
     // StreamTestCompany için: test şirketinin connection string'i ile aç (mevcut şirket değil)
@@ -430,6 +434,7 @@ public sealed class HealthCheckController : Controller
             result.DurationMs = (int)sw.ElapsedMilliseconds;
             result.Status = "exception";
             result.ErrorSnippet = "İşlem sırasında bir hata oluştu.";
+            _logger.LogError(ex, "[HealthCheck] {Path} kontrolü sırasında hata.", target.Path);
         }
         return result;
     }
@@ -485,7 +490,7 @@ public sealed class HealthCheckController : Controller
             {
                 await WriteFrameAsync(new { type = "setup_step", step = 1, total = stepTotal, message = stepLabels[0] }, ct);
                 var newDbName = $"CalibraTest_{now:ddMMyyHHmm}";
-                var (newConnStr, dbError) = await CreateTestDatabaseAsync(connectionString, newDbName, ct);
+                var (newConnStr, dbError) = await CreateTestDatabaseAsync(connectionString, newDbName, _logger, ct);
                 if (dbError != null)
                 {
                     await WriteFrameAsync(new { type = "setup_error", message = $"Veritabanı oluşturulamadı: {dbError}" }, ct);
@@ -552,6 +557,7 @@ public sealed class HealthCheckController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[StreamTestCompany] Test ortamı oluşturulamadı.");
             await WriteFrameAsync(new { type = "setup_error", message = $"Ortam oluşturulamadı: {ex.Message}" }, ct);
             return;
         }
@@ -852,7 +858,7 @@ public sealed class HealthCheckController : Controller
     /// DB adı alphanumerik+alt_çizgi olduğundan doğrudan identifier olarak kullanılabilir.
     /// </summary>
     private static async Task<(string NewConnectionString, string? Error)> CreateTestDatabaseAsync(
-        string? templateConnectionString, string dbName, CancellationToken ct)
+        string? templateConnectionString, string dbName, ILogger logger, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(templateConnectionString))
             return (string.Empty, "Kaynak şirketin bağlantı bilgisi bulunamadı");
@@ -879,6 +885,7 @@ public sealed class HealthCheckController : Controller
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "[HealthCheck] Test veritabanı oluşturulamadı: {DbName}", dbName);
             return (string.Empty, ex.Message);
         }
     }

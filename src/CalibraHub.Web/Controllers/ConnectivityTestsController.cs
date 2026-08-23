@@ -18,10 +18,14 @@ namespace CalibraHub.Web.Controllers;
 public sealed class ConnectivityTestsController : Controller
 {
     private readonly IAdminManagementService _adminManagementService;
+    private readonly ILogger<ConnectivityTestsController> _logger;
 
-    public ConnectivityTestsController(IAdminManagementService adminManagementService)
+    public ConnectivityTestsController(
+        IAdminManagementService adminManagementService,
+        ILogger<ConnectivityTestsController> logger)
     {
         _adminManagementService = adminManagementService;
+        _logger = logger;
     }
 
     /// <summary>AJAX (JSON) SMTP test — CompanySettings sayfasindaki "Test Et" butonu cagirir.</summary>
@@ -40,6 +44,7 @@ public sealed class ConnectivityTestsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ConnectivityTests] SMTP bağlantı testi başarısız.");
             return Json(new { isSuccess = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -66,6 +71,7 @@ public sealed class ConnectivityTestsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ConnectivityTests] DB bağlantı testi başarısız.");
             return Json(new { success = false, message = $"Baglanti kurulamadi: {"İşlem sırasında bir hata oluştu."}" });
         }
     }

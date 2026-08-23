@@ -256,6 +256,88 @@ public sealed class AdminController : Controller
         return View(viewModel);
     }
 
+    /// <summary>
+    /// Yazılım/DB hata logları izleme ekranı (React ErrorLog, AuditMonitor deseni).
+    /// Veri /Admin/ErrorLogData'dan gelir. SystemAdmin-only (dev/sistem bucket — CLAUDE.md
+    /// "DepartmentManager Rolü" bölümü: SetupDefinitions admin'e açılmaz).
+    /// </summary>
+    [HttpGet]
+    [PermissionScope(FormCodes.SetupDefinitions)]
+    public IActionResult ErrorLog()
+    {
+        SetActiveMenu("error-log");
+        return View();
+    }
+
+    /// <summary>
+    /// Hata log arama JSON endpoint'i. <paramref name="from"/>/<paramref name="to"/> yerel gün
+    /// (yyyy-MM-dd); boşsa son 7 gün. <paramref name="level"/>: all|error|critical.
+    /// </summary>
+    [HttpGet]
+    [PermissionScope(FormCodes.SetupDefinitions)]
+    public async Task<IActionResult> ErrorLogData(
+        DateTime? from, DateTime? to, string? level, string? q,
+        int page = 1, int pageSize = 50, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var (fromUtc, toUtc) = NormalizeErrorLogRange(from, to);
+            var normalizedLevel = string.IsNullOrWhiteSpace(level) || string.Equals(level, "all", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : level.Trim();
+
+            var result = await _errorLogQuery.SearchAsync(
+                new CalibraHub.Application.Diagnostics.SystemErrorSearchRequest(
+                    fromUtc, toUtc, normalizedLevel, string.IsNullOrWhiteSpace(q) ? null : q.Trim(), page, pageSize),
+                cancellationToken);
+
+            return Json(new
+            {
+                ok = true,
+                total = result.Total,
+                page,
+                pageSize,
+                entries = result.Items.Select(e => new
+                {
+                    id = e.Id,
+                    timestampUtc = e.TimestampUtc,
+                    level = e.Level,
+                    category = e.Category,
+                    source = e.Source,
+                    message = e.Message,
+                    exceptionType = e.ExceptionType,
+                    exceptionMessage = e.ExceptionMessage,
+                    stackTrace = e.StackTrace,
+                    requestPath = e.RequestPath,
+                    userName = e.UserName,
+                    companyId = e.CompanyId,
+                }),
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ErrorLogData] Hata log sorgusu başarısız. from={From} to={To} level={Level}",
+                from, to, level);
+            return Json(new { ok = false, message = "İşlem sırasında bir hata oluştu." });
+        }
+    }
+
+    /// <summary>
+    /// Yerel gün girdilerini (tarih) UTC aralığına çevirir; boşsa son 7 gün. Dönen aralık:
+    /// FromUtc dahil, ToUtc HARİÇ (AuditLogController.NormalizeRange ile aynı desen).
+    /// </summary>
+    private static (DateTime FromUtc, DateTime ToUtc) NormalizeErrorLogRange(DateTime? from, DateTime? to)
+    {
+        var localTo = (to ?? DateTime.Now.Date).Date;
+        var localFrom = (from ?? localTo.AddDays(-6)).Date;
+        if (localFrom > localTo) (localFrom, localTo) = (localTo, localFrom);
+        if ((localTo - localFrom).TotalDays > 400) localFrom = localTo.AddDays(-400);
+
+        var fromUtc = DateTime.SpecifyKind(localFrom, DateTimeKind.Local).ToUniversalTime();
+        var toUtc = DateTime.SpecifyKind(localTo.AddDays(1), DateTimeKind.Local).ToUniversalTime();
+        return (fromUtc, toUtc);
+    }
+
     [HttpGet]
     [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> ProjectInstructions(CancellationToken cancellationToken)
