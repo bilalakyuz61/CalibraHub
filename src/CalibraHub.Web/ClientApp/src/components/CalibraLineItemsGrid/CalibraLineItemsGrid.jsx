@@ -2868,6 +2868,22 @@ export default function CalibraLineItemsGrid(props) {
                             140px → 180px + her buton flex-shrink-0 (2026-08-19 review bulgu 4 — 5 buton
                             5×28px + gap'lerle 140px'te ezilip taşıyordu). */}
                         <div className="w-[180px] flex-shrink-0 flex items-center justify-center gap-1 border-r border-slate-100 dark:border-white/[0.04]">
+                          {/* 2026-08-22 (kullanici istegi): KIT rozeti Malzeme Kodu
+                              hucresinin sag ustundeydi ve REHBER (buyutec) butonuyla
+                              ust uste biniyordu. Satirin EN BASINA, Islemler seridinin
+                              onune alindi — salt bilgi, tiklanmaz. Kit olmayan
+                              satirlarda ayni genislikte BOS yer tutulur ki aksiyon
+                              ikonlari satirdan satira kaymasin. */}
+                          <span
+                            className={'flex-shrink-0 w-[26px] text-center text-[9px] font-bold tracking-wide select-none ' + (
+                              (row.isKit === true || isKitHeader)
+                                ? 'text-indigo-600 dark:text-indigo-300'
+                                : 'opacity-0 pointer-events-none')}
+                            title={row.isKit === true
+                              ? 'Kit satırı — bileşenler için İşlemler ▸ Detay Göster'
+                              : (isKitHeader ? 'Kit — bileşenleri aşağıda listelenir' : undefined)}
+                            aria-hidden={!(row.isKit === true || isKitHeader)}
+                          >KİT</span>
                           <button
                             type="button"
                             onClick={function (e) {
@@ -2987,24 +3003,8 @@ export default function CalibraLineItemsGrid(props) {
                                   title="Kit bileseni"
                                 >↳</span>
                               )}
-                              {isMaterialCell && isKitHeader && (
-                                <span
-                                  className="absolute right-1 top-1 inline-flex items-center rounded px-1 py-[1px] text-[9px] font-bold tracking-wide bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 pointer-events-none select-none"
-                                  style={{ zIndex: 2 }}
-                                  title="Kit — bilesenleri asagida listelenir"
-                                >KİT</span>
-                              )}
                               {/* NORMAL teklif/siparis kit satiri (Faz 4a patlatmasindan bagimsiz,
                                   isKitHeader'dan AYRI) — tiklanabilir rozet, bilesen dokumunu ac/kapa. */}
-                              {/* 2026-08-22: rozet artik SALT BILGI — ac/kapa satirin
-                                  Islemler (⋯) menusundeki "Detay Göster" ile yapilir. */}
-                              {isMaterialCell && row.isKit === true && (
-                                <span
-                                  style={{ zIndex: 3 }}
-                                  className="absolute right-1 top-1 inline-flex items-center rounded px-1 py-[1px] text-[9px] font-bold tracking-wide select-none bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 pointer-events-none"
-                                  title="Kit satırı — bileşenler için İşlemler ▸ Detay Göster"
-                                >KİT</span>
-                              )}
                               {__cellBeh.behReqNow && !__cellBeh.hidden && (
                                 <span
                                   className="absolute left-0.5 top-0.5 text-[11px] font-bold leading-none text-rose-500 dark:text-rose-400 pointer-events-none select-none"
