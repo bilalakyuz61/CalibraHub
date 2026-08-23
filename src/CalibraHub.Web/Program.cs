@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Integrations;
+﻿using CalibraHub.Application.Abstractions.Integrations;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
@@ -125,6 +125,31 @@ builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Messaging.IMes
 builder.Services.AddScoped<CalibraHub.Application.Services.Messaging.WhatsAppInboundProcessor>();
 builder.Services.AddHostedService<CalibraHub.Application.Services.Messaging.WhatsAppInboxPollingService>();
 builder.Services.AddHostedService<CalibraHub.Application.Workflow.WorkflowTimeoutEscalationJob>();
+
+// ── Arka plan gorevleri (BUILTIN worker'lar) ────────────────────────────────
+// Uretimde bunlar ayri bir Windows Servisi (CalibraHub.Worker) tarafindan kosulur.
+// Gelistirmede o servis ayaga kalkmadigi icin kur guncelleme, hatirlatici, SLA taramasi,
+// belge ice aktarimi ve scheduler polling HIC calismiyordu — zamanlanmis gorevlerin
+// calisma gecmisi de bos kaliyordu. Artik proje calistirildiginda web host icinde de
+// kosuyorlar.
+//
+// AYNI ANDA IKI YERDE KOSMAMALI: Windows Servisi kuruluysa bu host icindekiler mukerrer
+// bildirim/aktarim uretir. Bu yuzden varsayilan yalnizca Development'ta acik; uretim
+// kurulumunda `Worker:RunInWebHost` false birakilir (servis isi devralir). Aksi bir
+// kurulum isteniyorsa deger appsettings'ten acikca verilir.
+var runWorkersInWebHost = builder.Configuration.GetValue<bool?>("Worker:RunInWebHost")
+                          ?? builder.Environment.IsDevelopment();
+if (runWorkersInWebHost)
+{
+    builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IReminderEmailSender,
+                               CalibraHub.Infrastructure.Notifications.SmtpReminderEmailSender>();
+    builder.Services.AddHostedService<CalibraHub.Worker.ScheduledTaskPollingWorker>();
+    builder.Services.AddHostedService<CalibraHub.Worker.ExchangeRateUpdateWorker>();
+    builder.Services.AddHostedService<CalibraHub.Worker.ReminderNotificationWorker>();
+    builder.Services.AddHostedService<CalibraHub.Worker.AssetMaintenanceReminderWorker>();
+    builder.Services.AddHostedService<CalibraHub.Worker.SlaCheckerWorker>();
+    builder.Services.AddHostedService<CalibraHub.Worker.DocumentImportWorker>();
+}
 builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IMachineIdProvider,
                               CalibraHub.Infrastructure.Security.WindowsMachineIdProvider>();
 builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.INoteOcrService,

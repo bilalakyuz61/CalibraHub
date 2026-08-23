@@ -1,9 +1,12 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
     <ProjectReference Include="..\CalibraHub.Application\CalibraHub.Application.csproj" />
     <ProjectReference Include="..\CalibraHub.Persistence\CalibraHub.Persistence.csproj" />
     <ProjectReference Include="..\CalibraHub.Infrastructure\CalibraHub.Infrastructure.csproj" />
+    <!-- Arka plan gorevleri (BUILTIN worker'lar) gelistirmede web host icinde de calissin diye;
+         uretimde Worker ayri bir Windows Servisi olarak kosar (bkz. Program.cs Worker:RunInWebHost). -->
+    <ProjectReference Include="..\CalibraHub.Worker\CalibraHub.Worker.csproj" />
   </ItemGroup>
 
   <ItemGroup>

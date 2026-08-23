@@ -1432,7 +1432,21 @@ export default function CalibraLineItemsGrid(props) {
         if (__tlCol) {
           var __rate = exchangeRate || 0
           var __tl = _num(newValue)
-          if (__rate > 0 && __tl != null) next[__tlCol.sourceKey] = __tl / __rate
+          if (__rate > 0 && __tl != null) {
+            /* 2026-08-22 (kullanici bildirimi): TL/kur bolmesi ham float birakiyordu
+               (85,7528644869572...). Hucreye tiklayinca ekranda GORUNENDEN cok daha
+               fazla ondalik cikiyordu; kaydedilen deger de o ham sayiydi.
+               Kaynak kolonun (unitPrice) COZUMLENMIS ondalik hassasiyetine yuvarlanir
+               — hassasiyet allColumns'ta decimalCfg'den zaten cozulmus durumda
+               (resolveColumnDecimals), burada yeniden tahmin edilmez. */
+            var __srcCol = null
+            for (var __j = 0; __j < allColumns.length; __j++) {
+              if (allColumns[__j].key === __tlCol.sourceKey) { __srcCol = allColumns[__j]; break }
+            }
+            var __p = (__srcCol && __srcCol.precision != null) ? __srcCol.precision : 4
+            var __f = Math.pow(10, __p)
+            next[__tlCol.sourceKey] = Math.round((__tl / __rate) * __f + Number.EPSILON) / __f
+          }
           // applyComputed ZORUNLU: satir toplami vb. turetilmis alanlar bu adimda
           // hesaplaniyor. Erken `return next` ilk denemede bunu atliyordu →
           // TL fiyat degisince satir toplami eski kaliyordu (sessiz kirik).
