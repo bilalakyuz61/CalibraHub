@@ -11,6 +11,7 @@ using CalibraHub.Persistence.Options;
 using CalibraHub.Web.Models.Diagnostics;
 using CalibraHub.Web.Models.Navigation;
 using CalibraHub.Web.Services;
+using CalibraHub.Web.Services.FunctionalTests;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
@@ -35,6 +36,7 @@ public sealed class HealthCheckController : Controller
     private readonly IDepartmentRepository _departmentRepository;
     private readonly CalibraDatabaseInitializer _dbInitializer;
     private readonly SqlServerConnectionFactory _connectionFactory;
+    private readonly CalibraHub.Application.Abstractions.Persistence.IDocumentTypeRepository _documentTypeRepo;
     private readonly string _schema;
 
     public HealthCheckController(
@@ -47,6 +49,7 @@ public sealed class HealthCheckController : Controller
         IDepartmentRepository departmentRepository,
         CalibraDatabaseInitializer dbInitializer,
         SqlServerConnectionFactory connectionFactory,
+        CalibraHub.Application.Abstractions.Persistence.IDocumentTypeRepository documentTypeRepo,
         CalibraDatabaseOptions dbOptions)
     {
         _httpFactory = httpFactory;
@@ -58,6 +61,7 @@ public sealed class HealthCheckController : Controller
         _departmentRepository = departmentRepository;
         _dbInitializer = dbInitializer;
         _connectionFactory = connectionFactory;
+        _documentTypeRepo = documentTypeRepo;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
@@ -606,6 +610,135 @@ public sealed class HealthCheckController : Controller
         catch (Exception ex)
         {
             await WriteFrameAsync(new { type = "setup_error", message = $"Test sırasında hata: {ex.Message}" }, ct);
+        }
+    }
+
+    /// <summary>
+    /// Fonksiyon testleri — ticari (Faz 1) / üretim / kalite senaryolarını gerçek HTTP uçlarına
+    /// istek atarak çalıştırır (bkz. Services/FunctionalTests/). NDJSON frame tipleri:
+    ///   fn_start(total, groups) | fn_step(index,total,key,group,label) |
+    ///   fn_result(index,total,key,group,label,ok,skipped,durationMs,message,steps[]) |
+    ///   fn_done(passed,failed,skipped) | fn_error(message)
+    ///
+    /// GÜVENLİK KİLİDİ (zorunlu, sunucu tarafı): yalnız oturumdaki şirket TEST_ önekli bir test
+    /// şirketiyse çalışır. Testler gerçek belge/stok hareketi yazar — canlı şirkette ASLA
+    /// çalıştırılamaz. Bu kontrol tek koruma katmanıdır; arayüz ayrıca gizleyebilir ama asıl
+    /// zorlama burasıdır (aynı desen: SalesController.ChangeQuoteStatus governance kontrolü).
+    /// </summary>
+    /// <summary>
+    /// Iki baglanti dizesi ayni sunucu+veritabanini mi gosteriyor? Cozulemezse (bozuk/bos dize)
+    /// TRUE doner — fail-closed: emin olamadigimiz durumda testleri calistirmayiz.
+    /// </summary>
+    private static bool SameDatabase(string? a, string? b)
+    {
+        if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b)) return true;
+        try
+        {
+            var ba = new SqlConnectionStringBuilder(a);
+            var bb = new SqlConnectionStringBuilder(b);
+            return string.Equals(ba.InitialCatalog?.Trim(), bb.InitialCatalog?.Trim(), StringComparison.OrdinalIgnoreCase)
+                && string.Equals(ba.DataSource?.Trim(), bb.DataSource?.Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (ArgumentException)
+        {
+            return true;
+        }
+    }
+
+    [HttpPost("/Admin/HealthCheck/StreamFunctionalTests")]
+    [ValidateAntiForgeryToken]
+    public async Task StreamFunctionalTests([FromQuery] string? groups, CancellationToken ct)
+    {
+        Response.ContentType = "application/x-ndjson; charset=utf-8";
+        Response.Headers.CacheControl = "no-cache";
+        Response.Headers["X-Accel-Buffering"] = "no";
+        Response.StatusCode = 200;
+
+        string? companyName;
+        string? sharedWithLiveCompany = null;
+        try
+        {
+            int.TryParse(User.FindFirst("company_id")?.Value, out var currentCompanyId);
+            var company = currentCompanyId > 0 ? await _companyRepository.GetByIdAsync(currentCompanyId, ct) : null;
+            companyName = company?.Name;
+
+            // "TEST_" adi TEK BASINA yeterli DEGIL: "Test Sirketi Olustur" akisi yeni DB
+            // olusturulmadan calistirildiginda test sirketi MEVCUT (canli) sirketin baglanti
+            // dizesini devralir — ayni veritabanina bakar. Bu durumda testlerin yazdigi belge
+            // ve stok hareketleri CANLI veriye duser. Bu yuzden test sirketinin veritabanini
+            // TEST olmayan bir sirket de kullaniyorsa calistirma reddedilir (fail-closed).
+            if (company is not null)
+            {
+                var all = await _companyRepository.GetAllAsync(ct);
+                sharedWithLiveCompany = all
+                    .Where(c => c.Id != company.Id
+                                && !(c.Name ?? string.Empty).StartsWith("TEST_", StringComparison.Ordinal)
+                                && SameDatabase(c.DatabaseConnectionString, company.DatabaseConnectionString))
+                    .Select(c => c.Name)
+                    .FirstOrDefault();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[StreamFunctionalTests] Şirket bilgisi okunamadı — güvenlik kilidi fail-closed.");
+            await WriteFrameAsync(new { type = "fn_error", message = "Şirket bilgisi doğrulanamadı — işlem güvenlik nedeniyle durduruldu." }, ct);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(companyName) || !companyName.StartsWith("TEST_", StringComparison.Ordinal))
+        {
+            await WriteFrameAsync(new
+            {
+                type = "fn_error",
+                message = "Fonksiyon testleri yalnız 'TEST_' önekli test şirketlerinde çalıştırılabilir " +
+                           $"(mevcut şirket: {(string.IsNullOrWhiteSpace(companyName) ? "bilinmiyor" : companyName)}). " +
+                           "Önce 'Test Şirketi Oluştur' akışıyla izole bir test şirketine geçin.",
+            }, ct);
+            return;
+        }
+
+        if (sharedWithLiveCompany is not null)
+        {
+            _logger.LogWarning("[StreamFunctionalTests] Test sirketi '{Test}' canli sirket '{Live}' ile ayni veritabanini paylasiyor — reddedildi.",
+                companyName, sharedWithLiveCompany);
+            await WriteFrameAsync(new
+            {
+                type = "fn_error",
+                message = $"Bu test şirketi '{sharedWithLiveCompany}' şirketiyle AYNI veritabanını kullanıyor; testler gerçek belge ve " +
+                          "stok hareketi yazdığı için çalıştırma durduruldu. Test şirketini 'Yeni Veritabanı Oluştur' seçeneğiyle kurun.",
+            }, ct);
+            return;
+        }
+
+        var req = _httpContextAccessor.HttpContext!.Request;
+        var baseUrl = $"{req.Scheme}://{req.Host}";
+        var cookieHeader = string.Join("; ", req.Cookies.Select(c => $"{c.Key}={c.Value}"));
+
+        var (httpClient, clientError) = await FunctionalTestHttpClient.CreateAsync(baseUrl, cookieHeader, ct);
+        if (httpClient == null)
+        {
+            await WriteFrameAsync(new { type = "fn_error", message = "Test HTTP istemcisi kurulamadı: " + clientError }, ct);
+            return;
+        }
+
+        IReadOnlyCollection<string>? groupList = string.IsNullOrWhiteSpace(groups)
+            ? null
+            : groups.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        try
+        {
+            var ctx = new FunctionalTestContext(httpClient, _documentTypeRepo);
+            var runner = new FunctionalTestRunner(FunctionalTestScenarioRegistry.BuildAll());
+            await runner.RunAsync(groupList, ctx, (frame, frameCt) => WriteFrameAsync(frame, frameCt), ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[StreamFunctionalTests] Test çalıştırma sırasında beklenmeyen hata.");
+            await WriteFrameAsync(new { type = "fn_error", message = "Test çalıştırma sırasında beklenmeyen bir hata oluştu." }, ct);
+        }
+        finally
+        {
+            httpClient.Dispose();
         }
     }
 

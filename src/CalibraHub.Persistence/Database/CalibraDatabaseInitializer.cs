@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Services;
+﻿using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Security;
 using CalibraHub.Application.Ui;
@@ -8281,19 +8281,6 @@ END;";
                         [InsertNew]      BIT NOT NULL CONSTRAINT [DF_DataImportJob_InsNew]   DEFAULT(1);
             END;
 
-            IF COL_LENGTH(N'[{s}].[DataImportRun]', 'RowsSkipped') IS NULL
-            BEGIN
-                ALTER TABLE [{s}].[DataImportRun]
-                    ADD [RowsSkipped] INT NOT NULL CONSTRAINT [DF_DataImportRun_Skipped] DEFAULT(0);
-            END;
-
-            IF COL_LENGTH(N'[{s}].[DataImportRun]', 'RowsDeactivated') IS NULL
-            BEGIN
-                ALTER TABLE [{s}].[DataImportRun]
-                    ADD [RowsDeactivated] INT NOT NULL
-                        CONSTRAINT [DF_DataImportRun_Deact] DEFAULT(0);
-            END;
-
             IF OBJECT_ID(N'[{s}].[DataImportJobColumn]', N'U') IS NULL
             BEGIN
                 CREATE TABLE [{s}].[DataImportJobColumn]
@@ -8325,6 +8312,8 @@ END;";
                     [RowsInserted]        INT           NOT NULL CONSTRAINT [DF_DataImportRun_Ins]      DEFAULT(0),
                     [RowsUpdated]         INT           NOT NULL CONSTRAINT [DF_DataImportRun_Upd]      DEFAULT(0),
                     [RowsFailed]          INT           NOT NULL CONSTRAINT [DF_DataImportRun_Fail]     DEFAULT(0),
+                    [RowsSkipped]         INT           NOT NULL CONSTRAINT [DF_DataImportRun_Skipped] DEFAULT(0),
+                    [RowsDeactivated]     INT           NOT NULL CONSTRAINT [DF_DataImportRun_Deact]   DEFAULT(0),
                     [ErrorMessage]        NVARCHAR(MAX) NULL,
                     [PreProcedureResult]  NVARCHAR(MAX) NULL,
                     [PostProcedureResult] NVARCHAR(MAX) NULL,
@@ -8333,6 +8322,24 @@ END;";
                 -- Is silinse bile calistirma tarihcesi KALIR (FK yok, bilincli).
                 CREATE INDEX [IX_DataImportRun_Job_Started]
                     ON [{s}].[DataImportRun]([JobId], [StartedAt] DESC);
+            END;
+
+            -- Mevcut DB'ler icin ek kolonlar. CREATE'ten SONRA calismali: onceki surumde
+            -- bu iki ALTER blogu CREATE'ten ONCE duruyordu ve COL_LENGTH olmayan TABLO icin
+            -- de NULL dondugu icin guard geciyordu -> sifirdan kurulan veritabani
+            -- "Cannot find the object DataImportRun" ile COKUYORDU. Kolonlar ayrica CREATE
+            -- listesine de eklendi; fresh DB'de bu bloklar artik no-op.
+            IF COL_LENGTH(N'[{s}].[DataImportRun]', 'RowsSkipped') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[DataImportRun]
+                    ADD [RowsSkipped] INT NOT NULL CONSTRAINT [DF_DataImportRun_Skipped] DEFAULT(0);
+            END;
+
+            IF COL_LENGTH(N'[{s}].[DataImportRun]', 'RowsDeactivated') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[DataImportRun]
+                    ADD [RowsDeactivated] INT NOT NULL
+                        CONSTRAINT [DF_DataImportRun_Deact] DEFAULT(0);
             END;
             """;
         await using var cmd = connection.CreateCommand();
