@@ -171,7 +171,14 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             FROM [{_schema}].[DocumentLineKitComponent] s
             LEFT JOIN [{_schema}].[Items] ci ON ci.[Id] = s.[ComponentItemId]
             LEFT JOIN [{_schema}].[ItemConfiguration] cfg ON cfg.[Id] = s.[ConfigId]
-            LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = ci.[UnitId]
+            -- 2026-08-22: birim once malzemenin VARSAYILAN birimi (Items.UnitId),
+            -- o bos ise malzemenin birim listesindeki ILK satir (ItemUnits, LineNo
+            -- sirasi = taban birim). Kit recetesi birim tasimaz (ItemKitLine'da
+            -- kolon yok), tek kaynak malzemenin kendi birimidir.
+            LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = COALESCE(
+                ci.[UnitId],
+                (SELECT TOP 1 iu.[UnitId] FROM [{_schema}].[ItemUnits] iu
+                  WHERE iu.[ItemId] = ci.[Id] ORDER BY iu.[LineNo]))
             WHERE s.[DocumentLineId] = @L
             ORDER BY s.[Id];
             """;

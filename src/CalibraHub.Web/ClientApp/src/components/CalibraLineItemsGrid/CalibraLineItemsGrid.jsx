@@ -451,19 +451,33 @@ export default function CalibraLineItemsGrid(props) {
      Simdi her bilesen normal bir satir gibi cizilir: ayni kolon genislikleri
      (widthCss), degerler kendi sutununda. Fark: aksiyon serididir (••• / kilit /
      ⚙ / sil) BOSTUR ve satir salt-okunurdur. */
-  function kitComponentCellValue(col, c) {
+  /* kitQty — kit satirinin miktari (1'e duser). DocumentLineKitComponent
+     SET BASINA receteyi saklar (bkz. DocumentService.ReplaceKitSnapshotAsync →
+     src.Components, kit miktariyla CARPILMAZ). Kullanici istegi 2026-08-22:
+     "kit miktari 2 ise her bilesen miktari 2 birim kullanilmali" → gosterimde
+     carpilir. Birim FIYAT carpilmaz (fiyat birim basinadir); satir toplami ise
+     miktara bagli oldugu icin carpilir. */
+  function kitQtyOf(row) {
+    var q = row && row.quantity
+    var n = typeof q === 'number' ? q : parseFloat(String(q == null ? '' : q).replace(',', '.'))
+    return (isNaN(n) || n <= 0) ? 1 : n
+  }
+
+  function kitComponentCellValue(col, c, kitQty) {
+    var qty = (c.quantity || 0) * (kitQty || 1)
+    var total = c.lineTotal != null ? c.lineTotal * (kitQty || 1) : null
     switch (col.key) {
       case 'materialCode': return c.code || ''
       case 'materialName': return c.name || ''
       case 'unit':         return c.unit || ''
-      case 'quantity':     return TR_FMT(c.quantity, col.precision != null ? col.precision : 4)
+      case 'quantity':     return TR_FMT(qty, col.precision != null ? col.precision : 4)
       case 'unitPrice':    return c.unitPrice != null ? TR_FMT(c.unitPrice, col.precision != null ? col.precision : 4) : ''
-      case 'lineTotal':    return c.lineTotal != null ? TR_FMT(c.lineTotal, col.precision != null ? col.precision : 4) : ''
+      case 'lineTotal':    return total != null ? TR_FMT(total, col.precision != null ? col.precision : 4) : ''
       default: break
     }
     // TL aynalari — kaynak alanin kur ile carpimi (tlCellValue ile ayni kural).
     if (col.tlMirror) {
-      var src = col.sourceKey === 'unitPrice' ? c.unitPrice : (col.sourceKey === 'lineTotal' ? c.lineTotal : null)
+      var src = col.sourceKey === 'unitPrice' ? c.unitPrice : (col.sourceKey === 'lineTotal' ? total : null)
       if (src == null) return ''
       return TR_FMT(src * (exchangeRate || 1), col.precision != null ? col.precision : 2)
     }
@@ -501,7 +515,7 @@ export default function CalibraLineItemsGrid(props) {
                 <span className="text-indigo-400 dark:text-indigo-300/70 text-[11px] select-none" aria-hidden="true">↳</span>
               </div>
               {columns.map(function (col) {
-                var v = kitComponentCellValue(col, c)
+                var v = kitComponentCellValue(col, c, kitQtyOf(row))
                 var alignCls = col.align === 'right' ? 'justify-end text-right'
                   : (col.align === 'center' ? 'justify-center text-center' : 'justify-start text-left')
                 return (
@@ -2888,16 +2902,36 @@ export default function CalibraLineItemsGrid(props) {
                               onune alindi — salt bilgi, tiklanmaz. Kit olmayan
                               satirlarda ayni genislikte BOS yer tutulur ki aksiyon
                               ikonlari satirdan satira kaymasin. */}
-                          <span
-                            className={'flex-shrink-0 w-[26px] text-center text-[9px] font-bold tracking-wide select-none ' + (
-                              (row.isKit === true || isKitHeader)
-                                ? 'text-indigo-600 dark:text-indigo-300'
-                                : 'opacity-0 pointer-events-none')}
-                            title={row.isKit === true
-                              ? 'Kit satırı — bileşenler için İşlemler ▸ Detay Göster'
-                              : (isKitHeader ? 'Kit — bileşenleri aşağıda listelenir' : undefined)}
-                            aria-hidden={!(row.isKit === true || isKitHeader)}
-                          >KİT</span>
+                          {/* 2026-08-22 (kullanici istegi): rozet yeniden TIKLANABILIR —
+                              basinca bilesen dokumu acilip kapanir. Islemler menusundeki
+                              "Detay Göster" maddesi de duruyor (iki yol, tek davranis).
+                              Kit olmayan satirlarda ayni genislikte BOS yer tutulur ki
+                              aksiyon ikonlari satirdan satira kaymasin. */}
+                          {(function () {
+                            var kitLid = (row.isKit === true && row.id != null && Number(row.id) > 0) ? Number(row.id) : null
+                            var isKitRow = row.isKit === true || isKitHeader
+                            if (!isKitRow) {
+                              return <span className="flex-shrink-0 w-[26px]" aria-hidden="true" />
+                            }
+                            var acik = kitLid != null && kitExpandedRows[kitLid] === true
+                            return (
+                              <button
+                                type="button"
+                                onClick={function (e) { e.stopPropagation(); if (kitLid) toggleKitExpand(kitLid) }}
+                                disabled={kitLid == null}
+                                className={'flex-shrink-0 w-[26px] rounded text-center text-[9px] font-bold tracking-wide select-none transition-colors ' + (
+                                  kitLid == null
+                                    ? 'text-indigo-400/60 dark:text-indigo-300/40 cursor-not-allowed'
+                                    : (acik
+                                        ? 'text-white bg-indigo-500 dark:bg-indigo-500'
+                                        : 'text-indigo-600 hover:bg-indigo-100 dark:text-indigo-300 dark:hover:bg-indigo-500/25'))}
+                                title={kitLid == null
+                                  ? 'Kaydedince bileşenler görünür'
+                                  : (acik ? 'Kit bileşenlerini gizle' : 'Kit bileşenlerini göster')}
+                                aria-expanded={acik}
+                              >KİT</button>
+                            )
+                          })()}
                           <button
                             type="button"
                             onClick={function (e) {
