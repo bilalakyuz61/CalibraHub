@@ -679,13 +679,22 @@ public sealed class DocumentService : IDocumentService
         // 2026-05-23: İhtiyaç Kaydı (alis_talebi) bir IC belge — tedarikci/musteri
         // bu asamada belli degil. Cari Kod zorunlulugu sadece diger belge tiplerinde geçerli.
         var isPurchaseRequest = false;
+        // 2026-08-22 DUZELTME: Satin Alma Talebi (satin_alma_talebi) de AYNI sinifta bir
+        // IC belgedir — tedarikci henuz belli degil; /Purchase/CreatePurchaseDemand zaten
+        // bilincli olarak ContactId/ContactName NULL gonderiyor. Muafiyet listesi yalniz
+        // 'alis_talebi' icerdigi icin bu uc HER CAGRIDA "Cari (musteri) zorunludur" ile
+        // reddediliyordu — yani Ihtiyac Kaydi'ndan Satin Alma Talebi uretmek HIC
+        // calismiyordu. (Fonksiyon testi bu hatayi acikca gosterdi.)
+        var isInternalProcurementDoc = false;
         CalibraHub.Domain.Entities.DocumentType? documentType = null;
         if (request.DocumentTypeId.HasValue)
         {
             documentType = await _documentTypeRepo.GetByIdAsync(request.DocumentTypeId.Value, ct);
             isPurchaseRequest = string.Equals(documentType?.Code, "alis_talebi", StringComparison.OrdinalIgnoreCase);
+            isInternalProcurementDoc = isPurchaseRequest
+                || string.Equals(documentType?.Code, "satin_alma_talebi", StringComparison.OrdinalIgnoreCase);
         }
-        if (!isPurchaseRequest && !resolvedContactId.HasValue && string.IsNullOrWhiteSpace(resolvedContactName))
+        if (!isInternalProcurementDoc && !resolvedContactId.HasValue && string.IsNullOrWhiteSpace(resolvedContactName))
             return (false, "Cari (musteri) zorunludur. Kalem eklemeden once cari seciniz.", null, false);
         // 2026-06-01: İhtiyaç Kaydı (alis_talebi) için Talep Eden personel zorunlu —
         // onay akışı + raporlama bu personel üzerinden ilerler. Frontend de aynı

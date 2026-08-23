@@ -102,6 +102,11 @@
         border: 1px solid rgba(148,163,184,.15);
         border-radius: 10px;
         overflow: hidden;
+        /* 2026-08-22: kap dikey FLEX + yukseklik sinirli oldugu icin satirlar
+           varsayilan `flex-shrink: 1` ile EZILIYOR (metinler ust uste biniyor,
+           satirlar kirpiliyor). Sabit yukseklik degil — icerigi kadar yer alsin
+           ve ASLA kucultulmesin; tasan kisim kabin kendi kaydirmasina gider. */
+        flex: 0 0 auto;
     }
     body.app-theme-dark .hc-step-item {
         background: rgba(30,41,59,.55);
