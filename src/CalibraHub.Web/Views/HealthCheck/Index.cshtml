@@ -217,31 +217,112 @@
         color: #ef4444; margin-top: 3px; max-width: 500px;
         white-space: pre-wrap; word-break: break-word;
     }
+
+    /* ── İki bölüm (Sayfa Kontrolleri / Fonksiyon Testleri) ────────────── */
+    .hc-block {
+        flex: 1 1 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+    .hc-divider {
+        height: 1px;
+        background: rgba(148,163,184,.18);
+        margin: 18px 0;
+        flex: 0 0 auto;
+    }
+    body.app-theme-dark .hc-divider { background: rgba(255,255,255,.08); }
+
+    .hc-section-title { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+    body.app-theme-dark .hc-section-title { color: #f1f5f9; }
+    .hc-section-sub { font-size: 12.5px; color: #64748b; margin: 0 0 16px; }
+    body.app-theme-dark .hc-section-sub { color: #94a3b8; }
+
+    .hc-fn-toolbar { flex-wrap: wrap; row-gap: 8px; }
+    .hc-fn-hint { font-size: 12px; color: #f59e0b; font-weight: 600; }
+
+    /* Fonksiyon testleri — çalışma başlamadıysa (fn_error) uyarı bandı */
+    .hc-fn-error-banner {
+        padding: 14px 16px;
+        border-radius: 10px;
+        background: rgba(239,68,68,.10);
+        border: 1px solid rgba(239,68,68,.25);
+        color: #ef4444;
+        font-size: 13px;
+        font-weight: 600;
+    }
+    body.app-theme-dark .hc-fn-error-banner {
+        background: rgba(239,68,68,.16);
+        border-color: rgba(239,68,68,.32);
+    }
 </style>
 }
 
 <div class="hc-wrap">
-    <h1 style="font-size: 22px; font-weight: 700; margin: 0 0 6px;">Sistem Sağlık Kontrolü</h1>
-    <p style="font-size: 13px; color: #64748b; margin: 0 0 20px;">
-        Tüm menü ekranlarına otomatik HTTP isteği gönderilir. 200 OK alamayan sayfalar listelenir.
-    </p>
+    <div class="hc-block">
+        <h1 style="font-size: 22px; font-weight: 700; margin: 0 0 6px;">Sistem Sağlık Kontrolü</h1>
+        <p style="font-size: 13px; color: #64748b; margin: 0 0 20px;">
+            Tüm menü ekranlarına otomatik HTTP isteği gönderilir. 200 OK alamayan sayfalar listelenir.
+        </p>
 
-    <div class="hc-toolbar">
-        <button id="hcRunBtn" class="hc-btn" type="button">
-            <span id="hcRunIcon">▶</span>
-            <span id="hcRunLabel">Kontrolleri Çalıştır</span>
-        </button>
-        <label class="hc-switch-label" title="Etkinleştirilirse mevcut sunucuda yeni bir test DB'si oluşturulur, içi sıfırdan doldurulur">
-            <span class="hc-switch-track">
-                <input type="checkbox" id="hcNewDb" class="hc-switch-input">
-                <span class="hc-switch-thumb"></span>
-            </span>
-            <span class="hc-switch-text">Yeni veritabanı oluştur</span>
-        </label>
-        <div id="hcSummary" class="hc-summary"></div>
+        <div class="hc-toolbar">
+            <button id="hcRunBtn" class="hc-btn" type="button">
+                <span id="hcRunIcon">▶</span>
+                <span id="hcRunLabel">Kontrolleri Çalıştır</span>
+            </button>
+            <label class="hc-switch-label" title="Etkinleştirilirse mevcut sunucuda yeni bir test DB'si oluşturulur, içi sıfırdan doldurulur">
+                <span class="hc-switch-track">
+                    <input type="checkbox" id="hcNewDb" class="hc-switch-input">
+                    <span class="hc-switch-thumb"></span>
+                </span>
+                <span class="hc-switch-text">Yeni veritabanı oluştur</span>
+            </label>
+            <div id="hcSummary" class="hc-summary"></div>
+        </div>
+
+        <div id="hcResults" style="flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;"></div>
     </div>
 
-    <div id="hcResults" style="flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;"></div>
+    <div class="hc-divider"></div>
+
+    <div class="hc-block">
+        <h2 class="hc-section-title">Fonksiyon Testleri</h2>
+        <p class="hc-section-sub">
+            Test şirketi üzerinde uçtan uca iş senaryoları (sipariş, üretim, kalite vb.) çalıştırılır ve adım adım doğrulanır.
+        </p>
+
+        <div class="hc-toolbar hc-fn-toolbar">
+            <button id="hcFnRunBtn" class="hc-btn" type="button">
+                <span id="hcFnRunIcon">▶</span>
+                <span id="hcFnRunLabel">Testleri Çalıştır</span>
+            </button>
+            <label class="hc-switch-label">
+                <span class="hc-switch-track">
+                    <input type="checkbox" id="hcFnGroupTicari" class="hc-switch-input" checked>
+                    <span class="hc-switch-thumb"></span>
+                </span>
+                <span class="hc-switch-text">Ticari</span>
+            </label>
+            <label class="hc-switch-label">
+                <span class="hc-switch-track">
+                    <input type="checkbox" id="hcFnGroupUretim" class="hc-switch-input" checked>
+                    <span class="hc-switch-thumb"></span>
+                </span>
+                <span class="hc-switch-text">Üretim</span>
+            </label>
+            <label class="hc-switch-label">
+                <span class="hc-switch-track">
+                    <input type="checkbox" id="hcFnGroupKalite" class="hc-switch-input" checked>
+                    <span class="hc-switch-thumb"></span>
+                </span>
+                <span class="hc-switch-text">Kalite</span>
+            </label>
+            <span id="hcFnHint" class="hc-fn-hint"></span>
+            <div id="hcFnSummary" class="hc-summary"></div>
+        </div>
+
+        <div id="hcFnResults" style="flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;"></div>
+    </div>
 </div>
 
 @Html.AntiForgeryToken()
@@ -254,6 +335,14 @@
     const label     = document.getElementById('hcRunLabel');
     const summaryEl = document.getElementById('hcSummary');
     const resultsEl = document.getElementById('hcResults');
+
+    // Fonksiyon Testleri bölümü referansları
+    const fnBtn       = document.getElementById('hcFnRunBtn');
+    const fnIcon      = document.getElementById('hcFnRunIcon');
+    const fnLabel     = document.getElementById('hcFnRunLabel');
+    const fnSummaryEl = document.getElementById('hcFnSummary');
+    const fnResultsEl = document.getElementById('hcFnResults');
+    const fnHintEl    = document.getElementById('hcFnHint');
 
     // ── Yardımcılar ─────────────────────────────────────────────────────
 
@@ -534,6 +623,157 @@
     }
 
     btn.addEventListener('click', runTestStream);
+
+    // ── Fonksiyon Testleri ──────────────────────────────────────────────
+    const FN_GROUP_LABELS_DEFAULT = { ticari: 'Ticari', uretim: 'Üretim', kalite: 'Kalite' };
+    const fn = { total: 0, groupLabels: {} };
+
+    function fnGroupLabel(key) {
+        return (fn.groupLabels && fn.groupLabels[key]) || FN_GROUP_LABELS_DEFAULT[key] || key || '';
+    }
+
+    function fnSelectedGroups() {
+        const keys = [];
+        if (document.getElementById('hcFnGroupTicari')?.checked) keys.push('ticari');
+        if (document.getElementById('hcFnGroupUretim')?.checked) keys.push('uretim');
+        if (document.getElementById('hcFnGroupKalite')?.checked) keys.push('kalite');
+        return keys;
+    }
+
+    function setFnBtnRunning(running) {
+        fnBtn.disabled = running;
+        if (running) { fnIcon.innerHTML = '<span class="hc-spinner"></span>'; fnLabel.textContent = 'Çalıştırılıyor...'; }
+        else         { fnIcon.textContent = '▶'; fnLabel.textContent = 'Tekrar Çalıştır'; }
+    }
+
+    // Üstte sabit duran "şu an çalışıyor" göstergesi (satır listesi ayrı kayar)
+    function fnLiveHtml(index, total, lbl, groupLbl) {
+        const pct = total > 0 ? Math.round(Math.max(0, index - 1) / total * 100) : 0;
+        return '<div class="hc-form-live" id="hcFnLive">'
+             + '<div class="hc-form-live-row">'
+             +   '<span style="color:#6366f1;font-weight:700">' + index + '/' + total + '</span> çalıştırılıyor: '
+             +   '<b>' + escapeHtml(lbl) + '</b>'
+             +   (groupLbl ? ' <span class="hc-parent">· ' + escapeHtml(groupLbl) + '</span>' : '')
+             + '</div>'
+             + '<div class="hc-progress-bar"><div class="hc-progress-bar-fill" style="width:' + pct + '%"></div></div>'
+             + '</div>';
+    }
+
+    function fnUpdateLive(index, total, lbl, groupLbl) {
+        const el = document.getElementById('hcFnLive');
+        if (!el) return;
+        const pct = total > 0 ? Math.round(Math.max(0, index - 1) / total * 100) : 0;
+        el.innerHTML =
+            '<div class="hc-form-live-row">'
+          +   '<span style="color:#6366f1;font-weight:700">' + index + '/' + total + '</span> çalıştırılıyor: '
+          +   '<b>' + escapeHtml(lbl) + '</b>'
+          +   (groupLbl ? ' <span class="hc-parent">· ' + escapeHtml(groupLbl) + '</span>' : '')
+          + '</div>'
+          + '<div class="hc-progress-bar"><div class="hc-progress-bar-fill" style="width:' + pct + '%"></div></div>';
+    }
+
+    // Senaryo adımları — hangi adımda kırıldığı görünür (accordion içi liste)
+    function fnStepsHtml(steps) {
+        if (!steps || !steps.length) {
+            return '<div class="hc-substep-list"><div class="hc-substep-row pending">Adım ayrıntısı yok</div></div>';
+        }
+        let h = '<div class="hc-substep-list">';
+        steps.forEach(st => {
+            const cls  = st.ok ? 'ok' : 'error';
+            const icon = st.ok ? '✓' : '✗';
+            h += '<div class="hc-substep-row ' + cls + '"><span class="hc-substep-icon">' + icon + '</span>' + escapeHtml(st.label) + '</div>';
+            if (!st.ok && st.message) h += '<div class="hc-error-snippet">' + escapeHtml(st.message) + '</div>';
+        });
+        h += '</div>';
+        return h;
+    }
+
+    function fnRowMeta(r) {
+        const parts = [];
+        const groupLbl = fnGroupLabel(r.group);
+        if (groupLbl) parts.push(groupLbl);
+        if (r.skipped)      parts.push('Atlandı' + (r.message ? ': ' + r.message : ''));
+        else if (!r.ok)     parts.push('Başarısız' + (r.message ? ': ' + r.message : ''));
+        else                parts.push('Başarılı');
+        parts.push((r.durationMs != null ? r.durationMs : 0) + 'ms');
+        return parts.join(' · ');
+    }
+
+    // Sonuç satırı — kendi adım listesiyle genişleyen accordion satırı (hc-step-item yeniden kullanılıyor)
+    function fnAddResultRow(r) {
+        const list = document.getElementById('hcFnList');
+        if (!list) return;
+        const cls  = r.skipped ? 'warn' : (r.ok ? 'ok' : 'error');
+        const rid  = 'fnr-' + r.index;
+        const open = cls === 'error';
+        const item = document.createElement('div');
+        item.className = 'hc-step-item' + (open ? ' expanded' : '');
+        item.id = 'hcs-' + rid;
+        item.innerHTML =
+            '<div class="hc-step-header" onclick="hcToggle(\'' + rid + '\')">'
+          +   '<div class="hc-step-badge ' + cls + '">' + badgeInner(cls) + '</div>'
+          +   '<div class="hc-step-title">' + escapeHtml(r.label) + '</div>'
+          +   '<div class="hc-step-meta">' + escapeHtml(fnRowMeta(r)) + '</div>'
+          +   '<div class="hc-step-chevron" id="hcc-' + rid + '">' + (open ? '▼' : '▶') + '</div>'
+          + '</div>'
+          + '<div class="hc-step-body" id="hcbd-' + rid + '">' + fnStepsHtml(r.steps) + '</div>';
+        list.appendChild(item);
+    }
+
+    function fnSummaryHtml(s) {
+        return '<span class="hc-pill ok">✓ ' + s.passed + ' Geçti</span>'
+            + (s.failed > 0  ? '<span class="hc-pill error">✗ ' + s.failed  + ' Başarısız</span>' : '')
+            + (s.skipped > 0 ? '<span class="hc-pill warn">⚠ '  + s.skipped + ' Atlandı</span>'   : '');
+    }
+
+    function handleFnFrame(frame) {
+        switch (frame.type) {
+            case 'fn_start':
+                fn.total = frame.total;
+                fn.groupLabels = {};
+                (frame.groups || []).forEach(g => { fn.groupLabels[g.key] = g.label; });
+                fnResultsEl.innerHTML = '<div id="hcFnLive"></div><div class="hc-step-list" id="hcFnList"></div>';
+                document.getElementById('hcFnLive').innerHTML = fnLiveHtml(0, frame.total, 'Başlatılıyor...', '');
+                break;
+            case 'fn_step':
+                fnUpdateLive(frame.index, frame.total, frame.label, fnGroupLabel(frame.group));
+                break;
+            case 'fn_result':
+                fnAddResultRow(frame);
+                break;
+            case 'fn_done': {
+                fnSummaryEl.innerHTML = fnSummaryHtml({ passed: frame.passed, failed: frame.failed, skipped: frame.skipped });
+                const live = document.getElementById('hcFnLive');
+                if (live) live.innerHTML = '';
+                break;
+            }
+            case 'fn_error':
+                fnResultsEl.innerHTML = '<div class="hc-fn-error-banner">⚠ ' + escapeHtml(frame.message || 'Fonksiyon testleri başlatılamadı.') + '</div>';
+                fnSummaryEl.innerHTML = '';
+                break;
+        }
+    }
+
+    async function runFnTests() {
+        const groups = fnSelectedGroups();
+        if (groups.length === 0) {
+            fnHintEl.textContent = 'En az bir grup seçmelisiniz.';
+            return;
+        }
+        fnHintEl.textContent = '';
+        setFnBtnRunning(true);
+        fnSummaryEl.innerHTML = '';
+        fnResultsEl.innerHTML = '<div style="padding:16px;color:#64748b;font-size:13px;">Başlatılıyor…</div>';
+        try {
+            const resp = await fetch('/Admin/HealthCheck/StreamFunctionalTests?groups=' + encodeURIComponent(groups.join(',')), { method:'POST', credentials:'same-origin', headers:{ 'RequestVerificationToken': getCsrf() } });
+            if (!resp.ok || !resp.body) throw new Error('HTTP ' + resp.status);
+            await readStream(resp.body, handleFnFrame);
+        } catch (err) {
+            fnResultsEl.innerHTML = '<div class="hc-fn-error-banner">İstek hatası: ' + escapeHtml(err.message) + '</div>';
+        } finally { setFnBtnRunning(false); }
+    }
+
+    fnBtn.addEventListener('click', runFnTests);
 })();
 </script>
 }
