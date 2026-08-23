@@ -3162,7 +3162,9 @@ public sealed class SalesController : Controller
     /// filtre/dışa aktar/gruplama/sütun ayarları hep SmartBoard'dan gelir.
     /// Ekrana ÖZEL olan tek şey rezervasyon akışıdır — o da:
     ///   • toplu aksiyon <c>type:"event"</c> ile sayfadaki rezerve modalını açar,
-    ///   • satır detayı (expandable) o kalemin rezervasyonlarını listeler.
+    ///   • satır başındaki "İşlemler" menüsü (extraActions, type:"event") rezerve etme ve
+    ///     o kalemin rezervasyonlarını (Yükle/İptal) gösteren modalları açar — alta açılır
+    ///     detay paneli 2026-08-23 kullanıcı kararıyla KALDIRILDI.
     /// GET /Sales/ShipmentPlanningBoardConfig
     /// </summary>
     [HttpGet("/Sales/ShipmentPlanningBoardConfig")]
@@ -3289,7 +3291,8 @@ public sealed class SalesController : Controller
 
     /// <summary>
     /// Bir sipariş kaleminin açılır detayı — o kaleme ait aktif rezervasyonlar.
-    /// SmartBoard expandable sözleşmesi: { ok, columns, rows, rowActions, empty }.
+    /// Sözleşme: { ok, columns, rows, rowActions, empty } — eskiden SmartBoard expandable
+    /// paneli tüketirdi; ARTIK satır "İşlemler" menüsünün "Rezervasyonlar" modalı okur.
     /// GET /Sales/ShipmentPlanningLineDetail?lineId=123
     /// </summary>
     [HttpGet("/Sales/ShipmentPlanningLineDetail")]
