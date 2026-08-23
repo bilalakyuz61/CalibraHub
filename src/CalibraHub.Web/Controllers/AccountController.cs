@@ -113,6 +113,128 @@ public sealed class AccountController : Controller
         return Json(payload);
     }
 
+    // ── Şirket değiştirme (oturum açıkken) ───────────────────────────────────
+    // Kullanıcı çıkış yapmadan, PAROLA SORMADAN başka şirkete geçebilir.
+    // Güvenlik kapısı: hedef şirkette AYNI e-postaya ait AKTİF bir kullanıcı kaydı
+    // bulunmak ZORUNDA — istemciden gelen companyId asla doğrudan claim'e yazılmaz.
+    // (Login ekranındaki şirket listesi de birebir aynı ilişkiden türer:
+    //  GetCompanyOptionsByEmailAsync.)
+
+    /// <summary>
+    /// Oturumdaki kullanıcının yetkili olduğu şirketler + hangisinin aktif olduğu.
+    /// GET /Account/MyCompanies
+    /// </summary>
+    [Authorize]
+    [HttpGet]
+    public async Task<IActionResult> MyCompanies(CancellationToken cancellationToken)
+    {
+        var email = User.FindFirstValue(ClaimTypes.Email);
+        if (string.IsNullOrWhiteSpace(email))
+            return Json(Array.Empty<object>());
+
+        var currentCompanyId = int.TryParse(User.FindFirst("company_id")?.Value, out var cid) ? cid : 0;
+        var options = await GetCompanyOptionsByEmailAsync(email, currentCompanyId, cancellationToken);
+
+        return Json(options.Select(x => new
+        {
+            id = int.TryParse(x.Value, out var id) ? id : 0,
+            name = x.Text,
+            isCurrent = int.TryParse(x.Value, out var v) && v == currentCompanyId,
+        }).ToArray());
+    }
+
+    /// <summary>
+    /// Aktif şirketi değiştirir — oturum kapanmaz, parola istenmez.
+    /// POST /Account/SwitchCompany  Body: { companyId }
+    /// </summary>
+    [Authorize]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SwitchCompany(
+        [FromBody] SwitchCompanyRequest request, CancellationToken cancellationToken)
+    {
+        var email = User.FindFirstValue(ClaimTypes.Email);
+        if (string.IsNullOrWhiteSpace(email))
+            return Json(new { ok = false, error = "Oturum bilgisi okunamadı." });
+
+        var targetId = request?.CompanyId ?? 0;
+        if (targetId <= 0)
+            return Json(new { ok = false, error = "Şirket seçilmedi." });
+
+        var currentCompanyId = int.TryParse(User.FindFirst("company_id")?.Value, out var cid) ? cid : 0;
+        if (targetId == currentCompanyId)
+            return Json(new { ok = true, unchanged = true });
+
+        try
+        {
+            // YETKİ KAPISI — hedef şirkette bu e-postaya ait aktif kullanıcı var mı?
+            var users = await _userProfileRepository.GetAllAsync(cancellationToken);
+            var target = users.FirstOrDefault(u =>
+                u.IsActive &&
+                u.CompanyId == targetId &&
+                string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase));
+
+            if (target is null)
+            {
+                _logger.LogWarning(
+                    "[SwitchCompany] Yetkisiz şirket geçiş denemesi. Email={Email} Hedef={CompanyId} IP={Ip}",
+                    email, targetId, HttpContext.Connection.RemoteIpAddress);
+                return Json(new { ok = false, error = "Bu şirkete erişim yetkiniz yok." });
+            }
+
+            var companies = await _companyDefinitionRepository.GetAllAsync(cancellationToken);
+            var company = companies.FirstOrDefault(c => c.Id == targetId && c.IsActive);
+            if (company is null)
+                return Json(new { ok = false, error = "Şirket bulunamadı veya pasif." });
+
+            // Claim seti login ile BİREBİR aynı kurulur — rol/departman hedef şirketin
+            // kullanıcı kaydından gelir (aynı kişi şirkete göre farklı rolde olabilir).
+            var claims = new List<Claim>
+            {
+                new(ClaimTypes.NameIdentifier, target.Id.ToString()),
+                new(ClaimTypes.Name, target.FullName),
+                new(ClaimTypes.Email, target.Email),
+                new(ClaimTypes.Role, target.Role.ToString()),
+                new("company_id", target.CompanyId.ToString()),
+                new("company_name", company.Name),
+            };
+            if (target.DepartmentId.HasValue)
+                claims.Add(new Claim("department_id", target.DepartmentId.Value.ToString()));
+
+            var principal = new ClaimsPrincipal(
+                new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme));
+
+            // Mevcut oturumun kalıcılık/süre ayarları korunur (yeniden giriş hissi olmasın).
+            var authResult = await HttpContext.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            var authProperties = authResult?.Properties ?? new AuthenticationProperties
+            {
+                IsPersistent = false,
+                ExpiresUtc = DateTimeOffset.Now.AddHours(8),
+            };
+
+            await HttpContext.SignInAsync(
+                CookieAuthenticationDefaults.AuthenticationScheme, principal, authProperties);
+
+            var displayName = string.IsNullOrWhiteSpace(target.FullName) ? target.Email : target.FullName;
+            _audit.LogEvent(CalibraHub.Application.Auditing.AuditActions.Login,
+                detail: $"Şirket değiştirildi: {currentCompanyId} → {targetId} ({company.Name})",
+                actor: new CalibraHub.Application.Auditing.AuditActor(
+                    target.CompanyId, target.Id, displayName,
+                    HttpContext.Connection.RemoteIpAddress?.ToString(), "Web"),
+                entity: "Session");
+
+            return Json(new { ok = true, companyId = targetId, companyName = company.Name });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SwitchCompany] Şirket değiştirilirken hata. Email={Email} Hedef={CompanyId}",
+                email, targetId);
+            return Json(new { ok = false, error = "Şirket değiştirilemedi." });
+        }
+    }
+
+    public sealed record SwitchCompanyRequest(int CompanyId);
+
     // ── Şifremi Unuttum ──────────────────────────────────────────────────────
 
     [AllowAnonymous]

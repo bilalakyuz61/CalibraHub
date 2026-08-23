@@ -54,7 +54,7 @@ import {
   MessageCircle, LayoutDashboard, PenLine, Inbox, GitBranch, Grid3X3,
   ShoppingCart, ShoppingBag, ClipboardList, Tablet, FileUp, PenSquare,
   SlidersHorizontal, ShieldCheck, EyeOff, ScrollText, Activity,
-  CornerDownRight
+  CornerDownRight, ChevronDown
 } from 'lucide-react'
 
 /* ══════════════════════════════════════════════════════════════
@@ -114,6 +114,10 @@ var SHELL_I18N = {
   theme_light:             { TR: 'Açık',                             EN: 'Light' },
   profile_info:            { TR: 'Profil Bilgileri',                 EN: 'Profile' },
   sign_out:                { TR: 'Çıkış Yap',                       EN: 'Sign Out' },
+  switch_company:          { TR: 'Şirket Değiştir',                  EN: 'Switch Company' },
+  switch_company_loading:  { TR: 'Yükleniyor…',                      EN: 'Loading…' },
+  switch_company_empty:    { TR: 'Başka şirket yetkiniz yok.',       EN: 'No other company available.' },
+  switch_company_error:    { TR: 'Şirketler alınamadı.',             EN: 'Could not load companies.' },
   ai_assistant:            { TR: 'Calibo',                           EN: 'Calibo' },
   // Connection overlay
   conn_lost:               { TR: 'Bağlantı Kesildi',                EN: 'Connection Lost' },
@@ -1089,6 +1093,7 @@ export default function Shell(props) {
                 isDark={isDark}
                 user={user}
                 lang={lang}
+                antiforgery={antiforgery}
                 onLangChange={handleChangeLang}
                 onThemeToggle={handleToggleTheme}
                 onOpenWorkspaceTab={function(arg) {
@@ -2976,6 +2981,11 @@ function ProfilePopover(props) {
                       }
                       if (props.onClose) props.onClose()
                     }} />
+
+        {/* Şirket Değiştir — parola SORULMAZ; sunucu, e-postanın hedef şirkette
+            aktif kullanıcı kaydı olup olmadığına bakarak yetkiyi doğrular
+            (bkz. AccountController.SwitchCompany). Liste açılınca çekilir. */}
+        <SwitchCompanyRow isDark={isDark} lang={props.lang || 'TR'} antiforgery={props.antiforgery} />
       </div>
 
       <div className={isDark ? 'h-px bg-white/10' : 'h-px bg-slate-200'} />
@@ -3144,6 +3154,131 @@ function OpenTabsPopover(props) {
         })}
       </div>
     </motion.div>
+  )
+}
+
+/**
+ * Şirket Değiştir satırı — tıklanınca altında kullanıcının YETKİLİ olduğu şirketleri
+ * listeler (GET /Account/MyCompanies), seçilince POST /Account/SwitchCompany ile
+ * oturumun şirketi değişir ve sayfa yeniden yüklenir.
+ *
+ * Parola istenmez: yetki kapısı sunucudadır — hedef şirkette aynı e-postaya ait
+ * AKTİF kullanıcı kaydı yoksa istek reddedilir. Liste yalnızca gösterim içindir.
+ * Tam sayfa reload şart: menü, izinler ve açık workspace iframe'lerinin hepsi
+ * yeni şirkete göre yeniden kurulmalı.
+ */
+function SwitchCompanyRow(props) {
+  var isDark = props.isDark
+  var [open, setOpen] = useState(false)
+  var [state, setState] = useState({ loading: false, error: null, items: null })
+  var [busyId, setBusyId] = useState(0)
+
+  function toggle() {
+    var next = !open
+    setOpen(next)
+    if (!next || state.items || state.loading) return
+    setState({ loading: true, error: null, items: null })
+    fetch('/Account/MyCompanies', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json() })
+      .then(function (list) {
+        setState({ loading: false, error: null, items: Array.isArray(list) ? list : [] })
+      })
+      .catch(function () {
+        setState({ loading: false, error: tShell('switch_company_error', props.lang), items: null })
+      })
+  }
+
+  function pick(c) {
+    if (c.isCurrent || busyId) return
+    setBusyId(c.id)
+    fetch('/Account/SwitchCompany', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': props.antiforgery || '' },
+      body: JSON.stringify({ companyId: c.id }),
+    })
+      .then(function (r) { return r.json() })
+      .then(function (d) {
+        if (d && d.ok) { window.location.href = '/' ; return }
+        setBusyId(0)
+        setState(function (p) { return { loading: false, error: (d && d.error) || 'Şirket değiştirilemedi.', items: p.items } })
+      })
+      .catch(function () {
+        setBusyId(0)
+        setState(function (p) { return { loading: false, error: 'Bağlantı hatası.', items: p.items } })
+      })
+  }
+
+  var items = state.items || []
+  var others = items.filter(function (c) { return !c.isCurrent })
+  var current = items.find(function (c) { return c.isCurrent }) || null
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={toggle}
+        className={
+          'w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors ' +
+          (isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-100')
+        }
+      >
+        <Building2 size={15} strokeWidth={1.8} className={isDark ? 'text-white/50' : 'text-slate-500'} />
+        <span className={'flex-1 text-left text-[13px] font-medium ' + (isDark ? 'text-white/80' : 'text-slate-700')}>
+          {tShell('switch_company', props.lang)}
+        </span>
+        <ChevronDown
+          size={13}
+          strokeWidth={2}
+          className={(isDark ? 'text-white/40' : 'text-slate-400') + ' transition-transform ' + (open ? 'rotate-180' : '')}
+        />
+      </button>
+
+      {open && (
+        <div className="mt-1 mb-1 pl-8 pr-1 flex flex-col gap-0.5">
+          {state.loading && (
+            <span className={'text-[12px] px-2 py-1 ' + (isDark ? 'text-white/45' : 'text-slate-500')}>
+              {tShell('switch_company_loading', props.lang)}
+            </span>
+          )}
+          {state.error && (
+            <span className="text-[12px] px-2 py-1 text-rose-400">{state.error}</span>
+          )}
+          {/* Aktif şirket en üstte, işaretli ve tıklanamaz — kullanıcı nerede olduğunu görsün. */}
+          {current && (
+            <span className={
+              'flex items-center gap-2 text-[12.5px] px-2 py-1.5 rounded-lg font-semibold ' +
+              (isDark ? 'text-indigo-300 bg-indigo-500/10' : 'text-indigo-600 bg-indigo-50')
+            }>
+              <Check size={12} strokeWidth={2.5} />
+              {current.name}
+            </span>
+          )}
+          {!state.loading && !state.error && others.length === 0 && state.items && (
+            <span className={'text-[12px] px-2 py-1 ' + (isDark ? 'text-white/45' : 'text-slate-500')}>
+              {tShell('switch_company_empty', props.lang)}
+            </span>
+          )}
+          {others.map(function (c) {
+            return (
+              <button
+                key={c.id}
+                type="button"
+                disabled={!!busyId}
+                onClick={function () { pick(c) }}
+                className={
+                  'w-full text-left text-[12.5px] px-2 py-1.5 rounded-lg transition-colors ' +
+                  (busyId === c.id ? 'opacity-60 ' : '') +
+                  (isDark ? 'text-white/75 hover:bg-white/[0.06]' : 'text-slate-700 hover:bg-slate-100')
+                }
+              >
+                {c.name}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 
