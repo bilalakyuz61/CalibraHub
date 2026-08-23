@@ -1,0 +1,29 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="/css/site.css"><link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/react/calibrahub-widgets.css">
+<style>body{margin:0;padding:14px;background:#0b1220}</style></head><body class="app-theme-dark">
+<div id="host"></div>
+<pre id="out" style="color:#94a3b8;font:12px Consolas;margin-top:16px"></pre>
+<script src="/react/calibrahub-widgets.js"></script>
+<script>
+var cols=[
+ {key:'materialCode',label:'Malzeme Kodu',type:'text-lookup',guideCode:'G1',width:220,align:'left'},
+ {key:'materialName',label:'Malzeme Adı',type:'text',width:'flex',readonly:true,align:'left'},
+ {key:'unit',label:'Birim',type:'text',width:100,readonly:true,align:'left'},
+ {key:'quantity',label:'Miktar',type:'number',width:110,precision:3,align:'right'},
+ {key:'unitPrice',label:'Birim Fiyat',type:'currency',width:130,precision:4,align:'right'},
+ {key:'lineTotal',label:'Satır Toplamı',type:'currency',width:140,precision:4,computed:true,readonly:true,align:'right'}
+];
+var rows=[{id:1,materialCode:'EG01',materialName:'Test',unit:'Adet',quantity:1,unitPrice:10,lineTotal:10}];
+window.CalibraHub.mountLineItemsGrid(document.getElementById('host'),{columns:cols,rows:rows,labels:{},footer:{},viewMode:'grid'});
+setTimeout(function(){
+ var strip=document.querySelector('.clg-table-row .flex.items-stretch > div');
+ var out=[];
+ if(!strip){document.getElementById('out').textContent='serit bulunamadi';return;}
+ out.push('serit genisligi: '+Math.round(strip.getBoundingClientRect().width)+'px');
+ strip.querySelectorAll('button, span, div').forEach(function(el){
+   if(el.tagName==='BUTTON'){ out.push('  BUTON  title="'+(el.getAttribute('title')||'')+'"  svg='+(el.querySelector('svg')?'var':'yok')); }
+ });
+ document.getElementById('out').textContent=out.join(String.fromCharCode(10));
+},900);
+</script></body></html>
