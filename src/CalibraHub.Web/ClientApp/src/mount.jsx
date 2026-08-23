@@ -51,6 +51,7 @@ import ReportViewer from './components/ReportViewer/ReportViewer'
 import './components/ReportDesigner/ReportDesigner.css'
 import AuditMonitor from './components/AuditLog/AuditMonitor'
 import AuditTrailPanel from './components/AuditLog/AuditTrailPanel'
+import ErrorMonitor from './components/ErrorLog/ErrorMonitor'
 import './components/AuditLog/auditLog.css'
 import ViewBuilder from './components/ViewBuilder/ViewBuilder'
 import './components/ViewBuilder/ViewBuilder.css'
@@ -2044,6 +2045,27 @@ function mountAuditTrail(element, config) {
   return { unmount: function () { root.unmount(); mountedRoots.delete(element) } }
 }
 window.CalibraHub.mountAuditTrail = mountAuditTrail
+
+/**
+ * ErrorMonitor mount — Hata Logları izleme ekranı (/Admin/ErrorLog).
+ * @param {HTMLElement} element
+ */
+function mountErrorLog(element) {
+  if (!element) return { unmount: function () {} }
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(ErrorMonitor, null)
+    )
+  )
+  return { unmount: function () { root.unmount(); mountedRoots.delete(element) } }
+}
+window.CalibraHub.mountErrorLog = mountErrorLog
 
 /**
  * ViewBuilder mount — SQL View Yönetimi ekranı (/ViewBuilder, SystemAdmin-only).

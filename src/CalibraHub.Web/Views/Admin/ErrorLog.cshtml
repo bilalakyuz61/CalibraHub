@@ -1,0 +1,54 @@
+@{
+    ViewData["Title"] = "Hata Logları";
+    ViewData["BodyClass"] = "page-error-log";
+    ViewData["DbInfo"] =
+        "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;'>App_Data (Diagnostics)</td><td style='padding:6px 8px;'>Dosya tabanlı hata logu — /Admin/ErrorLogData üzerinden okunur, DB'de tutulmaz.</td></tr>"
+        + "</table>";
+}
+
+@section Styles {
+<style>
+    .workspace-frame-body.page-error-log .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column; overflow: hidden; padding: 0;
+    }
+    #errorLogRoot { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; height: 100%; }
+</style>
+}
+
+<div id="errorLogRoot"></div>
+
+@section Scripts {
+<script>
+(function () {
+    var BUNDLE_URL = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL    = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
+    var el = document.getElementById('errorLogRoot');
+
+    function showError(msg) { if (el) el.innerHTML = '<div style="padding:24px;color:#dc2626;font-size:13px;">' + msg + '</div>'; }
+    function loadCss() {
+        if (document.querySelector('link[data-elog-css]')) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL; link.setAttribute('data-elog-css', '1');
+        document.head.appendChild(link);
+    }
+    function loadScript(cb) {
+        var prev = document.querySelector('script[data-elog-js]');
+        if (prev) { prev.addEventListener('load', cb); return; }
+        var s = document.createElement('script');
+        s.src = BUNDLE_URL; s.setAttribute('data-elog-js', '1');
+        s.onload = function () { setTimeout(cb, 0); };
+        s.onerror = function () { showError('React bundle yüklenemedi.'); };
+        document.head.appendChild(s);
+    }
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountErrorLog) { showError('mountErrorLog bulunamadı.'); return; }
+        window.CalibraHub.mountErrorLog(el);
+    }
+
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountErrorLog) doMount();
+    else loadScript(doMount);
+})();
+</script>
+}

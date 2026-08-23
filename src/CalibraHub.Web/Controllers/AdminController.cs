@@ -33,6 +33,8 @@ public sealed class AdminController : Controller
     private readonly ICompanyParameterService _companyParameters;
     private readonly IFormRepository _formRepository;
     private readonly CollaborationRuntimeStore _collaborationStore;
+    private readonly CalibraHub.Application.Diagnostics.ISystemErrorLogQueryService _errorLogQuery;
+    private readonly ILogger<AdminController> _logger;
     private static readonly JsonSerializerOptions ProjectRequestJsonOptions = new()
     {
         WriteIndented = true
@@ -55,7 +57,9 @@ public sealed class AdminController : Controller
         IScheduledTaskRepository scheduledTaskRepo,
         ICompanyParameterService companyParameters,
         IFormRepository formRepository,
-        CollaborationRuntimeStore collaborationStore)
+        CollaborationRuntimeStore collaborationStore,
+        CalibraHub.Application.Diagnostics.ISystemErrorLogQueryService errorLogQuery,
+        ILogger<AdminController> logger)
     {
         _adminReadService = adminReadService;
         _adminManagementService = adminManagementService;
@@ -68,6 +72,8 @@ public sealed class AdminController : Controller
         _companyParameters = companyParameters;
         _formRepository = formRepository;
         _collaborationStore = collaborationStore;
+        _errorLogQuery = errorLogQuery;
+        _logger = logger;
     }
 
     [HttpGet]

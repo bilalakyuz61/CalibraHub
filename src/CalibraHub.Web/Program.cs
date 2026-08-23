@@ -370,6 +370,31 @@ builder.Services.AddSingleton<CalibraHub.Application.Auditing.IAuditRetentionRes
 builder.Services.AddScoped<CalibraHub.Application.Auditing.IAuditQueryService,
                            CalibraHub.Application.Auditing.AuditQueryService>();
 builder.Services.AddHostedService<CalibraHub.Application.Auditing.AuditFileWriter>();
+
+// 2026-08-23 Yazılım/DB hata log modülü — audit trail ile PARALEL ama BAĞIMSIZ bir dosya-JSONL
+// akışı ({ContentRoot}/App_Data/ErrorLogs). Tüm ILogger LogError/LogCritical çağrıları
+// SystemErrorLoggerProvider (ILoggerProvider, DI'dan otomatik toplanır) aracılığıyla otomatik
+// yakalanır — enstrümantasyon gerekmez. Bkz. CalibraHub.Application/Diagnostics/.
+builder.Services.AddSingleton<CalibraHub.Application.Diagnostics.ISystemErrorLogChannel,
+                              CalibraHub.Application.Diagnostics.SystemErrorLogChannel>();
+builder.Services.AddSingleton(new CalibraHub.Application.Diagnostics.SystemErrorLogOptions
+{
+    RootPath = builder.Configuration["Diagnostics:RootPath"]
+               ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "ErrorLogs"),
+    RetentionDays = builder.Configuration.GetValue<int?>("Diagnostics:ErrorLogRetentionDays")
+                    ?? CalibraHub.Application.Diagnostics.SystemErrorLogOptions.DefaultRetentionDays,
+});
+builder.Services.AddSingleton<CalibraHub.Application.Diagnostics.ISystemErrorLog,
+                              CalibraHub.Application.Diagnostics.SystemErrorLog>();
+builder.Services.AddScoped<CalibraHub.Application.Diagnostics.ISystemErrorLogQueryService,
+                           CalibraHub.Application.Diagnostics.SystemErrorLogQueryService>();
+builder.Services.AddHostedService<CalibraHub.Application.Diagnostics.SystemErrorLogWriter>();
+// ILoggerProvider DI kaydı — logging factory DI'daki tüm ILoggerProvider'ları tüketir,
+// bu yüzden builder.Logging.AddProvider(...) yerine services.AddSingleton kullanılır
+// (ClearProviders/AddConsole/AddDebug/AddEventLog sıralamasından bağımsız çalışır).
+builder.Services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider,
+                              CalibraHub.Web.Logging.SystemErrorLoggerProvider>();
+
 builder.Services.AddScoped<ILogisticsConfigurationRepository, SqlLogisticsConfigurationRepository>();
 builder.Services.AddScoped<IFinanceRepository, SqlFinanceRepository>();
 builder.Services.AddScoped<IAddressRepository, SqlAddressRepository>();
