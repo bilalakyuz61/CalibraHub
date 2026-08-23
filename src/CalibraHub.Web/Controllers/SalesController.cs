@@ -1,4 +1,4 @@
-using CalibraHub.Application.Constants;
+﻿using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.DesignProvider;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
@@ -3235,6 +3235,15 @@ public sealed class SalesController : Controller
                     url = "/Sales/DocumentEdit?id=" + l.OrderDocumentId,
                     openInTab = new { title = "Satış Siparişi", matchPath = "/Sales/DocumentEdit" },
                 },
+                // Satır başındaki "İşlemler" kebab menüsü (SmartTableRow, sticky-left).
+                // Rezervasyon akışı ALTA AÇILIR panel yerine buradan yürür (2026-08-23
+                // kullanıcı kararı): ikisi de type:"event" — sayfa kendi modalını açar
+                // (miktar/depo/tarih girdisi gerektiği için POST değil).
+                ["extraActions"] = new object[]
+                {
+                    new { id = "reserve",      label = "Rezerve Et",    icon = "Boxes", type = "event", @event = "shipmentPlanning:reserve" },
+                    new { id = "reservations", label = "Rezervasyonlar", icon = "List",  type = "event", @event = "shipmentPlanning:reservations" },
+                },
                 ["widgets"] = new List<object>
                 {
                     new Dictionary<string, object?> { ["id"] = "w_ordno", ["type"] = "data", ["dataType"] = "text",    ["label"] = "Sipariş No", ["value"] = l.OrderNumber },
@@ -3262,10 +3271,11 @@ public sealed class SalesController : Controller
             searchPlaceholder = "Malzeme kodu/adı veya sipariş no…",
             emptyText = "Açık sipariş kalemi bulunamadı",
             refreshUrl = "/Sales/ShipmentPlanningBoardConfig",
-            // Satır seçimi + açılır detay (SmartBoard opt-in yetenekleri).
+            // Satır seçimi açık; ALTA AÇILIR detay paneli KAPALI (2026-08-23 kullanıcı
+            // kararı) — rezervasyon görüntüleme/işlemleri satır başındaki "İşlemler"
+            // menüsünden yürür (bkz. entity.extraActions). ShipmentPlanningLineDetail
+            // uç noktası KORUNUR: "Rezervasyonlar" modalı aynı veriyi okur.
             selectable = true,
-            expandable = true,
-            detailUrl = "/Sales/ShipmentPlanningLineDetail?lineId={id}",
             bulkActions = new object[]
             {
                 // POST DEĞİL: miktar/depo/tarih/not girdisi gerektiği için sayfadaki

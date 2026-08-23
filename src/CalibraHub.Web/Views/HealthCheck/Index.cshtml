@@ -1,14 +1,26 @@
 @{
     ViewData["Title"] = "Sistem Sağlık Kontrolü";
     ViewData["HelpKey"] = "health-check";
+    ViewData["BodyClass"] = "page-hc";
 }
 
 @section Styles {
 <style>
+    /* 2026-08-22 (kullanici istegi: "tam ekran yap, bazi yazilar sigmiyor"):
+       Sayfa kabinin padding/max-width kisitlari sifirlanir — ShipmentPlanningCenter
+       (.page-sp) ile ayni iskelet. */
+    .page-hc .integrator-dashboard {
+        padding: 0 !important; background: transparent !important;
+        box-shadow: none !important; border: none !important; max-width: none !important;
+    }
+    .page-hc .integrator-dashboard__content { width: 100% !important; max-width: none !important; padding: 0 !important; }
+
     .hc-wrap {
-        padding: 20px;
-        max-width: 1400px;
-        margin: 0 auto;
+        padding: 16px 20px;
+        /* 1400px tavani genis ekranda sagda genis bir bosluk birakiyor ve uzun
+           yollar/hata metinleri dar sutuna sikisiyordu — tavan kaldirildi. */
+        max-width: none;
+        margin: 0;
         height: calc(100vh - var(--app-header-height, 64px) - var(--app-tabs-height, 48px));
         display: flex;
         flex-direction: column;
@@ -214,7 +226,11 @@
     .hc-error-snippet {
         font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px;
         background: rgba(239,68,68,.10); padding: 5px 8px; border-radius: 4px;
-        color: #ef4444; margin-top: 3px; max-width: 500px;
+        color: #ef4444; margin-top: 3px;
+        /* max-width: 500px KALDIRILDI (2026-08-22) — uzun hata/uyari metinleri
+           dar bir sutuna sikisip okunmaz oluyordu; artik satirin tam genisligini
+           kullanir, tasan kisim yine sarilir. */
+        max-width: none;
         white-space: pre-wrap; word-break: break-word;
     }
 
@@ -238,6 +254,58 @@
     .hc-section-sub { font-size: 12.5px; color: #64748b; margin: 0 0 16px; }
     body.app-theme-dark .hc-section-sub { color: #94a3b8; }
 
+    /* ── Sol sekme rayi + sag icerik (2026-08-22, kullanici istegi:
+       "gruplamalar solda tabsheet olsun, detaylar sagda tabsheet bazinda").
+       Proje sekmeli-form dili: sol dar ray, secili sekmede dolu nokta + glow. ── */
+    .hc-shell { display: flex; gap: 16px; flex: 1 1 auto; min-height: 0; }
+    .hc-nav {
+        flex: 0 0 210px; width: 210px;
+        display: flex; flex-direction: column; gap: 4px;
+        padding-right: 14px;
+        border-right: 1px solid rgba(148,163,184,.18);
+        overflow-y: auto;
+    }
+    body.app-theme-dark .hc-nav { border-right-color: rgba(255,255,255,.08); }
+    .hc-nav__tab {
+        display: flex; align-items: center; gap: 9px;
+        padding: 9px 11px; border-radius: 9px;
+        font-size: 13px; font-weight: 600; color: #64748b;
+        background: transparent; border: 1px solid transparent;
+        cursor: pointer; text-align: left; width: 100%;
+        transition: background .12s, color .12s, border-color .12s;
+    }
+    body.app-theme-dark .hc-nav__tab { color: #94a3b8; }
+    .hc-nav__tab:hover { background: rgba(148,163,184,.10); }
+    .hc-nav__tab.is-active {
+        background: rgba(99,102,241,.10); color: #4f46e5;
+        border-color: rgba(99,102,241,.22);
+    }
+    body.app-theme-dark .hc-nav__tab.is-active { color: #a5b4fc; background: rgba(99,102,241,.16); }
+    /* Nokta: pasifken halka, aktifken dolu + glow (Malzeme Karti standardi) */
+    .hc-nav__dot {
+        width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        border: 1.5px solid currentColor; background: transparent;
+    }
+    .hc-nav__tab.is-active .hc-nav__dot {
+        background: currentColor; border-color: currentColor;
+        box-shadow: 0 0 0 3px rgba(99,102,241,.18);
+    }
+    /* Sekme durum rozeti — o gruptaki en kotu sonuc (calisma bitince JS boyar) */
+    .hc-nav__badge {
+        margin-left: auto; flex-shrink: 0;
+        font-size: 10px; font-weight: 700; letter-spacing: .03em;
+        padding: 1px 7px; border-radius: 999px;
+        background: rgba(148,163,184,.18); color: #94a3b8;
+    }
+    .hc-nav__badge.ok    { background: rgba(16,185,129,.18); color: #10b981; }
+    .hc-nav__badge.warn  { background: rgba(245,158,11,.18); color: #f59e0b; }
+    .hc-nav__badge.error { background: rgba(239,68,68,.18);  color: #ef4444; }
+    .hc-nav__badge:empty { display: none; }
+
+    .hc-panes { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+    .hc-pane { display: none; flex: 1 1 auto; min-height: 0; }
+    .hc-pane.is-active { display: flex; flex-direction: column; }
+
     .hc-fn-toolbar { flex-wrap: wrap; row-gap: 8px; }
     .hc-fn-hint { font-size: 12px; color: #f59e0b; font-weight: 600; }
 
@@ -259,9 +327,25 @@
 }
 
 <div class="hc-wrap">
-    <div class="hc-block">
-        <h1 style="font-size: 22px; font-weight: 700; margin: 0 0 6px;">Sistem Sağlık Kontrolü</h1>
-        <p style="font-size: 13px; color: #64748b; margin: 0 0 20px;">
+    <h1 style="font-size: 20px; font-weight: 700; margin: 0 0 12px; flex: 0 0 auto;">Sistem Sağlık Kontrolü</h1>
+
+    <div class="hc-shell">
+        <nav class="hc-nav" role="tablist" aria-label="Sağlık kontrolü grupları">
+            <button type="button" class="hc-nav__tab is-active" role="tab" data-hc-tab="pages" aria-selected="true">
+                <span class="hc-nav__dot"></span>
+                <span>Sayfa Kontrolleri</span>
+                <span class="hc-nav__badge" id="hcTabBadgePages"></span>
+            </button>
+            <button type="button" class="hc-nav__tab" role="tab" data-hc-tab="fn" aria-selected="false">
+                <span class="hc-nav__dot"></span>
+                <span>Fonksiyon Testleri</span>
+                <span class="hc-nav__badge" id="hcTabBadgeFn"></span>
+            </button>
+        </nav>
+
+        <div class="hc-panes">
+    <div class="hc-block hc-pane is-active" data-hc-pane="pages">
+        <p style="font-size: 13px; color: #64748b; margin: 0 0 16px;">
             Tüm menü ekranlarına otomatik HTTP isteği gönderilir. 200 OK alamayan sayfalar listelenir.
         </p>
 
@@ -283,10 +367,7 @@
         <div id="hcResults" style="flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;"></div>
     </div>
 
-    <div class="hc-divider"></div>
-
-    <div class="hc-block">
-        <h2 class="hc-section-title">Fonksiyon Testleri</h2>
+    <div class="hc-block hc-pane" data-hc-pane="fn">
         <p class="hc-section-sub">
             Test şirketi üzerinde uçtan uca iş senaryoları (sipariş, üretim, kalite vb.) çalıştırılır ve adım adım doğrulanır.
         </p>
@@ -323,12 +404,51 @@
 
         <div id="hcFnResults" style="flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;"></div>
     </div>
+        </div>
+    </div>
 </div>
 
 @Html.AntiForgeryToken()
 
 @section Scripts {
 <script>
+/* ── Sol sekme rayi (2026-08-22) ─────────────────────────────────────────
+   Gruplar solda, secili grubun detayi sagda. Bagimsiz IIFE — asagidaki
+   calistirma mantigina hic dokunmaz; yalnizca gorunurluk degistirir.
+   Sekme rozetleri: her grup kendi ozetini yayinlar (hcSetTabBadge), boylece
+   kullanici digerine gecmeden hangi grupta sorun oldugunu gorur. */
+(function () {
+    var tabs  = Array.prototype.slice.call(document.querySelectorAll('[data-hc-tab]'));
+    var panes = Array.prototype.slice.call(document.querySelectorAll('[data-hc-pane]'));
+    function activate(key) {
+        tabs.forEach(function (t) {
+            var on = t.getAttribute('data-hc-tab') === key;
+            t.classList.toggle('is-active', on);
+            t.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        panes.forEach(function (p) {
+            p.classList.toggle('is-active', p.getAttribute('data-hc-pane') === key);
+        });
+    }
+    tabs.forEach(function (t) {
+        t.addEventListener('click', function () { activate(t.getAttribute('data-hc-tab')); });
+    });
+
+    /* Rozet: { ok, warn, error } sayilarindan EN KOTU durumu gosterir.
+       Hicbiri yoksa rozet gizlenir (:empty). */
+    window.hcSetTabBadge = function (key, counts) {
+        var el = document.getElementById(key === 'fn' ? 'hcTabBadgeFn' : 'hcTabBadgePages');
+        if (!el) return;
+        counts = counts || {};
+        var err = Number(counts.error || 0), warn = Number(counts.warn || 0), ok = Number(counts.ok || 0);
+        el.classList.remove('ok', 'warn', 'error');
+        if (err > 0)       { el.classList.add('error'); el.textContent = err; }
+        else if (warn > 0) { el.classList.add('warn');  el.textContent = warn; }
+        else if (ok > 0)   { el.classList.add('ok');    el.textContent = ok; }
+        else               { el.textContent = ''; }
+    };
+})();
+
 (function() {
     const btn       = document.getElementById('hcRunBtn');
     const icon      = document.getElementById('hcRunIcon');
@@ -580,6 +700,10 @@
                 stepExpand('forms', hasErr);
                 const extra = s.testCompanyName ? ' <span class="hc-pill" style="background:rgba(16,185,129,.15);color:#10b981;">Şirket: ' + escapeHtml(s.testCompanyName) + '</span>' : '';
                 summaryEl.innerHTML = summaryHtml(s, extra);
+                if (window.hcSetTabBadge) window.hcSetTabBadge('pages', {
+                    ok: s.ok || 0, warn: s.warn || 0,
+                    error: (s.error || 0) + (s.exception || 0),
+                });
                 break;
             }
         }
@@ -743,6 +867,9 @@
                 break;
             case 'fn_done': {
                 fnSummaryEl.innerHTML = fnSummaryHtml({ passed: frame.passed, failed: frame.failed, skipped: frame.skipped });
+                if (window.hcSetTabBadge) window.hcSetTabBadge('fn', {
+                    ok: frame.passed || 0, warn: frame.skipped || 0, error: frame.failed || 0,
+                });
                 const live = document.getElementById('hcFnLive');
                 if (live) live.innerHTML = '';
                 break;
