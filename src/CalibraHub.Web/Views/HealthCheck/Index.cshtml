@@ -1,4 +1,4 @@
-@{
+﻿@{
     ViewData["Title"] = "Sistem Sağlık Kontrolü";
     ViewData["HelpKey"] = "health-check";
     ViewData["BodyClass"] = "page-hc";
@@ -21,7 +21,12 @@
            yollar/hata metinleri dar sutuna sikisiyordu — tavan kaldirildi. */
         max-width: none;
         margin: 0;
-        height: calc(100vh - var(--app-header-height, 64px) - var(--app-tabs-height, 48px));
+        /* Ekran workspace sekmesinde IFRAME içinde açılır: 100vh ZATEN iframe'in
+           yüksekliğidir; app header/tab şeridi DIŞARIDA (ana belgede) kalır. Eskiden
+           ikisi de ayrıca çıkarılıyordu (-112px) → sayfanın altında ~112px ölü alan
+           oluşuyor, liste erken kesiliyordu. Diğer tüm tam-yükseklik ekranlarıyla
+           (ör. .sp-outer) aynı değer kullanılır. (2026-08-23 düzeltme) */
+        height: calc(100vh - 56px);
         display: flex;
         flex-direction: column;
         min-height: 0;
@@ -302,7 +307,9 @@
     .hc-nav__badge.error { background: rgba(239,68,68,.18);  color: #ef4444; }
     .hc-nav__badge:empty { display: none; }
 
-    .hc-panes { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+    /* min-height:0 — flex zincirinin kopmaması için (alt kırılımdaki .hc-step-list
+       ancak böyle sınırlanıp KENDİ kaydırma çubuğunu gösterebilir). */
+    .hc-panes { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
     .hc-pane { display: none; flex: 1 1 auto; min-height: 0; }
     .hc-pane.is-active { display: flex; flex-direction: column; }
 

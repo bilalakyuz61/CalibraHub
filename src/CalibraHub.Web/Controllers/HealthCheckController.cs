@@ -290,10 +290,26 @@ public sealed class HealthCheckController : Controller
                 var n = await CountAsync(conn, "Forms", ct);
                 return n < 0 ? ("error", "okunamadı") : n > 0 ? ("ok", $"{n} kayıt") : ("warn", "form seed eksik");
             }),
-            new("seed.perms", "İzin tanımı (seed)", gseed, async (conn, ct) =>
+            new("seed.perms", "İzin tanımı (seed)", gseed, async (_, ct) =>
             {
-                var n = await CountAsync(conn, "PermissionDef", ct);
-                return n < 0 ? ("error", "okunamadı") : n > 0 ? ("ok", $"{n} kayıt") : ("warn", "izin seed eksik");
+                // PermissionDef SİSTEM (master) DB'de yaşar — SqlPermissionDefRepository tüm
+                // sorgularını OpenSystemConnectionAsync ile açar, PermissionDefDiscoveryService
+                // de oraya upsert eder. Şirket DB'sinde tablo yalnızca şema-ensure nedeniyle
+                // VAR ama HER ZAMAN BOŞTUR; burada company connection'ını saymak kalıcı ve
+                // yanıltıcı bir "izin seed eksik" uyarısı üretiyordu (2026-08-23 düzeltme).
+                try
+                {
+                    await using var sysConn = await _connectionFactory.OpenSystemConnectionAsync(ct);
+                    var n = await CountAsync(sysConn, "PermissionDef", ct);
+                    return n < 0 ? ("error", "okunamadı")
+                         : n > 0 ? ("ok", $"{n} kayıt (sistem DB)")
+                         : ("warn", "izin seed eksik — PermissionDefDiscoveryService çalışmamış olabilir");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "[HealthCheck] PermissionDef sayımı (sistem DB) başarısız.");
+                    return ("error", "sistem DB okunamadı");
+                }
             }),
             new("seed.decimal", "Ondalık ayarı", gseed, async (conn, ct) =>
             {
