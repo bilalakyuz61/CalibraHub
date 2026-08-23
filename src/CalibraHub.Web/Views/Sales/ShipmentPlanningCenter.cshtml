@@ -170,6 +170,36 @@
     body.app-theme-light .sp-modal-rm { background:rgba(239,68,68,.06); border-color:rgba(239,68,68,.22); color:#dc2626; }
     body.app-theme-light .sp-modal-rm:hover { background:rgba(239,68,68,.12); }
     body.app-theme-light .sp-modal-ft { border-top-color:#e2e8f0; }
+
+    /* ── Rezervasyonlar modalı (satır İşlemler menüsü → "Rezervasyonlar") ──
+       Ayni sp-modal iskeleti, ama boyutu icerige gore DEGISMEZ (yukleniyor→
+       liste→bos gecislerinde modal buyuyup kuculmesin — CLAUDE.md "Modal
+       boyut sabitligi"): sabit genislik+yukseklik, govde flex+overflow-y. */
+    .sp-modal--resv { width:min(720px, 94vw); height:min(560px, 82vh); max-height:82vh; }
+    .sp-modal--resv .sp-modal-body { flex:1 1 auto; min-height:0; overflow-y:auto; }
+    .sp-resv-state { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:40px 16px; color:#64748b; font-size:.82rem; text-align:center; }
+    .sp-resv-badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:.68rem; font-weight:700; white-space:nowrap; }
+    .sp-resv-badge--active { background:rgba(99,102,241,.14); color:#a5b4fc; }
+    .sp-resv-badge--shipped { background:rgba(16,185,129,.14); color:#6ee7b7; }
+    .sp-resv-badge--cancelled { background:rgba(239,68,68,.12); color:#fca5a5; }
+    .sp-resv-actions { display:flex; gap:6px; justify-content:flex-end; }
+    .sp-resv-abtn {
+        padding:4px 10px; border-radius:6px; font-size:.72rem; font-weight:600; cursor:pointer; border:1px solid transparent;
+        transition:all .12s; white-space:nowrap;
+    }
+    .sp-resv-abtn--primary { background:rgba(99,102,241,.14); border-color:rgba(99,102,241,.3); color:#a5b4fc; }
+    .sp-resv-abtn--primary:hover { background:rgba(99,102,241,.22); }
+    .sp-resv-abtn--danger { background:rgba(239,68,68,.1); border-color:rgba(239,68,68,.25); color:#fca5a5; }
+    .sp-resv-abtn--danger:hover { background:rgba(239,68,68,.18); }
+    .sp-resv-abtn:disabled { opacity:.35; cursor:not-allowed; }
+    body.app-theme-light .sp-resv-state { color:#64748b; }
+    body.app-theme-light .sp-resv-badge--active { background:#eef2ff; color:#4338ca; }
+    body.app-theme-light .sp-resv-badge--shipped { background:#ecfdf5; color:#059669; }
+    body.app-theme-light .sp-resv-badge--cancelled { background:#fef2f2; color:#dc2626; }
+    body.app-theme-light .sp-resv-abtn--primary { background:#eef2ff; border-color:#c7d2fe; color:#4338ca; }
+    body.app-theme-light .sp-resv-abtn--primary:hover { background:#e0e7ff; }
+    body.app-theme-light .sp-resv-abtn--danger { background:#fef2f2; border-color:#fecaca; color:#dc2626; }
+    body.app-theme-light .sp-resv-abtn--danger:hover { background:#fee2e2; }
 </style>
 }
 
@@ -245,6 +275,36 @@
             <div class="sp-modal-ft-btns">
                 <button type="button" class="sp-btn sp-btn--g" id="spResCancelBtn" onclick="spCloseReserveModal()">Vazgeç</button>
                 <button type="button" class="sp-btn sp-btn--p" id="spResOkBtn" onclick="spSubmitReservation()">Rezerve Et</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ── Rezervasyonlar modalı — satır İşlemler menüsü "Rezervasyonlar" ──
+   Bir kalemin mevcut rezervasyonlarını listeler; her satırda Yükle (irsaliyeye
+   çevir) / İptal aksiyonu (destrüktif — ekran-ortası showConfirm zorunlu,
+   native confirm YOK). Veri: GET /Sales/ShipmentPlanningLineDetail?lineId=.. *@
+<div class="sp-modal-backdrop" id="spResvModalBackdrop" onclick="spResvBackdropClick(event)">
+    <div class="sp-modal sp-modal--resv" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
+        <div class="sp-modal-hd">
+            <div class="sp-modal-hd-icon">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+            </div>
+            <div class="sp-modal-hd-tx">
+                <strong>Rezervasyonlar</strong>
+                <small id="spResvSubtitle">—</small>
+            </div>
+            <button type="button" class="sp-modal-close" onclick="spCloseReservationsModal()" title="Kapat (Esc)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="sp-modal-body">
+            <div id="spResvBody"><div class="sp-resv-state">Yükleniyor…</div></div>
+        </div>
+        <div class="sp-modal-ft">
+            <span class="sp-res" id="spResvMsg"></span>
+            <div class="sp-modal-ft-btns">
+                <button type="button" class="sp-btn sp-btn--g" onclick="spCloseReservationsModal()">Kapat</button>
             </div>
         </div>
     </div>
@@ -502,6 +562,176 @@
             .catch(function () {
                 if (CalibraAlert) CalibraAlert.show('Bağlantı hatası — kalemler okunamadı.', { type: 'error' });
             });
+    });
+
+    // ── Rezervasyonlar modalı ────────────────────────────────────────────────
+    // Satır İşlemler menüsü → "Rezervasyonlar" (type:"event"). Veri:
+    // GET /Sales/ShipmentPlanningLineDetail?lineId=.. → { ok, empty, columns, rowActions, rows }.
+    // rowActions[].apiUrl + idsField sözleşmesi: POST { [idsField]: [rowId] }.
+    var RESV_LINE_ID = null;
+    var RESV_ROW_ACTIONS = [];
+    var RESV_BUSY = false;
+
+    function spResvStatusBadgeClass(status) {
+        if (status === 'Yüklendi') return 'sp-resv-badge--shipped';
+        if (status === 'İptal') return 'sp-resv-badge--cancelled';
+        return 'sp-resv-badge--active';
+    }
+
+    function spResvRenderRows(data) {
+        var cols = Array.isArray(data.columns) ? data.columns : [];
+        var rows = Array.isArray(data.rows) ? data.rows : [];
+        RESV_ROW_ACTIONS = Array.isArray(data.rowActions) ? data.rowActions : [];
+        var wrap = document.getElementById('spResvBody');
+
+        if (!rows.length) {
+            wrap.innerHTML = '<div class="sp-resv-state">' + esc(data.empty || 'Kayıt yok.') + '</div>';
+            return;
+        }
+
+        var theadHtml = cols.map(function (c) {
+            return '<th style="text-align:' + (c.align || 'left') + ';' + (c.width ? ('width:' + c.width + 'px;') : '') + '">' + esc(c.label) + '</th>';
+        }).join('') + (RESV_ROW_ACTIONS.length ? '<th style="width:1%;"></th>' : '');
+
+        var tbodyHtml = rows.map(function (r) {
+            var tds = cols.map(function (c) {
+                var v = r[c.key];
+                if (c.key === 'status') {
+                    return '<td style="text-align:' + (c.align || 'left') + ';"><span class="sp-resv-badge ' + spResvStatusBadgeClass(v) + '">' + esc(v) + '</span></td>';
+                }
+                return '<td style="text-align:' + (c.align || 'left') + ';">' + esc(v == null || v === '' ? '—' : v) + '</td>';
+            }).join('');
+            var isActive = r.status === 'Aktif';
+            var actionsHtml = '';
+            if (RESV_ROW_ACTIONS.length) {
+                actionsHtml = '<td><div class="sp-resv-actions">' + RESV_ROW_ACTIONS.map(function (a) {
+                    var cls = a.variant === 'danger' ? 'sp-resv-abtn--danger' : 'sp-resv-abtn--primary';
+                    return '<button type="button" class="sp-resv-abtn ' + cls + '"' + (isActive ? '' : ' disabled')
+                        + ' onclick="spResvRunRowAction(\'' + a.id + '\',' + r.id + ')">' + esc(a.label) + '</button>';
+                }).join('') + '</div></td>';
+            }
+            return '<tr data-resv-id="' + r.id + '">' + tds + actionsHtml + '</tr>';
+        }).join('');
+
+        wrap.innerHTML = '<div class="sp-modal-tablewrap"><table class="sp-modal-tbl"><thead><tr>' + theadHtml + '</tr></thead><tbody>' + tbodyHtml + '</tbody></table></div>';
+    }
+
+    function spResvLoad(lineId) {
+        document.getElementById('spResvBody').innerHTML = '<div class="sp-resv-state">Yükleniyor…</div>';
+        spModalShowMsgIn('spResvMsg', '', '');
+        fetch('/Sales/ShipmentPlanningLineDetail?lineId=' + encodeURIComponent(lineId), { headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data || data.ok === false) {
+                    document.getElementById('spResvBody').innerHTML = '<div class="sp-resv-state">' + esc((data && data.error) || 'Rezervasyon detayı yüklenemedi.') + '</div>';
+                    return;
+                }
+                spResvRenderRows(data);
+            })
+            .catch(function () {
+                document.getElementById('spResvBody').innerHTML = '<div class="sp-resv-state">Bağlantı hatası — rezervasyon detayı yüklenemedi.</div>';
+            });
+    }
+
+    function spModalShowMsgIn(elId, text, kind) {
+        var el = document.getElementById(elId);
+        if (!el) return;
+        if (!text) { el.style.display = 'none'; el.textContent = ''; el.className = 'sp-res'; return; }
+        el.textContent = text;
+        el.className = 'sp-res ' + (kind === 'ok' ? 'sp-res--ok' : (kind === 'info' ? 'sp-res--info' : 'sp-res--err'));
+        el.style.display = 'block';
+    }
+
+    // Satır aksiyonu (Yükle/İptal) — confirm ZORUNLU: destrüktif/geri alınamaz
+    // işlem, ekran-ortası custom modal (window.showConfirm), native confirm YOK.
+    window.spResvRunRowAction = function (actionId, rowId) {
+        if (RESV_BUSY) return;
+        var action = RESV_ROW_ACTIONS.find(function (a) { return a.id === actionId; });
+        if (!action) return;
+
+        function run() {
+            RESV_BUSY = true;
+            var idsField = action.idsField || 'ids';
+            var body = {};
+            body[idsField] = [rowId];
+            fetch(action.apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': spCsrf() },
+                body: JSON.stringify(body),
+            })
+            .then(function (r) { return r.text().then(function (txt) { return { status: r.status, ok: r.ok, txt: txt }; }); })
+            .then(function (res) {
+                var data = null;
+                if (res.txt) { try { data = JSON.parse(res.txt); } catch (e) { /* JSON degil */ } }
+                var failMsg = data && (data.error || data.message);
+                if (!res.ok || (data && (data.ok === false || data.success === false))) {
+                    spModalShowMsgIn('spResvMsg', failMsg || ('İstek başarısız (HTTP ' + res.status + ')'), 'err');
+                    return;
+                }
+                spModalShowMsgIn('spResvMsg', 'İşlem tamamlandı.', 'ok');
+                if (CalibraAlert) CalibraAlert.show('İşlem tamamlandı.', { type: 'success', autoDismissMs: 2200 });
+                if (RESV_LINE_ID != null) spResvLoad(RESV_LINE_ID);
+                spBoardRefresh();   // in-place — window.location.reload YOK
+            })
+            .catch(function (err) {
+                spModalShowMsgIn('spResvMsg', 'Bağlantı hatası: ' + err.message, 'err');
+            })
+            .finally(function () { RESV_BUSY = false; });
+        }
+
+        if (action.confirm) {
+            window.showConfirm({
+                title: action.variant === 'danger' ? 'İptal Onayı' : 'Yükleme Onayı',
+                message: action.confirm,
+                okLabel: action.variant === 'danger' ? 'Evet, İptal Et' : 'Evet, Yükle',
+                danger: action.variant === 'danger',
+            }).then(function (ok) { if (ok) run(); });
+        } else {
+            run();
+        }
+    };
+
+    window.spCloseReservationsModal = function () {
+        document.getElementById('spResvModalBackdrop').classList.remove('open');
+        document.removeEventListener('keydown', spResvEscHandler);
+        RESV_LINE_ID = null;
+    };
+    window.spResvBackdropClick = function (event) {
+        if (event.target && event.target.id === 'spResvModalBackdrop') spCloseReservationsModal();
+    };
+    function spResvEscHandler(e) {
+        if (e.key === 'Escape') spCloseReservationsModal();
+    }
+
+    // "Rezervasyonlar" satır İşlemler menüsü (SmartBoard type:"event") — event.detail.id
+    // (SmartTableRow tekil satır id'si gönderir; ids[] de aynı tek elemanla dolu gelir).
+    window.addEventListener('shipmentPlanning:reservations', function (e) {
+        var lineId = e && e.detail && (e.detail.id != null ? e.detail.id : (e.detail.ids && e.detail.ids[0]));
+        if (lineId == null) return;
+        RESV_LINE_ID = lineId;
+        var subtitleEl = document.getElementById('spResvSubtitle');
+        var line = LINES.find(function (l) { return l.lineId === lineId; });
+        subtitleEl.textContent = line
+            ? ((line.materialName || line.materialCode || ('#' + lineId)) + (line.orderNumber ? ' — ' + line.orderNumber : ''))
+            : ('Kalem #' + lineId);
+        document.getElementById('spResvModalBackdrop').classList.add('open');
+        document.addEventListener('keydown', spResvEscHandler);
+        spResvLoad(lineId);
+        // LINES cache'i bos olabilir (rezerve modali hic acilmadiysa) — subtitle'i
+        // dolduran acik kalem listesini arka planda tazele, gelince yeniden yaz.
+        if (!line) {
+            fetch('/Sales/OpenOrderLinesForReservation?materialSearch=&orderNumber=', { headers: { 'Accept': 'application/json' } })
+                .then(function (r) { return r.json(); })
+                .then(function (list) {
+                    if (!Array.isArray(list)) return;
+                    LINES = list;
+                    var l2 = list.find(function (x) { return x.lineId === lineId; });
+                    if (l2 && RESV_LINE_ID === lineId) {
+                        subtitleEl.textContent = (l2.materialName || l2.materialCode || ('#' + lineId)) + (l2.orderNumber ? ' — ' + l2.orderNumber : '');
+                    }
+                })
+                .catch(function () { /* sessiz — subtitle fallback zaten gosteriliyor */ });
+        }
     });
 
     // ── SmartBoard mount (Machines/MaterialCards deseni) ────────────────────

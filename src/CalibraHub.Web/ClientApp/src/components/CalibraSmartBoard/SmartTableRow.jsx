@@ -786,6 +786,21 @@ export default function SmartTableRow(props) {
       }, { okLabel: action.confirmOkLabel, variant: action.confirmVariant })
       return
     }
+    // type:'event' — POST YOK. Bu satirin id'si DOM olayi ile host sayfaya
+    // verilir; ek girdi toplayan akislar (miktar/depo/tarih soran modal) boyle
+    // baglanir. SmartBoard.jsx executeBulkAction'daki type:'event' toplu-aksiyon
+    // sozlesmesiyle AYNI desen (bkz. o dosyadaki 2026-08 kdoc'u) — burada tek
+    // farkla, secili id listesi yerine bu SATIRIN id'si gonderilir. Host sayfa
+    // isi bitince window.CalibraSmartBoard.refresh(boardKey) ile board'u tazeler.
+    if (action.type === 'event') {
+      try {
+        window.dispatchEvent(new CustomEvent(action.event || 'smartboard:row', {
+          detail: { actionId: action.id || null, ids: [id], id: id },
+        }))
+      } catch (e) { /* CustomEvent desteklenmiyorsa sessiz gec */ }
+      setMenuOpen(false)
+      return
+    }
     // fetch-modal: sunucudan HTML partial cek, modalda goster (SmartCard paritesi).
     if (action.type === 'fetch-modal') {
       var fetchUrl = (action.fetchUrl || '').replace('{id}', id)
