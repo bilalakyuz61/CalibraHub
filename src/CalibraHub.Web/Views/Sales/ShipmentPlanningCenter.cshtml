@@ -49,179 +49,13 @@
         padding: 16px 20px 0;
         overflow:hidden;
     }
-
-    /* ── Başlık ── */
-    .sp-hd { display:flex; align-items:center; gap:12px; margin-bottom:14px; flex-shrink:0; position:relative; }
-    .sp-back {
-        display:inline-flex; align-items:center; gap:5px;
-        padding:5px 11px; border-radius:7px;
-        background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.09);
-        color:#94a3b8; font-size:.79rem; text-decoration:none; transition:all .13s;
-    }
-    .sp-back:hover { background:rgba(255,255,255,.08); color:#e2e8f0; }
-    /* Aşağıdaki ölçüler SmartBoard başlık şeridiyle (standart liste ekranı)
-       birebir aynıdır: ikon kutusu 36px/rounded-xl, başlık 16px, alt başlık 11px,
-       arama ve araç butonları 12px köşe yarıçapı. */
-    .sp-title-icon {
-        width:36px; height:36px; border-radius:12px; flex-shrink:0;
-        background:rgba(99,102,241,.15); border:1px solid rgba(99,102,241,.3);
-        color:#818cf8;
-        display:flex; align-items:center; justify-content:center;
-    }
-    .sp-title-tx  { font-size:1rem; font-weight:700; color:#e2e8f0; letter-spacing:-.01em; line-height:1.2; }
-    .sp-title-sub { font-size:.6875rem; color:#64748b; line-height:1.2; }
-
-    .sp-qs-wrap { width:280px; flex-shrink:0; position:relative; display:flex; align-items:center; }
-    .sp-qs-icon { position:absolute; left:14px; top:50%; transform:translateY(-50%); color:#64748b; pointer-events:none; }
-    .sp-qs-input {
-        width:100%; height:38px; padding:0 14px 0 38px;
-        border:1px solid rgba(255,255,255,.06); border-radius:12px;
-        background:rgba(255,255,255,.04); font-size:.875rem;
-        color:#e2e8f0; outline:none; transition:border-color .13s;
-    }
-    .sp-qs-input::placeholder { color:#334155; }
-    .sp-qs-input:focus { border-color:rgba(255,255,255,.15); }
-    .sp-qs-input::-webkit-search-cancel-button { cursor:pointer; }
-
-    .sp-hd-icon-btn {
-        display:inline-flex; align-items:center; justify-content:center;
-        width:36px; height:36px; border-radius:12px; padding:0; flex-shrink:0;
-        background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.06);
-        color:#94a3b8; cursor:pointer; transition:all .13s;
-    }
-    .sp-hd-icon-btn:hover { background:rgba(255,255,255,.08); color:#818cf8; }
     @@keyframes spspin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    .sp-hd-icon-btn.sp-spin svg { animation: spspin .8s linear infinite; }
-
-    /* ── Liste ── */
-    .sp-body { flex:1; min-height:0; display:flex; flex-direction:column; }
-    .sp-left {
-        flex:1; min-height:0; display:flex; flex-direction:column;
-        background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.07);
-        border-radius:12px; overflow:hidden;
-    }
-
-    /* Baslik ve satirlar AYNI grid sablonunu kullanir: --sp-cols'u JS uretir
-       (gorunur sutunlar + genislikleri). Fallback, sutun ayari yuklenmeden
-       once ilk cizimde bozuk gorunmesin diye eski sabit sablondur. */
-    .sp-flat-hdr {
-        display:grid;
-        grid-template-columns: var(--sp-cols, 26px 130px 1fr 76px 76px 76px 76px 110px 46px 26px);
-        align-items:center; gap:8px;
-        padding:6px 16px 6px 14px; flex-shrink:0;
-        font-size:.68rem; font-weight:700; letter-spacing:.04em; text-transform:none;
-        color:#475569; border-bottom:1px solid rgba(255,255,255,.06);
-        background:rgba(255,255,255,.02);
-    }
-    .sp-flat-hdr > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .sp-fh { display:flex; align-items:center; gap:5px; min-width:0; }
-    .sp-fh-tx { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .sp-fh-ic { width:12px; height:12px; flex-shrink:0; opacity:.65; }
-
-
-    .sp-list { flex:1; overflow-y:auto; scrollbar-gutter:stable; }
-    .sp-list::-webkit-scrollbar { width:4px; }
-    .sp-list::-webkit-scrollbar-thumb { background:rgba(255,255,255,.09); border-radius:2px; }
-    .sp-empty-list { padding:32px 14px; text-align:center; color:#475569; font-size:.82rem; }
-
-    .sp-row-wrap { border-bottom:1px solid rgba(255,255,255,.04); }
-    .sp-flat-row {
-        display:grid;
-        grid-template-columns: var(--sp-cols, 26px 130px 1fr 76px 76px 76px 76px 110px 46px 26px);
-        align-items:center; gap:8px;
-        padding:8px 14px; font-size:.79rem; transition:background .1s;
-    }
-    .sp-flat-row:hover { background:rgba(255,255,255,.025); }
-    .sp-flat-row.sel   { background:rgba(99,102,241,.09); }
-    .sp-flat-row.is-kit { background:rgba(139,92,246,.045); }
-    .sp-flat-row.is-kit.sel { background:rgba(99,102,241,.12); }
-    .sp-cb { accent-color:#6366f1; width:15px; height:15px; cursor:pointer; margin:0; }
-    .sp-cb:disabled { opacity:.35; cursor:not-allowed; }
-    .sp-flat-num { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:.79rem; font-weight:700; color:#818cf8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; background:none; border:none; padding:0; text-align:left; cursor:pointer; }
-    .sp-flat-num:hover { color:#a5b4fc; text-decoration:underline; }
-    .sp-flat-mat { min-width:0; overflow:hidden; }
-    .sp-flat-mat-name { color:#e2e8f0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; }
-    .sp-flat-mat-code { color:#475569; font-size:.7rem; font-family:ui-monospace, Menlo, Consolas, monospace; }
     .sp-kit-badge {
         display:inline-flex; align-items:center; gap:3px; margin-left:6px;
         padding:1px 6px; border-radius:999px; font-size:.63rem; font-weight:700;
         background:rgba(139,92,246,.16); color:#c4b5fd; white-space:nowrap;
     }
     .sp-qty  { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:.78rem; color:#cbd5e1; text-align:right; }
-    .sp-qty--open { color:#e2e8f0; font-weight:700; }
-    .sp-stock { text-align:right; font-family:ui-monospace, Menlo, Consolas, monospace; font-size:.78rem; padding:1px 6px; border-radius:6px; }
-    .sp-stock--ok   { color:#34d399; }
-    .sp-stock--warn { color:#fbbf24; }
-    .sp-stock--none { color:#f87171; }
-    .sp-unit { color:#64748b; font-size:.75rem; }
-    .sp-exp-btn {
-        justify-self:end; width:20px; height:20px; border-radius:5px; padding:0;
-        background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.09);
-        color:#64748b; cursor:pointer; display:flex; align-items:center; justify-content:center;
-        transition:all .12s; line-height:1;
-    }
-    .sp-exp-btn:hover { background:rgba(99,102,241,.15); border-color:rgba(99,102,241,.3); color:#a5b4fc; }
-    .sp-exp-btn.active { background:rgba(99,102,241,.14); border-color:rgba(99,102,241,.28); color:#818cf8; }
-    .sp-exp-btn svg { transition:transform .15s; }
-    .sp-exp-btn.active svg { transform:rotate(180deg); }
-
-    /* ── Rezervasyon detay bloğu ── */
-    .sp-sub { background:rgba(99,102,241,.025); border-top:1px solid rgba(99,102,241,.1); }
-    .sp-sub-loading, .sp-sub-empty { padding:8px 14px 8px 48px; font-size:.76rem; color:#475569; font-style:italic; }
-    .sp-sub-row {
-        display:flex; align-items:center; gap:10px; flex-wrap:wrap;
-        padding:6px 14px 6px 48px; border-bottom:1px solid rgba(255,255,255,.03); font-size:.76rem;
-    }
-    .sp-sub-row:last-child { border-bottom:none; }
-    .sp-sub-cb   { accent-color:#6366f1; width:14px; height:14px; cursor:pointer; margin:0; flex-shrink:0; }
-    .sp-sub-loc  { color:#94a3b8; min-width:120px; }
-    .sp-sub-qty  { color:#e2e8f0; font-weight:600; font-family:ui-monospace, Menlo, Consolas, monospace; min-width:70px; }
-    .sp-sub-date { color:#64748b; min-width:80px; }
-    .sp-sub-notes { color:#64748b; flex:1; min-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .sp-sub-actions { margin-left:auto; display:flex; align-items:center; gap:6px; flex-shrink:0; }
-    .sp-sub-cancel {
-        display:inline-flex; align-items:center; gap:4px;
-        padding:3px 9px; border-radius:6px; font-size:.72rem; font-weight:600; cursor:pointer;
-        background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.28); color:#fca5a5; transition:all .12s;
-    }
-    .sp-sub-cancel:hover { background:rgba(239,68,68,.18); border-color:rgba(239,68,68,.4); }
-    .sp-sub-ship {
-        display:inline-flex; align-items:center; gap:4px;
-        padding:3px 9px; border-radius:6px; font-size:.72rem; font-weight:600; cursor:pointer;
-        background:rgba(99,102,241,.12); border:1px solid rgba(99,102,241,.32); color:#a5b4fc; transition:all .12s;
-    }
-    .sp-sub-ship:hover { background:rgba(99,102,241,.2); border-color:rgba(99,102,241,.45); }
-    .sp-sub-toolbar {
-        display:flex; align-items:center; gap:10px; flex-wrap:wrap;
-        padding:6px 14px 6px 48px; border-bottom:1px solid rgba(99,102,241,.14);
-        background:rgba(99,102,241,.04);
-    }
-    .sp-sub-toolbar-cnt { font-size:.74rem; font-weight:700; color:#a5b4fc; }
-    .sp-btn--xs { padding:4px 10px; font-size:.73rem; }
-
-    /* ── Kit seti grup kartı (Faz 1.5) — bileşen rezervasyonları tek kart altında toplanır ── */
-    .sp-sub-kit-group { background:rgba(139,92,246,.04); border-bottom:1px solid rgba(255,255,255,.04); }
-    .sp-sub-kit-group:last-child { border-bottom:none; }
-    .sp-sub-kit-items { padding:2px 14px 8px 74px; display:flex; flex-direction:column; gap:3px; }
-    .sp-sub-kit-item { display:flex; align-items:center; gap:10px; font-size:.72rem; }
-    .sp-sub-kit-item .sp-sub-loc  { min-width:120px; }
-    .sp-sub-kit-item .sp-sub-qty { min-width:70px; }
-    .sp-sub-kit-item .sp-sub-date { min-width:80px; }
-
-    /* ── Seçim aksiyon bar ── */
-    .sp-selbar {
-        position:fixed; left:50%; bottom:18px; transform:translate(-50%, 120%);
-        display:flex; align-items:center; gap:14px; z-index:60;
-        padding:9px 12px 9px 16px; border-radius:12px;
-        background:rgba(13,18,34,.96); border:1px solid rgba(255,255,255,.09);
-        box-shadow:0 16px 40px rgba(0,0,0,.35);
-        transition:transform .18s ease;
-    }
-    .sp-selbar.show { transform:translate(-50%, 0); }
-    .sp-sb-cnt { font-size:.83rem; font-weight:700; color:#a5b4fc; white-space:nowrap; }
-    .sp-sb-right { display:flex; align-items:center; gap:8px; }
-    .sp-fb-cancel { background:none; border:none; color:#64748b; font-size:.78rem; cursor:pointer; padding:5px 4px; }
-    .sp-fb-cancel:hover { color:#94a3b8; }
 
     .sp-btn { display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:8px; font-size:.8rem; font-weight:600; cursor:pointer; border:none; transition:all .13s; }
     .sp-btn--p { background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; }
@@ -292,7 +126,6 @@
     }
     .sp-modal-qty-input:focus { border-color:rgba(99,102,241,.5); }
     .sp-modal-qty-input.sp-qty-warn { border-color:rgba(245,158,11,.55); color:#fbbf24; }
-    .sp-modal-hint { font-size:.67rem; color:#475569; white-space:nowrap; }
     .sp-modal-rm {
         width:24px; height:24px; padding:0; border-radius:6px;
         background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.25); color:#f87171;
@@ -312,152 +145,7 @@
     .sp-result-item { display:flex; align-items:center; gap:8px; font-size:.78rem; padding:4px 8px; border-radius:6px; }
     .sp-result-item--ok  { background:rgba(16,185,129,.08); color:#6ee7b7; }
     .sp-result-item--bad { background:rgba(239,68,68,.08);  color:#fca5a5; }
-
-    /* ── Sütun ayarları paneli (standart liste deseni) ─────────────────── */
-    /* Sütun butonu üst şeritteki diğer araç butonlarıyla aynı görünür (.sp-hd-icon-btn);
-       yalnız "panel açık" durumu için etkin görünüm eklenir. */
-    .sp-hd-icon-btn.active { background:rgba(99,102,241,.18); color:#818cf8; border-color:rgba(99,102,241,.3); }
-
-    .sp-col-panel {
-        position:absolute; top:38px; right:0; z-index:140;
-        width:300px; max-height:440px;
-        background:#0f172a; border:1px solid rgba(255,255,255,.09);
-        border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,.45);
-        display:none; flex-direction:column; overflow:hidden;
-    }
-    .sp-col-panel.open { display:flex; }
-    .sp-cfg-hdr {
-        display:flex; align-items:center; justify-content:space-between; gap:8px;
-        padding:9px 12px; font-size:.68rem; font-weight:700; letter-spacing:.04em;
-        color:#94a3b8; border-bottom:1px solid rgba(255,255,255,.07); flex-shrink:0;
-    }
-    .sp-cfg-reset {
-        background:none; border:none; padding:0; cursor:pointer;
-        font-size:.7rem; font-weight:600; color:#818cf8;
-    }
-    .sp-cfg-reset:hover { text-decoration:underline; }
-    .sp-cfg-rows { overflow-y:auto; flex:1; padding:4px 0; }
-    .sp-cfg-rows::-webkit-scrollbar { width:4px; }
-    .sp-cfg-rows::-webkit-scrollbar-thumb { background:rgba(255,255,255,.09); border-radius:2px; }
-
-    .sp-cfg-row {
-        display:flex; align-items:center; gap:6px; margin:1px 4px;
-        padding:4px 8px; border-radius:6px; cursor:grab; transition:background .1s;
-    }
-    .sp-cfg-row:hover { background:rgba(99,102,241,.09); }
-    .sp-cfg-row.is-hidden { opacity:.45; }
-    .sp-cfg-row.drag-over { outline:2px solid #6366f1; outline-offset:-2px; }
-    .sp-cfg-grip { color:#475569; flex-shrink:0; display:flex; }
-    .sp-cfg-grip svg { width:13px; height:13px; }
-    .sp-cfg-eye {
-        width:20px; height:20px; padding:0; border:none; background:transparent;
-        cursor:pointer; display:flex; align-items:center; justify-content:center;
-        color:#818cf8; border-radius:4px; flex-shrink:0;
-    }
-    .sp-cfg-eye.sp-eye-off { color:#475569; }
-    .sp-cfg-eye:hover { background:rgba(99,102,241,.14); }
-    .sp-cfg-eye svg { width:13px; height:13px; }
-    .sp-cfg-label { flex:1; font-size:.76rem; font-weight:500; color:#e2e8f0; min-width:0;
-        overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .sp-cfg-exp {
-        width:20px; height:20px; padding:0; border:none; background:transparent;
-        cursor:pointer; display:flex; align-items:center; justify-content:center;
-        color:#475569; border-radius:4px; flex-shrink:0;
-    }
-    .sp-cfg-exp:hover { background:rgba(99,102,241,.14); color:#818cf8; }
-    .sp-cfg-exp svg { width:11px; height:11px; transition:transform .15s; }
-    .sp-cfg-exp.open svg { transform:rotate(180deg); }
-
-    .sp-cfg-detail {
-        display:none; flex-direction:column; gap:6px;
-        padding:6px 10px 9px 34px; margin:0 4px 2px;
-        border-bottom:1px solid rgba(255,255,255,.06);
-    }
-    .sp-cfg-detail.open { display:flex; }
-    .sp-cfg-frow { display:flex; align-items:center; gap:8px; }
-    .sp-cfg-flabel { width:62px; font-size:.68rem; color:#64748b; flex-shrink:0; }
-    .sp-cfg-input {
-        flex:1; min-width:0; height:26px; padding:0 8px; border-radius:5px;
-        border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.05);
-        font-size:.74rem; color:#e2e8f0; outline:none; color-scheme:dark;
-    }
-    .sp-cfg-input:focus { border-color:rgba(99,102,241,.5); }
-    .sp-cfg-width { width:66px; flex:none; text-align:right; }
-    .sp-cfg-unit { font-size:.68rem; color:#475569; }
-    .sp-cfg-align { display:flex; gap:2px; flex:1; }
-    .sp-cfg-abtn {
-        flex:1; height:26px; padding:0; border-radius:5px; cursor:pointer;
-        border:1px solid rgba(255,255,255,.08); background:transparent; color:#64748b;
-        display:flex; align-items:center; justify-content:center; transition:all .1s;
-    }
-    .sp-cfg-abtn svg { width:13px; height:13px; }
-    .sp-cfg-abtn:hover { background:rgba(99,102,241,.14); color:#818cf8; }
-    .sp-cfg-abtn.on { background:rgba(99,102,241,.22); color:#818cf8; border-color:rgba(99,102,241,.3); }
-
-    /* ── Light tema override — fc3 deseniyle tutarlı (dark default, light override) ── */
-    body.app-theme-light .sp-hd-icon-btn.active { background:rgba(99,102,241,.1); color:#6366f1; border-color:rgba(99,102,241,.25); }
-    body.app-theme-light .sp-col-panel { background:#fff; border-color:#e2e8f0; box-shadow:0 8px 24px rgba(0,0,0,.12); }
-    body.app-theme-light .sp-cfg-hdr { color:#64748b; border-bottom-color:#e2e8f0; }
-    body.app-theme-light .sp-cfg-reset { color:#4338ca; }
-    body.app-theme-light .sp-cfg-rows::-webkit-scrollbar-thumb { background:#cbd5e1; }
-    body.app-theme-light .sp-cfg-row:hover { background:rgba(99,102,241,.06); }
-    body.app-theme-light .sp-cfg-grip { color:#94a3b8; }
-    body.app-theme-light .sp-cfg-eye { color:#6366f1; }
-    body.app-theme-light .sp-cfg-eye.sp-eye-off { color:#94a3b8; }
-    body.app-theme-light .sp-cfg-label { color:#0f172a; }
-    body.app-theme-light .sp-cfg-exp { color:#94a3b8; }
-    body.app-theme-light .sp-cfg-detail { border-bottom-color:#e2e8f0; }
-    body.app-theme-light .sp-cfg-flabel { color:#64748b; }
-    body.app-theme-light .sp-cfg-input { background:#f8fafc; border-color:#e2e8f0; color:#0f172a; color-scheme:light; }
-    body.app-theme-light .sp-cfg-unit { color:#94a3b8; }
-    body.app-theme-light .sp-cfg-abtn { border-color:rgba(148,163,184,.25); color:#94a3b8; }
-    body.app-theme-light .sp-cfg-abtn.on { background:rgba(99,102,241,.15); color:#6366f1; border-color:rgba(99,102,241,.3); }
-    body.app-theme-light .sp-back { background:#f1f5f9; border-color:#e2e8f0; color:#475569; }
-    body.app-theme-light .sp-back:hover { background:#e2e8f0; color:#0f172a; }
-    body.app-theme-light .sp-title-tx  { color:#0f172a; }
-    body.app-theme-light .sp-title-sub { color:#64748b; }
-    body.app-theme-light .sp-title-icon { background:#eef2ff; border-color:#c7d2fe; color:#6366f1; }
-    body.app-theme-light .sp-title-sub { color:#64748b; }
-    body.app-theme-light .sp-qs-input { background:rgba(255,255,255,.6); border-color:#e2e8f0; color:#334155; color-scheme:light; }
-    body.app-theme-light .sp-qs-input::placeholder { color:#94a3b8; }
-    body.app-theme-light .sp-qs-input:focus { border-color:rgba(129,140,248,.5); }
-    body.app-theme-light .sp-qs-icon { color:#94a3b8; }
-    body.app-theme-light .sp-hd-icon-btn { background:rgba(255,255,255,.6); border-color:#e2e8f0; color:#64748b; }
-    body.app-theme-light .sp-hd-icon-btn:hover { background:rgba(255,255,255,.85); color:#6366f1; }
-
-    body.app-theme-light .sp-left { background:#ffffff; border-color:#e2e8f0; }
-    body.app-theme-light .sp-flat-hdr { color:#94a3b8; border-bottom-color:#f1f5f9; background:#f8fafc; }
-    body.app-theme-light .sp-list::-webkit-scrollbar-thumb { background:#cbd5e1; }
-    body.app-theme-light .sp-row-wrap { border-bottom-color:#f1f5f9; }
-    body.app-theme-light .sp-flat-row:hover { background:#f8fafc; }
-    body.app-theme-light .sp-flat-row.sel { background:rgba(99,102,241,.08); }
-    body.app-theme-light .sp-flat-row.is-kit { background:rgba(139,92,246,.055); }
-    body.app-theme-light .sp-flat-row.is-kit.sel { background:rgba(99,102,241,.1); }
-    body.app-theme-light .sp-flat-num { color:#4338ca; }
-    body.app-theme-light .sp-flat-mat-name { color:#0f172a; }
-    body.app-theme-light .sp-flat-mat-code { color:#94a3b8; }
     body.app-theme-light .sp-qty { color:#334155; }
-    body.app-theme-light .sp-qty--open { color:#0f172a; }
-    body.app-theme-light .sp-unit { color:#94a3b8; }
-    body.app-theme-light .sp-exp-btn { background:#f1f5f9; border-color:#e2e8f0; color:#64748b; }
-    body.app-theme-light .sp-exp-btn:hover, body.app-theme-light .sp-exp-btn.active { background:#e0e7ff; border-color:#c7d2fe; color:#4338ca; }
-    body.app-theme-light .sp-empty-list { color:#64748b; }
-
-    body.app-theme-light .sp-sub { background:#f8fafc; border-top-color:#e0e7ff; }
-    body.app-theme-light .sp-sub-row { border-bottom-color:#f1f5f9; }
-    body.app-theme-light .sp-sub-loc, body.app-theme-light .sp-sub-date, body.app-theme-light .sp-sub-notes { color:#64748b; }
-    body.app-theme-light .sp-sub-qty { color:#0f172a; }
-    body.app-theme-light .sp-sub-loading, body.app-theme-light .sp-sub-empty { color:#94a3b8; }
-    body.app-theme-light .sp-sub-ship { background:rgba(99,102,241,.08); border-color:rgba(99,102,241,.25); color:#4338ca; }
-    body.app-theme-light .sp-sub-ship:hover { background:rgba(99,102,241,.14); border-color:rgba(99,102,241,.38); }
-    body.app-theme-light .sp-sub-toolbar { background:rgba(99,102,241,.05); border-bottom-color:rgba(99,102,241,.16); }
-    body.app-theme-light .sp-sub-toolbar-cnt { color:#4338ca; }
-    body.app-theme-light .sp-sub-kit-group { background:rgba(139,92,246,.045); border-bottom-color:#f1f5f9; }
-
-    body.app-theme-light .sp-selbar { background:#ffffff; border-color:#e2e8f0; box-shadow:0 16px 40px rgba(15,23,42,.14); }
-    body.app-theme-light .sp-sb-cnt { color:#4338ca; }
-    body.app-theme-light .sp-fb-cancel { color:#94a3b8; }
-    body.app-theme-light .sp-fb-cancel:hover { color:#334155; }
     body.app-theme-light .sp-btn--g { background:#f1f5f9; border-color:#e2e8f0; color:#475569; }
     body.app-theme-light .sp-btn--g:hover { background:#e2e8f0; color:#0f172a; }
 
@@ -479,7 +167,6 @@
     body.app-theme-light .sp-modal-tbl tbody td { border-bottom-color:#f1f5f9; }
     body.app-theme-light .sp-modal-mat { color:#334155; }
     body.app-theme-light .sp-modal-qty-input { background:#ffffff; border-color:#e2e8f0; color:#0f172a; }
-    body.app-theme-light .sp-modal-hint { color:#94a3b8; }
     body.app-theme-light .sp-modal-rm { background:rgba(239,68,68,.06); border-color:rgba(239,68,68,.22); color:#dc2626; }
     body.app-theme-light .sp-modal-rm:hover { background:rgba(239,68,68,.12); }
     body.app-theme-light .sp-modal-ft { border-top-color:#e2e8f0; }
@@ -596,10 +283,6 @@
         if (line.isKit) return (line.availableSets != null ? line.availableSets : line.availableStock);
         return line.availableStock;
     }
-    function spReservedForLine(line) {
-        if (line.isKit) return (line.reservedSets != null ? line.reservedSets : line.reservedQty);
-        return line.reservedQty;
-    }
     function fmtDate(iso) {
         if (!iso) return '';
         var d = new Date(iso);
@@ -610,19 +293,6 @@
         var el = document.querySelector('input[name="__RequestVerificationToken"]');
         return el ? el.value : '';
     }
-
-    // Sipariş numarasına tıklanınca parent shell'de workspace sekmesi açar (fc3 deseniyle aynı).
-    window.spOpenOrderTab = function(event, orderDocumentId) {
-        event.preventDefault();
-        event.stopPropagation();
-        var url = '/Sales/DocumentEdit?id=' + orderDocumentId;
-        var p = window.parent;
-        if (p && p !== window && typeof p.calibraOpenWorkspaceTab === 'function') {
-            p.calibraOpenWorkspaceTab(url, 'Satış Siparişi');
-        } else {
-            window.location.href = url;
-        }
-    };
 
     // ── Depo dropdown (lazy, cache) ─────────────────────────────────────────────
     function spEnsureLocations(cb) {

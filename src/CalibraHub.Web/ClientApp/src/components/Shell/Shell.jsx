@@ -305,6 +305,9 @@ export default function Shell(props) {
   var initialUrl = config.initialUrl || '/'
   var savePrefsUrl = config.savePreferencesUrl || '/Account/SaveInterfacePreferences'
   var antiforgery = config.antiforgeryToken || ''
+  // Şirket değiştirme modalı — popover'ın İÇİNDE değil Shell kökünde tutulur,
+  // yoksa menü kapanınca modal da kapanır.
+  var [companySwitchOpen, setCompanySwitchOpen] = useState(false)
 
   /* ── Menü state — sayfa yüklemesinde config'den gelir, focus'ta sunucudan tazelenir ── */
   var [menu, setMenu] = useState(function() {
@@ -1094,6 +1097,7 @@ export default function Shell(props) {
                 user={user}
                 lang={lang}
                 antiforgery={antiforgery}
+                onOpenCompanySwitch={function() { setCompanySwitchOpen(true) }}
                 onLangChange={handleChangeLang}
                 onThemeToggle={handleToggleTheme}
                 onOpenWorkspaceTab={function(arg) {
@@ -1323,6 +1327,19 @@ export default function Shell(props) {
       {/* Oturum atalet izleyici — per-company idle timeout + geri sayımlı uyarı + logout.
           Top-level (Shell) mount; iframe aktiviteleri postMessage ile buraya iletilir. */}
       <SessionIdleGuard />
+
+      {/* Şirket değiştirme modalı — kullanıcı menüsündeki butondan açılır; menü
+          kapansa da açık kalsın diye Shell kökünde render edilir. */}
+      <AnimatePresence>
+        {companySwitchOpen && (
+          <CompanySwitchModal
+            isDark={isDark}
+            lang={lang}
+            antiforgery={antiforgery}
+            onClose={function() { setCompanySwitchOpen(false) }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -2982,20 +2999,34 @@ function ProfilePopover(props) {
                       if (props.onClose) props.onClose()
                     }} />
 
-        {/* Şirket Değiştir — parola SORULMAZ; sunucu, e-postanın hedef şirkette
-            aktif kullanıcı kaydı olup olmadığına bakarak yetkiyi doğrular
-            (bkz. AccountController.SwitchCompany). Liste açılınca çekilir. */}
-        <SwitchCompanyRow isDark={isDark} lang={props.lang || 'TR'} antiforgery={props.antiforgery} />
       </div>
 
       <div className={isDark ? 'h-px bg-white/10' : 'h-px bg-slate-200'} />
 
-      {/* Logout — gercek endpoint'e yonlendir */}
-      <div className="p-2">
+      {/* Alt şerit: Şirket Değiştir + Çıkış Yap AYNI SATIRDA.
+          Şirket değiştirme modalı Shell kökünde açılır (bu popover kapandığında
+          modalın da kapanmaması için) — burada yalnız tetikleyici var. */}
+      <div className="p-2 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={function() {
+            if (props.onOpenCompanySwitch) props.onOpenCompanySwitch()
+            if (props.onClose) props.onClose()
+          }}
+          className={
+            'flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all ' +
+            (isDark
+              ? 'text-white/80 bg-white/[0.05] hover:bg-white/[0.09]'
+              : 'text-slate-700 bg-slate-100 hover:bg-slate-200')
+          }
+        >
+          <Building2 size={15} strokeWidth={2} />
+          <span>{tShell('switch_company', props.lang || 'TR')}</span>
+        </button>
         <a
           href="/Account/Logout"
           className={
-            'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all no-underline ' +
+            'flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all no-underline ' +
             (isDark
               ? 'text-rose-400 hover:bg-rose-500/15 hover:text-rose-300'
               : 'text-rose-600 hover:bg-rose-50')
@@ -3158,35 +3189,40 @@ function OpenTabsPopover(props) {
 }
 
 /**
- * Şirket Değiştir satırı — tıklanınca altında kullanıcının YETKİLİ olduğu şirketleri
- * listeler (GET /Account/MyCompanies), seçilince POST /Account/SwitchCompany ile
- * oturumun şirketi değişir ve sayfa yeniden yüklenir.
+ * CompanySwitchModal — kullanıcının YETKİLİ olduğu şirketler arasında geçiş.
  *
- * Parola istenmez: yetki kapısı sunucudadır — hedef şirkette aynı e-postaya ait
- * AKTİF kullanıcı kaydı yoksa istek reddedilir. Liste yalnızca gösterim içindir.
- * Tam sayfa reload şart: menü, izinler ve açık workspace iframe'lerinin hepsi
- * yeni şirkete göre yeniden kurulmalı.
+ * GET  /Account/MyCompanies    → [{ id, name, isCurrent }]
+ * POST /Account/SwitchCompany  → { companyId }
+ *
+ * Parola İSTENMEZ. Yetki kapısı sunucudadır: hedef şirkette aynı e-postaya ait
+ * AKTİF kullanıcı kaydı yoksa istek reddedilir (AccountController.SwitchCompany).
+ * Buradaki liste yalnızca gösterimdir — güvenlik ona dayanmaz.
+ *
+ * Geçiş sonrası TAM SAYFA yenileme şart: menü, yetkiler ve açık workspace
+ * iframe'lerinin hepsi yeni şirkete göre yeniden kurulmalı.
  */
-function SwitchCompanyRow(props) {
+function CompanySwitchModal(props) {
   var isDark = props.isDark
-  var [open, setOpen] = useState(false)
-  var [state, setState] = useState({ loading: false, error: null, items: null })
+  var lang = props.lang || 'TR'
+  var [state, setState] = useState({ loading: true, error: null, items: null })
   var [busyId, setBusyId] = useState(0)
 
-  function toggle() {
-    var next = !open
-    setOpen(next)
-    if (!next || state.items || state.loading) return
-    setState({ loading: true, error: null, items: null })
+  useEffect(function() {
+    function onKey(e) { if (e.key === 'Escape' && !busyId && props.onClose) props.onClose() }
+    document.addEventListener('keydown', onKey)
+    return function() { document.removeEventListener('keydown', onKey) }
+  }, [busyId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(function() {
     fetch('/Account/MyCompanies', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
-      .then(function (r) { return r.json() })
-      .then(function (list) {
+      .then(function(r) { return r.json() })
+      .then(function(list) {
         setState({ loading: false, error: null, items: Array.isArray(list) ? list : [] })
       })
-      .catch(function () {
-        setState({ loading: false, error: tShell('switch_company_error', props.lang), items: null })
+      .catch(function() {
+        setState({ loading: false, error: tShell('switch_company_error', lang), items: null })
       })
-  }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function pick(c) {
     if (c.isCurrent || busyId) return
@@ -3197,88 +3233,108 @@ function SwitchCompanyRow(props) {
       headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': props.antiforgery || '' },
       body: JSON.stringify({ companyId: c.id }),
     })
-      .then(function (r) { return r.json() })
-      .then(function (d) {
-        if (d && d.ok) { window.location.href = '/' ; return }
+      .then(function(r) { return r.json() })
+      .then(function(d) {
+        if (d && d.ok) { window.location.href = '/'; return }
         setBusyId(0)
-        setState(function (p) { return { loading: false, error: (d && d.error) || 'Şirket değiştirilemedi.', items: p.items } })
+        setState(function(p) { return { loading: false, error: (d && d.error) || 'Şirket değiştirilemedi.', items: p.items } })
       })
-      .catch(function () {
+      .catch(function() {
         setBusyId(0)
-        setState(function (p) { return { loading: false, error: 'Bağlantı hatası.', items: p.items } })
+        setState(function(p) { return { loading: false, error: 'Bağlantı hatası.', items: p.items } })
       })
   }
 
   var items = state.items || []
-  var others = items.filter(function (c) { return !c.isCurrent })
-  var current = items.find(function (c) { return c.isCurrent }) || null
 
   return (
-    <div>
-      <button
-        type="button"
-        onClick={toggle}
-        className={
-          'w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors ' +
-          (isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-100')
-        }
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      onClick={function() { if (!busyId && props.onClose) props.onClose() }}
+      className="fixed inset-0 z-[10010] flex items-start justify-center p-4"
+      style={{ background: 'rgba(0,0,0,.45)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', paddingTop: '14vh' }}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: -8, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -8, scale: 0.97 }}
+        transition={{ duration: 0.16 }}
+        onClick={function(e) { e.stopPropagation() }}
+        role="dialog"
+        aria-modal="true"
+        className={'w-full max-w-sm rounded-2xl overflow-hidden flex flex-col ' + (isDark ? 'text-white' : 'text-slate-900')}
+        style={{ maxHeight: '70vh', background: 'var(--app-surface)', border: '1px solid var(--app-border)', boxShadow: '0 24px 70px rgba(0,0,0,0.45)' }}
       >
-        <Building2 size={15} strokeWidth={1.8} className={isDark ? 'text-white/50' : 'text-slate-500'} />
-        <span className={'flex-1 text-left text-[13px] font-medium ' + (isDark ? 'text-white/80' : 'text-slate-700')}>
-          {tShell('switch_company', props.lang)}
-        </span>
-        <ChevronDown
-          size={13}
-          strokeWidth={2}
-          className={(isDark ? 'text-white/40' : 'text-slate-400') + ' transition-transform ' + (open ? 'rotate-180' : '')}
-        />
-      </button>
+        <div className={'flex items-center gap-2.5 px-4 py-3.5 border-b flex-shrink-0 ' + (isDark ? 'border-white/10' : 'border-slate-200')}>
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 6px 14px rgba(99,102,241,0.3)' }}
+          >
+            <Building2 size={15} strokeWidth={2} className="text-white" />
+          </div>
+          <span className="flex-1 text-[14px] font-bold">{tShell('switch_company', lang)}</span>
+          <button
+            type="button"
+            onClick={function() { if (!busyId && props.onClose) props.onClose() }}
+            className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' +
+              (isDark ? 'text-white/45 hover:text-white hover:bg-white/[0.08]' : 'text-slate-400 hover:text-slate-800 hover:bg-slate-100')}
+            aria-label="Kapat"
+          >
+            <X size={14} strokeWidth={2} />
+          </button>
+        </div>
 
-      {open && (
-        <div className="mt-1 mb-1 pl-8 pr-1 flex flex-col gap-0.5">
+        <div className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col gap-1">
           {state.loading && (
-            <span className={'text-[12px] px-2 py-1 ' + (isDark ? 'text-white/45' : 'text-slate-500')}>
-              {tShell('switch_company_loading', props.lang)}
+            <span className={'text-[12.5px] px-2 py-3 text-center ' + (isDark ? 'text-white/45' : 'text-slate-500')}>
+              {tShell('switch_company_loading', lang)}
             </span>
           )}
           {state.error && (
-            <span className="text-[12px] px-2 py-1 text-rose-400">{state.error}</span>
+            <span className="text-[12.5px] px-2 py-2 text-rose-400">{state.error}</span>
           )}
-          {/* Aktif şirket en üstte, işaretli ve tıklanamaz — kullanıcı nerede olduğunu görsün. */}
-          {current && (
-            <span className={
-              'flex items-center gap-2 text-[12.5px] px-2 py-1.5 rounded-lg font-semibold ' +
-              (isDark ? 'text-indigo-300 bg-indigo-500/10' : 'text-indigo-600 bg-indigo-50')
-            }>
-              <Check size={12} strokeWidth={2.5} />
-              {current.name}
+          {!state.loading && items.length === 0 && !state.error && (
+            <span className={'text-[12.5px] px-2 py-3 text-center ' + (isDark ? 'text-white/45' : 'text-slate-500')}>
+              {tShell('switch_company_empty', lang)}
             </span>
           )}
-          {!state.loading && !state.error && others.length === 0 && state.items && (
-            <span className={'text-[12px] px-2 py-1 ' + (isDark ? 'text-white/45' : 'text-slate-500')}>
-              {tShell('switch_company_empty', props.lang)}
-            </span>
-          )}
-          {others.map(function (c) {
+          {items.map(function(c) {
+            if (c.isCurrent) {
+              return (
+                <span
+                  key={c.id}
+                  className={'flex items-center gap-2 text-[13px] px-3 py-2.5 rounded-xl font-semibold ' +
+                    (isDark ? 'text-indigo-300 bg-indigo-500/10' : 'text-indigo-600 bg-indigo-50')}
+                >
+                  <Check size={14} strokeWidth={2.5} />
+                  <span className="flex-1">{c.name}</span>
+                </span>
+              )
+            }
             return (
               <button
                 key={c.id}
                 type="button"
                 disabled={!!busyId}
-                onClick={function () { pick(c) }}
+                onClick={function() { pick(c) }}
                 className={
-                  'w-full text-left text-[12.5px] px-2 py-1.5 rounded-lg transition-colors ' +
+                  'w-full flex items-center gap-2 text-left text-[13px] px-3 py-2.5 rounded-xl transition-colors ' +
                   (busyId === c.id ? 'opacity-60 ' : '') +
-                  (isDark ? 'text-white/75 hover:bg-white/[0.06]' : 'text-slate-700 hover:bg-slate-100')
+                  (busyId ? 'cursor-not-allowed ' : '') +
+                  (isDark ? 'text-white/80 hover:bg-white/[0.06]' : 'text-slate-700 hover:bg-slate-100')
                 }
               >
-                {c.name}
+                <Building2 size={14} strokeWidth={1.8} className={isDark ? 'text-white/40' : 'text-slate-400'} />
+                <span className="flex-1">{c.name}</span>
               </button>
             )
           })}
         </div>
-      )}
-    </div>
+      </motion.div>
+    </motion.div>
   )
 }
 

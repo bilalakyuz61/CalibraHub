@@ -3333,34 +3333,8 @@ public sealed class SalesController : Controller
         }
     }
 
-    // ── Yükleme Planlama — kullanıcı bazlı sütun ayarları ────────────────────
-    // Standart liste ekranı deseni (bkz. PurchaseController.GetFlatColConfig, ui.fc3.col-cfg-flat).
-    private const string ShipmentColCfgKey = "ui.sp.col-cfg";
-
-    [HttpGet("/Sales/GetShipmentColConfig")]
-    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShipmentPlanning)]
-    public async Task<IActionResult> GetShipmentColConfig(CancellationToken ct)
-    {
-        var uid = CurrentUserId();
-        if (!uid.HasValue) return Json(new { config = (string?)null });
-        var json = await _userSettings.GetAsync(uid.Value, ShipmentColCfgKey, ct);
-        return Json(new { config = json });
-    }
-
-    [HttpPost("/Sales/SaveShipmentColConfig")]
-    [ValidateAntiForgeryToken]
-    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShipmentPlanning)]
-    public async Task<IActionResult> SaveShipmentColConfig(
-        [FromBody] SaveShipmentColConfigRequest request, CancellationToken ct)
-    {
-        var uid = CurrentUserId();
-        if (!uid.HasValue) return Json(new { ok = false });
-        await _userSettings.SetAsync(uid.Value, ShipmentColCfgKey, request?.Config, ct);
-        return Json(new { ok = true });
-    }
 }
 
-public sealed record SaveShipmentColConfigRequest(string? Config);
 
 public sealed record DeleteQuoteBody(int Id);
 public sealed record DeleteAttachmentBody(int Id);
