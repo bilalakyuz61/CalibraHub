@@ -5,6 +5,7 @@ using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Security;
+using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
@@ -661,22 +662,38 @@ public sealed class HealthCheckController : Controller
     /// zorlama burasıdır (aynı desen: SalesController.ChangeQuoteStatus governance kontrolü).
     /// </summary>
     /// <summary>
-    /// Iki baglanti dizesi ayni sunucu+veritabanini mi gosteriyor? Cozulemezse (bozuk/bos dize)
-    /// TRUE doner — fail-closed: emin olamadigimiz durumda testleri calistirmayiz.
+    /// Iki sirket ayni veritabanina mi bakiyor? Sirket kaydindaki <c>DatabaseName</c> tek
+    /// basina YETMEZ: varsayilan (ilk) sirkette bu alan bos olur ve baglanti appsettings'teki
+    /// varsayilan dizeden cozulur — bos degeri "bilinmiyor" sayip fail-closed davranmak her
+    /// test sirketini de bloklardi. Bu yuzden karsilastirma, factory'nin sirket icin GERCEKTEN
+    /// cozdugu baglanti dizesi (sunucu + veritabani) uzerinden yapilir. Cozulemezse TRUE doner
+    /// — emin olamadigimiz durumda testleri calistirmayiz.
     /// </summary>
-    private static bool SameDatabase(string? a, string? b)
+    private bool SameDatabase(int companyIdA, int companyIdB)
     {
-        if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b)) return true;
+        var a = TryResolveTarget(companyIdA);
+        var b = TryResolveTarget(companyIdB);
+        if (a is null || b is null) return true;
+        return string.Equals(a.Value.Server, b.Value.Server, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(a.Value.Database, b.Value.Database, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private (string Server, string Database)? TryResolveTarget(int companyId)
+    {
         try
         {
-            var ba = new SqlConnectionStringBuilder(a);
-            var bb = new SqlConnectionStringBuilder(b);
-            return string.Equals(ba.InitialCatalog?.Trim(), bb.InitialCatalog?.Trim(), StringComparison.OrdinalIgnoreCase)
-                && string.Equals(ba.DataSource?.Trim(), bb.DataSource?.Trim(), StringComparison.OrdinalIgnoreCase);
+            var cs = _connectionFactory.ResolveConnectionStringForCompany(companyId);
+            if (string.IsNullOrWhiteSpace(cs)) return null;
+            var b = new SqlConnectionStringBuilder(cs);
+            var db = b.InitialCatalog?.Trim();
+            var srv = b.DataSource?.Trim();
+            if (string.IsNullOrWhiteSpace(db) || string.IsNullOrWhiteSpace(srv)) return null;
+            return (srv, db);
         }
-        catch (ArgumentException)
+        catch (Exception ex)
         {
-            return true;
+            _logger.LogWarning(ex, "[StreamFunctionalTests] Sirket {CompanyId} baglantisi cozulemedi.", companyId);
+            return null;
         }
     }
 
@@ -708,7 +725,7 @@ public sealed class HealthCheckController : Controller
                 sharedWithLiveCompany = all
                     .Where(c => c.Id != company.Id
                                 && !(c.Name ?? string.Empty).StartsWith("TEST_", StringComparison.Ordinal)
-                                && SameDatabase(c.DatabaseConnectionString, company.DatabaseConnectionString))
+                                && SameDatabase(c.Id, company.Id))
                     .Select(c => c.Name)
                     .FirstOrDefault();
             }
