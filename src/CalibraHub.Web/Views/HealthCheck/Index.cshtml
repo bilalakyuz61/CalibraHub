@@ -343,9 +343,14 @@
 
     <div class="hc-shell">
         <nav class="hc-nav" role="tablist" aria-label="Sağlık kontrolü grupları">
-            <button type="button" class="hc-nav__tab is-active" role="tab" data-hc-tab="pages" aria-selected="true">
+            <button type="button" class="hc-nav__tab is-active" role="tab" data-hc-tab="setup" aria-selected="true">
                 <span class="hc-nav__dot"></span>
-                <span>Sayfa Kontrolleri</span>
+                <span>Test Ortamı</span>
+                <span class="hc-nav__badge" id="hcTabBadgeSetup"></span>
+            </button>
+            <button type="button" class="hc-nav__tab" role="tab" data-hc-tab="pages" aria-selected="false">
+                <span class="hc-nav__dot"></span>
+                <span>Form Kontrolleri</span>
                 <span class="hc-nav__badge" id="hcTabBadgePages"></span>
             </button>
             <button type="button" class="hc-nav__tab" role="tab" data-hc-tab="fn" aria-selected="false">
@@ -356,9 +361,10 @@
         </nav>
 
         <div class="hc-panes">
-    <div class="hc-block hc-pane is-active" data-hc-pane="pages">
+    <div class="hc-block hc-pane is-active" data-hc-pane="setup">
         <p style="font-size: 13px; color: #64748b; margin: 0 0 16px;">
-            Tüm menü ekranlarına otomatik HTTP isteği gönderilir. 200 OK alamayan sayfalar listelenir.
+            Kontroller izole bir test şirketi üzerinde çalışır. Bu sekme şirket/kullanıcı/oturum
+            hazırlığını gösterir; sonuçlar <strong>Form Kontrolleri</strong> sekmesine düşer.
         </p>
 
         <div class="hc-toolbar">
@@ -377,6 +383,14 @@
         </div>
 
         <div id="hcResults" style="flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;"></div>
+    </div>
+
+    <div class="hc-block hc-pane" data-hc-pane="pages">
+        <p style="font-size: 13px; color: #64748b; margin: 0 0 16px;">
+            Tüm menü ekranlarına otomatik HTTP isteği gönderilir. 200 OK alamayan sayfalar listelenir.
+        </p>
+        <div class="hc-toolbar"><div id="hcFormsSummary" class="hc-summary"></div></div>
+        <div id="hcResultsForms" style="flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;"></div>
     </div>
 
     <div class="hc-block hc-pane" data-hc-pane="fn">
@@ -445,11 +459,15 @@
     tabs.forEach(function (t) {
         t.addEventListener('click', function () { activate(t.getAttribute('data-hc-tab')); });
     });
+    // Akis ilerledikce dogru sekmeye gecmek icin disariya acilir (form kontrolleri
+    // basladiginda kullanici elle sekme degistirmek zorunda kalmasin).
+    window.hcActivateTab = activate;
 
     /* Rozet: { ok, warn, error } sayilarindan EN KOTU durumu gosterir.
        Hicbiri yoksa rozet gizlenir (:empty). */
     window.hcSetTabBadge = function (key, counts) {
-        var el = document.getElementById(key === 'fn' ? 'hcTabBadgeFn' : 'hcTabBadgePages');
+        var ids = { fn: 'hcTabBadgeFn', pages: 'hcTabBadgePages', setup: 'hcTabBadgeSetup' };
+        var el = document.getElementById(ids[key] || 'hcTabBadgePages');
         if (!el) return;
         counts = counts || {};
         var err = Number(counts.error || 0), warn = Number(counts.warn || 0), ok = Number(counts.ok || 0);
@@ -489,14 +507,22 @@
     }
 
     // ── Accordion step list ──────────────────────────────────────────────
+    /* 2026-08-22 (kullanici istegi): "test ortami hazirlama" ve "form kontrolleri"
+       AYRI sekmeler. Iki ayri adim listesi kurulur; createStep hangi listeye
+       yazacagini id'den secer. Akis/stream mantigi degismedi. */
+    const resultsFormsEl = document.getElementById('hcResultsForms');
     function initStepList() {
         resultsEl.innerHTML = '<div class="hc-step-list" id="hcStepList"></div>';
+        if (resultsFormsEl) resultsFormsEl.innerHTML = '<div class="hc-step-list" id="hcStepListForms"></div>';
     }
-    function getList() { return document.getElementById('hcStepList'); }
+    function getList(id) {
+        if (id === 'forms') return document.getElementById('hcStepListForms') || document.getElementById('hcStepList');
+        return document.getElementById('hcStepList');
+    }
 
     // Yeni adım satırı oluştur ve listeye ekle
     function createStep(id, title, statusCls) {
-        const list = getList(); if (!list) return;
+        const list = getList(id); if (!list) return;
         const item = document.createElement('div');
         item.className = 'hc-step-item';
         item.id = 'hcs-' + id;
@@ -676,6 +702,7 @@
             case 'setup_done':
                 tst.companyName = frame.companyName;
                 stepStatus('setup', 'ok', frame.companyName + ' · ' + frame.userEmail);
+                if (window.hcSetTabBadge) window.hcSetTabBadge('setup', { ok: 1 });
                 stepBody('setup',
                     setupBodyHtml((tst.setupLabels || SETUP_LABELS).length + 1, null, tst.setupLabels)
                   + '<div class="hc-substep-info">Şirket: <b>' + escapeHtml(frame.companyName) + '</b> · Kullanıcı: <b>' + escapeHtml(frame.userEmail) + '</b></div>');
@@ -683,6 +710,7 @@
                 break;
             case 'setup_error':
                 stepStatus('setup', 'error', 'Hata');
+                if (window.hcSetTabBadge) window.hcSetTabBadge('setup', { error: 1 });
                 stepBody('setup', setupBodyHtml(tst.setupStep, frame.message, tst.setupLabels));
                 break;
 
@@ -690,6 +718,8 @@
             case 'start':
                 tst.results = []; tst.total = frame.total;
                 stepStatus('forms', 'running', frame.total + ' form sırada');
+                // Hazirlik bitti, sonuclar Form Kontrolleri sekmesine akiyor — oraya gec.
+                if (window.hcActivateTab) window.hcActivateTab('pages');
                 stepExpand('forms', true);
                 stepBody('forms', formLiveHtml(0, frame.total, 'Başlatılıyor...', null, ''));
                 break;
@@ -712,6 +742,8 @@
                 stepExpand('forms', hasErr);
                 const extra = s.testCompanyName ? ' <span class="hc-pill" style="background:rgba(16,185,129,.15);color:#10b981;">Şirket: ' + escapeHtml(s.testCompanyName) + '</span>' : '';
                 summaryEl.innerHTML = summaryHtml(s, extra);
+                var formsSum = document.getElementById('hcFormsSummary');
+                if (formsSum) formsSum.innerHTML = summaryHtml(s, extra);
                 if (window.hcSetTabBadge) window.hcSetTabBadge('pages', {
                     ok: s.ok || 0, warn: s.warn || 0,
                     error: (s.error || 0) + (s.exception || 0),
