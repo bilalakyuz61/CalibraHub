@@ -301,6 +301,37 @@ public sealed class PermissionRevokeScenario : FunctionalTestScenarioBase
 internal static class PermissionHelpers
 {
     /// <summary>
+    /// Form kodu → PermissionDef Id haritası (tek aksiyon için). Öncelik senaryoları her
+    /// forma AYRI bir izin durumu kurduğu için düz liste değil, forma göre eşleme gerekir.
+    /// </summary>
+    public static async Task<(bool Ok, IReadOnlyDictionary<string, int> Map)> ResolveDefMapAsync(
+        FunctionalTestContext ctx, List<FunctionalTestStep> steps, int userId,
+        IEnumerable<string> formCodes, string actionCode, CancellationToken ct)
+    {
+        var empty = (IReadOnlyDictionary<string, int>)new Dictionary<string, int>();
+        var res = await ctx.Http.GetAsync($"/Permission/User/{userId}", ct);
+        if (!res.Ok)
+        {
+            steps.Add(new FunctionalTestStep("İzin tanımlarını okuma", false, res.Error));
+            return (false, empty);
+        }
+
+        var forms = new HashSet<string>(formCodes, StringComparer.OrdinalIgnoreCase);
+        var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in res.Json.GetArrayCI("permissions"))
+        {
+            var fc = p.GetStringCI("formCode") ?? "";
+            if (!forms.Contains(fc)) continue;
+            if (!string.Equals(p.GetStringCI("actionCode"), actionCode, StringComparison.OrdinalIgnoreCase)) continue;
+            var id = p.GetIntCI("permissionDefId");
+            if (id > 0) map[fc] = id;
+        }
+
+        steps.Add(new FunctionalTestStep("İzin tanımlarını okuma", true, $"{map.Count} form için {actionCode} izni çözüldü."));
+        return (true, map);
+    }
+
+    /// <summary>
     /// (Form kodu, aksiyon kodu) çiftlerini PermissionDef Id'lerine çevirir. Kaynak, yetki
     /// yönetimi ekranının kullandığı uçtur (<c>/Permission/User/{id}</c>) — böylece test,
     /// izin kataloğunu yeniden tanımlamak yerine ürünün kendi tanımını kullanır.

@@ -66,5 +66,7 @@ public static class FunctionalTestScenarioRegistry
         new PermissionDenyScenario(),
         new PermissionGrantScenario(),
         new PermissionRevokeScenario(),
+        new PermissionPrecedenceScenario(),
+        new PermissionGroupDormantScenario(),
     };
 }
