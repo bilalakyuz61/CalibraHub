@@ -121,6 +121,23 @@ public sealed class AccountController : Controller
     //  GetCompanyOptionsByEmailAsync.)
 
     /// <summary>
+    /// Oturum içinde TAZE bir CSRF token üretir (2026-08-24).
+    ///
+    /// Neden gerekli: antiforgery token oturumdaki kullanıcı kimliğine bağlıdır. Şirket
+    /// değiştirince claim seti (ve kullanıcı Id'si) değişir → sayfanın DOM'undaki eski
+    /// token geçersizleşir ve sonraki POST'lar "token başka bir kullanıcı içindi" hatası
+    /// verir. Şirket geçişini sayfa yenilemeden yapan ekranlar (Sistem Sağlık Kontrolü)
+    /// geçişten hemen sonra buradan yeni token alır.
+    /// </summary>
+    [Authorize]
+    [HttpGet]
+    public IActionResult AntiforgeryToken([FromServices] Microsoft.AspNetCore.Antiforgery.IAntiforgery antiforgery)
+    {
+        var tokens = antiforgery.GetAndStoreTokens(HttpContext);
+        return Json(new { token = tokens.RequestToken });
+    }
+
+    /// <summary>
     /// Hedef şirketin veritabanına gerçekten bağlanılabiliyor mu (2026-08-24).
     ///
     /// Per-company DB mimarisinde bir şirketin veritabanı silinirse şirket KAYDI ayakta

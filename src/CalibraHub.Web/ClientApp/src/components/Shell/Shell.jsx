@@ -303,7 +303,14 @@ function flattenMenuLeaves(menu) {
 export default function Shell(props) {
   var config = props.config || {}
   var user = config.user || { name: '—', email: '', initials: '?', userKey: 'anon' }
-  var system = config.system || { company: '', year: '', status: 'Hazir', appVersion: '?' }
+  // Sirket adi STATE: sunucudan render edilir ama oturum icinde degisebilir — Sistem
+  // Saglik Kontrolu test ortami kurduktan sonra oturumu test sirketine gecirir ve
+  // sayfayi yeniden yuklemez. Sabit prop olsaydi ust serit ESKI sirketi gostermeye
+  // devam ederdi; kullanicinin hangi sirkette oldugunu yanlis bilmesi gercek bir
+  // risktir (test sirketi sanip canli veriye dokunmak). Bu yuzden state + setter.
+  var [system, setSystem] = useState(function () {
+    return config.system || { company: '', year: '', status: 'Hazir', appVersion: '?' }
+  })
   var initialUrl = config.initialUrl || '/'
   var savePrefsUrl = config.savePreferencesUrl || '/Account/SaveInterfacePreferences'
   var antiforgery = config.antiforgeryToken || ''
@@ -771,8 +778,20 @@ export default function Shell(props) {
     window.CalibraHub.openWorkspaceTab = function (arg) {
       if (openWorkspaceTabRef.current) openWorkspaceTabRef.current(arg)
     }
+    // Aktif sirket adini sayfa yenilemeden guncelle (iframe icindeki ekranlar
+    // window.top.CalibraHub.setActiveCompanyName(...) ile cagirir).
+    window.CalibraHub.setActiveCompanyName = function (name) {
+      if (!name) return
+      setSystem(function (prev) {
+        if (prev && prev.company === name) return prev
+        return Object.assign({}, prev, { company: name })
+      })
+    }
     return function () {
-      if (window.CalibraHub) delete window.CalibraHub.openWorkspaceTab
+      if (window.CalibraHub) {
+        delete window.CalibraHub.openWorkspaceTab
+        delete window.CalibraHub.setActiveCompanyName
+      }
     }
   }, [])
 

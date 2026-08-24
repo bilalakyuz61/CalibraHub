@@ -496,9 +496,61 @@
 
     // ── Yardımcılar ─────────────────────────────────────────────────────
 
+    // Sirket gecisinden sonra DOM'daki token gecersizlesir (token oturumdaki kullanici
+    // kimligine bagli). Tazelenen token varsa O kullanilir.
+    let csrfOverride = null;
     function getCsrf() {
+        if (csrfOverride) return csrfOverride;
         const el = document.querySelector('input[name="__RequestVerificationToken"]');
         return el ? el.value : '';
+    }
+    async function refreshCsrf() {
+        try {
+            const r = await fetch('/Account/AntiforgeryToken', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+            const d = await r.json();
+            if (d && d.token) { csrfOverride = d.token; return true; }
+        } catch (e) { console.warn('[HC] CSRF token tazelenemedi', e); }
+        return false;
+    }
+
+    /*  Test ortami kurulduktan SONRA oturumu test sirketine gecirir (2026-08-24,
+        kullanici istegi: "once sirketi acar sonra ilgili sirkete gecer ve kalan
+        islemlere orada devam eder").
+
+        Neden gerekli: Fonksiyon Testleri sunucu tarafinda "oturumdaki sirket TEST_
+        onekli mi" diye kilitli (StreamFunctionalTests guvenlik kilidi). Gecis elle
+        yapilmazsa testler hic calismiyordu; kullanici Sirket Degistir'den test
+        sirketini bulmak zorunda kaliyordu.
+
+        Sayfa YENILENMEZ — akan sonuclar kaybolmasin diye. Bunun iki yan etkisi
+        elle kapatilir: (1) CSRF token tazelenir, (2) ust seritteki sirket adi
+        Shell API'siyle guncellenir (yoksa kullanici hangi sirkette oldugunu
+        yanlis bilir — test sanip canliya dokunma riski).
+
+        Fail-open: gecis basarisizsa kurulum gecerli kalir, kullaniciya elle
+        gecmesi soylenir. */
+    async function switchToTestCompany(companyId, companyName) {
+        try {
+            const r = await fetch('/Account/SwitchCompany', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getCsrf() },
+                body: JSON.stringify({ companyId: companyId }),
+            });
+            const d = await r.json();
+            if (!d || !d.ok) return { ok: false, error: (d && d.error) || 'Şirket değiştirilemedi.' };
+
+            await refreshCsrf();
+            try {
+                const topWin = window.top || window;
+                if (topWin && topWin.CalibraHub && typeof topWin.CalibraHub.setActiveCompanyName === 'function') {
+                    topWin.CalibraHub.setActiveCompanyName(companyName);
+                }
+            } catch (e) { /* cross-origin — ust serit bir sonraki gezinmede guncellenir */ }
+            return { ok: true };
+        } catch (e) {
+            return { ok: false, error: 'Bağlantı hatası.' };
+        }
     }
 
     function escapeHtml(s) {
@@ -699,15 +751,32 @@
                 stepStatus('setup', 'running', frame.message || ((tst.setupLabels || SETUP_LABELS)[frame.step - 1]) || ('Adım ' + frame.step));
                 stepBody('setup', setupBodyHtml(frame.step, null, tst.setupLabels));
                 break;
-            case 'setup_done':
+            case 'setup_done': {
                 tst.companyName = frame.companyName;
+                tst.companyId   = frame.testCompanyId;
                 stepStatus('setup', 'ok', frame.companyName + ' · ' + frame.userEmail);
                 if (window.hcSetTabBadge) window.hcSetTabBadge('setup', { ok: 1 });
-                stepBody('setup',
-                    setupBodyHtml((tst.setupLabels || SETUP_LABELS).length + 1, null, tst.setupLabels)
-                  + '<div class="hc-substep-info">Şirket: <b>' + escapeHtml(frame.companyName) + '</b> · Kullanıcı: <b>' + escapeHtml(frame.userEmail) + '</b></div>');
+                const baseInfo = setupBodyHtml((tst.setupLabels || SETUP_LABELS).length + 1, null, tst.setupLabels)
+                  + '<div class="hc-substep-info">Şirket: <b>' + escapeHtml(frame.companyName) + '</b> · Kullanıcı: <b>' + escapeHtml(frame.userEmail) + '</b></div>';
+                stepBody('setup', baseInfo + '<div class="hc-substep-info">Oturum test şirketine geçiriliyor…</div>');
                 stepExpand('setup', false);
+                // Kurulum bitti → oturumu test sirketine gecir, kalan isler orada koşsun.
+                if (tst.companyId) {
+                    switchToTestCompany(tst.companyId, frame.companyName).then(function (res) {
+                        if (res.ok) {
+                            stepBody('setup', baseInfo
+                              + '<div class="hc-substep-info">✓ Oturum <b>' + escapeHtml(frame.companyName)
+                              + '</b> şirketine geçildi — Fonksiyon Testleri bu şirkette çalışacak.</div>');
+                        } else {
+                            stepBody('setup', baseInfo
+                              + '<div class="hc-error-snippet">⚠ Test şirketine otomatik geçilemedi ('
+                              + escapeHtml(res.error) + '). Fonksiyon Testleri için Şirket Değiştir menüsünden <b>'
+                              + escapeHtml(frame.companyName) + '</b> şirketine geçin.</div>');
+                        }
+                    });
+                }
                 break;
+            }
             case 'setup_error':
                 stepStatus('setup', 'error', 'Hata');
                 if (window.hcSetTabBadge) window.hcSetTabBadge('setup', { error: 1 });
