@@ -155,6 +155,8 @@ public sealed class LogisticsController : Controller
             masterWidgets.Add(MakeWidget("w_kod", "Stok Kodu", "text", STD_GROUP, STD_LBL));
         if (!handledColumns.Contains("Name"))
             masterWidgets.Add(MakeWidget("w_ad", "Stok Adı", "text", STD_GROUP, STD_LBL));
+        if (!handledColumns.Contains("Barcode"))
+            masterWidgets.Add(MakeWidget("w_barcode", "Barkod", "text", STD_GROUP, STD_LBL));
         masterWidgets.Add(MakeWidget("w_aktif",       "Durum",              "boolean", STD_GROUP, STD_LBL));
         masterWidgets.Add(MakeWidget("w_kombinasyon", "Kombinasyon Takibi", "boolean", STD_GROUP, STD_LBL));
         masterWidgets.Add(MakeWidget("w_vergi",       "KDV Oranı",          "percent", STD_GROUP, STD_LBL));
@@ -522,6 +524,7 @@ public sealed class LogisticsController : Controller
                 ["id"]          = card.Id,
                 ["code"]        = card.Code,
                 ["name"]        = card.Name,
+                ["barcode"]     = card.Barcode,
                 ["type_id"]     = card.TypeId,
                 ["unit"]        = card.UnitId,
                 ["tax_rate"]    = card.TaxRate,

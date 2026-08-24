@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
@@ -267,17 +267,64 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                 var s = _schema.Replace("]", "]]");
                 var lineTable = $"[{s}].[DocumentLine]";
 
-                int nextLineNo;
-                await using (var selCmd = conn.CreateCommand())
+                // ── ÜRETİM FİŞİ (2026-08-24, Faz 2) ────────────────────────────────
+                // Mamul girişi artık iş emrinin KENDİ belgesine değil, bu tamamlama
+                // işlemine ait ayrı bir "uretim_fisi" belgesine yazılır; fiş
+                // ParentDocumentId ile iş emri belgesine bağlanır.
+                //
+                // Numara AYNI transaction içinde üretilir (MAX+1) çünkü satırın yazımı
+                // atomik olmak zorunda — Application katmanı iki repository arasında
+                // transaction paylaşamıyor (bu bloğun var olma sebebi de bu).
+                // NOT: sarf tarafı (SqlStockDocRepository) numarayı DocumentNumberRule
+                // üzerinden alır; burada kural servisi yok, aynı yedek biçim kullanılır.
+                // İkisi de aynı MAX+1 sorgusundan beslendiği için numaralar çakışmaz.
+                // uretim_fisi için bir numara KURALI tanımlanırsa iki yol ayrışır — o gün
+                // bu blok da kural servisine bağlanmalı.
+                var woDocumentIdForVoucher = stockLine.DocumentId;
+                var companyIdForVoucher = _connectionFactory.ResolveCurrentCompanyId();
+                var yil = DateTime.Now.Year;
+                string fisNo;
+                await using (var noCmd = conn.CreateCommand())
                 {
-                    selCmd.Transaction = tx;
-                    selCmd.CommandText = $"""
-                        SELECT ISNULL(MAX([LineNo]), 0) + 1 FROM {lineTable} WITH (UPDLOCK, HOLDLOCK)
-                        WHERE [DocumentId] = @DocumentId;
+                    noCmd.Transaction = tx;
+                    noCmd.CommandText = $"""
+                        SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([DocumentNumber], 9, 10) AS INT)), 0) + 1
+                        FROM [{s}].[Document] WITH (UPDLOCK, HOLDLOCK)
+                        WHERE [DocumentNumber] LIKE 'UF-' + CAST(@Yil AS NVARCHAR(4)) + '-%';
                         """;
-                    selCmd.Parameters.AddWithValue("@DocumentId", stockLine.DocumentId);
-                    nextLineNo = Convert.ToInt32(await selCmd.ExecuteScalarAsync(ct));
+                    noCmd.Parameters.AddWithValue("@Yil", yil);
+                    var seq = Convert.ToInt32(await noCmd.ExecuteScalarAsync(ct));
+                    fisNo = $"UF-{yil}-{seq:D4}";
                 }
+
+                await using (var vIns = conn.CreateCommand())
+                {
+                    vIns.Transaction = tx;
+                    vIns.CommandText = $"""
+                        INSERT INTO [{s}].[Document]
+                            ([CompanyId],[DocumentNumber],[DocumentTypeId],[DocumentDate],[LocationId],
+                             [Notes],[Status],[CreatedById],[Created],[IsActive],[ParentDocumentId])
+                        SELECT @CompanyId, @DocNo, dt.[Id], @DocDate, @LocId,
+                               @Notes, N'Draft', NULL, SYSUTCDATETIME(), 1, @ParentId
+                        FROM [{s}].[DocumentType] dt WHERE dt.[Code] = N'uretim_fisi';
+                        SELECT CAST(SCOPE_IDENTITY() AS INT);
+                        """;
+                    vIns.Parameters.AddWithValue("@CompanyId", companyIdForVoucher);
+                    vIns.Parameters.AddWithValue("@DocNo", fisNo);
+                    vIns.Parameters.AddWithValue("@DocDate", DateTime.Today);
+                    vIns.Parameters.AddWithValue("@LocId", (object?)stockLine.LocationId ?? DBNull.Value);
+                    vIns.Parameters.AddWithValue("@Notes", stockLine.Notes ?? "Mamul girişi");
+                    vIns.Parameters.AddWithValue("@ParentId", woDocumentIdForVoucher);
+                    var vId = await vIns.ExecuteScalarAsync(ct);
+                    if (vId is null || vId == DBNull.Value)
+                        throw new InvalidOperationException(
+                            "Üretim fişi oluşturulamadı — 'uretim_fisi' belge türü tanımlı değil. " +
+                            "Uygulamayı yeniden başlatın (belge türleri açılışta seed edilir).");
+                    stockLine.DocumentId = Convert.ToInt32(vId);
+                }
+
+                // Yeni fiş → satır numarası 1.
+                var nextLineNo = 1;
 
                 await using var insCmd = conn.CreateCommand();
                 insCmd.Transaction = tx;
