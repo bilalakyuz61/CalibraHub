@@ -11,9 +11,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -143,11 +144,7 @@ fun MaterialPickerField(
     }
 
     Column(modifier = modifier) {
-        ExposedDropdownMenuBox(
-            expanded = expanded && results.isNotEmpty(),
-            onExpandedChange = { if (results.isNotEmpty()) expanded = it },
-        ) {
-            OutlinedTextField(
+        OutlinedTextField(
                 value = query,
                 onValueChange = { onQueryChange(it) },
                 label = { Text(label) },
@@ -178,28 +175,40 @@ fun MaterialPickerField(
                 },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { results.singleOrNull()?.let { pick(it) } }),
-                modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
             )
-            ExposedDropdownMenu(
-                expanded = expanded && results.isNotEmpty(),
-                onDismissRequest = { expanded = false },
+        // Sonuc listesi POPUP DEGIL, alanin ALTINDA satir ici cizilir.
+        // Sebep (2026-08-24, iOS cihaz testi): ExposedDropdownMenu bir Popup acar ve iOS'ta
+        // (Compose Multiplatform) bu popup metin alaninin ODAGINI CALIYOR — kullanici malzeme
+        // adini yazarken liste acilinca klavye/odak kayboluyordu. Material3'un bu surumunde
+        // ExposedDropdownMenu `properties = PopupProperties(focusable = false)` KABUL ETMIYOR
+        // (yerel derlemeyle dogrulandi: "No parameter with name 'properties'"), bu yuzden popup
+        // tamamen birakildi. Satir ici liste her iki platformda ayni davranir ve odagi bozmaz.
+        // Kaydirma YOK, en fazla 8 sonuc gosterilir (ic ice dikey kaydirma olcum sorunu yaratir;
+        // ekranlarin kendi verticalScroll'u zaten var).
+        if (expanded && results.isNotEmpty()) {
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                tonalElevation = 2.dp,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             ) {
-                results.forEach { dto ->
-                    DropdownMenuItem(
-                        text = {
-                            Column {
-                                Text(dto.name, fontWeight = FontWeight.SemiBold)
-                                Text(
-                                    text = dto.code + (dto.unit.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        },
-                        onClick = { pick(dto) },
-                    )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    results.take(8).forEach { dto ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { pick(dto) }
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                        ) {
+                            Text(dto.name, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = dto.code + (dto.unit.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        HorizontalDivider()
+                    }
                 }
             }
         }
