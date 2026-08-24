@@ -884,6 +884,12 @@ END;";
             // her kaynak icin ayri try/catch (logla+atla) - bir kaynak patlarsa startup kirilmaz.
             // Canli yazim (dual-write) YOK - o Faz 1b. Bkz. DocumentLineLink-Tasarim.md.
             await EnsureDocumentLineLinkBackfillAsync(connection, cancellationToken);
+            // 2026-08-24: Items.Barcode tekillik guvenlik agi. Zincirin sonunda — Items tablosu
+            // + Barcode kolonu bu noktada kesin kurulu (EnsureSchemaAndTablesAsync). Cift barkod
+            // varsa UNIQUE index kurulmaz, uyari loglanir ve acilis NORMAL devam eder; cift
+            // temizlenince bir sonraki acilista otomatik kurulur. Per-company DB'lerin her biri
+            // icin ayri calisir — bir sirketteki cift digerlerini engellemez.
+            await EnsureItemsBarcodeUniqueIndexAsync(connection, cancellationToken);
             // Startup override pass (clobber savunması) — BİRİNCİL geçiş. Kod baseline'ı
             // yukarıdaki tüm program view'larını ensure ettikten SONRA aktif kullanıcı
             // override'larını uygular (kullanıcı sürümü kazanır). NOT: flat view'lar +
@@ -1030,6 +1036,171 @@ END;";
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[DLL Backfill] Fulfillment (tip 1-7) atlandi: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 2026-08-24 — Items.Barcode tekilligi icin DB seviyesinde GUVENLIK AGI.
+    /// Birincil koruma servis katmanindadir (LogisticsConfigurationService.EnsureBarcodeUnique);
+    /// bu index onu atlayan yollara (dogrudan SQL, veri aktarimi, entegrasyon) karsi son savunmadir.
+    ///
+    /// Davranis (idempotent, her startup'ta ve HER sirket DB'sinde ayri ayri calisir):
+    ///   - Cift barkod YOKSA  -> UNIQUE filtered index [UX_Items_Barcode] kurulur,
+    ///                           eski non-unique [IX_Items_Barcode] (varsa) sonrasinda dusurulur.
+    ///   - Cift barkod VARSA  -> UNIQUE index KURULMAZ. Aramayi hizli tutmak icin non-unique
+    ///                           [IX_Items_Barcode] fallback'i garanti edilir + uyari loglanir.
+    ///                           Cift temizlenince sonraki acilista UNIQUE index otomatik kurulur.
+    ///
+    /// Filtre: [Barcode] IS NOT NULL AND [Barcode] <> N'' — bos barkod serbesttir (servis bos
+    /// degeri NULL'a normalize eder; olasi '' satirlari da index disi kalir, yoksa iki bos
+    /// barkodlu malzeme yanlislikla "cift" sayilirdi). Barcode kolonu CI_AS collation'da
+    /// oldugundan buyuk/kucuk harf farki cift sayilir — servisteki OrdinalIgnoreCase ile tutarli.
+    ///
+    /// Bu metod hicbir kosulda acilisi cokertmez: veri SILMEZ/DEGISTIRMEZ, tum SQL try/catch
+    /// icindedir, hata loglanip gecilir (bir sirkette cift olmasi digerlerini etkilemez).
+    /// Kolon/index adlari canli semada dogrulandi (INFORMATION_SCHEMA + sys.indexes, 2026-08-24).
+    /// </summary>
+    private async Task EnsureItemsBarcodeUniqueIndexAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+
+        try
+        {
+            // 1) Tablo + kolon var mi? (Items bu DB'de hic yoksa sessizce cik.)
+            await using (var probe = connection.CreateCommand())
+            {
+                probe.CommandText = $"""
+                    SELECT CASE
+                        WHEN OBJECT_ID(N'[{s}].[Items]', N'U') IS NOT NULL
+                         AND COL_LENGTH(N'[{s}].[Items]', N'Barcode') IS NOT NULL
+                        THEN 1 ELSE 0 END;
+                    """;
+                var ready = Convert.ToInt32(await probe.ExecuteScalarAsync(cancellationToken) ?? 0);
+                if (ready != 1) return;
+            }
+
+            // 2) Cift barkod var mi? (Index filtresiyle BIREBIR ayni predicate.)
+            var duplicateGroups = 0;
+            var samples = new List<string>();
+            await using (var dupCmd = connection.CreateCommand())
+            {
+                dupCmd.CommandText = $"""
+                    SELECT TOP (5) [Barcode], COUNT(*) AS [Cnt]
+                      FROM [{s}].[Items]
+                     WHERE [Barcode] IS NOT NULL AND [Barcode] <> N''
+                     GROUP BY [Barcode]
+                    HAVING COUNT(*) > 1
+                     ORDER BY COUNT(*) DESC, [Barcode];
+                    """;
+                await using var reader = await dupCmd.ExecuteReaderAsync(cancellationToken);
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    samples.Add($"{reader.GetString(0)} (x{reader.GetInt32(1)})");
+                }
+            }
+
+            if (samples.Count > 0)
+            {
+                await using var cntCmd = connection.CreateCommand();
+                cntCmd.CommandText = $"""
+                    SELECT COUNT(*) FROM (
+                        SELECT [Barcode]
+                          FROM [{s}].[Items]
+                         WHERE [Barcode] IS NOT NULL AND [Barcode] <> N''
+                         GROUP BY [Barcode]
+                        HAVING COUNT(*) > 1) d;
+                    """;
+                duplicateGroups = Convert.ToInt32(await cntCmd.ExecuteScalarAsync(cancellationToken) ?? 0);
+            }
+
+            if (duplicateGroups > 0)
+            {
+                // 3a) CIFT VAR -> UNIQUE index kurma. Aramayi hizli tutan non-unique
+                //     fallback index'i garanti et (yoksa kur, varsa dokunma) + uyar.
+                await using (var fallbackCmd = connection.CreateCommand())
+                {
+                    fallbackCmd.CommandText = $"""
+                        IF NOT EXISTS (
+                            SELECT 1 FROM sys.indexes
+                             WHERE [object_id] = OBJECT_ID(N'[{s}].[Items]')
+                               AND [name] = N'IX_Items_Barcode')
+                        BEGIN
+                            CREATE INDEX [IX_Items_Barcode]
+                                ON [{s}].[Items]([Barcode])
+                                WHERE [Barcode] IS NOT NULL AND [Barcode] <> N'';
+                        END;
+                        """;
+                    await fallbackCmd.ExecuteNonQueryAsync(cancellationToken);
+                }
+
+                Console.Error.WriteLine(
+                    $"[DB INIT WARN] [{connection.Database}] Items.Barcode UNIQUE index KURULMADI: " +
+                    $"{duplicateGroups} adet cift barkod var. Ornekler: {string.Join(", ", samples)}" +
+                    (duplicateGroups > samples.Count ? $" (+{duplicateGroups - samples.Count} tane daha)" : string.Empty));
+                Console.Error.WriteLine(
+                    $"[DB INIT WARN] [{connection.Database}] Cift barkodlar temizlendikten sonra bir sonraki acilista " +
+                    "[UX_Items_Barcode] UNIQUE index'i OTOMATIK kurulacaktir. Tespit sorgusu: " +
+                    "SELECT [Barcode], COUNT(*) FROM dbo.Items WHERE [Barcode] IS NOT NULL AND [Barcode] <> N'' " +
+                    "GROUP BY [Barcode] HAVING COUNT(*) > 1;");
+                return;
+            }
+
+            // 3b) CIFT YOK -> UNIQUE index'i kur. Onceden farkli tanimla (non-unique ya da
+            //     baska filtre) kurulmus bir UX varsa once dusur; UNIQUE kurulumu basarili
+            //     olduktan SONRA eski non-unique IX'i dusur (arama index'i hic bosluk gormez).
+            await using (var uxCmd = connection.CreateCommand())
+            {
+                uxCmd.CommandText = $"""
+                    -- Self-heal: ayni adla non-unique bir index kalmissa dusur (normalde
+                    -- olusmaz; UX_Items_Barcode'u yalniz bu blok kurar ve hep UNIQUE kurar).
+                    -- NOT: filter_definition metni KARSILASTIRILMAZ — SQL Server'in normalize
+                    -- ettigi metne bagli kalmak her acilista drop/create salinimi riski dogurur.
+                    IF EXISTS (
+                        SELECT 1 FROM sys.indexes
+                         WHERE [object_id] = OBJECT_ID(N'[{s}].[Items]')
+                           AND [name] = N'UX_Items_Barcode'
+                           AND [is_unique] = 0)
+                    BEGIN
+                        DROP INDEX [UX_Items_Barcode] ON [{s}].[Items];
+                    END;
+
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.indexes
+                         WHERE [object_id] = OBJECT_ID(N'[{s}].[Items]')
+                           AND [name] = N'UX_Items_Barcode')
+                    BEGIN
+                        CREATE UNIQUE INDEX [UX_Items_Barcode]
+                            ON [{s}].[Items]([Barcode])
+                            WHERE [Barcode] IS NOT NULL AND [Barcode] <> N'';
+                    END;
+
+                    IF EXISTS (
+                        SELECT 1 FROM sys.indexes
+                         WHERE [object_id] = OBJECT_ID(N'[{s}].[Items]')
+                           AND [name] = N'UX_Items_Barcode' AND [is_unique] = 1)
+                       AND EXISTS (
+                        SELECT 1 FROM sys.indexes
+                         WHERE [object_id] = OBJECT_ID(N'[{s}].[Items]')
+                           AND [name] = N'IX_Items_Barcode')
+                    BEGIN
+                        DROP INDEX [IX_Items_Barcode] ON [{s}].[Items];
+                    END;
+                    """;
+                await uxCmd.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+        catch (SqlException ex)
+        {
+            // 1505/2601: yaris durumu (kontrol ile CREATE arasinda cift eklendi) — atla, sonraki
+            // acilista tekrar denenir. Diger tum hatalar da acilisi cokertmez, sadece loglanir.
+            Console.Error.WriteLine(
+                $"[DB INIT WARN] [{connection.Database}] Items.Barcode unique index adimi atlandi " +
+                $"(SqlException {ex.Number}): {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(
+                $"[DB INIT WARN] [{connection.Database}] Items.Barcode unique index adimi atlandi: {ex.Message}");
         }
     }
 
@@ -2268,23 +2439,11 @@ END;";
                     ADD [Barcode] NVARCHAR(50) NULL;
             END;
 
-            -- Barkod tam-eşleşme aramasını hızlandıran filtered index (yalnız dolu barkodlar
-            -- indekslenir → küçük ve seçici). CREATE INDEX aynı batch'te eklenen [Barcode]
-            -- kolonuna baktığından deferred-compile için EXEC ile sarılır (ux_Items_Company_Code
-            -- ile aynı desen).
-            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'[{schemaForSql}].[Items]', N'Barcode') IS NOT NULL
-               AND NOT EXISTS (
-                   SELECT 1 FROM sys.indexes
-                   WHERE [object_id] = OBJECT_ID(N'[{schemaForSql}].[Items]')
-                     AND [name] = N'IX_Items_Barcode')
-            BEGIN
-                EXEC(N'
-                    CREATE INDEX [IX_Items_Barcode]
-                        ON [{schemaForSql}].[Items]([Barcode])
-                        WHERE [Barcode] IS NOT NULL;
-                ');
-            END;
+            -- 2026-08-24: Barkod filtered index'i BU BATCH'TEN ÇIKARILDI. Artık tek sahibi
+            -- EnsureItemsBarcodeUniqueIndexAsync (zincirin sonunda çağrılır): çift barkod
+            -- yoksa UNIQUE [UX_Items_Barcode], çift varsa güvenli fallback olarak
+            -- non-unique [IX_Items_Barcode] kurar. Burada CREATE INDEX bırakmak, o metodun
+            -- her açılışta oluştur-sil salınımı yapmasına yol açardı.
 
             -- Eski tek-kolonlu unique index'i (Code) drop et, (CompanyId, Code) ile degistir
             IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
