@@ -63,6 +63,9 @@ public sealed class ParametersController : Controller
         var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
         var company = snapshot.Companies.FirstOrDefault(x => x.Id == companyId);
         ViewData["IsEDocumentApprovalEnabled"] = company?.IsEDocumentApprovalEnabled ?? false;
+        // Dis Erisim URL (2026-08-24): Sirket Ayarlari > Genel Bilgiler'den buraya tasindi —
+        // sirket kimlik bilgisi degil, sistem parametresi (onay/red baglantilarinin koku).
+        ViewData["PublicBaseUrl"] = company?.PublicBaseUrl ?? string.Empty;
 
         // Onay İşlemleri tab'i: belge türü bazında onay switch'leri.
         // Kaynak: DocumentEntityTypes.Definitions (Filter != null → Document tablosuna bağlı,
@@ -228,7 +231,10 @@ public sealed class ParametersController : Controller
                     company.TaxNumber,
                     input.IsEDocumentApprovalEnabled,
                     company.IsActive,
-                    company.DatabaseConnectionString),
+                    company.DatabaseConnectionString,
+                    // Gonderilmediyse mevcut deger korunur — aksi halde SaveCompanyAsync
+                    // yeni Company nesnesini null PublicBaseUrl ile kurup degeri siler.
+                    input.PublicBaseUrl ?? company.PublicBaseUrl),
                 cancellationToken);
 
             return Json(new { ok = true });
@@ -460,7 +466,8 @@ public sealed class ParametersController : Controller
         int SessionIdleMinutes,
         int AuditRetentionDays = CalibraHub.Application.Constants.AuditParameters.DefaultRetentionDays);
 
-    public sealed record GeneralParametersInput(bool IsEDocumentApprovalEnabled);
+    /// <summary>Genel sekmesi. PublicBaseUrl null = gonderilmedi, mevcut deger korunur.</summary>
+    public sealed record GeneralParametersInput(bool IsEDocumentApprovalEnabled, string? PublicBaseUrl = null);
     public sealed record ApprovalParametersInput(List<ApprovalKindInput> Kinds);
     /// <summary>Use: onay sistemi ana anahtarı. null = gönderilmedi, mevcut değer korunur.</summary>
     public sealed record ApprovalKindInput(string Kind, bool Enabled, bool? Use = null);

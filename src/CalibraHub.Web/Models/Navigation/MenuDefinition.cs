@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Services;
+﻿using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
 using CalibraHub.Domain.Enums;
 
@@ -56,7 +56,7 @@ public static class MenuDefinition
 
         var settingsChildren = new List<MenuNode>
         {
-            new("settings.company",        isEn ? "Company Settings"       : "Şirket Ayarları",         "Building2",          "/Admin/CompanySettings",    null, AdminOnly: true),
+            new("settings.company",        isEn ? "Company Definitions"    : "Şirket Tanımlamaları",    "Building2",          "/Admin/CompanySettings",    null, AdminOnly: true),
             new("settings.parameters",     isEn ? "Company Parameters"     : "Şirket Parametreleri",    "SlidersHorizontal",  "/Admin/Parameters",         null, AdminOnly: true),
             new("settings.decimals",       isEn ? "Decimal Settings"       : "Ondalık Ayarları",        "Ruler",              "/Admin/DecimalSettings",    null,
                 PermissionFormCode: FormCodes.DecimalSettings),

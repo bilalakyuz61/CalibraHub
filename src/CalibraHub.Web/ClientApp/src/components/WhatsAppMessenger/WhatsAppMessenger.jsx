@@ -1024,9 +1024,9 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
                         <span className="wa-bridge-banner__dot" />
                         {bridgeState === 'unreachable' && 'Bridge\'e ulaşılamıyor — WhatsApp servisi çalışmıyor olabilir.'}
                         {bridgeState === 'connecting' && 'WhatsApp\'a bağlanılıyor…'}
-                        {bridgeState === 'awaiting_qr' && 'Telefon bağlantısı yok — Şirket Ayarları → WhatsApp\'tan QR tarayın.'}
-                        {bridgeState === 'disabled' && 'WhatsApp entegrasyonu pasif — Şirket Ayarları\'ndan etkinleştirin.'}
-                        {bridgeState === 'not_configured' && 'Bridge URL ayarlanmamış — Şirket Ayarları → WhatsApp.'}
+                        {bridgeState === 'awaiting_qr' && 'Telefon bağlantısı yok — Şirket Tanımlamaları → WhatsApp\'tan QR tarayın.'}
+                        {bridgeState === 'disabled' && 'WhatsApp entegrasyonu pasif — Şirket Tanımlamaları\'ndan etkinleştirin.'}
+                        {bridgeState === 'not_configured' && 'Bridge URL ayarlanmamış — Şirket Tanımlamaları → WhatsApp.'}
                         {!['unreachable', 'connecting', 'awaiting_qr', 'disabled', 'not_configured'].includes(bridgeState)
                             && 'WhatsApp bağlantı durumu: ' + bridgeState}
                     </div>

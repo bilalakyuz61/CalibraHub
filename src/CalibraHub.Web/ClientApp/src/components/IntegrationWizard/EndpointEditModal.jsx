@@ -155,7 +155,7 @@ function diagnoseResolveError(rawError) {
       title: 'Netsis kimlik doğrulama başarısız',
       lead: 'Token endpoint\'e ulaşıldı ancak kullanıcı/şifre veya DB bağlantı parametreleri kabul edilmedi.',
       reasons: [
-        '**DbPassword boş** olabilir — Şirket Ayarları → Entegrasyon API → Netsis Ek Alanlar bölümünü kontrol edin',
+        '**DbPassword boş** olabilir — Şirket Tanımlamaları → Entegrasyon API → Netsis Ek Alanlar bölümünü kontrol edin',
         'NetOpenX kullanıcı şifresi yanlış (üst kısımdaki "Sifre" alanı)',
         'DbName / DbUser değerleri Netsis SQL Server\'daki adlarla eşleşmiyor',
         'Netsis NoxRest servisi DB\'ye bağlanamıyor (servis hesabı / firewall)',
@@ -180,7 +180,7 @@ function diagnoseResolveError(rawError) {
       title: 'Kimlik doğrulama gerekli (401)',
       lead: 'Endpoint kimlik doğrulama bekliyor ama profile\'da auth tanımı yok veya geçersiz.',
       reasons: [
-        'API Profile AuthType = "None" — Şirket Ayarları → Entegrasyon API\'den Bearer/OAuth ayarlayın',
+        'API Profile AuthType = "None" — Şirket Tanımlamaları → Entegrasyon API\'den Bearer/OAuth ayarlayın',
         'Token süresi dolmuş, yenileme başarısız oldu',
       ],
     }

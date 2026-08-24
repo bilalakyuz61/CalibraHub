@@ -1,11 +1,11 @@
-@model CalibraHub.Web.Models.Admin.CompanyManagementViewModel
+﻿@model CalibraHub.Web.Models.Admin.CompanyManagementViewModel
 @inject CalibraHub.Application.Abstractions.Services.IPermissionService PermService
 @using System.Security.Claims
 @using CalibraHub.Application.Security
 @using CalibraHub.Application.Services.Security
 @using CalibraHub.Domain.Enums
 @{
-    ViewData["Title"] = "Şirket Ayarları";
+    ViewData["Title"] = "Şirket Tanımlamaları";
     ViewData["HelpKey"] = "company-settings";
     ViewData["FormCode"] = "COMPANY_SETTINGS";
     ViewData["BodyClass"] = "page-admin-company";
@@ -450,7 +450,7 @@
                 {
                     <div style="padding: 60px 28px; text-align: center; color: #94a3b8;">
                         <div style="font-size: 40px; margin-bottom: 12px; opacity: .5;">🛡️</div>
-                        <div style="font-size: 14px; font-weight: 600; color: #475569;">Şirket Ayarları için tanımlı yetkiniz yok.</div>
+                        <div style="font-size: 14px; font-weight: 600; color: #475569;">Şirket Tanımlamaları için tanımlı yetkiniz yok.</div>
                         <div style="font-size: 12px; margin-top: 6px;">Yöneticinizle iletişime geçin.</div>
                     </div>
                 }
@@ -490,11 +490,10 @@
                         <label>Posta Kodu</label>
                         <input asp-for="Input.PostalCode" class="form-control form-control-sm" />
                     </div>
-                    <div class="cs-line">
-                        <label>Dış Erişim URL</label>
-                        <input asp-for="Input.PublicBaseUrl" class="form-control form-control-sm"
-                               placeholder="https://calibra.sirketim.com (boş → otomatik)" />
-                    </div>
+                    @* Dis Erisim URL (2026-08-24): /Admin/Parameters > Genel sekmesine tasindi —
+                       sirket kimlik bilgisi degil sistem parametresi. Gizli input yalnizca bu
+                       formun POST'unda mevcut degeri korumak icin duruyor (E-Belge Onay ile ayni desen). *@
+                    <input asp-for="Input.PublicBaseUrl" type="hidden" />
                     <div class="cs-line">
                         <label>Durum</label>
                         <div class="form-check form-switch" style="margin:0;padding-top:4px;">

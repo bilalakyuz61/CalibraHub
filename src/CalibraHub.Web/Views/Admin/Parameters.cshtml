@@ -1,8 +1,9 @@
-@{
+﻿@{
     ViewData["Title"] = "Şirket Parametreleri";
     ViewData["HelpKey"] = "parameters";
     ViewData["BodyClass"] = "page-admin-parameters";
     var isEDocApproval = (ViewData["IsEDocumentApprovalEnabled"] is bool b) && b;
+    var publicBaseUrl  = ViewData["PublicBaseUrl"] as string ?? string.Empty;
     var shopFloorMaxPinAttempts = ViewData["ShopFloorMaxPinAttempts"] as int? ?? 5;
     var bomAllowDup = ViewData["BomAllowDuplicateComponents"] as bool? ?? false;
     var allowStartedWoRecipeEdit = ViewData["AllowStartedWoRecipeEdit"] as bool? ?? false;
@@ -475,6 +476,29 @@ body.app-theme-dark .ap-tab.is-active::before {
                             <span class="ap-switch-label @(isEDocApproval ? "is-active" : "")"
                                   id="ap-edoc-approval-label">@(isEDocApproval ? "Aktif" : "Pasif")</span>
                         </label>
+                    </div>
+                </div>
+
+                @* Dis Erisim URL — Sirket Ayarlari > Genel Bilgiler'den tasindi (2026-08-24).
+                   Sirket kimlik bilgisi degil sistem parametresi: mail/WhatsApp ile giden
+                   tek-tik onay/red baglantilarinin (approveLink/rejectLink) koku. *@
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Dış Erişim URL</div>
+                        <div class="ap-row-desc">
+                            Mail ve WhatsApp ile gönderilen <strong>tek tıkla onay/red</strong>
+                            bağlantılarının başına eklenen adres (örn. <code>https://erp.firma.com</code>).
+                            Boş bırakılırsa bağlantılar isteğin geldiği adresten üretilir — şirket dışından
+                            açılan onay maillerinde bu adres çalışmayabilir.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <input type="url" id="ap-public-base-url" value="@publicBaseUrl"
+                               placeholder="https://erp.firma.com" spellcheck="false"
+                               style="width:260px; padding:6px 10px; border-radius:8px;
+                                      border:1px solid var(--app-border, #e2e8f0);
+                                      background: var(--app-surface, #fff);
+                                      color: var(--bs-body-color, #0f172a);" />
                     </div>
                 </div>
             </section>
@@ -1382,7 +1406,10 @@ body.app-theme-dark .ap-tab.is-active::before {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-                    body: JSON.stringify({ isEDocumentApprovalEnabled: edocCheckbox.checked })
+                    body: JSON.stringify({
+                        isEDocumentApprovalEnabled: edocCheckbox.checked,
+                        publicBaseUrl: (document.getElementById('ap-public-base-url') || {}).value || ''
+                    })
                 });
                 var data = await r.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
                 ok = !!data.ok;
