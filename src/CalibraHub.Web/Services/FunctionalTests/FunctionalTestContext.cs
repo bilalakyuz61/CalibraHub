@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 
 namespace CalibraHub.Web.Services.FunctionalTests;
 
@@ -86,5 +86,34 @@ public sealed class FunctionalTestContext
         // ── Satış zinciri ──
         public const string SalesQuoteDocId = "salesQuoteDocId";
         public const string SalesOrderDocId = "salesOrderDocId";
+
+        // ── PROD_SEED çıktısı (üretim grubu kendi malzemelerini kurar) ──
+        // Ticari zincirin item1/item2 stoğu paylaşılmaz: satış teslimatı ile üretim sarfı
+        // aynı bakiyeyi tüketirse senaryolar birbirinin eksi-bakiye korumasına takılır.
+        public const string ProdItemId = "prodItemId";           // Mamul (FinishedGood)
+        public const string ProdItemCode = "prodItemCode";
+        public const string ProdComp1Id = "prodComp1Id";         // Hammadde 1 (mamul başına 2 adet)
+        public const string ProdComp1Code = "prodComp1Code";
+        public const string ProdComp2Id = "prodComp2Id";         // Hammadde 2 (mamul başına 1 adet)
+        public const string ProdComp2Code = "prodComp2Code";
+
+        // ── Üretim zinciri ──
+        public const string ProdBomId = "prodBomId";
+        public const string ProdRoutingId = "prodRoutingId";
+        public const string ProdWorkOrderId = "prodWorkOrderId";
+        public const string ProdOp1Id = "prodOp1Id";             // WorkOrderOperation (Sıra 10)
+        public const string ProdOp2Id = "prodOp2Id";             // WorkOrderOperation (Sıra 20 — son op, mamul girişi)
+
+        // ── Kombinasyon (özellik/değer/kombinasyon) ──
+        public const string ComboItemId = "comboItemId";
+        public const string ComboItemCode = "comboItemCode";
+        public const string ComboFeature1Id = "comboFeature1Id";
+        public const string ComboFeature2Id = "comboFeature2Id";
+        public const string ComboValueIds = "comboValueIds";     // int[] — iki özelliğin 2+2 değeri
+
+        // ── Kit ──
+        public const string KitItemId = "kitItemId";
+        public const string KitItemCode = "kitItemCode";
+        public const string KitOrderDocId = "kitOrderDocId";
     }
 }
