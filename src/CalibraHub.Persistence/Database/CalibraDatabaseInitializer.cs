@@ -3768,13 +3768,27 @@ END;";
                 EXEC(N'CREATE UNIQUE INDEX [UX_Machine_CompanyId_Code] ON [{schemaForSql}].[Machine]([CompanyId], [Code]);');
             END;
             IF OBJECT_ID(N'[{schemaForSql}].[Machine]', N'U') IS NOT NULL
-               AND EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'ix_Machine_CompanyId' AND [object_id] = OBJECT_ID(N'[{schemaForSql}].[Machine]'))
+               -- BINARY karsilastirma ZORUNLU: varsayilan collation buyuk/kucuk harf duyarsiz
+               -- oldugu icin bu guard, ad zaten 'IX_Machine_CompanyId'e cevrilmis olsa bile
+               -- eslesiyor ve blok HER ACILISTA yeniden calisip "index already exists" ile
+               -- patliyordu. Tek parca sema batch'i oldugundan arkasindaki adimlar da
+               -- calismiyordu (2026-08-24).
+               AND EXISTS (SELECT 1 FROM sys.indexes
+                            WHERE [name] COLLATE Latin1_General_BIN2 = N'ix_Machine_CompanyId' COLLATE Latin1_General_BIN2
+                              AND [object_id] = OBJECT_ID(N'[{schemaForSql}].[Machine]'))
             BEGIN
                 EXEC(N'DROP INDEX [ix_Machine_CompanyId] ON [{schemaForSql}].[Machine];');
                 EXEC(N'CREATE INDEX [IX_Machine_CompanyId] ON [{schemaForSql}].[Machine]([CompanyId]);');
             END;
             IF OBJECT_ID(N'[{schemaForSql}].[Machine]', N'U') IS NOT NULL
-               AND EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'ix_Machine_LocationId' AND [object_id] = OBJECT_ID(N'[{schemaForSql}].[Machine]'))
+               -- BINARY karsilastirma ZORUNLU: varsayilan collation buyuk/kucuk harf duyarsiz
+               -- oldugu icin bu guard, ad zaten 'IX_Machine_LocationId'e cevrilmis olsa bile
+               -- eslesiyor ve blok HER ACILISTA yeniden calisip "index already exists" ile
+               -- patliyordu. Tek parca sema batch'i oldugundan arkasindaki adimlar da
+               -- calismiyordu (2026-08-24).
+               AND EXISTS (SELECT 1 FROM sys.indexes
+                            WHERE [name] COLLATE Latin1_General_BIN2 = N'ix_Machine_LocationId' COLLATE Latin1_General_BIN2
+                              AND [object_id] = OBJECT_ID(N'[{schemaForSql}].[Machine]'))
             BEGIN
                 EXEC(N'DROP INDEX [ix_Machine_LocationId] ON [{schemaForSql}].[Machine];');
                 EXEC(N'CREATE INDEX [IX_Machine_LocationId] ON [{schemaForSql}].[Machine]([LocationId]);');
