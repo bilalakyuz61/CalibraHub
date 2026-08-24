@@ -2460,20 +2460,47 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             if (status is Domain.Enums.WorkOrderStatus.Cancelled or Domain.Enums.WorkOrderStatus.Closed)
                 throw new InvalidOperationException($"'{orderNo}' iş emri {(status == Domain.Enums.WorkOrderStatus.Cancelled ? "iptal edilmiş" : "kapatılmış")} — sarf girilemez.");
 
-            // LineNo başlangıcı — AppendStockLineAsync/IssueAsync ile aynı UPDLOCK+HOLDLOCK deseni
-            int lineNo;
-            await using (var ln = conn.CreateCommand())
+            var docDate = DateTime.Today;
+
+            // ── ÜRETİM FİŞİ (2026-08-24) ───────────────────────────────────────────
+            // Sarf satırları artık iş emrinin KENDİ belgesine değil, bu işleme ait AYRI bir
+            // "uretim_fisi" belgesine yazılır. Fiş, ParentDocumentId ile iş emri belgesine
+            // bağlanır; iş emri ekranı hareketleri fiş bazında gruplayıp detayını açabilsin
+            // ve istenirse fişe gidilebilsin diye.
+            //
+            // Önceki davranışta her sarf işlemi aynı belgeye satır ekliyordu — "hangi işlemde
+            // ne sarf edildi" ayırt edilemiyordu, yalnız satır notunda metin olarak duruyordu.
+            var woDocumentId = documentId;
+            var voucherNo = await ResolveDocNoByCodeAsync(conn, tx, "uretim_fisi", "UF", createdById, docDate, ct);
+            await using (var vIns = conn.CreateCommand())
             {
-                ln.Transaction = tx;
-                ln.CommandText = $"""
-                    SELECT ISNULL(MAX([LineNo]), 0) + 1 FROM {T("DocumentLine")} WITH (UPDLOCK, HOLDLOCK)
-                    WHERE [DocumentId] = @DocId;
+                vIns.Transaction = tx;
+                vIns.CommandText = $"""
+                    INSERT INTO {T("Document")}
+                        ([CompanyId],[DocumentNumber],[DocumentTypeId],[DocumentDate],[LocationId],
+                         [Notes],[Status],[CreatedById],[Created],[IsActive],[ParentDocumentId])
+                    SELECT @CompanyId, @DocNo, dt.[Id], @DocDate, @LocId,
+                           @Notes, N'Draft', @CreatedById, SYSUTCDATETIME(), 1, @ParentId
+                    FROM {T("DocumentType")} dt WHERE dt.[Code] = N'uretim_fisi';
+                    SELECT CAST(SCOPE_IDENTITY() AS INT);
                     """;
-                ln.Parameters.AddWithValue("@DocId", documentId);
-                lineNo = Convert.ToInt32(await ln.ExecuteScalarAsync(ct));
+                vIns.Parameters.AddWithValue("@CompanyId", companyId);
+                vIns.Parameters.AddWithValue("@DocNo", voucherNo);
+                vIns.Parameters.AddWithValue("@DocDate", docDate);
+                vIns.Parameters.AddWithValue("@LocId", (object?)woLocationId ?? DBNull.Value);
+                vIns.Parameters.AddWithValue("@Notes", $"İş Emri {orderNo} — üretim sarfı");
+                vIns.Parameters.AddWithValue("@CreatedById", (object?)createdById ?? DBNull.Value);
+                vIns.Parameters.AddWithValue("@ParentId", woDocumentId);
+                var vId = await vIns.ExecuteScalarAsync(ct);
+                if (vId is null || vId == DBNull.Value)
+                    throw new InvalidOperationException(
+                        "Üretim fişi oluşturulamadı — 'uretim_fisi' belge türü tanımlı değil. " +
+                        "Uygulamayı yeniden başlatın (belge türleri açılışta seed edilir).");
+                documentId = Convert.ToInt32(vId);
             }
 
-            var docDate = DateTime.Today;
+            // Yeni fiş: satır numarası 1'den başlar.
+            var lineNo = 1;
             var defaultNote = request.ProducedQuantity is > 0
                 ? $"Üretim sarfı (üretilen: {request.ProducedQuantity:0.####})"
                 : "Üretim sarfı";

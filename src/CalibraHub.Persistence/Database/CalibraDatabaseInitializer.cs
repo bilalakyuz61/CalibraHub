@@ -11886,6 +11886,11 @@ END;";
         // Numara kurali SeedCapaNumberRuleAsync ile seed edilir (DÖF-yyyy######). Print view'i
         // ileride eklenince SqlViewName doldurulur.
         ("dof",           "DÖF / Düzeltici-Önleyici Faaliyet", null, "BelgeId", "Düzeltici ve önleyici faaliyet kaydı"),
+        // 2026-08-24: Uretim fisi — is emrinin urettigi stok hareketleri artik is emrinin
+        // KENDI belgesine degil, her uretim islemi icin ayri bir fise yazilir. Fis
+        // ParentDocumentId ile is emri belgesine baglanir; boylece is emri ekraninda
+        // "hangi fiste ne oldu" satir bazinda gorulebilir ve fise gidilebilir.
+        ("uretim_fisi",   "Uretim Fisi",        null, "BelgeId", "Is emri uretim hareketi — bilesen sarfi / mamul girisi"),
     ];
 
     private async Task SeedDocumentTypesAsync(SqlConnection connection, CancellationToken cancellationToken)
