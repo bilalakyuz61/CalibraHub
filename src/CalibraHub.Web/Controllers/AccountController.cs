@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -121,6 +121,38 @@ public sealed class AccountController : Controller
     //  GetCompanyOptionsByEmailAsync.)
 
     /// <summary>
+    /// Hedef şirketin veritabanına gerçekten bağlanılabiliyor mu (2026-08-24).
+    ///
+    /// Per-company DB mimarisinde bir şirketin veritabanı silinirse şirket KAYDI ayakta
+    /// kalır; o şirkete geçiş "başarılı" olur, çökme ilk sayfa açılışında
+    /// ("Cannot open database ... Login failed") ham SqlException hata sayfası olarak
+    /// patlar. Bu yüzden geçiş/giriş anında bağlantı önden yoklanır.
+    ///
+    /// Bağlantı dizesi boş olan şirket kendi DB'sine sahip değildir (varsayılan/sistem
+    /// bağlantısını kullanır) → erişilebilir sayılır.
+    /// </summary>
+    private static async Task<bool> CanOpenCompanyDatabaseAsync(string? connectionString, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString)) return true;
+        try
+        {
+            var builder = new SqlConnectionStringBuilder(connectionString) { ConnectTimeout = 3 };
+            await using var conn = new SqlConnection(builder.ConnectionString);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(4));
+            await conn.OpenAsync(cts.Token);
+            return true;
+        }
+        catch
+        {
+            // Burada exception YUTULMUYOR, boolean'a çevriliyor — metodun tek işi
+            // "bağlanabiliyor muyuz" sorusunu yanıtlamak. Nedeni (silinmiş DB, kapalı
+            // sunucu, hatalı parola) çağıran tarafta loglanır.
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Oturumdaki kullanıcının yetkili olduğu şirketler + hangisinin aktif olduğu.
     /// GET /Account/MyCompanies
     /// </summary>
@@ -135,11 +167,36 @@ public sealed class AccountController : Controller
         var currentCompanyId = int.TryParse(User.FindFirst("company_id")?.Value, out var cid) ? cid : 0;
         var options = await GetCompanyOptionsByEmailAsync(email, currentCompanyId, cancellationToken);
 
-        return Json(options.Select(x => new
+        // Veritabanı erişilebilirliği — modal, ulaşılamayan şirketi pasif gösterir ki
+        // kullanıcı ham SqlException hata sayfasına düşmesin. Yoklamalar paralel:
+        // en yavaş bağlantı kadar (~4 sn) sürer, sayı kadar değil.
+        var companies = await _companyDefinitionRepository.GetAllAsync(cancellationToken);
+        var ids = options
+            .Select(x => int.TryParse(x.Value, out var oid) ? oid : 0)
+            .Where(oid => oid > 0)
+            .Distinct()
+            .ToArray();
+        var probes = await Task.WhenAll(ids.Select(async oid =>
         {
-            id = int.TryParse(x.Value, out var id) ? id : 0,
-            name = x.Text,
-            isCurrent = int.TryParse(x.Value, out var v) && v == currentCompanyId,
+            // Aktif şirket zaten açık — yeniden yoklamaya gerek yok.
+            if (oid == currentCompanyId) return (Id: oid, Ok: true);
+            var conn = companies.FirstOrDefault(c => c.Id == oid)?.DatabaseConnectionString;
+            return (Id: oid, Ok: await CanOpenCompanyDatabaseAsync(conn, cancellationToken));
+        }));
+        var reachable = probes.ToDictionary(p => p.Id, p => p.Ok);
+
+        return Json(options.Select(x =>
+        {
+            var id = int.TryParse(x.Value, out var oid) ? oid : 0;
+            var available = id > 0 && reachable.TryGetValue(id, out var ok) && ok;
+            return new
+            {
+                id,
+                name = x.Text,
+                isCurrent = id == currentCompanyId,
+                available,
+                unavailableReason = available ? null : "Veritabanına ulaşılamıyor",
+            };
         }).ToArray());
     }
 
@@ -186,6 +243,22 @@ public sealed class AccountController : Controller
             var company = companies.FirstOrDefault(c => c.Id == targetId && c.IsActive);
             if (company is null)
                 return Json(new { ok = false, error = "Şirket bulunamadı veya pasif." });
+
+            // Veritabanı kapısı: şirket kaydı ayakta ama DB'si silinmiş/erişilemez olabilir.
+            // Geçişe izin verilirse oturum hedef şirkete taşınır ve kullanıcı ilk sayfa
+            // açılışında ham SqlException hata sayfasına düşer — üstelik geri dönmesi de
+            // zorlaşır (artık ulaşılamayan şirkette). Bu yüzden geçiş HİÇ yapılmaz.
+            if (!await CanOpenCompanyDatabaseAsync(company.DatabaseConnectionString, cancellationToken))
+            {
+                _logger.LogWarning(
+                    "[SwitchCompany] Hedef şirketin veritabanına ulaşılamadı, geçiş yapılmadı. Email={Email} Hedef={CompanyId} Db={Db}",
+                    email, targetId, company.DatabaseName);
+                return Json(new
+                {
+                    ok = false,
+                    error = $"'{company.Name}' şirketinin veritabanına ulaşılamıyor. Geçiş yapılmadı — sistem yöneticisiyle görüşün.",
+                });
+            }
 
             // Claim seti login ile BİREBİR aynı kurulur — rol/departman hedef şirketin
             // kullanıcı kaydından gelir (aynı kişi şirkete göre farklı rolde olabilir).
@@ -433,6 +506,24 @@ public sealed class AccountController : Controller
             if (isAjax)
                 return Json(new { ok = false, error = "credentials", message = credMsg, remaining });
             ModelState.AddModelError(string.Empty, credMsg);
+            return View(input);
+        }
+
+        // Veritabanı kapısı (2026-08-24) — kimlik doğru ama şirketin DB'si silinmiş/erişilemez
+        // olabilir. Oturum açılırsa kullanıcı doğrudan ham SqlException hata sayfasına düşer.
+        // Kontrol kimlik doğrulamadan SONRA: yetkisiz kişiye hangi şirketin DB'sinin düştüğü
+        // bilgisi sızmasın.
+        var loginCompany = (await _companyDefinitionRepository.GetAllAsync(cancellationToken))
+            .FirstOrDefault(c => c.Id == authenticatedUser.CompanyId);
+        if (!await CanOpenCompanyDatabaseAsync(loginCompany?.DatabaseConnectionString, cancellationToken))
+        {
+            _logger.LogWarning(
+                "[Login] Şirket veritabanına ulaşılamadı, oturum açılmadı. Email={Email} Sirket={CompanyId} Db={Db}",
+                input.Email, authenticatedUser.CompanyId, loginCompany?.DatabaseName);
+            var dbMsg = $"'{authenticatedUser.CompanyName}' şirketinin veritabanına ulaşılamıyor. Sistem yöneticisiyle görüşün.";
+            if (isAjax)
+                return Json(new { ok = false, error = "database", message = dbMsg });
+            ModelState.AddModelError(string.Empty, dbMsg);
             return View(input);
         }
 

@@ -54,7 +54,9 @@ import {
   MessageCircle, LayoutDashboard, PenLine, Inbox, GitBranch, Grid3X3,
   ShoppingCart, ShoppingBag, ClipboardList, Tablet, FileUp, PenSquare,
   SlidersHorizontal, ShieldCheck, EyeOff, ScrollText, Activity,
-  CornerDownRight, ChevronDown
+  CornerDownRight, ChevronDown,
+  // Şirket geçiş modalı — veritabanına ulaşılamayan şirket satırı (2026-08-24).
+  AlertTriangle
 } from 'lucide-react'
 
 /* ══════════════════════════════════════════════════════════════
@@ -3226,6 +3228,9 @@ function CompanySwitchModal(props) {
 
   function pick(c) {
     if (c.isCurrent || busyId) return
+    // Veritabanına ulaşılamayan şirket seçilemez (sunucu da ayrıca reddeder — bu yalnız
+    // kullanıcıyı boş bir denemeden ve ham hata sayfasından korur).
+    if (c.available === false) return
     setBusyId(c.id)
     fetch('/Account/SwitchCompany', {
       method: 'POST',
@@ -3314,21 +3319,38 @@ function CompanySwitchModal(props) {
                 </span>
               )
             }
+            /* Veritabanı silinmiş/erişilemez şirket (2026-08-24): geçiş sunucuda zaten
+               reddediliyor, burada da SEÇİLEMEZ gösterilir — kullanıcı ulaşılamayan bir
+               şirketi denemek zorunda kalmasın. `available` alanı gelmiyorsa (eski yanıt)
+               satır normal davranır: fail-open. */
+            var unavailable = c.available === false
             return (
               <button
                 key={c.id}
                 type="button"
-                disabled={!!busyId}
+                disabled={!!busyId || unavailable}
                 onClick={function() { pick(c) }}
+                title={unavailable ? (c.unavailableReason || 'Veritabanına ulaşılamıyor') : undefined}
                 className={
                   'w-full flex items-center gap-2 text-left text-[13px] px-3 py-2.5 rounded-xl transition-colors ' +
                   (busyId === c.id ? 'opacity-60 ' : '') +
-                  (busyId ? 'cursor-not-allowed ' : '') +
-                  (isDark ? 'text-white/80 hover:bg-white/[0.06]' : 'text-slate-700 hover:bg-slate-100')
+                  (unavailable ? 'opacity-55 cursor-not-allowed ' : (busyId ? 'cursor-not-allowed ' : '')) +
+                  (unavailable
+                    ? (isDark ? 'text-white/45' : 'text-slate-400')
+                    : (isDark ? 'text-white/80 hover:bg-white/[0.06]' : 'text-slate-700 hover:bg-slate-100'))
                 }
               >
-                <Building2 size={14} strokeWidth={1.8} className={isDark ? 'text-white/40' : 'text-slate-400'} />
-                <span className="flex-1">{c.name}</span>
+                {unavailable
+                  ? <AlertTriangle size={14} strokeWidth={1.8} className="text-amber-500" />
+                  : <Building2 size={14} strokeWidth={1.8} className={isDark ? 'text-white/40' : 'text-slate-400'} />}
+                <span className="flex-1">
+                  {c.name}
+                  {unavailable && (
+                    <span className={'block text-[10.5px] font-medium ' + (isDark ? 'text-amber-300/70' : 'text-amber-600')}>
+                      {c.unavailableReason || 'Veritabanına ulaşılamıyor'}
+                    </span>
+                  )}
+                </span>
               </button>
             )
           })}
