@@ -41,6 +41,8 @@ public sealed class HealthCheckController : Controller
     private readonly string _schema;
 
     private readonly Microsoft.AspNetCore.Mvc.Infrastructure.IActionDescriptorCollectionProvider _actionProvider;
+    // Şifreleme anahtarı kontrolü eski (ContentRoot altındaki) konumu da raporlar.
+    private readonly IWebHostEnvironment _hostEnvironment;
 
     public HealthCheckController(
         IHttpClientFactory httpFactory,
@@ -54,9 +56,11 @@ public sealed class HealthCheckController : Controller
         SqlServerConnectionFactory connectionFactory,
         CalibraHub.Application.Abstractions.Persistence.IDocumentTypeRepository documentTypeRepo,
         Microsoft.AspNetCore.Mvc.Infrastructure.IActionDescriptorCollectionProvider actionProvider,
+        IWebHostEnvironment hostEnvironment,
         CalibraDatabaseOptions dbOptions)
     {
         _actionProvider = actionProvider;
+        _hostEnvironment = hostEnvironment;
         _httpFactory = httpFactory;
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
@@ -325,6 +329,30 @@ public sealed class HealthCheckController : Controller
         return new List<InfraSpec>
         {
             new("infra.permgate", "Yetki kapısı taraması", gsec, (conn, ct) => Task.FromResult(ScanPermissionGates())),
+
+            // Şifreleme anahtarı — kaybı GERİ DÖNÜŞSÜZ ve SESSİZ (şifreli notlar açılamaz,
+            // hata da düşmez; ekranda anlamsız karakter görünür). Bu yüzden varlığı her
+            // sağlık kontrolünde teyit edilir, "yok" durumu HATA sayılır.
+            new("infra.dpkeys", "Şifreleme anahtarı (Data Protection)", gsec, (conn, ct) =>
+            {
+                var stable = CalibraHub.Infrastructure.Security.DataProtectionKeyStore.GetStablePath();
+                var legacy = CalibraHub.Infrastructure.Security.DataProtectionKeyStore
+                    .GetLegacyPath(_hostEnvironment.ContentRootPath);
+                var stableCount = CalibraHub.Infrastructure.Security.DataProtectionKeyStore.CountKeys(stable);
+                var legacyCount = CalibraHub.Infrastructure.Security.DataProtectionKeyStore.CountKeys(legacy);
+
+                if (stableCount > 0)
+                    return Task.FromResult(("ok", $"{stableCount} anahtar · kalıcı konum: {stable}"));
+
+                if (legacyCount > 0)
+                    return Task.FromResult(("warn",
+                        $"{legacyCount} anahtar YALNIZCA eski konumda: {legacy} — bu klasör güncellemede silinebilir. " +
+                        "Uygulamayı yeniden başlatınca kalıcı konuma taşınır."));
+
+                return Task.FromResult(("error",
+                    "Hiç Data Protection anahtarı bulunamadı. Şifreli not içerikleri açılamaz — " +
+                    "yedekten anahtar klasörünü geri yükleyin."));
+            }),
             new("infra.conn", "Veritabanı bağlantısı", gdb, async (conn, ct) =>
             {
                 if (conn is null) return ("error", "Bağlantı açılamadı");

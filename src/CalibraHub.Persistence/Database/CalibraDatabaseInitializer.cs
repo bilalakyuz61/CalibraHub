@@ -808,6 +808,7 @@ END;";
             await EnsureDocLayoutTableAsync(connection, cancellationToken);
             await EnsureDocLayoutDsTableAsync(connection, cancellationToken);
             await EnsureDocLayoutRuleTableAsync(connection, cancellationToken);
+            await EnsureDocLayoutSeedHashColumnAsync(connection, cancellationToken);
             await SeedDefaultDocLayoutsAsync(connection, cancellationToken);
             await EnsureFormsTableAsync(connection, cancellationToken);
             await SeedFormsAsync(connection, cancellationToken);
@@ -11946,6 +11947,34 @@ END;";
     /// üzerinden parametrik yapılır; barkod/etiket için 80x40mm, mail_template için tek-bant
     /// HTML uyumlu, diğerleri A4 belge şablonu üretilir.
     /// </summary>
+    /// <summary>
+    /// DocLayout.SeedHash — sistem varsayilan tasariminin EN SON seed edilen halinin SHA-256
+    /// ozeti. "Kod baseline kurar, kullanici surumu kazanir" korumasinin dayanagi
+    /// (SQL View override mekanizmasiyla ayni felsefe, bkz. CLAUDE.md).
+    ///
+    /// NEDEN: seed bloğu daha once `default_*` layout'lari KOSULSUZ update ediyordu; musteri
+    /// faturasini ozellestirdiginde bir sonraki RESTART tasarimi fabrika haline donduruyor ve
+    /// veri kaynaklarini siliyordu. Sessiz, tekrarlayan veri kaybi.
+    /// </summary>
+    private async Task EnsureDocLayoutSeedHashColumnAsync(SqlConnection connection, CancellationToken ct)
+    {
+        var s = _schema.Replace("]", "]]");
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            IF OBJECT_ID(N'[{s}].[DocLayout]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocLayout]', N'SeedHash') IS NULL
+                ALTER TABLE [{s}].[DocLayout] ADD [SeedHash] NVARCHAR(64) NULL;
+            """;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>Layout JSON'unun kanonik ozeti — seed baseline karsilastirmasi icin.</summary>
+    private static string ComputeLayoutHash(string? layoutJson)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(layoutJson ?? string.Empty);
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
+    }
+
     private async Task SeedDefaultDocLayoutsAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
         var s = _schema.Replace("]", "]]");
@@ -11988,12 +12017,50 @@ END;";
             // (kullanıcı klonlayıp özelleştirmemişse — Owner=admin ve IsDefault=1 ise sistem'in
             // yönettiği layout'tur). Mevcut değilse INSERT.
             int? existingLayoutId = null;
+            string? existingLayoutJson = null;
+            string? existingSeedHash = null;
             await using (var existCmd = connection.CreateCommand())
             {
-                existCmd.CommandText = $"SELECT TOP 1 [Id] FROM [{s}].[DocLayout] WHERE [Code] = @LayoutCode;";
+                existCmd.CommandText = $"SELECT TOP 1 [Id], [LayoutJson], [SeedHash] FROM [{s}].[DocLayout] WHERE [Code] = @LayoutCode;";
                 existCmd.Parameters.AddWithValue("@LayoutCode", layoutCode);
-                var raw = await existCmd.ExecuteScalarAsync(cancellationToken);
-                if (raw != null && raw != DBNull.Value) existingLayoutId = Convert.ToInt32(raw);
+                await using var rd = await existCmd.ExecuteReaderAsync(cancellationToken);
+                if (await rd.ReadAsync(cancellationToken))
+                {
+                    existingLayoutId  = rd.GetInt32(0);
+                    existingLayoutJson = rd.IsDBNull(1) ? null : rd.GetString(1);
+                    existingSeedHash   = rd.IsDBNull(2) ? null : rd.GetString(2);
+                }
+            }
+
+            // ── KULLANICI SÜRÜMÜ KAZANIR (2026-08-24) ──────────────────────────────
+            // Eskiden burada koşulsuz UPDATE vardı: müşteri belge tasarımını özelleştirse
+            // bile her RESTART'ta fabrika haline dönüyor, veri kaynakları siliniyordu.
+            // Artık üç yollu karar veriliyor:
+            //
+            //   SeedHash NULL      → bu sürümle ilk karşılaşma. Ne olduğunu bilemeyiz
+            //                        (kullanıcı çoktan değiştirmiş olabilir) → DOKUNMA,
+            //                        yalnız mevcut halin özetini "benimse". Bir sonraki
+            //                        sürümde karşılaştırma yapılabilir hale gelir.
+            //   Hash ≠ mevcut      → kullanıcı bizim yazdığımızdan sonra değiştirmiş → DOKUNMA.
+            //   Hash = mevcut      → bizim yazdığımız hâlâ duruyor, kimse ellememiş →
+            //                        güvenle yeni baseline'a güncelle.
+            //
+            // Fail-safe yön bilinçli: emin olamadığımızda ÜZERİNE YAZMIYORUZ. Bir sürüm
+            // boyunca varsayılanın tazelenmemesi, müşterinin tasarımını kaybetmesinden iyidir.
+            if (existingLayoutId.HasValue)
+            {
+                var currentHash = ComputeLayoutHash(existingLayoutJson);
+                if (existingSeedHash is null)
+                {
+                    await using var adopt = connection.CreateCommand();
+                    adopt.CommandText = $"UPDATE [{s}].[DocLayout] SET [SeedHash] = @Hash WHERE [Id] = @Id;";
+                    adopt.Parameters.AddWithValue("@Hash", currentHash);
+                    adopt.Parameters.AddWithValue("@Id", existingLayoutId.Value);
+                    await adopt.ExecuteNonQueryAsync(cancellationToken);
+                    continue;   // mevcut tasarıma dokunma
+                }
+                if (!string.Equals(existingSeedHash, currentHash, StringComparison.OrdinalIgnoreCase))
+                    continue;   // kullanıcı değiştirmiş — koru
             }
 
             int newLayoutId;
@@ -12018,8 +12085,10 @@ END;";
                            [IsActive]        = 1,
                            [Updated]         = SYSUTCDATETIME(),
                            [OutputFormat]    = @OutputFormat,
-                           [UseAsMailTemplate] = @UseAsMail
+                           [UseAsMailTemplate] = @UseAsMail,
+                           [SeedHash]        = @SeedHash
                      WHERE [Id] = @Id;";
+                updCmd.Parameters.AddWithValue("@SeedHash", ComputeLayoutHash(built.LayoutJson));
                 updCmd.Parameters.AddWithValue("@Id",          existingLayoutId.Value);
                 updCmd.Parameters.AddWithValue("@Name",        layoutName);
                 updCmd.Parameters.AddWithValue("@DocType",     code);
@@ -12052,13 +12121,16 @@ END;";
                         ([Code],[Name],[DocType],[DocumentTypeId],[Description],[LayoutJson],
                          [PageW],[PageH],[MarginTop],[MarginBot],[MarginLeft],[MarginRight],
                          [OwnerUserId],[IsDefault],[IsActive],[Created],[Updated],
-                         [OutputFormat],[UseAsMailTemplate])
+                         [OutputFormat],[UseAsMailTemplate],[SeedHash])
                     VALUES
                         (@Code,@Name,@DocType,@DocTypeId,@Description,@LayoutJson,
                          @PageW,@PageH,@MarginTop,@MarginBot,@MarginLeft,@MarginRight,
                          @OwnerUserId,1,1,SYSUTCDATETIME(),SYSUTCDATETIME(),
-                         @OutputFormat,@UseAsMail);
+                         @OutputFormat,@UseAsMail,@SeedHash);
                     SELECT CAST(SCOPE_IDENTITY() AS INT);";
+                // Yeni kurulumda baseline ilk andan itibaren kayitli — boylece kullanici
+                // ilk ozellestirmesini yaptigi anda koruma devreye girer (bir surum beklemez).
+                insCmd.Parameters.AddWithValue("@SeedHash", ComputeLayoutHash(built.LayoutJson));
                 insCmd.Parameters.AddWithValue("@Code",        layoutCode);
                 insCmd.Parameters.AddWithValue("@Name",        layoutName);
                 insCmd.Parameters.AddWithValue("@DocType",     code);

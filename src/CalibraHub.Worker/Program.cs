@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Integrations;
+﻿using CalibraHub.Application.Abstractions.Integrations;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Services;
@@ -201,8 +201,10 @@ var host = Host.CreateDefaultBuilder(args)
         // Worker sadece reminder icin metadata okur, note.Content alanini kullanmaz,
         // o yuzden key paylasimi zorunlu degil; ama Unprotect basarisiz olursa
         // ciphertext aynen gelir ve worker tarafindan kullanilmaz (risk yok).
-        var dpKeysPath = System.IO.Path.Combine(environment.ContentRootPath, ".app-data-protection");
-        System.IO.Directory.CreateDirectory(dpKeysPath);
+        // Web ile AYNI kalici konum — ortak cozucu kullanilir ki iki surec ayni anahtar
+        // halkasini gorsun (farkli klasorlere yazarlarsa notlar birinde acilmaz).
+        var dpKeysPath = CalibraHub.Infrastructure.Security.DataProtectionKeyStore
+            .ResolveAndMigrate(environment.ContentRootPath, msg => Console.WriteLine(msg));
         services.AddDataProtection()
             .SetApplicationName("CalibraHub.Web")
             .PersistKeysToFileSystem(new System.IO.DirectoryInfo(dpKeysPath));

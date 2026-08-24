@@ -88,7 +88,11 @@ var bootstrapAdminOptions = new BootstrapAdminOptions
 };
 var forceInMemory = builder.Configuration.GetValue<bool>("CalibraDatabase:ForceInMemory");
 var useInMemoryPersistence = builder.Environment.IsDevelopment() && forceInMemory;
-var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, ".app-data-protection");
+// Anahtar halkasi ProgramData altinda (yayin klasorunun DISINDA) tutulur; eski kurulumlardan
+// tek seferlik tasima burada yapilir. Neden: eski konum guncellemede silinebiliyordu ve
+// kaybin sonucu geri donussuz + sessizdi (bkz. DataProtectionKeyStore XML dokumantasyonu).
+var dataProtectionKeysPath = CalibraHub.Infrastructure.Security.DataProtectionKeyStore
+    .ResolveAndMigrate(builder.Environment.ContentRootPath, msg => Console.WriteLine(msg));
 
 builder.Services.AddScoped<IDocumentImportService, DocumentImportService>();
 // Tum belge basimlari Belge Tasarimcisi (DocDesigner) uzerinden yapilir.
