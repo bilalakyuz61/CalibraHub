@@ -35,6 +35,8 @@ public sealed class ProductionController : Controller
     private readonly IRoutingService _routings;
     private readonly IOperationMachineTimeService _machineTimes;
     private readonly IWorkOrderOperationService _workOrderOperations;
+    // 2026-08-24 — "Üretim Hareketleri" sekmesi: iş emrinin stok satırlarını okur.
+    private readonly CalibraHub.Application.Abstractions.Persistence.IWorkOrderRepository _workOrderRepo;
     private readonly IPersonnelService _personnel;
     private readonly IWidgetService _widgetService;
     private readonly ILogisticsConfigurationService _logisticsConfig;
@@ -68,6 +70,7 @@ public sealed class ProductionController : Controller
         IRoutingService routings,
         IOperationMachineTimeService machineTimes,
         IWorkOrderOperationService workOrderOperations,
+        CalibraHub.Application.Abstractions.Persistence.IWorkOrderRepository workOrderRepo,
         IPersonnelService personnel,
         IWidgetService widgetService,
         ILogisticsConfigurationService logisticsConfig,
@@ -92,6 +95,7 @@ public sealed class ProductionController : Controller
         _routings = routings;
         _machineTimes = machineTimes;
         _workOrderOperations = workOrderOperations;
+        _workOrderRepo = workOrderRepo;
         _personnel = personnel;
         _widgetService = widgetService;
         _logisticsConfig = logisticsConfig;
@@ -1455,6 +1459,86 @@ public sealed class ProductionController : Controller
             _logger.LogError(ex, "[WorkOrder.ExplodeBom] workOrderId={WorkOrderId} reçete patlatılamadı.", workOrderId);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
+    }
+
+    /// <summary>
+    /// İş emri "Üretim Hareketleri" sekmesinin verisi (2026-08-24 kullanıcı isteği:
+    /// "iş emri içerisinden üretim sonu kayıtlarını ve üretim akış kayıtlarını da görebilmeli
+    /// ve ilgili kayda gidebilmeliyiz").
+    ///
+    /// İki farklı kayıt türü tek çağrıda döner:
+    ///   movements  — mamul girişi + bileşen sarfı (stok etkisi olan satırlar)
+    ///   activities — operasyon bazlı üretim akışı (başlat/üret/durma kayıtları)
+    ///
+    /// Aktivite geçmişi operasyon başına saklanır; burada iş emrinin TÜM operasyonları için
+    /// toplanıp tek zaman çizelgesine indirilir (en yeni önce). Operasyon adı satıra
+    /// eklenir ki kullanıcı hangi adımın kaydı olduğunu görebilsin.
+    /// </summary>
+    [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
+    public async Task<IActionResult> WorkOrderMovements(int workOrderId, CancellationToken ct)
+    {
+        if (workOrderId <= 0) return Json(new { ok = false, error = "İş emri belirtilmedi." });
+        try
+        {
+            var movements = await _workOrderRepo.GetMovementsAsync(workOrderId, ct);
+            var operations = await _workOrderOperations.GetByWorkOrderAsync(workOrderId, ct);
+
+            var activities = new List<ActivityRow>();
+            foreach (var op in operations)
+            {
+                var history = await _activities.GetHistoryAsync(op.Id, ct);
+                foreach (var h in history)
+                {
+                    activities.Add(new ActivityRow
+                    {
+                        id = h.Id,
+                        operationId = op.Id,
+                        sequence = op.Sequence,
+                        operationName = op.OperationName ?? op.Name ?? $"Sıra {op.Sequence}",
+                        activityType = h.ActivityTypeLabel,
+                        reason = h.ActivityReasonName,
+                        personnel = h.PersonnelName,
+                        startedAt = h.StartedAt,
+                        endedAt = h.EndedAt,
+                        durationSeconds = h.DurationSeconds,
+                        quantity = h.Quantity,
+                        scrapQuantity = h.ScrapQuantity,
+                        notes = h.Notes,
+                    });
+                }
+            }
+
+            return Json(new
+            {
+                ok = true,
+                movements,
+                activities = activities.OrderByDescending(a => a.startedAt).ToArray(),
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[WorkOrder.Movements] workOrderId={WorkOrderId} üretim hareketleri okunamadı.", workOrderId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    /// <summary>Üretim akışı satırı — arayüze camelCase alanlarla düz gider.</summary>
+    private sealed class ActivityRow
+    {
+        public int id { get; set; }
+        public int operationId { get; set; }
+        public int sequence { get; set; }
+        public string? operationName { get; set; }
+        public string? activityType { get; set; }
+        public string? reason { get; set; }
+        public string? personnel { get; set; }
+        public DateTime startedAt { get; set; }
+        public DateTime? endedAt { get; set; }
+        public int? durationSeconds { get; set; }
+        public decimal? quantity { get; set; }
+        public decimal? scrapQuantity { get; set; }
+        public string? notes { get; set; }
     }
 
     [HttpGet]

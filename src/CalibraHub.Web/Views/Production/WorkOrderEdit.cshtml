@@ -1,4 +1,4 @@
-@model CalibraHub.Application.Contracts.WorkOrderDto
+﻿@model CalibraHub.Application.Contracts.WorkOrderDto
 @using CalibraHub.Domain.Enums
 @{
     var isNew = Model is null;
@@ -905,6 +905,13 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                     <span class="woe-nav-count">@Model.Sources.Count</span>
                 }
             </button>
+            @if (!isNew)
+            {
+                <button type="button" class="woe-nav-btn" data-tab="hareket">
+                    <svg class="woe-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"/></svg>
+                    <span>Üretim Hareketleri</span>
+                </button>
+            }
             @if (!isNew && (Model!.RevisionNo > 0 || Model.RevisedFromId.HasValue))
             {
                 <button type="button" class="woe-nav-btn" data-tab="revize">
@@ -1439,6 +1446,23 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                         </div>
                     </div>
                 </div>
+            }
+
+            @* Tab: Üretim Hareketleri (2026-08-24) — mamul girişi + bileşen sarfı ve
+               operasyon bazlı üretim akışı. Veri /Production/WorkOrderMovements'tan
+               sekmeye İLK GEÇİLDİĞİNDE çekilir (sayfa açılışını yavaşlatmasın). *@
+            @if (!isNew)
+            {
+                <section class="woe-pane-section" data-pane="hareket">
+                    <h2>Üretim Hareketleri</h2>
+                    <div class="pane-hint">
+                        Bu iş emrinin ürettiği mamul girişleri, sarf edilen bileşenler ve
+                        operasyon bazlı üretim akış kayıtları. Satırdan ilgili kayda gidebilirsiniz.
+                    </div>
+                    <div id="woeMovementsHost" style="display:flex;flex-direction:column;gap:18px;">
+                        <div style="padding:14px;font-size:.85rem;color:var(--app-text-muted,#64748b);">Yükleniyor…</div>
+                    </div>
+                </section>
             }
 
             <!-- Tab: Revizyon -->
@@ -2994,6 +3018,185 @@ function _woeFmtQty(v) {
     }
     window.addEventListener('hashchange', applyHash);
     applyHash();
+})();
+
+/* ── Üretim Hareketleri sekmesi (2026-08-24) ─────────────────────────────────
+   Kullanıcı isteği: "iş emri içerisinden üretim sonu kayıtlarını ve üretim akış
+   kayıtlarını da görebilmeli ve ilgili kayda gidebilmeliyiz".
+
+   İki liste tek uçtan gelir (/Production/WorkOrderMovements):
+     · Stok hareketleri  → mamul girişi (Receipt) + bileşen sarfı (Issue)
+     · Üretim akışı      → operasyon bazlı aktivite kayıtları
+
+   "İlgili kayda gitme" hedefleri bilinçli seçildi:
+     · Stok satırı  → MALZEME KARTI. Üretim satırları ayrı bir stok fişine değil
+       iş emrinin KENDİ belgesine yazılır; dolayısıyla gidilecek ayrı bir belge
+       yoktur. Malzemenin kartı ise "Stok Hareketleri" sekmesini barındırır —
+       kullanıcının aradığı iz orada.
+     · Akış satırı  → ilgili OPERASYON (Rota sekmesi). Aynı sayfada olduğu için
+       sekme değiştirilir ve satır kısa süre vurgulanır.
+
+   Veri sekmeye İLK geçildiğinde çekilir; sayfa açılışını yavaşlatmaz. */
+(function () {
+    const WO_ID = @(Model?.Id ?? 0);
+    if (!WO_ID) return;
+    const host = document.getElementById('woeMovementsHost');
+    if (!host) return;
+
+    let loaded = false;
+
+    function esc(v) {
+        if (v === null || v === undefined) return '';
+        return String(v).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+    function num(v, d) {
+        if (v === null || v === undefined || v === '') return '';
+        const n = Number(v);
+        return isNaN(n) ? '' : n.toLocaleString('tr-TR', { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 });
+    }
+    function dtf(v) {
+        if (!v) return '';
+        const d = new Date(v);
+        return isNaN(d.getTime()) ? '' : d.toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' });
+    }
+    function dur(sec) {
+        if (sec === null || sec === undefined) return '<span style="opacity:.55">devam ediyor</span>';
+        const s = Number(sec) || 0;
+        const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+        return h > 0 ? (h + ' sa ' + m + ' dk') : (m + ' dk');
+    }
+
+    function sectionHtml(title, hint, bodyHtml) {
+        return '<div>'
+             +   '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">'
+             +     '<h3 style="margin:0;font-size:.95rem;font-weight:600;">' + esc(title) + '</h3>'
+             +     '<span style="font-size:.75rem;color:var(--app-text-muted,#64748b);">' + esc(hint) + '</span>'
+             +   '</div>' + bodyHtml
+             + '</div>';
+    }
+    function emptyHtml(msg) {
+        return '<div style="padding:12px 14px;border:1px dashed var(--app-border,#e2e8f0);border-radius:10px;'
+             + 'font-size:.82rem;color:var(--app-text-muted,#64748b);">' + esc(msg) + '</div>';
+    }
+
+    function movementsHtml(rows) {
+        if (!rows.length) return emptyHtml('Bu iş emrinde henüz stok hareketi yok. Mamul girişi son operasyon tamamlanınca oluşur.');
+        let h = '<table style="width:100%;border-collapse:collapse;font-size:.82rem;">'
+              + '<thead><tr>'
+              + '<th style="text-align:left;padding:6px 8px;">Tür</th>'
+              + '<th style="text-align:left;padding:6px 8px;">Malzeme</th>'
+              + '<th style="text-align:right;padding:6px 8px;">Miktar</th>'
+              + '<th style="text-align:left;padding:6px 8px;">Depo</th>'
+              + '<th style="text-align:left;padding:6px 8px;">Lot</th>'
+              + '<th style="width:120px"></th>'
+              + '</tr></thead><tbody>';
+        rows.forEach(function (r) {
+            const isReceipt = r.movementType === 2;
+            const color = isReceipt ? '#059669' : '#b45309';
+            h += '<tr style="border-top:1px solid var(--app-border,#e2e8f0);">'
+              +   '<td style="padding:6px 8px;"><span style="color:' + color + ';font-weight:600;">' + esc(r.movementLabel) + '</span></td>'
+              +   '<td style="padding:6px 8px;">' + esc(r.itemCode || '') + ' <span style="opacity:.7">' + esc(r.itemName || '') + '</span></td>'
+              +   '<td style="padding:6px 8px;text-align:right;">' + num(r.quantity, 2) + ' ' + esc(r.unitCode || '') + '</td>'
+              +   '<td style="padding:6px 8px;">' + esc(r.locationName || '—') + '</td>'
+              +   '<td style="padding:6px 8px;">' + esc(r.lotNo || '—') + '</td>'
+              +   '<td style="padding:6px 8px;text-align:right;">'
+              +     '<button type="button" class="woe-btn" data-goto-item="' + r.itemId + '" title="Malzeme kartına git (Stok Hareketleri sekmesi)">Kayda Git</button>'
+              +   '</td>'
+              + '</tr>';
+        });
+        return h + '</tbody></table>';
+    }
+
+    function activitiesHtml(rows) {
+        if (!rows.length) return emptyHtml('Henüz üretim akış kaydı yok. Operasyon başlatıldığında burada listelenir.');
+        let h = '<table style="width:100%;border-collapse:collapse;font-size:.82rem;">'
+              + '<thead><tr>'
+              + '<th style="text-align:left;padding:6px 8px;">Operasyon</th>'
+              + '<th style="text-align:left;padding:6px 8px;">Tür</th>'
+              + '<th style="text-align:left;padding:6px 8px;">Personel</th>'
+              + '<th style="text-align:left;padding:6px 8px;">Başlangıç</th>'
+              + '<th style="text-align:right;padding:6px 8px;">Süre</th>'
+              + '<th style="text-align:right;padding:6px 8px;">Üretilen</th>'
+              + '<th style="width:120px"></th>'
+              + '</tr></thead><tbody>';
+        rows.forEach(function (a) {
+            h += '<tr style="border-top:1px solid var(--app-border,#e2e8f0);">'
+              +   '<td style="padding:6px 8px;">' + esc('Sıra ' + a.sequence + ' · ' + (a.operationName || '')) + '</td>'
+              +   '<td style="padding:6px 8px;">' + esc(a.activityType || '') + (a.reason ? ' <span style="opacity:.6">(' + esc(a.reason) + ')</span>' : '') + '</td>'
+              +   '<td style="padding:6px 8px;">' + esc(a.personnel || '—') + '</td>'
+              +   '<td style="padding:6px 8px;">' + esc(dtf(a.startedAt)) + '</td>'
+              +   '<td style="padding:6px 8px;text-align:right;">' + dur(a.durationSeconds) + '</td>'
+              +   '<td style="padding:6px 8px;text-align:right;">' + (a.quantity != null ? num(a.quantity, 2) : '—')
+              +     (a.scrapQuantity ? ' <span style="color:#dc2626">(fire ' + num(a.scrapQuantity, 2) + ')</span>' : '') + '</td>'
+              +   '<td style="padding:6px 8px;text-align:right;">'
+              +     '<button type="button" class="woe-btn" data-goto-op="' + a.operationId + '" title="Rota sekmesinde bu operasyona git">Kayda Git</button>'
+              +   '</td>'
+              + '</tr>';
+        });
+        return h + '</tbody></table>';
+    }
+
+    function wireActions() {
+        host.querySelectorAll('[data-goto-item]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const id = btn.getAttribute('data-goto-item');
+                const url = '/Logistics/MaterialCardEdit?id=' + id;
+                try {
+                    const top = window.top || window;
+                    if (top && top.CalibraHub && typeof top.CalibraHub.openWorkspaceTab === 'function') {
+                        top.CalibraHub.openWorkspaceTab({ url: url, title: 'Malzeme Kartları', matchPath: '/Logistics/MaterialCard' });
+                        return;
+                    }
+                } catch (e) { /* cross-origin — asagidaki yerel gezinme calisir */ }
+                window.location.href = url;
+            });
+        });
+        host.querySelectorAll('[data-goto-op]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const opId = btn.getAttribute('data-goto-op');
+                const rotaBtn = document.querySelector('.woe-nav-btn[data-tab="rota"]');
+                if (rotaBtn) rotaBtn.click();
+                // Operasyon satırı Rota sekmesinde render edilmişse vurgula (yoksa sessiz geç).
+                setTimeout(function () {
+                    const row = document.querySelector('[data-op-id="' + opId + '"]');
+                    if (!row) return;
+                    row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                    row.style.transition = 'background-color .4s';
+                    const old = row.style.backgroundColor;
+                    row.style.backgroundColor = 'rgba(99,102,241,.18)';
+                    setTimeout(function () { row.style.backgroundColor = old; }, 1600);
+                }, 120);
+            });
+        });
+    }
+
+    async function load() {
+        if (loaded) return;
+        loaded = true;
+        try {
+            const resp = await fetch('/Production/WorkOrderMovements?workOrderId=' + WO_ID, { credentials: 'same-origin' });
+            const data = await resp.json();
+            if (!data || !data.ok) {
+                host.innerHTML = emptyHtml((data && data.error) || 'Üretim hareketleri okunamadı.');
+                return;
+            }
+            const movements = data.movements || [];
+            const activities = data.activities || [];
+            host.innerHTML =
+                sectionHtml('Stok Hareketleri', movements.length + ' kayıt · mamul girişi ve bileşen sarfı', movementsHtml(movements))
+              + sectionHtml('Üretim Akışı', activities.length + ' kayıt · operasyon bazlı', activitiesHtml(activities));
+            wireActions();
+        } catch (e) {
+            loaded = false;   // tekrar denenebilsin
+            host.innerHTML = emptyHtml('Üretim hareketleri yüklenemedi: ' + (e && e.message ? e.message : 'bağlantı hatası'));
+        }
+    }
+
+    const tabBtn = document.querySelector('.woe-nav-btn[data-tab="hareket"]');
+    if (tabBtn) tabBtn.addEventListener('click', load);
+    if (location.hash === '#hareket') load();
 })();
 
 /* ── Birim dropdown'u (2026-05-20 sonrasi) ────────────────────────────────────

@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
@@ -616,6 +616,61 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                 RevisionNo: r.GetInt32(17),
                 AssignedPersonnelId: r.FieldCount > 18 && !r.IsDBNull(18) ? r.GetInt32(18) : null,
                 AssignedPersonnelName: r.FieldCount > 19 && !r.IsDBNull(19) ? r.GetString(19) : null));
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// İş emrinin üretim hareketleri — mamul girişi + bileşen sarfı.
+    ///
+    /// Kolon adları şemadan doğrulandı (CLAUDE.md kural 1): DocumentLine üzerinde
+    /// MovementType/LotNo sonradan eklenen NULL kolonlardır, tarih kolonu YOKTUR —
+    /// bu yüzden sıralama Id (ekleme sırası) ile yapılır.
+    /// MovementType NULL olan satırlar stok hareketi değildir (plan/fiyat satırı) → dışlanır.
+    /// </summary>
+    public async Task<IReadOnlyList<WorkOrderMovementDto>> GetMovementsAsync(int workOrderId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+            SELECT l.[Id], l.[LineNo], l.[ItemId],
+                   i.[Code] AS ItemCode, i.[Name] AS ItemName,
+                   l.[MovementType], l.[Quantity], u.[Code] AS UnitCode,
+                   l.[LocationId], loc.[LocationName], l.[LotNo], l.[Notes]
+            FROM [{_schema}].[DocumentLine] l
+            INNER JOIN {_woTable} w ON w.[DocumentId] = l.[DocumentId]
+            LEFT JOIN [{_schema}].[Items] i ON i.[Id] = l.[ItemId]
+            LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = l.[UnitId]
+            LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = l.[LocationId]
+            WHERE w.[Id] = @WorkOrderId AND l.[MovementType] IS NOT NULL
+            ORDER BY l.[Id];";
+        cmd.Parameters.AddWithValue("@WorkOrderId", workOrderId);
+
+        var list = new List<WorkOrderMovementDto>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            var mt = r.IsDBNull(5) ? (byte)0 : r.GetByte(5);
+            list.Add(new WorkOrderMovementDto(
+                LineId: r.GetInt32(0),
+                LineNo: r.IsDBNull(1) ? 0 : r.GetInt32(1),
+                ItemId: r.GetInt32(2),
+                ItemCode: r.IsDBNull(3) ? null : r.GetString(3),
+                ItemName: r.IsDBNull(4) ? null : r.GetString(4),
+                MovementType: mt,
+                MovementLabel: mt switch
+                {
+                    (byte)StockMovementType.Receipt => "Mamul Girişi",
+                    (byte)StockMovementType.Issue => "Bileşen Sarfı",
+                    (byte)StockMovementType.Transfer => "Transfer",
+                    _ => "Hareket",
+                },
+                Quantity: r.IsDBNull(6) ? 0m : r.GetDecimal(6),
+                UnitCode: r.IsDBNull(7) ? null : r.GetString(7),
+                LocationId: r.IsDBNull(8) ? null : r.GetInt32(8),
+                LocationName: r.IsDBNull(9) ? null : r.GetString(9),
+                LotNo: r.IsDBNull(10) ? null : r.GetString(10),
+                Notes: r.IsDBNull(11) ? null : r.GetString(11)));
         }
         return list;
     }

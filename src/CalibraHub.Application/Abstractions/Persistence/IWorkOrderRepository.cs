@@ -1,4 +1,4 @@
-using CalibraHub.Application.Contracts;
+﻿using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
 
@@ -75,4 +75,10 @@ public interface IWorkOrderRepository
     /// listesi değiştirilirse devam eden emirlerin adımları altından kayar.
     /// </summary>
     Task<int> CountOpenWorkOrdersByRoutingAsync(int routingId, CancellationToken ct);
+
+    /// <summary>
+    /// İş emrinin ürettiği/sarf ettiği stok hareketleri (mamul girişi + bileşen sarfı).
+    /// MovementType dolu olan DocumentLine satırları — plan/fiyat satırları hariç.
+    /// </summary>
+    Task<IReadOnlyList<WorkOrderMovementDto>> GetMovementsAsync(int workOrderId, CancellationToken ct);
 }

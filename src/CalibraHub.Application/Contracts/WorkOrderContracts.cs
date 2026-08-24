@@ -1,4 +1,4 @@
-using CalibraHub.Domain.Enums;
+﻿using CalibraHub.Domain.Enums;
 
 namespace CalibraHub.Application.Contracts;
 
@@ -143,3 +143,26 @@ public sealed record CreateWorkOrderFromSalesLineRequest(
     decimal Quantity,
     /// <summary>Doluysa mevcut emire AllocatedQuantity ekler (toplama). NULL ise yeni emir acar.</summary>
     int? TargetWorkOrderId);
+
+/// <summary>
+/// İş emrinin ÜRETİM HAREKETİ satırı — mamul girişi (MovementType=Receipt) ve bileşen
+/// sarfı (Issue) aynı listede döner.
+///
+/// Kaynak: iş emrinin KENDİ belgesindeki (WorkOrder.DocumentId) DocumentLine satırları.
+/// Üretim tamamlanınca mamul girişi ve sarf satırları ayrı bir stok fişine değil bu belgeye
+/// yazılır — bu yüzden "ilgili kayıt" ayrı bir belge değil, malzemenin stok kartıdır.
+/// </summary>
+public sealed record WorkOrderMovementDto(
+    int LineId,
+    int LineNo,
+    int ItemId,
+    string? ItemCode,
+    string? ItemName,
+    byte MovementType,
+    string MovementLabel,
+    decimal Quantity,
+    string? UnitCode,
+    int? LocationId,
+    string? LocationName,
+    string? LotNo,
+    string? Notes);
