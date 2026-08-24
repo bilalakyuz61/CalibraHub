@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Shell — CalibraHub uretim kabugu (Main Layout/Wrapper)
  *
  * Glassmorphism navbar + sidebar + tabs + status bar. Eski _Layout.cshtml
@@ -3271,6 +3271,34 @@ function CompanySwitchModal(props) {
 
   var items = state.items || []
 
+  // Sirket satirindaki veritabani bilgi satiri — mevcut sirket ve digerleri
+  // ayni islevi kullanir (DRY). Rozet yalniz sameDbAsCurrent === false ise cikar.
+  function dbLine(c) {
+    var name = c.databaseName || 'varsayılan veritabanı'
+    var diff = c.sameDbAsCurrent === false
+    return (
+      <span className="flex items-center gap-1.5 mt-0.5">
+        <span
+          className={'text-[10.5px] truncate ' + (isDark ? 'text-white/40' : 'text-slate-500')}
+          style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}
+          title={name}
+        >
+          {name}
+        </span>
+        {diff && (
+          <span
+            className={'flex-shrink-0 px-1.5 py-0.5 rounded text-[9.5px] font-semibold ' +
+              (isDark
+                ? 'bg-amber-500/15 text-amber-300 border border-amber-400/25'
+                : 'bg-amber-50 text-amber-700 border border-amber-200')}
+          >
+            Farklı VT
+          </span>
+        )}
+      </span>
+    )
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -3334,7 +3362,10 @@ function CompanySwitchModal(props) {
                     (isDark ? 'text-indigo-300 bg-indigo-500/10' : 'text-indigo-600 bg-indigo-50')}
                 >
                   <Check size={14} strokeWidth={2.5} />
-                  <span className="flex-1">{c.name}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block truncate">{c.name}</span>
+                    {dbLine(c)}
+                  </span>
                 </span>
               )
             }
@@ -3362,13 +3393,13 @@ function CompanySwitchModal(props) {
                 {unavailable
                   ? <AlertTriangle size={14} strokeWidth={1.8} className="text-amber-500" />
                   : <Building2 size={14} strokeWidth={1.8} className={isDark ? 'text-white/40' : 'text-slate-400'} />}
-                <span className="flex-1">
-                  {c.name}
-                  {unavailable && (
+                <span className="flex-1 min-w-0">
+                  <span className="block truncate">{c.name}</span>
+                  {unavailable ? (
                     <span className={'block text-[10.5px] font-medium ' + (isDark ? 'text-amber-300/70' : 'text-amber-600')}>
                       {c.unavailableReason || 'Veritabanına ulaşılamıyor'}
                     </span>
-                  )}
+                  ) : dbLine(c)}
                 </span>
               </button>
             )

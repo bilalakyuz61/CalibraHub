@@ -148,6 +148,36 @@ public sealed class AccountController : Controller
     /// Bağlantı dizesi boş olan şirket kendi DB'sine sahip değildir (varsayılan/sistem
     /// bağlantısını kullanır) → erişilebilir sayılır.
     /// </summary>
+    /// <summary>
+    /// Bir şirketin çalışma zamanı veritabanı kimliği. Öncelik <c>DatabaseName</c>
+    /// (master bağlantı + bu ad ile kurulur); yoksa tam <c>DatabaseConnectionString</c>
+    /// içinden InitialCatalog/DataSource okunur. İkisi de boşsa şirket varsayılan
+    /// (paylaşılan) bağlantıyı kullanıyor demektir → (null, null).
+    /// </summary>
+    private static (string? Server, string? Database) CompanyDbIdentity(CalibraHub.Domain.Entities.Company? c)
+    {
+        if (c is null) return (null, null);
+        string? server = null, database = null;
+        if (!string.IsNullOrWhiteSpace(c.DatabaseConnectionString))
+        {
+            try
+            {
+                var b = new SqlConnectionStringBuilder(c.DatabaseConnectionString);
+                server = string.IsNullOrWhiteSpace(b.DataSource) ? null : b.DataSource.Trim();
+                database = string.IsNullOrWhiteSpace(b.InitialCatalog) ? null : b.InitialCatalog.Trim();
+            }
+            catch (Exception) { /* bozuk dize — ad alanından devam edilir */ }
+        }
+        if (!string.IsNullOrWhiteSpace(c.DatabaseName)) database = c.DatabaseName.Trim();
+        return (server, database);
+    }
+
+    /// <summary>İki şirketin AYNI veritabanını kullanıp kullanmadığı (sunucu + katalog).
+    /// Katalogların ikisi de boşsa (her ikisi de varsayılan bağlantı) aynı sayılır.</summary>
+    private static bool SameDb((string? Server, string? Database) a, (string? Server, string? Database) b)
+        => string.Equals(a.Database ?? "", b.Database ?? "", StringComparison.OrdinalIgnoreCase)
+        && string.Equals(a.Server ?? "", b.Server ?? "", StringComparison.OrdinalIgnoreCase);
+
     private static async Task<bool> CanOpenCompanyDatabaseAsync(string? connectionString, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(connectionString)) return true;
@@ -202,10 +232,18 @@ public sealed class AccountController : Controller
         }));
         var reachable = probes.ToDictionary(p => p.Id, p => p.Ok);
 
+        // Veritabanı kimliği (2026-08-23 kullanıcı isteği): kullanıcı şirket değiştirirken
+        // FARKLI bir veritabanına geçtiğini görebilmeli. Sunucu adı istemciye BİLİNÇLİ
+        // OLARAK verilmez (gereksiz altyapı bilgisi) — yalnız veritabanı adı gösterilir;
+        // karşılaştırma ise sunucu+veritabanı ÇİFTİ üzerinden yapılır (aynı ada sahip iki
+        // farklı sunucudaki DB'ler yanlışlıkla "aynı" sayılmasın).
+        var currentDb = CompanyDbIdentity(companies.FirstOrDefault(c => c.Id == currentCompanyId));
+
         return Json(options.Select(x =>
         {
             var id = int.TryParse(x.Value, out var oid) ? oid : 0;
             var available = id > 0 && reachable.TryGetValue(id, out var ok) && ok;
+            var db = CompanyDbIdentity(companies.FirstOrDefault(c => c.Id == id));
             return new
             {
                 id,
@@ -213,6 +251,9 @@ public sealed class AccountController : Controller
                 isCurrent = id == currentCompanyId,
                 available,
                 unavailableReason = available ? null : "Veritabanına ulaşılamıyor",
+                // null = şirkete özel bir DB tanımlı değil (varsayılan/paylaşılan bağlantı).
+                databaseName = db.Database,
+                sameDbAsCurrent = SameDb(db, currentDb),
             };
         }).ToArray());
     }
