@@ -829,6 +829,9 @@ function mountLookupForInput(opts) {
         filterJson: opts.filterJson || null,
         formatJson: opts.formatJson || null,
         isRequired: !!opts.isRequired,
+        // navigateOnly: alan veri girisi degil GEZINME amacli (deger otomatik uretilir).
+        // Blur'da cozumleme basarisiz olsa bile kullanici alanda KILITLENMEZ.
+        navigateOnly: !!opts.navigateOnly,
       })
     )
   )

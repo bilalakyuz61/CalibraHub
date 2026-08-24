@@ -423,7 +423,7 @@
                     <span asp-validation-for="Email" class="cb-field-error"></span>
                 </div>
 
-                <div class="form-floating login-field mb-3">
+                <div class="form-floating login-field mb-3" id="companyField">
                     <select asp-for="CompanyId" asp-items="Model.CompanyOptions" class="form-select">
                         <option value="">@ui.Text("company_placeholder")</option>
                     </select>
@@ -481,6 +481,7 @@
         const companyPlaceholderText = @Html.Raw(JsonSerializer.Serialize(ui.Text("company_placeholder")));
         const emailInput = document.getElementById("Email");
         const companySelect = document.getElementById("CompanyId");
+        const companyField = document.getElementById("companyField");
         if (!emailInput || !companySelect) {
             return;
         }
@@ -511,6 +512,18 @@
 
             if (!hasCurrent) {
                 companySelect.value = "";
+            }
+
+            // Tek sirket varsa kullaniciya SORMA: otomatik sec ve alani gizle.
+            // (Mobil uygulamalarda da ayni davranis — tek sirket -> dogrudan giris.)
+            // Alan gizli olsa da <select> degeri formla birlikte POST edilir, sunucu
+            // tarafindaki dogrulama/yetki kontrolu aynen isler.
+            const singleCompany = items.length === 1;
+            if (singleCompany) {
+                companySelect.value = items[0].id;
+            }
+            if (companyField) {
+                companyField.style.display = singleCompany ? "none" : "";
             }
         }
 

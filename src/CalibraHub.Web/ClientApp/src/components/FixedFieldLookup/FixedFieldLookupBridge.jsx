@@ -340,7 +340,14 @@ export default function FixedFieldLookupBridge(props) {
   // Hatali kod sonrasi LookupCard'in input'una odagi geri al — kullanici alandan
   // cikip diger islemleri yapamasin (sabit alanlar form submit'i bloklayacak ama
   // yine de odak korumasi yapiyoruz UX icin).
+  //
+  // İSTİSNA (2026-08-24): navigateOnly alanlarda odak TUZAĞI UYGULANMAZ. Bu alanlar
+  // veri girişi değil GEZİNME amaçlıdır (örn. İş Emri "Numara" — başka bir iş emri
+  // seçince o kayda gider). Değeri otomatik üretilir, doğrulanacak bir şey yoktur;
+  // buna rağmen blur'da çözümleme başarısız olunca kullanıcı alana kilitleniyordu —
+  // Tab ile de tıklayarak da çıkılamıyordu.
   function forceFocusBackToCard() {
+    if (props.navigateOnly) return;
     setTimeout(function () {
       try {
         var node = fieldKey

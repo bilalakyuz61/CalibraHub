@@ -2083,6 +2083,11 @@ function _woeFmtQty(v) {
                     formCode: 'WORK_ORDER_EDIT',
                     fieldKey: 'orderNumber',
                     guideCode: 'WORKORDERS',
+                    // Bu alan veri girisi DEGIL, gezinme amacli: baska bir is emri secince
+                    // o kayda gider. Numara otomatik uretilir, dogrulanacak bir sey yoktur.
+                    // navigateOnly olmadan blur'daki cozumleme hatasi odagi geri aliyor ve
+                    // kullanici alandan CIKAMIYORDU (2026-08-24 kullanici bildirimi).
+                    navigateOnly: true,
                 });
                 orderInput.dataset.lookupMounted = '1';
                 orderInput.addEventListener('change', function () {

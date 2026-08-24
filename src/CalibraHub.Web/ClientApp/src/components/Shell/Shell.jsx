@@ -3281,19 +3281,19 @@ function CompanySwitchModal(props) {
         <span
           className={'text-[10.5px] truncate ' + (isDark ? 'text-white/40' : 'text-slate-500')}
           style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}
-          title={name}
+          title={diff ? ('Farklı veritabanı: ' + name) : name}
         >
           {name}
         </span>
         {diff && (
-          <span
-            className={'flex-shrink-0 px-1.5 py-0.5 rounded text-[9.5px] font-semibold ' +
-              (isDark
-                ? 'bg-amber-500/15 text-amber-300 border border-amber-400/25'
-                : 'bg-amber-50 text-amber-700 border border-amber-200')}
-          >
-            Farklı VT
-          </span>
+          /* Metin rozeti yerine VERİTABANI İKONU (2026-08-23 kullanıcı isteği) — satırın
+             solundaki şirket ikonu yerinde kalır, fark bu amber ikonla belirtilir. */
+          <Database
+            size={11}
+            strokeWidth={2}
+            className={'flex-shrink-0 ' + (isDark ? 'text-amber-300' : 'text-amber-600')}
+            aria-label="Farklı veritabanı"
+          />
         )}
       </span>
     )
