@@ -125,7 +125,16 @@ public sealed class HealthCheckController : Controller
         var total = checks.Count + infraSpecs.Count;
         var results = new List<CheckResult>(total);
 
-        await WriteFrameAsync(new { type = "start", total }, ct);
+        // items: arayüz kontrol edilecek TÜM satırları baştan "bekliyor" olarak çizsin diye
+        // gönderilir; sonuçlar geldikçe satırlar yerinde renk değiştirir (2026-08-24 kullanıcı isteği).
+        await WriteFrameAsync(new
+        {
+            type = "start",
+            total,
+            items = checks.Select((c, i) => new { index = i + 1, label = c.Label, parentLabel = c.ParentLabel, path = c.Path })
+                .Concat(infraSpecs.Select((sp, i) => new { index = checks.Count + i + 1, label = sp.Label, parentLabel = (string?)sp.Group, path = (string?)null }))
+                .ToArray(),
+        }, ct);
 
         for (var i = 0; i < checks.Count; i++)
         {
@@ -602,7 +611,16 @@ public sealed class HealthCheckController : Controller
             var client  = _httpFactory.CreateClient("health-check");
             client.Timeout = TimeSpan.FromSeconds(15);
 
-            await WriteFrameAsync(new { type = "start", total }, ct);
+            // items: arayüz kontrol edilecek TÜM satırları baştan "bekliyor" olarak çizsin diye
+        // gönderilir; sonuçlar geldikçe satırlar yerinde renk değiştirir (2026-08-24 kullanıcı isteği).
+        await WriteFrameAsync(new
+        {
+            type = "start",
+            total,
+            items = checks.Select((c, i) => new { index = i + 1, label = c.Label, parentLabel = c.ParentLabel, path = c.Path })
+                .Concat(infraSpecs.Select((sp, i) => new { index = checks.Count + i + 1, label = sp.Label, parentLabel = (string?)sp.Group, path = (string?)null }))
+                .ToArray(),
+        }, ct);
 
             for (var i = 0; i < checks.Count; i++)
             {

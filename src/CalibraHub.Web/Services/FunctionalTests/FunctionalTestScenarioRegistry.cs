@@ -43,6 +43,13 @@ public static class FunctionalTestScenarioRegistry
         new ApprovalFlowDefineScenario(),
         new DocLayoutDefineScenario(),
 
+        // ── Form alanı ve rehber özelleştirme ──
+        new WidgetFieldAddScenario(),
+        new WidgetDataTypeScenario(),
+        new WidgetFieldRequiredScenario(),
+        new GuideStandardColumnsScenario(),
+        new GuideCustomizeScenario(),
+
         // ── Stok kombinasyonu (özellik → değer → kombinasyon üretme) ──
         new CombinationFeatureDefineScenario(),
         new CombinationGenerateScenario(),

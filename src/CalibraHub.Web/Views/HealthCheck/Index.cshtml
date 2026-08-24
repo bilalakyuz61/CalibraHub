@@ -642,6 +642,36 @@
     }
 
     // ── Form sonuç tablosu ───────────────────────────────────────────────
+    /*  Canli satir listesi (2026-08-24 kullanici istegi): "kontrol edilecek form satirlari
+        acik gelmeli ... test edildikce yesile donmeli". Sunucu artik start/fn_start frame'inde
+        TUM satirlari gonderiyor; burada hepsi "bekliyor" olarak cizilir, sonuc geldikce
+        satirin sinifi yerinde degisir. Satirlar belirip kaymaz — liste sabit kalir. */
+    function pendingRowsHtml(items, idPrefix) {
+        let h = '<div class="hc-substep-list">';
+        (items || []).forEach(function (it) {
+            const meta = it.parentLabel ? ' <span style="opacity:.5">· ' + escapeHtml(it.parentLabel) + '</span>' : '';
+            h += '<div class="hc-substep-row pending" id="' + idPrefix + it.index + '">'
+               +   '<span class="hc-substep-icon">·</span>'
+               +   escapeHtml(it.label || ('#' + it.index)) + meta
+               + '</div>';
+        });
+        return h + '</div>';
+    }
+
+    function markRow(idPrefix, index, cls, symOverride) {
+        const el = document.getElementById(idPrefix + index);
+        if (!el) return;
+        el.className = 'hc-substep-row ' + cls;
+        const icon = el.querySelector('.hc-substep-icon');
+        if (!icon) return;
+        if (symOverride) { icon.innerHTML = symOverride; return; }
+        icon.innerHTML = cls === 'ok' ? '✓'
+                       : cls === 'error' ? '✗'
+                       : cls === 'warn' ? '⚠'
+                       : cls === 'running' ? '<span class="hc-spinner" style="width:11px;height:11px;border-width:2px;"></span>'
+                       : '·';
+    }
+
     function buildFormTable(results) {
         const order = { exception:0, error:1, warn:2, redirect:3, ok:4 };
         const sorted = [...results].sort((a, b) => (order[a.status] ?? 5) - (order[b.status] ?? 5));
@@ -793,21 +823,32 @@
             // Form test frameleri
             case 'start':
                 tst.results = []; tst.total = frame.total;
+                tst.items = frame.items || [];
                 stepStatus('forms', 'running', frame.total + ' form sırada');
                 // Hazirlik bitti, sonuclar Form Kontrolleri sekmesine akiyor — oraya gec.
                 if (window.hcActivateTab) window.hcActivateTab('pages');
                 stepExpand('forms', true);
-                stepBody('forms', formLiveHtml(0, frame.total, 'Başlatılıyor...', null, ''));
+                // Tum satirlar en bastan gorunur; ustte hangisinin islendigi canli gosterilir.
+                stepBody('forms',
+                    '<div id="hcFormLive">' + formLiveHtml(0, frame.total, 'Başlatılıyor...', null, '') + '</div>'
+                  + pendingRowsHtml(tst.items, 'hcfr-'));
                 break;
             case 'checking':
                 updateFormLive(frame.index, frame.total, frame.label, frame.parentLabel, frame.path);
+                markRow('hcfr-', frame.index, 'running');
                 stepStatus('forms', 'running', (frame.index - 1) + ' / ' + frame.total + ' tamamlandı');
                 summaryEl.innerHTML = (tst.companyName ? '<span class="hc-pill" style="background:rgba(16,185,129,.15);color:#10b981;">' + escapeHtml(tst.companyName) + '</span> ' : '')
                     + '<span class="hc-pill">' + (frame.index - 1) + ' / ' + frame.total + ' kontrol edildi</span>';
                 break;
-            case 'result':
+            case 'result': {
                 tst.results.push(frame.result);
+                // ok/redirect → yeşil, warn → sarı, error/exception → kırmızı.
+                const st = (frame.result && frame.result.status) || '';
+                const rowCls = (st === 'ok' || st === 'redirect') ? 'ok'
+                             : (st === 'warn' ? 'warn' : 'error');
+                markRow('hcfr-', frame.index, rowCls);
                 break;
+            }
             case 'done': {
                 const s = frame.summary;
                 const hasErr = s.error > 0 || s.exception > 0;
@@ -962,7 +1003,15 @@
           +   '<div class="hc-step-chevron" id="hcc-' + rid + '">' + (open ? '▼' : '▶') + '</div>'
           + '</div>'
           + '<div class="hc-step-body" id="hcbd-' + rid + '">' + fnStepsHtml(r.steps) + '</div>';
-        list.appendChild(item);
+
+        // Bekleyen satir varsa onun YERINE gecir — satirlar sona eklenip liste zipladikca
+        // kullanici okudugu yeri kaybediyordu (2026-08-24). Yoksa (eski akis) sona eklenir.
+        const placeholder = document.getElementById('hcfp-' + r.index);
+        if (placeholder && placeholder.parentNode) {
+            placeholder.parentNode.replaceChild(item, placeholder);
+        } else {
+            list.appendChild(item);
+        }
     }
 
     function fnSummaryHtml(s) {
@@ -977,11 +1026,19 @@
                 fn.total = frame.total;
                 fn.groupLabels = {};
                 (frame.groups || []).forEach(g => { fn.groupLabels[g.key] = g.label; });
+                fn.scenarios = frame.scenarios || [];
                 fnResultsEl.innerHTML = '<div id="hcFnLive"></div><div class="hc-step-list" id="hcFnList"></div>';
                 document.getElementById('hcFnLive').innerHTML = fnLiveHtml(0, frame.total, 'Başlatılıyor...', '');
+                // Tum senaryolar en bastan "bekliyor" olarak listelenir; sonuc geldikce
+                // ayni satir yerinde sonuc satirina donusur (fnAddResultRow).
+                document.getElementById('hcFnList').innerHTML =
+                    pendingRowsHtml((fn.scenarios || []).map(function (sc) {
+                        return { index: sc.index, label: sc.label, parentLabel: sc.groupLabel };
+                    }), 'hcfp-');
                 break;
             case 'fn_step':
                 fnUpdateLive(frame.index, frame.total, frame.label, fnGroupLabel(frame.group));
+                markRow('hcfp-', frame.index, 'running');
                 break;
             case 'fn_result':
                 fnAddResultRow(frame);

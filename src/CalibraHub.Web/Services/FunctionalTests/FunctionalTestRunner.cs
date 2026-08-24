@@ -67,7 +67,14 @@ public sealed class FunctionalTestRunner
             .Select(g => new { key = g.Key, label = GroupLabel(g.Key), count = g.Count() })
             .ToArray();
 
-        await emit(new { type = "fn_start", total = ordered.Count, groups = groupSummary }, ct);
+        // scenarios: arayüz TÜM satırları en baştan "bekliyor" olarak çizsin diye gönderilir —
+        // kullanıcı neyin sınanacağını daha ilk saniyede görür, sonuçlar geldikçe satırlar
+        // yerinde renk değiştirir (satır satır belirme yerine).
+        var scenarioList = ordered
+            .Select((s2, idx) => new { index = idx + 1, key = s2.Key, label = s2.Label, group = s2.Group, groupLabel = GroupLabel(s2.Group) })
+            .ToArray();
+
+        await emit(new { type = "fn_start", total = ordered.Count, groups = groupSummary, scenarios = scenarioList }, ct);
 
         var notRunnable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         int passed = 0, failed = 0, skipped = 0;
