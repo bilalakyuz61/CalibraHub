@@ -1,4 +1,4 @@
-using CalibraHub.Application.Constants;
+﻿using CalibraHub.Application.Constants;
 using System.Globalization;
 using System.Reflection;
 using System.Security.Claims;
@@ -148,7 +148,12 @@ public sealed class ProductionController : Controller
         return 5;
     }
 
+    // Yetki kapisi (2026-08-24): sayfa ve veri ucu daha once HIC gate edilmiyordu — oturum
+    // acan herkes is emri listesini gorebiliyordu. Menu (MenuDefinition) ve mobil API
+    // (MobileProductionApiController) zaten FormCodes.WorkOrders'a bakiyordu; yani menude
+    // gizli ama uc acikti. Fonksiyon testlerinin yetki grubu bu acigi ortaya cikardi.
     [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrders)]
     public async Task<IActionResult> WorkOrders(string? status, CancellationToken ct)
     {
         WorkOrderStatus? filter = null;
@@ -322,7 +327,9 @@ public sealed class ProductionController : Controller
     }
 
     // In-place refresh — kart aksiyonu (Iptal Et / Status change) sonrasi tum config'i tekrar ceker.
+    // Sayfayla AYNI kapi: veri ucu acik kalirsa sayfayi kapatmanin anlami olmaz.
     [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrders)]
     public async Task<IActionResult> WorkOrdersBoardConfig(string? status, CancellationToken ct)
     {
         WorkOrderStatus? filter = null;

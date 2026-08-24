@@ -13,9 +13,16 @@ namespace CalibraHub.Web.Services.FunctionalTests.Scenarios;
 /// Kapsam notu: liste temsili seçilmiş 3 ekranı içerir; yeni satır eklemek tek bir kayıt
 /// yazmak kadar basittir (Form kodu + sayfa yolu + uç + gövde üretici).
 /// </summary>
+/// <param name="PageFormCode">Sayfayı koruyan form kodu.</param>
+/// <param name="MutationFormCode">
+/// Mutasyonu koruyan form kodu. Genelde sayfayla AYNIdır ama olmak zorunda değil:
+/// örneğin İş Emirleri listesi WORK_ORDERS ile, kayıt açma WORK_ORDER_EDIT ile korunur.
+/// İkisini tek alan varsaymak, izin verme adımının yanlış izni vermesine yol açıyordu.
+/// </param>
 internal sealed record PermissionTarget(
     string Label,
-    string FormCode,
+    string PageFormCode,
+    string MutationFormCode,
     string PagePath,
     string MutationPath,
     Func<FunctionalTestContext, object> BuildBody);
@@ -25,7 +32,7 @@ internal static class PermissionTargets
     public static IReadOnlyList<PermissionTarget> All => new[]
     {
         new PermissionTarget(
-            "Malzeme Kartları", "MATERIAL_CARD_EDIT",
+            "Malzeme Kartları", "MATERIAL_CARD_EDIT", "MATERIAL_CARD_EDIT",
             "/Logistics/MaterialCards", "/Logistics/SaveMaterialCardJson",
             ctx => new
             {
@@ -38,7 +45,8 @@ internal static class PermissionTargets
             }),
 
         new PermissionTarget(
-            "İş Emirleri", "WORK_ORDER_EDIT",
+            // Sayfa WORK_ORDERS, kayıt açma WORK_ORDER_EDIT ile korunur — ayrı kodlar.
+            "İş Emirleri", "WORK_ORDERS", "WORK_ORDER_EDIT",
             "/Production/WorkOrders", "/Production/Create",
             ctx => new
             {
@@ -54,7 +62,7 @@ internal static class PermissionTargets
             }),
 
         new PermissionTarget(
-            "Kullanıcı Tanımlamaları", "USER_MANAGEMENT",
+            "Kullanıcı Tanımlamaları", "USER_MANAGEMENT", "USER_MANAGEMENT",
             "/CompanyUser/Index", "/CompanyUser/Save",
             ctx => new
             {
@@ -211,8 +219,11 @@ public sealed class PermissionGrantScenario : FunctionalTestScenarioBase
         var userId = ctx.GetInt(PermissionSeedScenario.UserIdKey);
         if (client is null || userId <= 0) { Fail(steps, "Kullanıcı oturumu", "Yetki testi kullanıcısı bağlamda yok."); return; }
 
+        var formCodes = PermissionTargets.All
+            .SelectMany(t => new[] { t.PageFormCode, t.MutationFormCode })
+            .Distinct(StringComparer.OrdinalIgnoreCase);
         var (defsOk, defIds) = await PermissionHelpers.ResolveDefIdsAsync(
-            ctx, steps, userId, PermissionTargets.All.Select(t => t.FormCode), Actions, ct);
+            ctx, steps, userId, formCodes, Actions, ct);
         if (!defsOk) return;
 
         var (saveOk, _) = await StepPostAsync(ctx, steps, "İzinleri verme", $"/Permission/User/{userId}/Save",
