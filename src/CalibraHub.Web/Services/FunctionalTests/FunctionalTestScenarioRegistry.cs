@@ -1,4 +1,4 @@
-using CalibraHub.Web.Services.FunctionalTests.Scenarios;
+﻿using CalibraHub.Web.Services.FunctionalTests.Scenarios;
 
 namespace CalibraHub.Web.Services.FunctionalTests;
 
@@ -37,5 +37,28 @@ public static class FunctionalTestScenarioRegistry
         new SalesOrderFromQuoteScenario(),
         new SalesDeliveryFullScenario(),
         new SalesDeliveryPartialScenario(),
+
+        // ── Tanımlamalar (departman → onay akışı, belge dizaynı) ──
+        new DepartmentDefineScenario(),
+        new ApprovalFlowDefineScenario(),
+        new DocLayoutDefineScenario(),
+
+        // ── Stok kombinasyonu (özellik → değer → kombinasyon üretme) ──
+        new CombinationFeatureDefineScenario(),
+        new CombinationGenerateScenario(),
+
+        // ── Kit / paket ürün (tanım → sipariş → teslimatta bileşene patlatma) ──
+        new KitDefineScenario(),
+        new KitOrderCreateScenario(),
+        new KitDeliveryScenario(),
+
+        // ── Üretim (reçete → rota → iş emri → akış → sarf → mamul girişi) ──
+        new ProductionSeedScenario(),
+        new ProductionBomDefineScenario(),
+        new ProductionRoutingDefineScenario(),
+        new ProductionWorkOrderCreateScenario(),
+        new ProductionFlowRecordScenario(),
+        new ProductionConsumptionScenario(),
+        new ProductionCompletionScenario(),
     };
 }

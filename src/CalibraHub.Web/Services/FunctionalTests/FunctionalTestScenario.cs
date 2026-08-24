@@ -1,4 +1,4 @@
-namespace CalibraHub.Web.Services.FunctionalTests;
+﻿namespace CalibraHub.Web.Services.FunctionalTests;
 
 /// <summary>Bir senaryo içindeki tek adımın sonucu — "hangi adımda kırıldığı" burada görünür.</summary>
 public sealed record FunctionalTestStep(string Label, bool Ok, string? Message);
@@ -71,6 +71,16 @@ public abstract class FunctionalTestScenarioBase : IFunctionalTestScenario
         FunctionalTestContext ctx, List<FunctionalTestStep> steps, string label, string path, object? body, CancellationToken ct)
     {
         var res = await ctx.Http.PostAsync(path, body, ct);
+        if (!res.Ok) { Fail(steps, label, res.Error); return (false, res.Json); }
+        Pass(steps, label);
+        return (true, res.Json);
+    }
+
+    /// <summary>PUT ile kaydeden REST uçları için (bkz. FunctionalTestHttpClient.PutAsync).</summary>
+    protected static async Task<(bool Ok, System.Text.Json.JsonElement Json)> StepPutAsync(
+        FunctionalTestContext ctx, List<FunctionalTestStep> steps, string label, string path, object? body, CancellationToken ct)
+    {
+        var res = await ctx.Http.PutAsync(path, body, ct);
         if (!res.Ok) { Fail(steps, label, res.Error); return (false, res.Json); }
         Pass(steps, label);
         return (true, res.Json);

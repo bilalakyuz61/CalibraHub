@@ -1,4 +1,4 @@
-using CalibraHub.Application.Constants;
+﻿using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
@@ -264,10 +264,10 @@ public sealed class AdminController : Controller
     [HttpGet]
     [PermissionScope(FormCodes.SetupDefinitions)]
     public IActionResult ErrorLog()
-    {
-        SetActiveMenu("error-log");
-        return View();
-    }
+        // 2026-08-24: iki ayrı log menüsü tek ekranda birleşti — hata logları artık
+        // /AuditLog sayfasının "Hata Logları" sekmesi. Bu action yalnızca eski
+        // bağlantılar/yer imleri kırılmasın diye duruyor (içerik taşındı, adres değişti).
+        => Redirect("/AuditLog?tab=errors");
 
     /// <summary>
     /// Hata log arama JSON endpoint'i. <paramref name="from"/>/<paramref name="to"/> yerel gün

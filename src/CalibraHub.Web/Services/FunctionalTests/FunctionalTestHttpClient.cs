@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -98,6 +98,16 @@ public sealed class FunctionalTestHttpClient : IDisposable
     public async Task<FunctionalTestApiResult> PostAsync(string path, object? body, CancellationToken ct)
     {
         var (httpOk, json, err) = await SendJsonAsync(HttpMethod.Post, path, body, ct);
+        return ToApiResult(httpOk, json, err);
+    }
+
+    /// <summary>
+    /// PUT + JSON gövde. Bazı REST uçları (örn. PUT /api/doc-designer/layouts) kaydetmeyi
+    /// PUT ile yapar; POST'a çevirmek 405 verir — bu yüzden ayrı bir metot var.
+    /// </summary>
+    public async Task<FunctionalTestApiResult> PutAsync(string path, object? body, CancellationToken ct)
+    {
+        var (httpOk, json, err) = await SendJsonAsync(HttpMethod.Put, path, body, ct);
         return ToApiResult(httpOk, json, err);
     }
 

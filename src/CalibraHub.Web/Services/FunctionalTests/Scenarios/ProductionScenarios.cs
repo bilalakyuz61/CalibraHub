@@ -24,7 +24,7 @@ public sealed class ProductionSeedScenario : FunctionalTestScenarioBase
     {
         var unitId = ctx.GetInt(FunctionalTestContext.Keys.UnitId);
         var loc1 = ctx.GetInt(FunctionalTestContext.Keys.Location1Id);
-        var suffix = Guid.NewGuid().ToString("N")[..6];
+        var suffix = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
 
         var (mamulOk, mamulId) = await SaveCardAsync(ctx, steps, "Mamul kartı oluşturma",
             $"FNM-{suffix}", $"Fonksiyon Test Mamul ({suffix})", typeId: 1, unitId, ct);
@@ -185,7 +185,7 @@ public sealed class ProductionRoutingDefineScenario : FunctionalTestScenarioBase
     protected override async Task ExecuteAsync(FunctionalTestContext ctx, List<FunctionalTestStep> steps, CancellationToken ct)
     {
         var itemId = ctx.GetInt(FunctionalTestContext.Keys.ProdItemId);
-        var suffix = Guid.NewGuid().ToString("N")[..6];
+        var suffix = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
 
         var (op1Ok, op1Id) = await SaveOperationAsync(ctx, steps, "Operasyon 1 (Kesim) oluşturma",
             $"Fonksiyon Test Kesim {suffix}", 15m, ct);

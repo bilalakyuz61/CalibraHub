@@ -10,6 +10,9 @@
     // Satın alma zinciri dönüşüm kaynakları: talep→teklif, teklif→sipariş.
     var isPurchaseDemand = string.Equals(Model.DocumentTypeCode, "satin_alma_talebi", StringComparison.OrdinalIgnoreCase);
     var isPurchaseQuote  = string.Equals(Model.DocumentTypeCode, "alis_teklifi", StringComparison.OrdinalIgnoreCase);
+    // Satis Teklifi — "Tum Urunlerin Maliyeti" Islemler ogesi yalniz bu tipte gorunur
+    // (Seq 1112-b, 2026-08-24: maliyet hesabi yalniz teklif adiminda anlamli).
+    var isSalesQuote = string.Equals(Model.DocumentTypeCode, "satis_teklifi", StringComparison.OrdinalIgnoreCase);
     // Kalite modülü "Muayene Oluştur" butonu — yalnız Alış İrsaliyesi tipinde (paylaşımlı
     // ekran; diğer 4 belge tipinde bu buton görünmemeli).
     var isPurchaseDelivery = string.Equals(Model.DocumentTypeCode, "alis_irsaliyesi", StringComparison.OrdinalIgnoreCase);
@@ -1425,6 +1428,45 @@
     .sqe-action-bar .sqe-meta strong { color: rgba(255,255,255,0.7); font-weight: 700; }
     body.app-theme-light .sqe-action-bar .sqe-meta strong { color: #334155; }
 
+    /* ── Ust serit butonlari ikon-only + kucuk (Seq 1113, 2026-08-24) ──────────
+       .pte-btn--icon paylasilan wwwroot/css/calibra-actionbar.css'ten geliyor
+       (60x42 tile, ikon + capraz etiket) ve TUM Edit ekranlarinda kullaniliyor;
+       oradaki base kurali degistirmek diger ekranlara yayilir. Bu yuzden override
+       yalniz burada, .sqe-action-bar scope'una hapsedilmis (bu sayfaya ozel stil
+       bloğu; baska hicbir view bu selector'i yuklemez). Etiket metni DOM'dan
+       SILINMIYOR — sadece gorsel gizleniyor; aria-label + title her butonda dolu
+       kalir (ekran okuyucu + fare-ustu ipucu korunur). Kaydet BIRINCIL eylem
+       oldugu icin yazili + biraz daha genis kalir (kesif edilebilirlik). */
+    .sqe-action-bar .pte-btn--icon:not(.pte-btn--primary) {
+        width: 34px;
+        height: 34px;
+    }
+    .sqe-action-bar .pte-btn--icon:not(.pte-btn--primary) > svg {
+        top: 50%;
+        left: 50%;
+        width: 16px;
+        height: 16px;
+        margin: -8px 0 0 -8px;
+    }
+    .sqe-action-bar .pte-btn--icon:not(.pte-btn--primary) .pte-btn__label {
+        display: none;
+    }
+    .sqe-action-bar .pte-btn--primary.pte-btn--icon {
+        width: auto;
+        height: 34px;
+        padding: 0 14px;
+    }
+    .sqe-action-bar .pte-btn--primary.pte-btn--icon > svg {
+        position: static;
+        width: 14px;
+        height: 14px;
+    }
+    .sqe-action-bar .pte-btn--primary.pte-btn--icon .pte-btn__label {
+        position: static;
+        font-size: 11.5px;
+        opacity: 1;
+    }
+
     /* ── Islemler menusu (cark ikonu + dropdown) ───────────────── */
     .sqe-actions-menu {
         position: relative;
@@ -2473,8 +2515,7 @@
                     onclick="sqToggleActionsMenu(event)"
                     aria-label="İşlemler">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    <circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>
                 </svg>
                 <span class="pte-btn__label">İşlemler</span>
             </button>
@@ -2482,11 +2523,11 @@
         <a href="@listReturnUrl" class="pte-btn pte-btn--secondary pte-btn--icon" id="ptBtnList" aria-label="Liste" title="Liste">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
         </a>
-        <button type="button" class="pte-btn pte-btn--primary pte-btn--icon" data-collaboration-write="true" onclick="sqSave({ validate: true })" aria-label="Kaydet">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+        <button type="button" class="pte-btn pte-btn--primary pte-btn--icon" data-collaboration-write="true" onclick="sqSave({ validate: true })" title="Kaydet" aria-label="Kaydet">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             <span class="pte-btn__label">Kaydet</span>
         </button>
-        <button type="button" class="pte-btn pte-btn--danger pte-btn--icon" id="sqBtnDelete" data-collaboration-write="true" disabled onclick="sqDelete()" aria-label="Sil">
+        <button type="button" class="pte-btn pte-btn--danger pte-btn--icon" id="sqBtnDelete" data-collaboration-write="true" disabled onclick="sqDelete()" title="Sil" aria-label="Sil">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
             <span class="pte-btn__label">Sil</span>
         </button>
@@ -2852,29 +2893,9 @@
             }
             </script>
         }
-        @if (isPurchaseDelivery && Model.DocumentId.HasValue)
-        {
-            <button type="button" class="pte-btn pte-btn--secondary pte-btn--icon" id="sqBtnInspect" data-collaboration-allow onclick="sqCreateInspection()" title="Bu belgeden muayene kaydı oluşturur" aria-label="Muayene Oluştur">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg>
-                <span class="pte-btn__label">Muayene Oluştur</span>
-            </button>
-            <button type="button" class="pte-btn pte-btn--danger pte-btn--icon" id="sqBtnDof" data-collaboration-allow onclick="sqCreateDof()" title="Bu alış irsaliyesinden (tedarikçi) DÖF açar" aria-label="DÖF Aç">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
-                <span class="pte-btn__label">DÖF Aç</span>
-            </button>
-            <script>
-            function sqCreateInspection() {
-                var sid = @(Model.DocumentId ?? 0);
-                if (!sid) return;
-                window.location.href = '/Quality/InspectionEdit?sourceKind=alis_irsaliyesi&sourceId=' + sid;
-            }
-            function sqCreateDof() {
-                var sid = @(Model.DocumentId ?? 0);
-                if (!sid) return;
-                window.location.href = '/Quality/CapaEdit?sourceKind=alis_irsaliyesi&sourceId=' + sid;
-            }
-            </script>
-        }
+        <!-- Muayene Oluştur / DÖF Aç — Islemler menusune tasindi (Seq 1112-a,
+             2026-08-24). Buton/JS: bkz. sqActionsDropdown icindeki isPurchaseDelivery
+             bloğu (sqActionCreateInspection / sqActionCreateDof). -->
         <!-- Status select gizli — UI uzerinden direkt degistirilmiyor; sqActionStatus
              (Islemler dropdown'undan) deger atayip change tetikliyor. Badge gorunur kaldi. -->
         <select id="sqStatusSelect" class="form-select form-select-sm" style="display:none;" onchange="sqChangeStatus()">
@@ -2916,16 +2937,21 @@
             </svg>
             <span>Mail Gönder</span>
         </button>
-        <button type="button" role="menuitem" class="sqe-actions-item" onclick="sqActionShowAllCosts(event)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <rect x="4" y="2" width="16" height="20" rx="2"/>
-                <line x1="8" y1="6" x2="16" y2="6"/>
-                <line x1="8" y1="10" x2="16" y2="10"/>
-                <line x1="8" y1="14" x2="16" y2="14"/>
-                <line x1="8" y1="18" x2="13" y2="18"/>
-            </svg>
-            <span>Tüm Ürünlerin Maliyeti</span>
-        </button>
+        @if (isSalesQuote)
+        {
+            <!-- Tum Urunlerin Maliyeti — yalniz Satis Teklifi tipinde anlamli (Seq 1112-b,
+                 2026-08-24); diger 4 belge tipinde hic render edilmez. -->
+            <button type="button" role="menuitem" class="sqe-actions-item" onclick="sqActionShowAllCosts(event)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="4" y="2" width="16" height="20" rx="2"/>
+                    <line x1="8" y1="6" x2="16" y2="6"/>
+                    <line x1="8" y1="10" x2="16" y2="10"/>
+                    <line x1="8" y1="14" x2="16" y2="14"/>
+                    <line x1="8" y1="18" x2="13" y2="18"/>
+                </svg>
+                <span>Tüm Ürünlerin Maliyeti</span>
+            </button>
+        }
         @if (Model.DocumentId.HasValue)
         {
             <!-- Onay Süreci — sağ çekmeceyi açar (bkz. _WorkflowDrawer.cshtml). Rozet
@@ -2937,6 +2963,40 @@
                 <span style="flex:1;">Onay Süreci</span>
                 <span id="sqApprovalBadge" class="sqe-approval-badge" style="display:none;"></span>
             </button>
+        }
+        @if (isPurchaseDelivery && Model.DocumentId.HasValue)
+        {
+            <!-- Muayene Oluştur / DÖF Aç — üst şeritten taşındı (Seq 1112-a, 2026-08-24):
+                 bu tür belgelerde ("işlem" niteliğinde) Islemler menusunde yer almalari
+                 istendi. Gorunurluk kosulu birebir korundu. -->
+            <button type="button" role="menuitem" class="sqe-actions-item" data-collaboration-allow onclick="sqActionCreateInspection(event)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>
+                </svg>
+                <span>Muayene Oluştur</span>
+            </button>
+            <button type="button" role="menuitem" class="sqe-actions-item" data-collaboration-allow onclick="sqActionCreateDof(event)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/>
+                </svg>
+                <span>DÖF Aç</span>
+            </button>
+            <script>
+            window.sqActionCreateInspection = function (ev) {
+                if (ev) ev.stopPropagation();
+                sqCloseActionsMenu();
+                var sid = @(Model.DocumentId ?? 0);
+                if (!sid) return;
+                window.location.href = '/Quality/InspectionEdit?sourceKind=alis_irsaliyesi&sourceId=' + sid;
+            };
+            window.sqActionCreateDof = function (ev) {
+                if (ev) ev.stopPropagation();
+                sqCloseActionsMenu();
+                var sid = @(Model.DocumentId ?? 0);
+                if (!sid) return;
+                window.location.href = '/Quality/CapaEdit?sourceKind=alis_irsaliyesi&sourceId=' + sid;
+            };
+            </script>
         }
         <!-- Durum Degistir — tek item, hover/click ile yan acilan sub-popup -->
         <button type="button" role="menuitem"

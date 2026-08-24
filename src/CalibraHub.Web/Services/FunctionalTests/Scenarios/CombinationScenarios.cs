@@ -16,7 +16,7 @@ public sealed class CombinationFeatureDefineScenario : FunctionalTestScenarioBas
 
     protected override async Task ExecuteAsync(FunctionalTestContext ctx, List<FunctionalTestStep> steps, CancellationToken ct)
     {
-        var suffix = Guid.NewGuid().ToString("N")[..6];
+        var suffix = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
         var valueIds = new List<int>();
 
         var (f1Ok, feature1Id) = await SaveFeatureAsync(ctx, steps, "Özellik 1 (Renk) tanımlama", $"Fonksiyon Test Renk {suffix}", ct);
@@ -100,7 +100,7 @@ public sealed class CombinationGenerateScenario : FunctionalTestScenarioBase
             return;
         }
 
-        var suffix = Guid.NewGuid().ToString("N")[..6];
+        var suffix = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
         var code = $"FNK-{suffix}";
         var (cardOk, cardJson) = await StepPostAsync(ctx, steps, "Kombinasyonlu stok kartı oluşturma", "/Logistics/SaveMaterialCardJson",
             new

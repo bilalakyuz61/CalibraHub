@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using CalibraHub.Application.Auditing;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
@@ -58,6 +58,13 @@ public sealed class AuditLogController : Controller
                 userId, role, departmentId, FormCodes.AuditLog, new[] { "VIEW", "VIEW_OWN" }, ct);
             if (!allowed)
                 return MakeForbidResult();
+
+            // Hata Logları (2026-08-24): ayrı menü/ekran olmaktan çıkıp bu sayfanın ikinci
+            // sekmesi oldu. Yetki kaynağı DEĞİŞMEDİ — eski /Admin/ErrorLog ekranıyla aynı
+            // kapı (SetupDefinitions = SystemAdmin-only dev/sistem bucket'ı, bkz. CLAUDE.md
+            // "DepartmentManager Rolü"). Yetkisi olmayan kullanıcı sekmeyi hiç görmez.
+            ViewData["CanViewErrorLog"] = await _permService.CheckAnyAsync(
+                userId, role, departmentId, FormCodes.SetupDefinitions, new[] { "VIEW", "VIEW_OWN" }, ct);
         }
 
         return View();

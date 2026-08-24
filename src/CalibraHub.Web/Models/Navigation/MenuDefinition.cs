@@ -71,7 +71,10 @@ public static class MenuDefinition
             new("settings.dbschema",       isEn ? "Database Map"           : "Veritabanı Haritası",     "Database",           "/admin/db-schema",          null, AdminOnly: true),
             new("settings.scheduledtasks", isEn ? "Scheduled Tasks"        : "Zamanlanmış Görevler",    "Clock",              "/Admin/ScheduledTasks",     null,
                 PermissionFormCode: FormCodes.Scheduler),
-            new("settings.auditlog",       isEn ? "Audit Log"              : "İşlem Logları",           "ScrollText",         "/AuditLog",                 null,
+            // Tek log ekranı (2026-08-24): "İşlem Logları" + "Hata Logları" ayrı menüydü,
+            // ikisi de App_Data altında dosya-JSONL okuyan aynı desendeki ekranlardı.
+            // Artık /AuditLog iki sekmeli tek ekran; hata sekmesi yalnız SystemAdmin'e açılır.
+            new("settings.auditlog",       isEn ? "Logs"                   : "Loglar",                  "ScrollText",         "/AuditLog",                 null,
                 MatchPath: "/AuditLog", PermissionFormCode: FormCodes.AuditLog),
         };
         if (isSystemAdmin)
@@ -84,9 +87,6 @@ public static class MenuDefinition
             settingsChildren.Add(
                 new("settings.gateadmin",   isEn ? "System Management"   : "Sistem Yönetimi",         "ShieldCheck", "/Gate", null,
                     MatchPath: "/Gate"));
-            settingsChildren.Add(
-                new("settings.errorlog",    isEn ? "Error Logs"          : "Hata Logları",             "FileWarning", "/Admin/ErrorLog", null,
-                    MatchPath: "/Admin/ErrorLog"));
         }
 
         return new List<MenuNode>
