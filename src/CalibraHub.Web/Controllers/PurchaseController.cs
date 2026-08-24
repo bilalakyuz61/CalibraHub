@@ -1,4 +1,4 @@
-using CalibraHub.Application.Constants;
+﻿using CalibraHub.Application.Constants;
 using System.Globalization;
 using System.Security.Claims;
 using System.Text.Json;
@@ -106,10 +106,12 @@ public sealed class PurchaseController : Controller
     /// Tümü /Sales/DocumentEdit'i (5 belge tipi paylaşır) autoAction query'siyle açar;
     /// edit ekranı yükleme sonrası ilgili işlemi otomatik tetikler.
     /// </summary>
+    // "Tüm Ürünlerin Maliyeti" BURADA YOK: kullanıcı kararı gereği maliyet yalnız Satış
+    // Teklifi adımında görünür (PageComment Seq 1112). Alış belgelerinde bu aksiyonun
+    // bırakılması, edit ekranındaki kısıtı autoAction=costs deep-link'iyle delerdi.
     private static object[] BuildRecordOperationActions(int id) => new object[]
     {
         new { label = "Durum Değiştir",         icon = "Clock",     color = "violet", url = $"/Sales/DocumentEdit?id={id}&autoAction=status" },
-        new { label = "Tüm Ürünlerin Maliyeti", icon = "Receipt",   color = "amber",  url = $"/Sales/DocumentEdit?id={id}&autoAction=costs" },
         new { label = "Onay Süreci",            icon = "GitBranch", color = "sky",    url = $"/Sales/DocumentEdit?id={id}&autoAction=approval" },
     };
 

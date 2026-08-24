@@ -259,14 +259,24 @@ public sealed class SalesController : Controller
     // durum menüsünden "Onaylandı"/"Reddedildi" seçenekleri GİZLENİR (yalnız onay akışından gelir).
     // UI gizlemedir; asıl zorlama ChangeQuoteStatus sunucu gate'indedir. Deep-link (inlineStatusMenu
     // false) yolu DocumentEdit'e gider, orada kendi VM flag'ıyla gizler.
-    private static object[] BuildRecordOperationActions(int id, bool inlineStatusMenu, bool approvalGoverned = false) => new object[]
+    // includeCosts: "Tüm Ürünlerin Maliyeti" YALNIZ Satış Teklifi listesinde (PageComment
+    // Seq 1112 — kullanıcı maliyetin sadece teklif adımında görünmesini istedi). Edit
+    // ekranındaki İşlemler ögesi de aynı koşula bağlandı; burası kısıtlanmazsa liste satır
+    // menüsü autoAction=costs deep-link'iyle o ekranı diğer belge tiplerinde de AÇMAYA
+    // devam ederdi (JS fonksiyonu global) — yani ayar görünürde uygulanır, fiilen delik kalırdı.
+    private static object[] BuildRecordOperationActions(int id, bool inlineStatusMenu, bool approvalGoverned = false, bool includeCosts = false)
     {
-        inlineStatusMenu
-            ? (object)BuildChangeStatusAction(approvalGoverned)
-            : (object)new { label = "Durum Değiştir", icon = "Clock", color = "violet", url = $"/Sales/DocumentEdit?id={id}&autoAction=status" },
-        new { label = "Tüm Ürünlerin Maliyeti", icon = "Receipt",   color = "amber",  url = $"/Sales/DocumentEdit?id={id}&autoAction=costs" },
-        new { label = "Onay Süreci",            icon = "GitBranch", color = "sky",    url = $"/Sales/DocumentEdit?id={id}&autoAction=approval" },
-    };
+        var actions = new List<object>
+        {
+            inlineStatusMenu
+                ? (object)BuildChangeStatusAction(approvalGoverned)
+                : (object)new { label = "Durum Değiştir", icon = "Clock", color = "violet", url = $"/Sales/DocumentEdit?id={id}&autoAction=status" },
+        };
+        if (includeCosts)
+            actions.Add(new { label = "Tüm Ürünlerin Maliyeti", icon = "Receipt", color = "amber", url = $"/Sales/DocumentEdit?id={id}&autoAction=costs" });
+        actions.Add(new { label = "Onay Süreci", icon = "GitBranch", color = "sky", url = $"/Sales/DocumentEdit?id={id}&autoAction=approval" });
+        return actions.ToArray();
+    }
 
     /// <summary>
     /// "Durum Değiştir" — PageComment Seq 1071 (2026-08-03): önceden edit ekranına
@@ -534,7 +544,7 @@ public sealed class SalesController : Controller
                         submitLabel = "Gonder",
                         successMessage = "Mail kuyruga alindi",
                     },
-                }.Concat(BuildRecordOperationActions(quote.Id, inlineStatusMenu: true, approvalGoverned: quotesApprovalGoverned)).Append(BuildAuditLogAction("satis_teklifi", quote.Id, quoteAuditFormCode)).ToArray(),
+                }.Concat(BuildRecordOperationActions(quote.Id, inlineStatusMenu: true, approvalGoverned: quotesApprovalGoverned, includeCosts: true)).Append(BuildAuditLogAction("satis_teklifi", quote.Id, quoteAuditFormCode)).ToArray(),
             });
         }
 
