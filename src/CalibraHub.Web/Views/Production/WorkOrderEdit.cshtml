@@ -3086,8 +3086,50 @@ function _woeFmtQty(v) {
              + 'font-size:.82rem;color:var(--app-text-muted,#64748b);">' + esc(msg) + '</div>';
     }
 
+    /* Satırları ÜRETİM FİŞİNE göre gruplar (2026-08-24). Her sarf/üretim işlemi kendi
+       fişini açar; iş emri ekranında fiş satırı görünür, "Detay" ile o fişin hammadde
+       sarfları açılır, "Fişe Git" ile belgeye gidilir.
+       Fişsiz (eski) satırlar tek bir "Fiş dışı" grubunda toplanır — kaybolmasınlar. */
+    function groupByVoucher(rows) {
+        const map = new Map();
+        rows.forEach(function (r) {
+            const key = r.voucherId || 0;
+            if (!map.has(key)) {
+                map.set(key, { id: r.voucherId || 0, no: r.voucherNo || '', date: r.voucherDate, lines: [] });
+            }
+            map.get(key).lines.push(r);
+        });
+        return Array.from(map.values());
+    }
+
     function movementsHtml(rows) {
         if (!rows.length) return emptyHtml('Bu iş emrinde henüz stok hareketi yok. Mamul girişi son operasyon tamamlanınca oluşur.');
+        const groups = groupByVoucher(rows);
+        let out = '';
+        groups.forEach(function (g, gi) {
+            const receipt = g.lines.filter(function (l) { return l.movementType === 2; });
+            const issue   = g.lines.filter(function (l) { return l.movementType === 1; });
+            const ozet = [];
+            if (receipt.length) ozet.push(receipt.length + ' mamul girişi');
+            if (issue.length)   ozet.push(issue.length + ' bileşen sarfı');
+            const gid = 'woeV' + gi;
+            out +=
+              '<div style="border:1px solid var(--app-border,#e2e8f0);border-radius:10px;margin-bottom:10px;overflow:hidden;">'
+            +   '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--app-surface-muted,#f8fafc);">'
+            +     '<b style="font-size:.85rem;">' + esc(g.no || 'Fiş dışı (eski kayıt)') + '</b>'
+            +     '<span style="font-size:.75rem;color:var(--app-text-muted,#64748b);">' + esc(dtf(g.date)) + '</span>'
+            +     '<span style="font-size:.75rem;color:var(--app-text-muted,#64748b);">' + esc(ozet.join(" · ")) + '</span>'
+            +     '<span style="flex:1"></span>'
+            +     '<button type="button" class="woe-btn" data-toggle-voucher="' + gid + '">Detay Göster</button>'
+            +     (g.id ? '<button type="button" class="woe-btn" data-goto-voucher="' + g.id + '">Fişe Git</button>' : '')
+            +   '</div>'
+            +   '<div id="' + gid + '" style="display:none;padding:0 8px 8px;">' + voucherLinesHtml(g.lines) + '</div>'
+            + '</div>';
+        });
+        return out;
+    }
+
+    function voucherLinesHtml(rows) {
         let h = '<table style="width:100%;border-collapse:collapse;font-size:.82rem;">'
               + '<thead><tr>'
               + '<th style="text-align:left;padding:6px 8px;">Tür</th>'
@@ -3156,6 +3198,27 @@ function _woeFmtQty(v) {
                     }
                 } catch (e) { /* cross-origin — asagidaki yerel gezinme calisir */ }
                 window.location.href = url;
+            });
+        });
+        host.querySelectorAll('[data-toggle-voucher]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const box = document.getElementById(btn.getAttribute('data-toggle-voucher'));
+                if (!box) return;
+                const acik = box.style.display !== 'none';
+                box.style.display = acik ? 'none' : 'block';
+                btn.textContent = acik ? 'Detay Göster' : 'Detayı Gizle';
+            });
+        });
+        host.querySelectorAll('[data-goto-voucher]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                // Üretim fişi ekranı Faz 2'de yazılacak; şimdilik belge kimliğini
+                // gösterip kullanıcıyı yanıltmamak için açık uyarı veriyoruz.
+                const id = btn.getAttribute('data-goto-voucher');
+                if (window.CalibraHub && window.CalibraHub.toast) {
+                    window.CalibraHub.toast('Üretim fişi görüntüleme ekranı henüz yok (Faz 2). Belge no: ' + id, 'warn');
+                } else {
+                    alert('Üretim fişi ekranı henüz yok (Faz 2). Belge Id: ' + id);
+                }
             });
         });
         host.querySelectorAll('[data-goto-op]').forEach(function (btn) {

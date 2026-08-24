@@ -632,18 +632,27 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // Hareketler iki yerde olabilir:
+        //   1) ÜRETİM FİŞLERİ — ParentDocumentId ile iş emri belgesine bağlı ayrı belgeler
+        //      (2026-08-24 sonrası yazılan sarf kayıtları).
+        //   2) İş emrinin KENDİ belgesi — bu tarihten ÖNCE yazılmış eski kayıtlar ve
+        //      operasyon tamamlamadaki mamul girişi (henüz fişe taşınmadı, Faz 2).
+        // İkisi birden okunur; eski veri kaybolmuş görünmesin diye UNION şart.
         cmd.CommandText = $@"
             SELECT l.[Id], l.[LineNo], l.[ItemId],
                    i.[Code] AS ItemCode, i.[Name] AS ItemName,
                    l.[MovementType], l.[Quantity], u.[Code] AS UnitCode,
-                   l.[LocationId], loc.[LocationName], l.[LotNo], l.[Notes]
+                   l.[LocationId], loc.[LocationName], l.[LotNo], l.[Notes],
+                   d.[Id] AS VoucherId, d.[DocumentNumber] AS VoucherNo, d.[DocumentDate] AS VoucherDate
             FROM [{_schema}].[DocumentLine] l
-            INNER JOIN {_woTable} w ON w.[DocumentId] = l.[DocumentId]
+            INNER JOIN [{_schema}].[Document] d ON d.[Id] = l.[DocumentId]
+            INNER JOIN {_woTable} w ON w.[Id] = @WorkOrderId
+                                   AND (d.[ParentDocumentId] = w.[DocumentId] OR d.[Id] = w.[DocumentId])
             LEFT JOIN [{_schema}].[Items] i ON i.[Id] = l.[ItemId]
             LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = l.[UnitId]
             LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = l.[LocationId]
-            WHERE w.[Id] = @WorkOrderId AND l.[MovementType] IS NOT NULL
-            ORDER BY l.[Id];";
+            WHERE l.[MovementType] IS NOT NULL
+            ORDER BY d.[Id], l.[LineNo], l.[Id];";
         cmd.Parameters.AddWithValue("@WorkOrderId", workOrderId);
 
         var list = new List<WorkOrderMovementDto>();
@@ -652,6 +661,9 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
         {
             var mt = r.IsDBNull(5) ? (byte)0 : r.GetByte(5);
             list.Add(new WorkOrderMovementDto(
+                VoucherId: r.GetInt32(12),
+                VoucherNo: r.IsDBNull(13) ? null : r.GetString(13),
+                VoucherDate: r.IsDBNull(14) ? DateTime.MinValue : r.GetDateTime(14),
                 LineId: r.GetInt32(0),
                 LineNo: r.IsDBNull(1) ? 0 : r.GetInt32(1),
                 ItemId: r.GetInt32(2),

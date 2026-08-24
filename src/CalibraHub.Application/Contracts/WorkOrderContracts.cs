@@ -153,6 +153,12 @@ public sealed record CreateWorkOrderFromSalesLineRequest(
 /// yazılır — bu yüzden "ilgili kayıt" ayrı bir belge değil, malzemenin stok kartıdır.
 /// </summary>
 public sealed record WorkOrderMovementDto(
+    /// <summary>Satırın ait olduğu üretim fişi (Document.Id) — "Fişe Git" hedefi.</summary>
+    int VoucherId,
+    /// <summary>Üretim fişi numarası (örn. UF-2026-0001).</summary>
+    string? VoucherNo,
+    /// <summary>Fiş tarihi — satırlar fişe göre gruplanırken başlıkta gösterilir.</summary>
+    DateTime VoucherDate,
     int LineId,
     int LineNo,
     int ItemId,
