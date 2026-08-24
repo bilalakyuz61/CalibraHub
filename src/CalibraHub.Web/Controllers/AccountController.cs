@@ -35,6 +35,7 @@ public sealed class AccountController : Controller
     private readonly IPasswordHashService _passwordHashService;
     private readonly CalibraHub.Application.Services.LoginLockoutTracker _loginLockout;
     private readonly CalibraHub.Application.Auditing.IAuditTrailService _audit;
+    private readonly CalibraHub.Persistence.Database.SqlServerConnectionFactory _connectionFactory;
     private readonly ILogger<AccountController> _logger;
 
     public AccountController(
@@ -49,6 +50,7 @@ public sealed class AccountController : Controller
         IPasswordHashService passwordHashService,
         CalibraHub.Application.Services.LoginLockoutTracker loginLockout,
         CalibraHub.Application.Auditing.IAuditTrailService audit,
+        CalibraHub.Persistence.Database.SqlServerConnectionFactory connectionFactory,
         ILogger<AccountController> logger)
     {
         _companyDefinitionRepository = companyDefinitionRepository;
@@ -62,6 +64,7 @@ public sealed class AccountController : Controller
         _passwordHashService = passwordHashService;
         _loginLockout = loginLockout;
         _audit = audit;
+        _connectionFactory = connectionFactory;
         _logger = logger;
     }
 
@@ -149,27 +152,31 @@ public sealed class AccountController : Controller
     /// bağlantısını kullanır) → erişilebilir sayılır.
     /// </summary>
     /// <summary>
-    /// Bir şirketin çalışma zamanı veritabanı kimliği. Öncelik <c>DatabaseName</c>
-    /// (master bağlantı + bu ad ile kurulur); yoksa tam <c>DatabaseConnectionString</c>
-    /// içinden InitialCatalog/DataSource okunur. İkisi de boşsa şirket varsayılan
-    /// (paylaşılan) bağlantıyı kullanıyor demektir → (null, null).
+    /// Bir şirketin çalışma zamanı veritabanı kimliği (sunucu + katalog). Kaynak,
+    /// uygulamanın GERÇEKTEN kullandığı çözücüdür: <c>ResolveConnectionStringForCompany</c>
+    /// (master bağlantı dizesi + <c>Company.DatabaseName</c>; ad boşsa sistem DB'si).
+    /// Böylece <c>DatabaseName</c> tanımsız olan şirket için de gerçek katalog adı
+    /// gösterilir ("varsayılan" yazmak yerine).
+    /// NOT: <c>Company.DatabaseConnectionString</c> KULLANILMAZ — o kolon 2026-07-19'da
+    /// kaldırıldı ve entity alanı artık hiç doldurulmuyor (bkz. SqlCompanyRepository).
     /// </summary>
-    private static (string? Server, string? Database) CompanyDbIdentity(CalibraHub.Domain.Entities.Company? c)
+    private (string? Server, string? Database) CompanyDbIdentity(int companyId)
     {
-        if (c is null) return (null, null);
-        string? server = null, database = null;
-        if (!string.IsNullOrWhiteSpace(c.DatabaseConnectionString))
+        if (companyId <= 0) return (null, null);
+        try
         {
-            try
-            {
-                var b = new SqlConnectionStringBuilder(c.DatabaseConnectionString);
-                server = string.IsNullOrWhiteSpace(b.DataSource) ? null : b.DataSource.Trim();
-                database = string.IsNullOrWhiteSpace(b.InitialCatalog) ? null : b.InitialCatalog.Trim();
-            }
-            catch (Exception) { /* bozuk dize — ad alanından devam edilir */ }
+            var cs = _connectionFactory.ResolveConnectionStringForCompany(companyId);
+            if (string.IsNullOrWhiteSpace(cs)) return (null, null);
+            var b = new SqlConnectionStringBuilder(cs);
+            var srv = string.IsNullOrWhiteSpace(b.DataSource) ? null : b.DataSource.Trim();
+            var db = string.IsNullOrWhiteSpace(b.InitialCatalog) ? null : b.InitialCatalog.Trim();
+            return (srv, db);
         }
-        if (!string.IsNullOrWhiteSpace(c.DatabaseName)) database = c.DatabaseName.Trim();
-        return (server, database);
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[MyCompanies] Şirket {CompanyId} bağlantısı çözülemedi.", companyId);
+            return (null, null);
+        }
     }
 
     /// <summary>İki şirketin AYNI veritabanını kullanıp kullanmadığı (sunucu + katalog).
@@ -227,8 +234,13 @@ public sealed class AccountController : Controller
         {
             // Aktif şirket zaten açık — yeniden yoklamaya gerek yok.
             if (oid == currentCompanyId) return (Id: oid, Ok: true);
-            var conn = companies.FirstOrDefault(c => c.Id == oid)?.DatabaseConnectionString;
-            return (Id: oid, Ok: await CanOpenCompanyDatabaseAsync(conn, cancellationToken));
+            // DİKKAT: Company.DatabaseConnectionString 2026-07-19'da DÜŞÜRÜLDÜ ve entity
+            // alanı artık hiç doldurulmuyor (hep null). Buraya null geçilince yoklama
+            // fail-open davranıp (bkz. CanOpenCompanyDatabaseAsync) HER şirketi "erişilebilir"
+            // sayıyordu → "Veritabanına ulaşılamıyor" durumu hiç tetiklenemiyordu. Artık
+            // uygulamanın gerçekten kullandığı bağlantı dizesi çözülüp yoklanıyor. (2026-08-23)
+            return (Id: oid, Ok: await CanOpenCompanyDatabaseAsync(
+                _connectionFactory.ResolveConnectionStringForCompany(oid), cancellationToken));
         }));
         var reachable = probes.ToDictionary(p => p.Id, p => p.Ok);
 
@@ -237,13 +249,13 @@ public sealed class AccountController : Controller
         // OLARAK verilmez (gereksiz altyapı bilgisi) — yalnız veritabanı adı gösterilir;
         // karşılaştırma ise sunucu+veritabanı ÇİFTİ üzerinden yapılır (aynı ada sahip iki
         // farklı sunucudaki DB'ler yanlışlıkla "aynı" sayılmasın).
-        var currentDb = CompanyDbIdentity(companies.FirstOrDefault(c => c.Id == currentCompanyId));
+        var currentDb = CompanyDbIdentity(currentCompanyId);
 
         return Json(options.Select(x =>
         {
             var id = int.TryParse(x.Value, out var oid) ? oid : 0;
             var available = id > 0 && reachable.TryGetValue(id, out var ok) && ok;
-            var db = CompanyDbIdentity(companies.FirstOrDefault(c => c.Id == id));
+            var db = CompanyDbIdentity(id);
             return new
             {
                 id,
@@ -306,7 +318,10 @@ public sealed class AccountController : Controller
             // Geçişe izin verilirse oturum hedef şirkete taşınır ve kullanıcı ilk sayfa
             // açılışında ham SqlException hata sayfasına düşer — üstelik geri dönmesi de
             // zorlaşır (artık ulaşılamayan şirkette). Bu yüzden geçiş HİÇ yapılmaz.
-            if (!await CanOpenCompanyDatabaseAsync(company.DatabaseConnectionString, cancellationToken))
+            // Aynı sebeple (bkz. MyCompanies) çözülmüş bağlantı dizesi kullanılır — aksi halde
+            // bu "veritabanı kapısı" hiçbir zaman kapanmıyordu.
+            if (!await CanOpenCompanyDatabaseAsync(
+                    _connectionFactory.ResolveConnectionStringForCompany(targetId), cancellationToken))
             {
                 _logger.LogWarning(
                     "[SwitchCompany] Hedef şirketin veritabanına ulaşılamadı, geçiş yapılmadı. Email={Email} Hedef={CompanyId} Db={Db}",
