@@ -674,4 +674,20 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
         }
         return list;
     }
+
+    /// <inheritdoc />
+    public async Task SyncProducedQuantityAsync(int workOrderId, decimal produced, decimal scrap, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+            UPDATE {_woTable}
+               SET [ProducedQuantity] = @Produced,
+                   [ScrapQuantity]    = @Scrap
+             WHERE [Id] = @Id;";
+        cmd.Parameters.AddWithValue("@Id", workOrderId);
+        cmd.Parameters.AddWithValue("@Produced", produced);
+        cmd.Parameters.AddWithValue("@Scrap", scrap);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
 }

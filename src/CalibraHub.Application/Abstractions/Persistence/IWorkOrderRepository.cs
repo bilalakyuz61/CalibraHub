@@ -81,4 +81,13 @@ public interface IWorkOrderRepository
     /// MovementType dolu olan DocumentLine satırları — plan/fiyat satırları hariç.
     /// </summary>
     Task<IReadOnlyList<WorkOrderMovementDto>> GetMovementsAsync(int workOrderId, CancellationToken ct);
+
+    /// <summary>
+    /// İş emri BAŞLIĞININ üretilen/fire miktarını son operasyonun değerleriyle eşitler.
+    ///
+    /// Neden gerekli: üretim miktarı yalnız WorkOrderOperation satırında artıyordu;
+    /// WorkOrder.ProducedQuantity hiçbir yerde yazılmıyordu ve listede her zaman 0
+    /// görünüyordu — mamul stoğa girmiş olsa bile (2026-08-24).
+    /// </summary>
+    Task SyncProducedQuantityAsync(int workOrderId, decimal produced, decimal scrap, CancellationToken ct);
 }

@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Auditing;
 using CalibraHub.Application.Contracts;
@@ -93,6 +93,27 @@ public sealed class WorkOrderOperationService : IWorkOrderOperationService
         }
     }
 
+
+    /// <summary>
+    /// İş emri başlığındaki üretilen/fire miktarını SON operasyonun değerine eşitler.
+    ///
+    /// Neden son operasyon: mamul stoğa son adımda giriyor (bkz. CompleteAsync → stockLine),
+    /// dolayısıyla "bu iş emrinden kaç adet çıktı" sorusunun cevabı odur. Ara operasyonların
+    /// miktarını toplamak yanlış olurdu (aynı parça her adımda tekrar sayılırdı).
+    ///
+    /// Sessizce yutulmuyor ama üretim akışını da bozmuyor: senkron başarısız olursa
+    /// operasyon kaydı zaten yazılmıştır, yalnız başlık özeti güncellenmemiş olur.
+    /// </summary>
+    private async Task SyncWorkOrderHeaderAsync(int workOrderOperationId, CancellationToken ct)
+    {
+        var op = await _repo.GetAsync(workOrderOperationId, ct);
+        if (op is null) return;
+        var all = await _repo.GetByWorkOrderAsync(op.WorkOrderId, ct);
+        if (all.Count == 0) return;
+        var last = all.OrderByDescending(o => o.Sequence).First();
+        await _workOrders.SyncProducedQuantityAsync(op.WorkOrderId, last.ProducedQuantity, last.ScrapQuantity, ct);
+    }
+
     public async Task PartialCompleteAsync(PartialCompleteOperationRequest req, CancellationToken ct)
     {
         if (req.WorkOrderOperationId <= 0) throw new ArgumentException("Operasyon kaydı zorunlu.");
@@ -108,6 +129,7 @@ public sealed class WorkOrderOperationService : IWorkOrderOperationService
                 $"Bu op'ta mevcut üretim: {op.ProducedQuantity:N2}. " +
                 $"Girebileceğiniz en fazla: {(op.UpstreamCap - op.ProducedQuantity):N2}.");
         await _repo.PartialCompleteAsync(req.WorkOrderOperationId, req.OperatorPersonnelId, req.Quantity, req.ScrapQuantity, ct);
+        await SyncWorkOrderHeaderAsync(req.WorkOrderOperationId, ct);
 
         // İşlem logu — üretilen miktar (+ girildiyse fire) artışı.
         if (_audit is not null)
@@ -203,6 +225,7 @@ public sealed class WorkOrderOperationService : IWorkOrderOperationService
         }
 
         await _repo.CompleteAsync(req.WorkOrderOperationId, req.OperatorPersonnelId, req.FinalQuantity, stockLine, ct);
+        await SyncWorkOrderHeaderAsync(req.WorkOrderOperationId, ct);
 
         // İşlem logu — operasyon tamamlandı; son operasyonsa mamul girişi detail'de belirtilir.
         if (_audit is not null)

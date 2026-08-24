@@ -1487,6 +1487,36 @@ public sealed class ProductionController : Controller
             var activities = new List<ActivityRow>();
             foreach (var op in operations)
             {
+                // OPERASYONUN KENDİ akış kaydı. Önceki sürüm yalnız saha aktivite loguna
+                // (WorkOrderOperationActivity) bakıyordu; o log YALNIZCA ShopFloor "Durum
+                // Değiştir" menüsü kullanıldığında oluşuyor. Operasyonu başlat/üret/tamamla
+                // akışı ise operasyon satırının kendisine yazılıyor — bu yüzden üretim yapılmış
+                // iş emirlerinde bile bölüm "0 kayıt" görünüyordu (2026-08-24).
+                if (op.StartedAt.HasValue || op.ProducedQuantity > 0 || op.CompletedAt.HasValue)
+                {
+                    var durationSec = (op.StartedAt.HasValue && op.CompletedAt.HasValue)
+                        ? (int)Math.Max(0, (op.CompletedAt.Value - op.StartedAt.Value).TotalSeconds)
+                        : (int?)null;
+                    activities.Add(new ActivityRow
+                    {
+                        id = -op.Id,                        // negatif: aktivite değil, operasyonun kendisi
+                        operationId = op.Id,
+                        sequence = op.Sequence,
+                        operationName = op.OperationName ?? op.Name ?? $"Sıra {op.Sequence}",
+                        activityType = op.CompletedAt.HasValue ? "Operasyon tamamlandı"
+                                     : op.StartedAt.HasValue ? "Operasyon devam ediyor"
+                                     : "Üretim girişi",
+                        reason = null,
+                        personnel = op.CompletedByPersonnelName ?? op.StartedByPersonnelName,
+                        startedAt = op.StartedAt ?? DateTime.UtcNow,
+                        endedAt = op.CompletedAt,
+                        durationSeconds = durationSec,
+                        quantity = op.ProducedQuantity,
+                        scrapQuantity = op.ScrapQuantity > 0 ? op.ScrapQuantity : null,
+                        notes = op.Notes,
+                    });
+                }
+
                 var history = await _activities.GetHistoryAsync(op.Id, ct);
                 foreach (var h in history)
                 {
