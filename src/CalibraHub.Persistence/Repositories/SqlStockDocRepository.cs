@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
@@ -2436,9 +2436,16 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             await using (var wo = conn.CreateCommand())
             {
                 wo.Transaction = tx;
+                // İş emri NUMARASI WorkOrder tablosunda YOK — Document.DocumentNumber'dır
+                // (WorkOrder yalnız DocumentId ile ona bağlanır). Eski sorgu [OrderNumber]
+                // kolonunu doğrudan okuyordu → "Invalid column name 'OrderNumber'" ile üretim
+                // sarfı HER ZAMAN patlıyordu (2026-08-24, fonksiyon testi ortaya çıkardı).
+                // Kanonik okuma deseni: SqlWorkOrderRepository — d.[DocumentNumber] alias'ı.
                 wo.CommandText = $"""
-                    SELECT [DocumentId], [WarehouseLocationId], [Status], [OrderNumber]
-                    FROM {T("WorkOrder")} WHERE [Id] = @Id;
+                    SELECT w.[DocumentId], w.[WarehouseLocationId], w.[Status], d.[DocumentNumber]
+                    FROM {T("WorkOrder")} w
+                    INNER JOIN {T("Document")} d ON d.[Id] = w.[DocumentId]
+                    WHERE w.[Id] = @Id;
                     """;
                 wo.Parameters.AddWithValue("@Id", request.WorkOrderId);
                 await using var r = await wo.ExecuteReaderAsync(ct);
