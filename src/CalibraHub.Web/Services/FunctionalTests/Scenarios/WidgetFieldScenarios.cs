@@ -165,3 +165,88 @@ public sealed class WidgetFieldRequiredScenario : FunctionalTestScenarioBase
         Pass(steps, "Boş değer reddi", "Boş değer sunucuda reddedildi.");
     }
 }
+
+/// <summary>
+/// Ek Alan Tanımı — TÜM Formlar. Önceki senaryolar akışı tek bir örnek form üzerinde derinlemesine
+/// sınar (şema + değer + tip + zorunluluk); bu senaryo ise genişliği kapsar: ek alan kabul eden
+/// HER forma bir alan tanımlar ve o formun şemasında göründüğünü doğrular.
+///
+/// Neden ayrı: bir formun ek alan altyapısı, form kaydı ya da form kodu bozuksa alan sessizce
+/// hiç görünmez. Örnek form üzerinden koşan test bunu yalnız o form için yakalar; kırık olan
+/// başka bir formsa hiç fark edilmez.
+///
+/// İlk hatada DURMAZ — bütün formlar denenir ve kırık olanların TAMAMI tek seferde raporlanır;
+/// aksi halde her koşuda yalnız bir sonraki kırık ortaya çıkar.
+/// </summary>
+public sealed class WidgetFieldAllFormsScenario : FunctionalTestScenarioBase
+{
+    public override string Key => "FORM_FIELD_ALL_FORMS";
+    public override string Group => "ticari";
+    public override string Label => "Ek Alan Tanımı — Tüm Formlar";
+    public override IReadOnlyList<string> DependsOn => new[] { "FORM_FIELD_ADD" };
+
+    protected override async Task ExecuteAsync(FunctionalTestContext ctx, List<FunctionalTestStep> steps, CancellationToken ct)
+    {
+        var (formsOk, formsJson) = await StepGetAsync(ctx, steps, "Form listesini okuma", "/api/widgets/forms", ct);
+        if (!formsOk) return;
+
+        var forms = formsJson.AsArray()
+            .Select(f => (Id: f.GetIntCI("id"), Code: f.GetStringCI("formCode") ?? f.GetStringCI("code")))
+            .Where(f => f.Id > 0 && !string.IsNullOrWhiteSpace(f.Code))
+            .ToList();
+
+        if (forms.Count == 0)
+        {
+            Fail(steps, "Form listesini okuma", "Ek alan kabul eden hiçbir form bulunamadı.");
+            return;
+        }
+        Pass(steps, "Form listesini okuma", $"{forms.Count} form ek alan kabul ediyor.");
+
+        var suffix = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+        var defineFailed = new List<string>();
+        var schemaFailed = new List<string>();
+
+        foreach (var form in forms)
+        {
+            var code = $"FN_SWEEP_{suffix}";
+            var addRes = await ctx.Http.PostAsync("/api/widgets/widgets", new
+            {
+                id = (int?)null, formId = form.Id, parentId = (int?)null,
+                widgetCode = code, label = $"Kapsam Testi Alanı {suffix}",
+                dataType = "text", maxLength = 50, sortOrder = 990,
+                options = (string[]?)null, isActive = true, isRequired = false,
+            }, ct);
+
+            if (!addRes.Ok) { defineFailed.Add($"{form.Code}: {Short(addRes.Error)}"); continue; }
+
+            var schemaRes = await ctx.Http.GetAsync($"/api/widgets/forms/{Uri.EscapeDataString(form.Code!)}/schema", ct);
+            var visible = schemaRes.Ok && schemaRes.Json.GetArrayCI("widgets")
+                .Any(w => string.Equals(w.GetStringCI("widgetCode"), code, StringComparison.OrdinalIgnoreCase));
+            if (!visible) schemaFailed.Add(form.Code!);
+        }
+
+        if (defineFailed.Count > 0)
+        {
+            Fail(steps, "Alan tanımlama (tüm formlar)",
+                $"{defineFailed.Count}/{forms.Count} formda alan tanımlanamadı: {string.Join(" · ", defineFailed.Take(5))}" +
+                (defineFailed.Count > 5 ? " …" : ""));
+            return;
+        }
+        Pass(steps, "Alan tanımlama (tüm formlar)", $"{forms.Count} formun tamamında alan tanımlandı.");
+
+        if (schemaFailed.Count > 0)
+        {
+            Fail(steps, "Şemada görünme (tüm formlar)",
+                $"{schemaFailed.Count}/{forms.Count} formda tanımlanan alan şemada YOK — o ekranlarda hiç görünmez: " +
+                string.Join(", ", schemaFailed.Take(8)) + (schemaFailed.Count > 8 ? " …" : ""));
+            return;
+        }
+        Pass(steps, "Şemada görünme (tüm formlar)", $"{forms.Count} formun tamamında alan şemada göründü.");
+    }
+
+    private static string Short(string? s)
+    {
+        if (string.IsNullOrEmpty(s)) return "?";
+        return s.Length > 80 ? s[..80] + "…" : s;
+    }
+}

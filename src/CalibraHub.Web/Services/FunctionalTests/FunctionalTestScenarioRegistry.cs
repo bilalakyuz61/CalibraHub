@@ -43,9 +43,13 @@ public static class FunctionalTestScenarioRegistry
         new ApprovalFlowDefineScenario(),
         new DocLayoutDefineScenario(),
 
+        // ── Ondalık ayarları (çözümleme zinciri + gerçek yuvarlama etkisi) ──
+        new DecimalSettingsScenario(),
+
         // ── Form alanı ve rehber özelleştirme ──
         new WidgetFieldAddScenario(),
         new WidgetDataTypeScenario(),
+        new WidgetFieldAllFormsScenario(),
         new WidgetFieldRequiredScenario(),
         new GuideStandardColumnsScenario(),
         new GuideCustomizeScenario(),
