@@ -1113,11 +1113,14 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Ayni malzeme kodu ile kayit zaten mevcut.");
         }
 
+        var normalizedBarcode = NormalizeOptionalField(request.Barcode, 50);
+        EnsureBarcodeUnique(normalizedBarcode, excludeItemId: null, stockCards);
+
         var stockCard = new Item
         {
             Code = code,
             Name = name,
-            Barcode = NormalizeOptionalField(request.Barcode, 50),
+            Barcode = normalizedBarcode,
             TypeId = request.TypeId,
             UnitId = request.UnitId,
             Combinations = request.Combinations,
@@ -1186,12 +1189,15 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Ayni malzeme kodu ile baska bir kayit mevcut.");
         }
 
+        var normalizedBarcode = NormalizeOptionalField(request.Barcode, 50);
+        EnsureBarcodeUnique(normalizedBarcode, excludeItemId: request.ItemId, stockCards);
+
         var updatedItem = new Item
         {
             Id = request.ItemId,
             Code = code,
             Name = name,
-            Barcode = NormalizeOptionalField(request.Barcode, 50),
+            Barcode = normalizedBarcode,
             TypeId = request.TypeId,
             UnitId = request.UnitId,
             Combinations = request.Combinations,
@@ -2844,6 +2850,29 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             }
 
             currentParentId = parentLookup.GetValueOrDefault(currentParentId.Value);
+        }
+    }
+
+    /// <summary>
+    /// Barkod benzersizligini dogrular (bos barkod serbest ve tekrar edebilir).
+    /// Karsilastirma Trim()+case-insensitive; guncellemede kendi kaydi haric tutulur.
+    /// </summary>
+    private static void EnsureBarcodeUnique(string? normalizedBarcode, int? excludeItemId, IReadOnlyCollection<Item> items)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedBarcode))
+        {
+            return;
+        }
+
+        var conflict = items.FirstOrDefault(x =>
+            x.Id != excludeItemId &&
+            !string.IsNullOrWhiteSpace(x.Barcode) &&
+            string.Equals(x.Barcode!.Trim(), normalizedBarcode, StringComparison.OrdinalIgnoreCase));
+
+        if (conflict is not null)
+        {
+            throw new ArgumentException(
+                $"Bu barkod baska bir malzemede kullaniliyor: {conflict.Name} ({conflict.Code})");
         }
     }
 
