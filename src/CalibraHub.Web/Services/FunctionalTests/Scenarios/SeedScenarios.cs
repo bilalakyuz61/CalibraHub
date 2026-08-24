@@ -23,17 +23,35 @@ public sealed class SeedMasterDataScenario : FunctionalTestScenarioBase
         var suffix = Guid.NewGuid().ToString("N")[..6];
 
         // ── 1) Ölçü birimi ──
-        var unitCode = $"FNU{suffix}";
-        var (unitSaveOk, _) = await StepPostAsync(ctx, steps, "Ölçü birimi oluşturma", "/Logistics/SaveMeasureUnitJson",
-            new { unitCode, unitName = $"Fonksiyon Test Birimi {suffix}", intlCode = (string?)null, sortOrder = 0, isActive = true }, ct);
-        if (!unitSaveOk) return;
+        // Gerçek veri konvansiyonu: KOD kısa sembol, AD tam kelime (AD → Adet, KG → Kilogram).
+        // Önceki sürüm "FNU1bba84 / Fonksiyon Test Birimi 1bba84" gibi rastgele uzun değerler
+        // üretiyordu — belge ekranlarında okunaksızdı ve gerçek kullanımı temsil etmiyordu.
+        //
+        // Birim, malzemenin aksine izole edilmesi GEREKMEYEN bir tanımdır (bakiye/stok etkisi
+        // yok), bu yüzden ortamda "AD" zaten varsa YENİDEN oluşturulmaz, mevcut olan kullanılır.
+        // Böylece aynı test şirketinde tekrar tekrar koşmak birim çöpü biriktirmez.
+        const string unitCode = "AD";
+        const string unitName = "Adet";
 
-        var (unitLookupOk, unitLookupJson) = await StepGetAsync(ctx, steps, "Ölçü birimi doğrulama",
-            $"/Logistics/GetAllMeasureUnits?search={unitCode}", ct);
-        if (!unitLookupOk) return;
-        var unitRow = unitLookupJson.AsArray().FirstOrDefault(e => string.Equals(e.GetStringCI("code"), unitCode, StringComparison.OrdinalIgnoreCase));
-        var unitId = unitRow.ValueKind == System.Text.Json.JsonValueKind.Object ? unitRow.GetIntCI("id") : 0;
-        if (unitId <= 0) { Fail(steps, "Ölçü birimi doğrulama", $"Oluşturulan '{unitCode}' birimi listede bulunamadı."); return; }
+        var unitId = await ResolveUnitIdAsync(ctx, unitCode, ct);
+        if (unitId > 0)
+        {
+            Pass(steps, "Ölçü birimi", $"Mevcut '{unitCode} — {unitName}' birimi kullanıldı.");
+        }
+        else
+        {
+            var (unitSaveOk, _) = await StepPostAsync(ctx, steps, "Ölçü birimi oluşturma", "/Logistics/SaveMeasureUnitJson",
+                new { unitCode, unitName, intlCode = (string?)null, sortOrder = 0, isActive = true }, ct);
+            if (!unitSaveOk) return;
+
+            unitId = await ResolveUnitIdAsync(ctx, unitCode, ct);
+            if (unitId <= 0)
+            {
+                Fail(steps, "Ölçü birimi doğrulama", $"Oluşturulan '{unitCode}' birimi listede bulunamadı.");
+                return;
+            }
+            Pass(steps, "Ölçü birimi doğrulama", $"'{unitCode} — {unitName}' oluşturuldu.");
+        }
         ctx.Set(FunctionalTestContext.Keys.UnitId, unitId);
 
         // ── 2) Malzeme kartı 1 ──
@@ -159,5 +177,15 @@ public sealed class SeedMasterDataScenario : FunctionalTestScenarioBase
         var currencyId = tryRow.ValueKind == System.Text.Json.JsonValueKind.Object ? tryRow.GetIntCI("id") : 0;
         if (currencyId <= 0) { Fail(steps, "Para birimi (TRY) çözümleme", "TRY para birimi bulunamadı."); return; }
         ctx.Set(FunctionalTestContext.Keys.CurrencyId, currencyId);
+    }
+
+    /// <summary>Koda göre ölçü birimi Id'si — yoksa 0. Hem "zaten var mı" hem "oluştu mu" için kullanılır.</summary>
+    private static async Task<int> ResolveUnitIdAsync(FunctionalTestContext ctx, string code, CancellationToken ct)
+    {
+        var res = await ctx.Http.GetAsync($"/Logistics/GetAllMeasureUnits?search={Uri.EscapeDataString(code)}", ct);
+        if (!res.Ok) return 0;
+        var row = res.Json.AsArray()
+            .FirstOrDefault(e => string.Equals(e.GetStringCI("code"), code, StringComparison.OrdinalIgnoreCase));
+        return row.ValueKind == System.Text.Json.JsonValueKind.Object ? row.GetIntCI("id") : 0;
     }
 }

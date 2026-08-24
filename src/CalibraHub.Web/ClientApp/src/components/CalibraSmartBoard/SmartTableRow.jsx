@@ -389,7 +389,15 @@ export default function SmartTableRow(props) {
   // Forward-looking, generic — bugun board config'lerinde gonderilmiyor ama
   // SmartCard'daki extraActions ile ayni sozlesme; "Islemler" menusu bunu
   // otomatik listeler (hardcode yok, bkz. dosya ustu aciklama).
-  var extraActions = Array.isArray(entity.extraActions) ? entity.extraActions.filter(function (a) { return !!a }) : []
+  // extraActions sozlesmesi `tooltip` tasir, `label` TASIMAZ (SmartBoardBuilder.AddExtraAction).
+  // Kart gorunumunde bu yeterli (aksiyonlar ikon butonu), ama "Islemler" MENUSU metni
+  // `label` alanindan okur — normalize edilmezse menu ogeleri ETIKETSIZ cikar (yalniz ikon)
+  // ve asagidaki tekrar-eleme de label karsilastirdigi icin calismaz: ayni "Duzenle"
+  // hem primaryAction hem extraAction olarak iki kez listelenirdi (2026-08-24, Olcu Birimleri).
+  var extraActions = (Array.isArray(entity.extraActions) ? entity.extraActions.filter(function (a) { return !!a }) : [])
+    .map(function (a) {
+      return (a.label && a.label.length) ? a : Object.assign({}, a, { label: a.tooltip || '' })
+    })
   // Menude AYNI aksiyon iki kez gorunmesin. Bazi board config'leri "Duzenle"yi hem
   // primaryAction (satir tiklamasi + hideButton) hem de extraActions icinde tanimliyor —
   // kart gorunumunde ikisi de gerekli (kartta primaryAction butonu gizli), ama tablo
