@@ -15,13 +15,26 @@ public sealed class FunctionalTestContext
     private readonly Dictionary<string, object?> _bag = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _documentTypeCache = new(StringComparer.OrdinalIgnoreCase);
 
-    public FunctionalTestContext(FunctionalTestHttpClient http, IDocumentTypeRepository documentTypes)
+    public FunctionalTestContext(
+        FunctionalTestHttpClient http, IDocumentTypeRepository documentTypes,
+        string baseUrl = "", int companyId = 0)
     {
         Http = http;
         DocumentTypes = documentTypes;
+        BaseUrl = baseUrl;
+        CompanyId = companyId;
     }
 
     public FunctionalTestHttpClient Http { get; }
+
+    /// <summary>
+    /// Uygulamanın kök adresi — yetki senaryoları BAŞKA bir kullanıcı adına oturum açmak
+    /// için kullanır (FunctionalTestHttpClient.LoginAsync). Boşsa o senaryolar atlanır.
+    /// </summary>
+    public string BaseUrl { get; }
+
+    /// <summary>Testlerin koştuğu (test) şirketin Id'si — ikinci kullanıcı girişinde gerekir.</summary>
+    public int CompanyId { get; }
 
     /// <summary>
     /// Belge tipi kodu → DocumentTypeId çözümü. Bu tek noktada Application repository'sine

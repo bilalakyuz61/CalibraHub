@@ -424,6 +424,13 @@
                 </span>
                 <span class="hc-switch-text">Kalite</span>
             </label>
+            <label class="hc-switch-label">
+                <span class="hc-switch-track">
+                    <input type="checkbox" id="hcFnGroupYetki" class="hc-switch-input" checked>
+                    <span class="hc-switch-thumb"></span>
+                </span>
+                <span class="hc-switch-text">Yetki</span>
+            </label>
             <span id="hcFnHint" class="hc-fn-hint"></span>
             <div id="hcFnSummary" class="hc-summary"></div>
         </div>
@@ -862,7 +869,7 @@
     btn.addEventListener('click', runTestStream);
 
     // ── Fonksiyon Testleri ──────────────────────────────────────────────
-    const FN_GROUP_LABELS_DEFAULT = { ticari: 'Ticari', uretim: 'Üretim', kalite: 'Kalite' };
+    const FN_GROUP_LABELS_DEFAULT = { ticari: 'Ticari', uretim: 'Üretim', kalite: 'Kalite', yetki: 'Yetki' };
     const fn = { total: 0, groupLabels: {} };
 
     function fnGroupLabel(key) {
@@ -874,6 +881,7 @@
         if (document.getElementById('hcFnGroupTicari')?.checked) keys.push('ticari');
         if (document.getElementById('hcFnGroupUretim')?.checked) keys.push('uretim');
         if (document.getElementById('hcFnGroupKalite')?.checked) keys.push('kalite');
+        if (document.getElementById('hcFnGroupYetki')?.checked) keys.push('yetki');
         return keys;
     }
 

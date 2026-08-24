@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 
 namespace CalibraHub.Web.Services.FunctionalTests;
 
@@ -146,6 +146,7 @@ public sealed class FunctionalTestRunner
         "ticari" => "Ticari",
         "uretim" => "Üretim",
         "kalite" => "Kalite",
+        "yetki" => "Yetki",
         _ => key,
     };
 }

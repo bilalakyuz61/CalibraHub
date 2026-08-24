@@ -74,24 +74,135 @@ public sealed class FunctionalTestHttpClient : IDisposable
         var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
         var instance = new FunctionalTestHttpClient(httpClient, baseUrl);
 
+        var (tokenOk, tokenError) = await instance.BootstrapCsrfAsync(ct);
+        if (!tokenOk)
+        {
+            httpClient.Dispose();
+            return (null, tokenError);
+        }
+        return (instance, null);
+    }
+
+    /// <summary>
+    /// CSRF token'ı alır. Önce <c>/Account/AntiforgeryToken</c> denenir — bu uç yalnız
+    /// <c>[Authorize]</c> ister, yani YETKİSİ OLMAYAN bir kullanıcı için de çalışır.
+    /// (Eski yol Sistem Sağlık Kontrolü sayfasını kazıyordu; normal rolde o sayfa
+    /// açılmadığı için yetki senaryolarında token hiç alınamazdı.) Uç bulunamazsa
+    /// eski HTML kazıma yoluna düşülür — geriye dönük uyumluluk.
+    /// </summary>
+    private async Task<(bool Ok, string? Error)> BootstrapCsrfAsync(CancellationToken ct)
+    {
         try
         {
-            using var resp = await httpClient.GetAsync($"{instance._baseUrl}/Admin/HealthCheck?workspace=1", ct);
+            using var apiResp = await _client.GetAsync($"{_baseUrl}/Account/AntiforgeryToken", ct);
+            if (apiResp.IsSuccessStatusCode)
+            {
+                var json = await apiResp.Content.ReadAsStringAsync(ct);
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("token", out var t) && t.ValueKind == JsonValueKind.String)
+                {
+                    _csrfToken = t.GetString() ?? "";
+                    if (!string.IsNullOrEmpty(_csrfToken)) return (true, null);
+                }
+            }
+        }
+        catch { /* uc yoksa/erisilemezse asagidaki HTML yoluna dusulur */ }
+
+        try
+        {
+            using var resp = await _client.GetAsync($"{_baseUrl}/Admin/HealthCheck?workspace=1", ct);
             var html = await resp.Content.ReadAsStringAsync(ct);
+            var match = CsrfRegex.Match(html);
+            if (!match.Success)
+                return (false, "CSRF token bulunamadı (oturum geçersiz olabilir).");
+            _csrfToken = match.Groups[1].Value;
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            return (false, "CSRF token alınamadı: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// BAŞKA bir kullanıcı adına oturum açıp o kimlikle istek atan yeni bir istemci kurar
+    /// (yetki senaryoları için: "bu kullanıcı bu işlemi yapabiliyor mu"). Giriş, gerçek
+    /// <c>/Account/Login</c> formundan yapılır — kimlik doğrulama katmanı da sınanmış olur.
+    /// </summary>
+    public static async Task<(FunctionalTestHttpClient? Client, string? Error)> LoginAsync(
+        string baseUrl, string email, string password, int companyId, CancellationToken ct)
+    {
+        var trimmed = baseUrl.TrimEnd('/');
+        var handler = new HttpClientHandler
+        {
+            CookieContainer = new CookieContainer(),
+            UseCookies = true,
+            AllowAutoRedirect = false,
+        };
+        var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
+        try
+        {
+            using var getResp = await httpClient.GetAsync($"{trimmed}/Account/Login", ct);
+            var html = await getResp.Content.ReadAsStringAsync(ct);
             var match = CsrfRegex.Match(html);
             if (!match.Success)
             {
                 httpClient.Dispose();
-                return (null, "CSRF token bulunamadı (workspace sayfası okunamadı — oturum geçersiz olabilir).");
+                return (null, "Giriş sayfasında CSRF token bulunamadı.");
             }
-            instance._csrfToken = match.Groups[1].Value;
+
+            using var form = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["CompanyId"] = companyId.ToString(),
+                ["Email"] = email,
+                ["Password"] = password,
+                ["RememberMe"] = "false",
+                ["__RequestVerificationToken"] = match.Groups[1].Value,
+            });
+            using var postResp = await httpClient.PostAsync($"{trimmed}/Account/Login", form, ct);
+            if (postResp.StatusCode is not (HttpStatusCode.Redirect or HttpStatusCode.Found or HttpStatusCode.OK))
+            {
+                httpClient.Dispose();
+                return (null, $"Giriş başarısız (HTTP {(int)postResp.StatusCode}).");
+            }
+            // 200 = login sayfasi tekrar render edildi (hatali kimlik) — 302 basari isaretidir.
+            if (postResp.StatusCode == HttpStatusCode.OK)
+            {
+                httpClient.Dispose();
+                return (null, "Giriş reddedildi (kimlik bilgileri kabul edilmedi).");
+            }
+
+            var instance = new FunctionalTestHttpClient(httpClient, trimmed);
+            var (tokenOk, tokenError) = await instance.BootstrapCsrfAsync(ct);
+            if (!tokenOk)
+            {
+                httpClient.Dispose();
+                return (null, tokenError);
+            }
+            return (instance, null);
         }
         catch (Exception ex)
         {
             httpClient.Dispose();
-            return (null, "CSRF token alınamadı: " + ex.Message);
+            return (null, "Giriş hatası: " + ex.Message);
         }
-        return (instance, null);
+    }
+
+    /// <summary>
+    /// Ham GET — yalnız HTTP durum kodu ile ilgilenen kontroller için (yetki senaryosunda
+    /// "sayfa açılıyor mu / 403 mü" sorusu). Gövde ayrıştırılmaz.
+    /// </summary>
+    public async Task<int> GetStatusCodeAsync(string path, CancellationToken ct)
+    {
+        try
+        {
+            using var resp = await _client.GetAsync(_baseUrl + path, ct);
+            return (int)resp.StatusCode;
+        }
+        catch
+        {
+            return 0;   // baglanti kurulamadi — cagiran bunu "belirsiz" olarak raporlar
+        }
     }
 
     /// <summary>POST + JSON gövde + business-ok zarf kontrolü tek adımda. Hata durumunda Ok=false + okunabilir mesaj.</summary>

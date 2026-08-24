@@ -730,9 +730,10 @@ public sealed class HealthCheckController : Controller
 
         string? companyName;
         string? sharedWithLiveCompany = null;
+        // Senaryo baglamina gecirilir (yetki senaryolari ikinci kullanici girisinde kullanir).
+        int.TryParse(User.FindFirst("company_id")?.Value, out var currentCompanyId);
         try
         {
-            int.TryParse(User.FindFirst("company_id")?.Value, out var currentCompanyId);
             var company = currentCompanyId > 0 ? await _companyRepository.GetByIdAsync(currentCompanyId, ct) : null;
             companyName = company?.Name;
 
@@ -801,7 +802,7 @@ public sealed class HealthCheckController : Controller
 
         try
         {
-            var ctx = new FunctionalTestContext(httpClient, _documentTypeRepo);
+            var ctx = new FunctionalTestContext(httpClient, _documentTypeRepo, baseUrl, currentCompanyId);
             var runner = new FunctionalTestRunner(FunctionalTestScenarioRegistry.BuildAll());
             await runner.RunAsync(groupList, ctx, (frame, frameCt) => WriteFrameAsync(frame, frameCt), ct);
         }

@@ -60,5 +60,11 @@ public static class FunctionalTestScenarioRegistry
         new ProductionFlowRecordScenario(),
         new ProductionConsumptionScenario(),
         new ProductionCompletionScenario(),
+
+        // ── Yetki (sınırlı yetkili kullanıcı → engel / izin / iptal) ──
+        new PermissionSeedScenario(),
+        new PermissionDenyScenario(),
+        new PermissionGrantScenario(),
+        new PermissionRevokeScenario(),
     };
 }
