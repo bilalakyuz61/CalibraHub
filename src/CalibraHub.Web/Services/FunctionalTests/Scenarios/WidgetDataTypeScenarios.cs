@@ -76,7 +76,9 @@ public sealed class WidgetDataTypeScenario : FunctionalTestScenarioBase
             new TypeCase("multi-select", "Çoklu Seçim", new[] { "Alfa", "Gama" }, new[] { "Alfa", "Beta", "Gama" },
                 v => (MultiSelectHas(v, "Alfa") && MultiSelectHas(v, "Gama") && !MultiSelectHas(v, "Beta"), Describe(v))),
 
-            new TypeCase("link", "Bağlantı", $"https://calibra.test/{suffix}", null,
+            // Bağlantı tipi hedef URL şablonu ZORUNLU ister (WidgetService: OptionsJSON[0]);
+            // şablonsuz tanım sunucuda reddedilir — options ile veriliyor.
+            new TypeCase("link", "Bağlantı", $"https://calibra.test/{suffix}", new[] { "/Finance/ContactEdit?code={value}" },
                 v => (v.ValueKind == JsonValueKind.String && (v.GetString() ?? "").EndsWith(suffix, StringComparison.Ordinal), Describe(v))),
         };
 

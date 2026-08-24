@@ -40,6 +40,8 @@ public sealed class HealthCheckController : Controller
     private readonly CalibraHub.Application.Abstractions.Persistence.IDocumentTypeRepository _documentTypeRepo;
     private readonly string _schema;
 
+    private readonly Microsoft.AspNetCore.Mvc.Infrastructure.IActionDescriptorCollectionProvider _actionProvider;
+
     public HealthCheckController(
         IHttpClientFactory httpFactory,
         IHttpContextAccessor httpContextAccessor,
@@ -51,8 +53,10 @@ public sealed class HealthCheckController : Controller
         CalibraDatabaseInitializer dbInitializer,
         SqlServerConnectionFactory connectionFactory,
         CalibraHub.Application.Abstractions.Persistence.IDocumentTypeRepository documentTypeRepo,
+        Microsoft.AspNetCore.Mvc.Infrastructure.IActionDescriptorCollectionProvider actionProvider,
         CalibraDatabaseOptions dbOptions)
     {
+        _actionProvider = actionProvider;
         _httpFactory = httpFactory;
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
@@ -245,12 +249,82 @@ public sealed class HealthCheckController : Controller
         string Key, string Label, string Group,
         Func<SqlConnection?, CancellationToken, Task<(string Status, string Detail)>> Run);
 
+    /// <summary>
+    /// Yetki kapısı OLMAYAN controller'lar — bilinçli istisnalar. Her biri ya kimlik
+    /// doğrulamadan ÖNCE çalışır (giriş, ilk kurulum), ya kendi ayrı kapısını taşır
+    /// (Sistem Yönetimi şifresi, operatör PIN'i), ya da yetki kavramı dışındadır.
+    /// Buraya isim eklemek denetimi zayıflatır — yeni ekran eklerken listeye değil,
+    /// action'a [PermissionScope] ekleyin.
+    /// </summary>
+    private static readonly HashSet<string> PermissionGateExempt = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Account",      // giriş/çıkış/token — oturum açılmadan çalışır
+        "Setup",        // ilk kurulum sihirbazı — henüz kullanıcı yok
+        "Gate",         // Sistem Yönetimi — kendi şifre katmanı
+        "Home",         // karşılama/hata sayfaları
+        "HealthCheck",  // bu ekranın kendisi (SystemAdmin menüsünden açılır)
+        "MobileWarehouseApi", "MobileProductionApi", "MobileWidgetApi", // operatör PIN + kendi form kodu kontrolü
+    };
+
+    /// <summary>
+    /// Yetki kapısı taraması — çalışma zamanında TÜM action'ları gezip
+    /// <c>[PermissionScope]</c> taşımayanları raporlar.
+    ///
+    /// Neden gerekli: yetki filtresi OPT-IN çalışır (kapsam yoksa filtre geçer). Yani bir
+    /// ekran/uç yanlışlıkla kapısız bırakıldığında hiçbir hata vermez, sessizce herkese
+    /// açık kalır. Fonksiyon testleri yalnız sınadıkları ekranlarda bunu yakalayabilir;
+    /// bu tarama ise istisnasız hepsini kapsar.
+    ///
+    /// Kaynak olarak kaynak kodu değil ÇALIŞMA ZAMANI action listesi kullanılır — dağıtılan
+    /// derlemede gerçekte ne varsa o denetlenir.
+    /// </summary>
+    private (string Status, string Detail) ScanPermissionGates()
+    {
+        var actions = _actionProvider.ActionDescriptors.Items
+            .OfType<Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor>()
+            .ToList();
+
+        var uncovered = new List<(string Controller, string Action, string Method)>();
+        foreach (var a in actions)
+        {
+            if (PermissionGateExempt.Contains(a.ControllerName)) continue;
+
+            var meta = a.EndpointMetadata;
+            if (meta.OfType<Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute>().Any()) continue;
+            if (meta.OfType<CalibraHub.Web.Authorization.PermissionScopeAttribute>().Any()) continue;
+            if (meta.OfType<CalibraHub.Web.Authorization.PermissionScopeAnyAttribute>().Any()) continue;
+
+            var method = meta.OfType<Microsoft.AspNetCore.Routing.HttpMethodMetadata>()
+                .SelectMany(m => (IEnumerable<string>)m.HttpMethods).FirstOrDefault() ?? "?";
+            uncovered.Add((a.ControllerName, a.ActionName, method));
+        }
+
+        var total = actions.Count;
+        if (uncovered.Count == 0)
+            return ("ok", $"{total} action denetlendi — kapısız uç yok.");
+
+        var mutations = uncovered.Count(u => !string.Equals(u.Method, "GET", StringComparison.OrdinalIgnoreCase));
+        var byController = uncovered
+            .GroupBy(u => u.Controller)
+            .OrderByDescending(g => g.Count())
+            .Take(6)
+            .Select(g => $"{g.Key} ({g.Count()})");
+
+        // "warn": bu bir hijyen ölçüsüdür, tek tek incelenmesi gerekir — kimisi meşru
+        // olabilir. Mutasyon (POST/PUT/DELETE) sayısı ayrıca verilir: asıl risk oradadır.
+        return ("warn",
+            $"{uncovered.Count}/{total} action yetki kapısı taşımıyor ({mutations} mutasyon). " +
+            $"En yoğun: {string.Join(" · ", byController)}");
+    }
+
     private List<InfraSpec> BuildInfraSpecs()
     {
         const string gdb = "Altyapı / Veritabanı";
         const string gseed = "Altyapı / Seed";
+        const string gsec = "Altyapı / Güvenlik";
         return new List<InfraSpec>
         {
+            new("infra.permgate", "Yetki kapısı taraması", gsec, (conn, ct) => Task.FromResult(ScanPermissionGates())),
             new("infra.conn", "Veritabanı bağlantısı", gdb, async (conn, ct) =>
             {
                 if (conn is null) return ("error", "Bağlantı açılamadı");

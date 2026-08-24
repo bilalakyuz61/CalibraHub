@@ -59,11 +59,14 @@ public sealed class WidgetFieldAddScenario : FunctionalTestScenarioBase
         ctx.Set(WidgetCodeKey, widgetCode);
 
         // Şemada göründü mü — tanım kaydedilip ekranda hiç çıkmama durumunun kanıtı.
-        var (reSchemaOk, reSchemaJson) = await StepGetAsync(ctx, steps, "Alanın form şemasında görünmesi",
+        var (reSchemaOk, reSchemaJson) = await StepGetAsync(ctx, steps, "Form şemasını yeniden okuma",
             $"/api/widgets/forms/{TargetFormCode}/schema", ct);
         if (!reSchemaOk) return;
+        // DİKKAT: şema ucu alan kodunu `widgetCode` ile döner (WidgetDefinitionDto);
+        // KAYIT ucu ise aynı bilgiyi `widgetId` adıyla döner (WidgetRenderDto). İki uç
+        // farklı sözleşme kullanıyor — karıştırmak "alan yok" gibi yanlış sonuç verir.
         var inSchema = reSchemaJson.GetArrayCI("widgets")
-            .Any(w => string.Equals(w.GetStringCI("widgetId"), widgetCode, StringComparison.OrdinalIgnoreCase));
+            .Any(w => string.Equals(w.GetStringCI("widgetCode"), widgetCode, StringComparison.OrdinalIgnoreCase));
         if (!inSchema)
         {
             Fail(steps, "Alanın form şemasında görünmesi",
