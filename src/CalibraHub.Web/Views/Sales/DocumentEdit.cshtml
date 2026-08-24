@@ -1,4 +1,4 @@
-@model CalibraHub.Web.Models.Sales.DocumentEditViewModel
+﻿@model CalibraHub.Web.Models.Sales.DocumentEditViewModel
 @{
     ViewData["HelpKey"] = "document-edit";
     var isOrder = string.Equals(Model.DocumentTypeCode, "satis_siparisi", StringComparison.OrdinalIgnoreCase);
@@ -4686,6 +4686,11 @@
      * SALES_ORDERS standart rehberini (cbv_Guide_SalesOrders) açar; secilen
      * sipariş için DocumentEdit'e ?id= ile yonlendirir.
      */
+    // Inline onclick (satir ~3114) YALNIZCA global scope'u gorur; bu fonksiyon
+    // sayfanin buyuk IIFE'sinin (3602-7448) icinde tanimli oldugu icin oradan
+    // erisilemiyordu -> butona basinca sessiz ReferenceError. Ayni sinif hata bu
+    // dosyada daha once sqToggleLineView'de de yasandi. window'a acikca yaziliyor.
+    window.openOrderLookup = openOrderLookup;
     function openOrderLookup() {
         if (!window.CalibraHub || !window.CalibraHub.openGuideLookup) {
             console.warn('[SQE] openGuideLookup hazir degil');
