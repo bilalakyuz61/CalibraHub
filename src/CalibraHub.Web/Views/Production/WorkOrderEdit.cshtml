@@ -3211,14 +3211,16 @@ function _woeFmtQty(v) {
         });
         host.querySelectorAll('[data-goto-voucher]').forEach(function (btn) {
             btn.addEventListener('click', function () {
-                // Üretim fişi ekranı Faz 2'de yazılacak; şimdilik belge kimliğini
-                // gösterip kullanıcıyı yanıltmamak için açık uyarı veriyoruz.
                 const id = btn.getAttribute('data-goto-voucher');
-                if (window.CalibraHub && window.CalibraHub.toast) {
-                    window.CalibraHub.toast('Üretim fişi görüntüleme ekranı henüz yok (Faz 2). Belge no: ' + id, 'warn');
-                } else {
-                    alert('Üretim fişi ekranı henüz yok (Faz 2). Belge Id: ' + id);
-                }
+                const url = '/Production/ProductionVoucher?id=' + id;
+                try {
+                    const top = window.top || window;
+                    if (top && top.CalibraHub && typeof top.CalibraHub.openWorkspaceTab === 'function') {
+                        top.CalibraHub.openWorkspaceTab({ url: url, title: 'Üretim Fişi', matchPath: '/Production/ProductionVoucher' });
+                        return;
+                    }
+                } catch (e) { /* cross-origin — yerel gezinme */ }
+                window.location.href = url;
             });
         });
         host.querySelectorAll('[data-goto-op]').forEach(function (btn) {

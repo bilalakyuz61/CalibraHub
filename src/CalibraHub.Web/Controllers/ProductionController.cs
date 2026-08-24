@@ -1474,6 +1474,22 @@ public sealed class ProductionController : Controller
     /// toplanıp tek zaman çizelgesine indirilir (en yeni önce). Operasyon adı satıra
     /// eklenir ki kullanıcı hangi adımın kaydı olduğunu görebilsin.
     /// </summary>
+    /// <summary>
+    /// Üretim fişi görüntüleme (2026-08-24, Faz 2) — salt okunur. İş emri ekranındaki
+    /// "Fişe Git" bağlantısının hedefi. Fiş, iş emrinin bir üretim işlemini (sarf ya da
+    /// mamul girişi) temsil eden ayrı bir belgedir.
+    /// </summary>
+    [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
+    public async Task<IActionResult> ProductionVoucher(int id, CancellationToken ct)
+    {
+        if (id <= 0) return NotFound();
+        var v = await _workOrderRepo.GetVoucherAsync(id, ct);
+        if (string.IsNullOrWhiteSpace(v.VoucherNo)) return NotFound();
+        ViewData["Title"] = $"Üretim Fişi {v.VoucherNo}";
+        return View(v);
+    }
+
     [HttpGet]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
     public async Task<IActionResult> WorkOrderMovements(int workOrderId, CancellationToken ct)

@@ -1,0 +1,109 @@
+@*
+    Üretim Fişi — salt okunur görüntüleme (2026-08-24, Faz 2).
+
+    Fiş, iş emrinin TEK bir üretim işlemini temsil eden ayrı bir belgedir:
+      · bileşen sarfı  → Üretim Sarfı modalı kaydedildiğinde
+      · mamul girişi   → son operasyon tamamlandığında
+    ParentDocumentId ile iş emrinin belgesine bağlıdır; başlıktan iş emrine dönülebilir.
+
+    Neden salt okunur: fiş bir stok hareketi kaydıdır. Düzeltme, kaydı elle değiştirerek
+    değil kaynağındaki işlemi (sarf / tamamlama) düzelterek yapılmalı — aksi halde satır
+    ile stok bakiyesi birbirinden ayrışır.
+*@
+@model System.ValueTuple<string, System.DateTime, int, string, System.Collections.Generic.IReadOnlyList<CalibraHub.Application.Contracts.WorkOrderMovementDto>>
+@{
+    var voucherNo   = Model.Item1;
+    var voucherDate = Model.Item2;
+    var workOrderId = Model.Item3;
+    var workOrderNo = Model.Item4;
+    var lines       = Model.Item5 ?? new List<CalibraHub.Application.Contracts.WorkOrderMovementDto>();
+    ViewData["BodyClass"] = "page-uf";
+}
+
+@section Styles {
+<style>
+    .uf-wrap { padding: 18px 22px; max-width: 1100px; }
+    .uf-head {
+        display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+        padding-bottom: 12px; margin-bottom: 14px;
+        border-bottom: 1px solid var(--app-border, #e2e8f0);
+    }
+    .uf-no { font-size: 1.15rem; font-weight: 700; color: var(--bs-body-color, #0f172a); }
+    .uf-meta { font-size: .82rem; color: var(--app-text-muted, #64748b); }
+    .uf-btn {
+        appearance: none; cursor: pointer;
+        border: 1px solid var(--app-border, #e2e8f0);
+        background: var(--app-surface, #fff);
+        color: var(--bs-body-color, #0f172a);
+        border-radius: 8px; padding: 6px 12px; font-size: .82rem; font-weight: 600;
+    }
+    .uf-btn:hover { background: var(--app-surface-muted, #f1f5f9); }
+    .uf-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    .uf-table th {
+        text-align: left; padding: 8px 10px; font-weight: 600;
+        color: var(--app-text-muted, #64748b);
+        border-bottom: 1px solid var(--app-border, #e2e8f0);
+    }
+    .uf-table td { padding: 8px 10px; border-bottom: 1px solid var(--app-border, #e2e8f0); }
+    .uf-num { text-align: right; }
+    .uf-in  { color: #059669; font-weight: 600; }
+    .uf-out { color: #b45309; font-weight: 600; }
+    .uf-empty {
+        padding: 14px; border: 1px dashed var(--app-border, #e2e8f0); border-radius: 10px;
+        font-size: .85rem; color: var(--app-text-muted, #64748b);
+    }
+    body.app-theme-dark .uf-in  { color: #34d399; }
+    body.app-theme-dark .uf-out { color: #fbbf24; }
+</style>
+}
+
+<div class="uf-wrap">
+    <div class="uf-head">
+        <span class="uf-no">Üretim Fişi @voucherNo</span>
+        <span class="uf-meta">@voucherDate.ToString("dd.MM.yyyy")</span>
+        @if (workOrderId > 0)
+        {
+            <span class="uf-meta">· İş Emri @workOrderNo</span>
+        }
+        <span style="flex:1"></span>
+        @if (workOrderId > 0)
+        {
+            <a class="uf-btn" href="/Production/WorkOrderEdit?id=@workOrderId#hareket">← İş Emrine Dön</a>
+        }
+    </div>
+
+    @if (lines.Count == 0)
+    {
+        <div class="uf-empty">Bu fişte stok hareketi satırı yok.</div>
+    }
+    else
+    {
+        <table class="uf-table">
+            <thead>
+                <tr>
+                    <th style="width:60px;">Sıra</th>
+                    <th style="width:140px;">Tür</th>
+                    <th>Malzeme</th>
+                    <th class="uf-num" style="width:140px;">Miktar</th>
+                    <th style="width:180px;">Depo</th>
+                    <th style="width:120px;">Lot</th>
+                    <th>Açıklama</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var l in lines)
+            {
+                <tr>
+                    <td>@l.LineNo</td>
+                    <td class="@(l.MovementType == 2 ? "uf-in" : "uf-out")">@l.MovementLabel</td>
+                    <td><b>@l.ItemCode</b> <span style="opacity:.75;">@l.ItemName</span></td>
+                    <td class="uf-num">@l.Quantity.ToString("N2") @l.UnitCode</td>
+                    <td>@(string.IsNullOrWhiteSpace(l.LocationName) ? "—" : l.LocationName)</td>
+                    <td>@(string.IsNullOrWhiteSpace(l.LotNo) ? "—" : l.LotNo)</td>
+                    <td style="opacity:.8;">@l.Notes</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</div>

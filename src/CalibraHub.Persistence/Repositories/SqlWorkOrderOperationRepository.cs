@@ -281,6 +281,9 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                 // uretim_fisi için bir numara KURALI tanımlanırsa iki yol ayrışır — o gün
                 // bu blok da kural servisine bağlanmalı.
                 var woDocumentIdForVoucher = stockLine.DocumentId;
+                // DocumentLine.DocumentId init-only — varlık mutasyona uğratılmaz,
+                // satır INSERT'i bu yerel değeri kullanır.
+                int voucherDocId;
                 var companyIdForVoucher = _connectionFactory.ResolveCurrentCompanyId();
                 var yil = DateTime.Now.Year;
                 string fisNo;
@@ -320,7 +323,7 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                         throw new InvalidOperationException(
                             "Üretim fişi oluşturulamadı — 'uretim_fisi' belge türü tanımlı değil. " +
                             "Uygulamayı yeniden başlatın (belge türleri açılışta seed edilir).");
-                    stockLine.DocumentId = Convert.ToInt32(vId);
+                    voucherDocId = Convert.ToInt32(vId);
                 }
 
                 // Yeni fiş → satır numarası 1.
@@ -338,7 +341,7 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                          @CombinationId,@LocationId,@FromLocationId,@MovementType,@UnitCost,@LotId,@LotNo,@Notes);
                     SELECT CAST(SCOPE_IDENTITY() AS INT);
                     """;
-                insCmd.Parameters.AddWithValue("@DocumentId", stockLine.DocumentId);
+                insCmd.Parameters.AddWithValue("@DocumentId", voucherDocId);
                 insCmd.Parameters.AddWithValue("@LineNo", nextLineNo);
                 insCmd.Parameters.AddWithValue("@ItemId", stockLine.ItemId);
                 insCmd.Parameters.AddWithValue("@UnitId", (object?)stockLine.UnitId ?? DBNull.Value);

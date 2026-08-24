@@ -384,6 +384,16 @@ public sealed class LogisticsController : Controller
                     alwaysVisible = false,
                 });
             }
+            if (!handledPlainColumns.Contains("Barcode"))
+            {
+                cardWidgets.Add(new {
+                    id = "w_barcode", type = "data", dataType = "text", label = "Barkod",
+                    value = (string?)card.Barcode,
+                    detail = (string?)null,
+                    color = "slate",
+                    alwaysVisible = false,
+                });
+            }
             // 2026-05-24: 5 ayri Grup slot'u — her biri kendi MaterialGroup kategorisinden
             // multi-select filtre alani. Filter panel "options" dataType'inda chip-toggle UI uretir.
             // Card'da gosterim icin de description varsa onu, yoksa kodu yaziyoruz (detail field).

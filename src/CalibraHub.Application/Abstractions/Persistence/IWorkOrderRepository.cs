@@ -90,4 +90,11 @@ public interface IWorkOrderRepository
     /// görünüyordu — mamul stoğa girmiş olsa bile (2026-08-24).
     /// </summary>
     Task SyncProducedQuantityAsync(int workOrderId, decimal produced, decimal scrap, CancellationToken ct);
+
+    /// <summary>
+    /// Tek bir üretim fişinin satırları + bağlı olduğu iş emri. Fiş görüntüleme ekranı
+    /// (/Production/ProductionVoucher) bunu kullanır. Fiş bulunamazsa boş liste döner.
+    /// </summary>
+    Task<(string? VoucherNo, DateTime VoucherDate, int WorkOrderId, string? WorkOrderNo,
+          IReadOnlyList<WorkOrderMovementDto> Lines)> GetVoucherAsync(int voucherId, CancellationToken ct);
 }

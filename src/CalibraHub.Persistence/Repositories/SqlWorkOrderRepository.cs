@@ -702,4 +702,71 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
         cmd.Parameters.AddWithValue("@Scrap", scrap);
         await cmd.ExecuteNonQueryAsync(ct);
     }
+
+    /// <inheritdoc />
+    public async Task<(string? VoucherNo, DateTime VoucherDate, int WorkOrderId, string? WorkOrderNo,
+                       IReadOnlyList<WorkOrderMovementDto> Lines)> GetVoucherAsync(int voucherId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        // Fiş → ParentDocumentId → iş emri belgesi → WorkOrder. İş emri numarası
+        // Document.DocumentNumber'dan gelir (WorkOrder'da böyle bir kolon YOKTUR).
+        cmd.CommandText = $@"
+            SELECT l.[Id], l.[LineNo], l.[ItemId],
+                   i.[Code] AS ItemCode, i.[Name] AS ItemName,
+                   l.[MovementType], l.[Quantity], u.[Code] AS UnitCode,
+                   l.[LocationId], loc.[LocationName], l.[LotNo], l.[Notes],
+                   d.[Id] AS VoucherId, d.[DocumentNumber] AS VoucherNo, d.[DocumentDate] AS VoucherDate,
+                   ISNULL(w.[Id], 0) AS WorkOrderId, wd.[DocumentNumber] AS WorkOrderNo
+            FROM [{_schema}].[Document] d
+            LEFT JOIN [{_schema}].[DocumentLine] l ON l.[DocumentId] = d.[Id] AND l.[MovementType] IS NOT NULL
+            LEFT JOIN [{_schema}].[Document] wd ON wd.[Id] = d.[ParentDocumentId]
+            LEFT JOIN {_woTable} w ON w.[DocumentId] = wd.[Id]
+            LEFT JOIN [{_schema}].[Items] i ON i.[Id] = l.[ItemId]
+            LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = l.[UnitId]
+            LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = l.[LocationId]
+            WHERE d.[Id] = @VoucherId
+            ORDER BY l.[LineNo], l.[Id];";
+        cmd.Parameters.AddWithValue("@VoucherId", voucherId);
+
+        string? no = null; var date = DateTime.MinValue; var woId = 0; string? woNo = null;
+        var lines = new List<WorkOrderMovementDto>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            no   = r.IsDBNull(13) ? null : r.GetString(13);
+            date = r.IsDBNull(14) ? DateTime.MinValue : r.GetDateTime(14);
+            woId = r.IsDBNull(15) ? 0 : r.GetInt32(15);
+            woNo = r.IsDBNull(16) ? null : r.GetString(16);
+
+            // LEFT JOIN: satırsız fişte tek satır döner ve Id NULL'dur — başlık okunur, satır eklenmez.
+            if (r.IsDBNull(0)) continue;
+
+            var mt = r.IsDBNull(5) ? (byte)0 : r.GetByte(5);
+            lines.Add(new WorkOrderMovementDto(
+                VoucherId: voucherId,
+                VoucherNo: no,
+                VoucherDate: date,
+                LineId: r.GetInt32(0),
+                LineNo: r.IsDBNull(1) ? 0 : r.GetInt32(1),
+                ItemId: r.GetInt32(2),
+                ItemCode: r.IsDBNull(3) ? null : r.GetString(3),
+                ItemName: r.IsDBNull(4) ? null : r.GetString(4),
+                MovementType: mt,
+                MovementLabel: mt switch
+                {
+                    (byte)StockMovementType.Receipt => "Mamul Girişi",
+                    (byte)StockMovementType.Issue => "Bileşen Sarfı",
+                    (byte)StockMovementType.Transfer => "Transfer",
+                    _ => "Hareket",
+                },
+                Quantity: r.IsDBNull(6) ? 0m : r.GetDecimal(6),
+                UnitCode: r.IsDBNull(7) ? null : r.GetString(7),
+                LocationId: r.IsDBNull(8) ? null : r.GetInt32(8),
+                LocationName: r.IsDBNull(9) ? null : r.GetString(9),
+                LotNo: r.IsDBNull(10) ? null : r.GetString(10),
+                Notes: r.IsDBNull(11) ? null : r.GetString(11)));
+        }
+        return (no, date, woId, woNo, lines);
+    }
 }
