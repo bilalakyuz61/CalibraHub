@@ -485,11 +485,35 @@ public sealed class ProductionCompletionScenario : FunctionalTestScenarioBase
         }
         Pass(steps, "Mamul stok girişi doğrulama", $"Depo 1 mamul: {before} → {after}.");
 
-        // İş emrini kapat — durum geçişinin (Completed) kabul edildiğini de sınar.
+        // İş emri başlığını kapat — durum makinesi İKİ ADIMLI geçmeyi zorunlu kılar.
+        //
+        // Önemli davranış: operasyonlar üretim işlese bile iş emri BAŞLIĞI kendiliğinden
+        // "Devam Ediyor"a geçmiyor, "Yayımlandı"da kalıyor (WorkOrderService içinde başlığı
+        // otomatik ilerleten bir yol yok). ValidateTransition ise Yayımlandı → Tamamlandı
+        // sıçramasını reddediyor; geçerli yol Yayımlandı → Devam Ediyor → Tamamlandı.
+        // Ekranda kullanıcının izlediği yol da budur — senaryo onu birebir taklit eder.
+        var (progressOk, _) = await StepPostAsync(ctx, steps, "İş emrini Devam Ediyor'a alma",
+            $"/Production/ChangeStatus?id={workOrderId}",
+            new { workOrderId, newStatus = "InProgress" }, ct);
+        if (!progressOk) return;
+
         var (statusOk, _) = await StepPostAsync(ctx, steps, "İş emrini Tamamlandı'ya alma",
             $"/Production/ChangeStatus?id={workOrderId}",
             new { workOrderId, newStatus = "Completed" }, ct);
         if (!statusOk) return;
-        Pass(steps, "İş emri durum doğrulama", "Tamamlandı.");
+
+        // Geri okuma: iş emri gerçekten "Tamamlandı" filtresinde görünüyor mu — POST'un
+        // ok dönmesi durumun yazıldığını kanıtlamaz.
+        var (boardOk, boardJson) = await StepGetAsync(ctx, steps, "İş emri durum doğrulama",
+            "/Production/WorkOrdersBoardConfig?status=Completed", ct);
+        if (!boardOk) return;
+        var found = boardJson.GetArrayCI("entities").Any(e => e.GetIntCI("id") == workOrderId);
+        if (!found)
+        {
+            Fail(steps, "İş emri durum doğrulama",
+                $"İş emri #{workOrderId} 'Tamamlandı' listesinde bulunamadı — durum yazılmamış olabilir.");
+            return;
+        }
+        Pass(steps, "İş emri durum doğrulama", "Tamamlandı listesinde görünüyor.");
     }
 }
