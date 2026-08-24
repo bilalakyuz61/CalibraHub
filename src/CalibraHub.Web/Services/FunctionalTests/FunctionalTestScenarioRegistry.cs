@@ -79,5 +79,6 @@ public static class FunctionalTestScenarioRegistry
         new PermissionRevokeScenario(),
         new PermissionPrecedenceScenario(),
         new PermissionGroupDormantScenario(),
+        new DataVisibilityScenario(),
     };
 }
