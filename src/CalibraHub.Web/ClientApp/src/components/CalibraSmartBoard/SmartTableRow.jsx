@@ -879,8 +879,13 @@ export default function SmartTableRow(props) {
       <tr
         className={'cst-row' + (isHighlighted ? ' cst-row--highlight' : '') + (clickableRow ? ' cst-row--clickable' : '')
           + (selected ? ' cst-row--selected' : '') + (expanded ? ' cst-row--expanded' : '')}
-        onClick={clickableRow ? handlePrimary : undefined}
-        title={primaryAction && primaryAction.label ? primaryAction.label : undefined}
+        /* ÇİFT tıkla açılır (2026-08-24 kullanıcı isteği). Tek tık yalnız satırı seçili
+           kılar; yanlışlıkla tek tıkta başka ekrana atlamak, kullanıcı listede gezinirken
+           iş kaybına yol açıyordu. Dosya gezgini/ızgara alışkanlığıyla da tutarlı. */
+        onDoubleClick={clickableRow ? handlePrimary : undefined}
+        title={primaryAction && primaryAction.label
+                 ? (primaryAction.label + ' (çift tıklayın)')
+                 : undefined}
       >
         {selectable && (
           // Onay kutusu satir tiklamasini (Duzenle) TETIKLEMEMELI — stopPropagation sart.

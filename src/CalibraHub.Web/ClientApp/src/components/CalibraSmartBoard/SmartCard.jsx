@@ -771,7 +771,9 @@ export default function SmartCard(props) {
           // Bu durumda widget alanini + bos alani da tiklanabilir hale getiriyoruz.
           // Action butonlari (handlePrimary/handleSecondary/handleExtraAction) zaten
           // stopPropagation yapiyor — onlara tiklayinca buradaki click dispatch olmaz.
-          onClick={(primaryAction && primaryAction.hideButton)
+          // ÇİFT tık (2026-08-24): tek tıkla gezinmek, listede dolaşırken yanlışlıkla
+          // başka ekrana atlamaya yol açıyordu. Tablo görünümüyle de aynı davranış.
+          onDoubleClick={(primaryAction && primaryAction.hideButton)
             ? function (e) {
                 // Iclerden gelen butonlar stopPropagation yaptigi icin burada bubble
                 // edilmis click sadece "bos alan / kimlik disi / widget alani" demek.
