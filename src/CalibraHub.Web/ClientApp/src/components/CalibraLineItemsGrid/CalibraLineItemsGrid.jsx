@@ -3791,6 +3791,11 @@ export default function CalibraLineItemsGrid(props) {
               disabled: false,
             },
           ]
+          // Kit olmayan satirda ilk eleman null geliyor (kosullu item). Bosluklari BURADA
+          // temizliyoruz: asagidaki filter/push zinciri item'lari `it.key` ile okuyor ve
+          // null'a carpinca tum menu ErrorBoundary'ye dusuyordu (Ihtiyac Kaydi'nda kit
+          // olmayan satirin ••• menusu acilmiyordu — 2026-08-24).
+          items = items.filter(Boolean)
           // İhtiyaç Kaydi (alis_talebi) + Sayım (INVENTORY_COUNT): sadece Stok Kartina Git + Not Ekle.
           // Fiyat Geçmişi / Maliyet Gör / Revize Et bu bağlamlarda anlamsız (fiyatlandırma teklif/
           // sipariş aşamasında oluşur; sayımda yalnız miktar sayılır).
@@ -3908,7 +3913,7 @@ export default function CalibraLineItemsGrid(props) {
                     : 'linear-gradient(90deg, transparent 0%, rgba(99,102,241,0.55) 30%, rgba(168,85,247,0.55) 70%, transparent 100%)',
                   pointerEvents: 'none',
                 }} />
-                {items.filter(Boolean).map(function (it, idx) {
+                {items.map(function (it, idx) {
                   var Icon = it.icon
                   var pal = accentMap[it.accent] || accentMap.slate
                   // Custom render with stagger via per-item motion

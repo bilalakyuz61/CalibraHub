@@ -16171,13 +16171,18 @@ END;";
             roleCmd.Parameters.AddWithValue("@ViewId", viewId);
             await roleCmd.ExecuteNonQueryAsync(cancellationToken);
 
-            // 3) RptViewCol seed — sadece RptViewCol bos ise (tekrar seed bozmasin)
-            await using var colCheckCmd = connection.CreateCommand();
-            colCheckCmd.CommandText = $"SELECT COUNT(1) FROM [{s}].[RptViewCol] WHERE [ViewId] = @ViewId;";
-            colCheckCmd.Parameters.AddWithValue("@ViewId", viewId);
-            var existingCols = Convert.ToInt32(await colCheckCmd.ExecuteScalarAsync(cancellationToken));
-            if (existingCols > 0) continue;
-
+            // 3) RptViewCol seed — kolon BAZINDA idempotent.
+            //
+            // Eski hali "ViewId icin hic satir yoksa hepsini INSERT et" idi; iki sorunu vardi
+            // (2026-08-24):
+            //   a) Yaris: initializer iki girisden (tam sema init + baglanti basi init) ayni
+            //      DB'ye es zamanli gelince ikisi de "0 satir" gorup INSERT ediyor ve
+            //      ux_RptViewCol_ViewCol benzersiz indeksi patliyordu
+            //      ("Cannot insert duplicate key ... (5, BelgeId)" startup hatasi).
+            //   b) Kendini onarmama: VIEW'a sonradan kolon eklendiginde ya da seed yarida
+            //      kesildiginde sayac >0 oldugu icin eksik kolonlar bir daha hic yazilmiyordu.
+            // Cozum: once kesfet, hizli yol icin sayiyi karsilastir, yazarken her satiri
+            // "WHERE NOT EXISTS" ile ekle — tekrar calismak zararsiz, eksik kolon tamamlanir.
             await using var discoverCmd = connection.CreateCommand();
             discoverCmd.CommandText = """
                 SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, ORDINAL_POSITION
@@ -16197,6 +16202,16 @@ END;";
                 }
             }
 
+            if (discovered.Count == 0) continue;
+
+            await using (var colCheckCmd = connection.CreateCommand())
+            {
+                colCheckCmd.CommandText = $"SELECT COUNT(1) FROM [{s}].[RptViewCol] WHERE [ViewId] = @ViewId;";
+                colCheckCmd.Parameters.AddWithValue("@ViewId", viewId);
+                var existingCols = Convert.ToInt32(await colCheckCmd.ExecuteScalarAsync(cancellationToken));
+                if (existingCols >= discovered.Count) continue;   // hizli yol: zaten tam
+            }
+
             foreach (var (colName, sqlType, ordinal) in discovered)
             {
                 var (dataType, isNumeric, isDateish) = MapSqlType(sqlType);
@@ -16205,8 +16220,10 @@ END;";
                     INSERT INTO [{s}].[RptViewCol]
                         ([ViewId],[ColName],[DisplayName],[DataType],[IsFilterable],[IsGroupable],
                          [IsAggregatable],[DefaultAggregate],[Ordinal],[ContextBinding])
-                    VALUES
-                        (@ViewId,@ColName,@Display,@DataType,@Filt,@Grp,@Agg,@Def,@Ord,@Ctx);
+                    SELECT @ViewId,@ColName,@Display,@DataType,@Filt,@Grp,@Agg,@Def,@Ord,@Ctx
+                     WHERE NOT EXISTS (
+                           SELECT 1 FROM [{s}].[RptViewCol]
+                            WHERE [ViewId] = @ViewId AND [ColName] = @ColName);
                     """;
                 insertColCmd.Parameters.AddWithValue("@ViewId", viewId);
                 insertColCmd.Parameters.AddWithValue("@ColName", colName);
