@@ -7,7 +7,10 @@ function getJson(url) {
   return fetch(url, { credentials: 'same-origin' }).then(function (r) { return r.json() })
 }
 
-// params: { from, to, level, q, page, pageSize } — from/to "yyyy-MM-dd", level "all|error|critical"
+// params: { from, to, level, q, page, pageSize, user, category }
+//   from/to "yyyy-MM-dd" · level "all|error|critical"
+//   user/category: TAM eşleşme; boş = tümü. Seçenekler yanıttaki users/categories
+//   dizilerinden gelir (aralıkta gerçekten görülen değerler).
 export function getErrorLogs(params) {
   params = params || {}
   var qs = new URLSearchParams()
@@ -15,6 +18,8 @@ export function getErrorLogs(params) {
   if (params.to) qs.set('to', params.to)
   qs.set('level', params.level || 'all')
   if (params.q) qs.set('q', params.q)
+  if (params.user) qs.set('user', params.user)
+  if (params.category) qs.set('category', params.category)
   qs.set('page', String(params.page || 1))
   qs.set('pageSize', String(params.pageSize || 50))
   return getJson(BASE + '/ErrorLogData?' + qs.toString())

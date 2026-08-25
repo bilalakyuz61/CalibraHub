@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 
 namespace CalibraHub.Application.Diagnostics;
 
@@ -22,6 +22,11 @@ public sealed class SystemErrorLogQueryService : ISystemErrorLogQueryService
     {
         var matches = new List<SystemErrorEntry>();
 
+        // Açılır liste seçenekleri, kullanıcı/kaynak seçimi UYGULANMADAN toplanır: seçim
+        // yapıldığında listenin tek seçeneğe düşüp seçimin geri alınamaz hale gelmemesi için.
+        var users = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var categories = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var (_, path) in SystemErrorLogFileNaming.EnumerateDayFilesDescending(
                      _options.RootPath, request.FromUtc, request.ToUtc))
         {
@@ -36,6 +41,11 @@ public sealed class SystemErrorLogQueryService : ISystemErrorLogQueryService
                 if (entry is null) continue;
                 if (!FullFilter(entry, request)) continue;
 
+                if (!string.IsNullOrWhiteSpace(entry.UserName)) users.Add(entry.UserName!);
+                if (!string.IsNullOrWhiteSpace(entry.Category)) categories.Add(entry.Category!);
+
+                if (!SelectionFilter(entry, request)) continue;
+
                 dayMatches.Add(entry);
             }
 
@@ -48,7 +58,7 @@ public sealed class SystemErrorLogQueryService : ISystemErrorLogQueryService
         var size = Math.Clamp(request.PageSize, 1, 500);
         var items = matches.Skip((page - 1) * size).Take(size).ToList();
 
-        return new SystemErrorSearchResult(items, matches.Count);
+        return new SystemErrorSearchResult(items, matches.Count, users.ToList(), categories.ToList());
     }
 
     // ── Yardımcılar ─────────────────────────────────────────────────────────
@@ -84,6 +94,22 @@ public sealed class SystemErrorLogQueryService : ISystemErrorLogQueryService
             if (!hit) return false;
         }
         if (entry.TimestampUtc < req.FromUtc || entry.TimestampUtc >= req.ToUtc) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Açılır listelerden yapılan seçimler (kullanıcı / kaynak). <see cref="FullFilter"/>'dan
+    /// AYRI tutulur: seçenek listesi bu süzgeçten geçmeyen kayıtlardan da beslenir.
+    /// Eşleşme TAM — seçenekler zaten log'un kendi değerlerinden üretiliyor.
+    /// </summary>
+    private static bool SelectionFilter(SystemErrorEntry entry, SystemErrorSearchRequest req)
+    {
+        if (!string.IsNullOrWhiteSpace(req.UserName) &&
+            !string.Equals(entry.UserName, req.UserName, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (!string.IsNullOrWhiteSpace(req.Category) &&
+            !string.Equals(entry.Category, req.Category, StringComparison.OrdinalIgnoreCase))
+            return false;
         return true;
     }
 

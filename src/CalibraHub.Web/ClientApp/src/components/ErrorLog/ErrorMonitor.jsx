@@ -12,16 +12,51 @@ const LEVELS = [
   { id: 'critical', label: 'Critical' },
 ]
 
+// İşlem Logları (AuditMonitor.jsx) ile AYNI aralık seçenekleri — iki log sekmesi tek
+// ekranda birleştiği için filtre çubuğunun da aynı davranması gerekiyor.
+const RANGE_PRESETS = [
+  { id: 'today', label: 'Bugün', days: 0 },
+  { id: 'yesterday', label: 'Dün', days: -1 },
+  { id: '7d', label: '7 Gün', days: 6 },
+  { id: '30d', label: '30 Gün', days: 29 },
+  { id: '90d', label: '90 Gün', days: 89 },
+  { id: 'custom', label: 'Özel', days: null },
+]
+
 function toDateInput(d) {
   var p = function (n) { return String(n).padStart(2, '0') }
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
 }
 
-function defaultRange() {
+function presetRange(id) {
   var today = new Date()
+  if (id === 'today') return { from: toDateInput(today), to: toDateInput(today) }
+  if (id === 'yesterday') {
+    var y = new Date(today); y.setDate(y.getDate() - 1)
+    return { from: toDateInput(y), to: toDateInput(y) }
+  }
+  var preset = RANGE_PRESETS.find(function (r) { return r.id === id })
   var from = new Date(today)
-  from.setDate(from.getDate() - 6)
+  from.setDate(from.getDate() - (preset && preset.days ? preset.days : 6))
   return { from: toDateInput(from), to: toDateInput(today) }
+}
+
+/**
+ * Seçili değeri seçenek listesinde GARANTİLER. Aralık değişince seçilen kullanıcı/kaynak
+ * o aralıkta hiç geçmeyebilir; seçenek düşerse kutu "Tümü" gösterir ama filtre uygulanmaya
+ * devam eder — kullanıcı boş listeye bakıp nedenini anlayamaz. Bu yüzden değer, geçerli
+ * aralıkta bulunmasa da listede tutulur.
+ */
+function withSelected(options, selected) {
+  if (!selected) return options
+  return options.indexOf(selected) >= 0 ? options : [selected].concat(options)
+}
+
+/** Uzun logger kategorisini okunur kılar: "…Controllers.AdminController" → "AdminController". */
+function shortCategory(value) {
+  if (!value) return ''
+  var parts = String(value).split('.')
+  return parts[parts.length - 1] || String(value)
 }
 
 /** UTC ISO → "10.07.2026 21:34:05" (yerel saat, tr-TR) */
@@ -46,8 +81,14 @@ function levelMeta(level) {
  * seviye filtresi + sayfalı liste + satır detay (burada modal, stack trace geniş olduğu için).
  */
 export default function ErrorMonitor() {
-  const [range, setRange] = useState(defaultRange)
+  const [preset, setPreset] = useState('7d')
+  const [range, setRange] = useState(function () { return presetRange('7d') })
   const [level, setLevel] = useState('all')
+  const [user, setUser] = useState('')
+  const [category, setCategory] = useState('')
+  // Seçenekler sunucudan gelir (aralıkta görülen değerler); seçim yapılınca
+  // listenin tek satıra düşmemesi için sunucu bunları seçim UYGULANMADAN toplar.
+  const [facets, setFacets] = useState({ users: [], categories: [] })
   const [text, setText] = useState('')
   const [debouncedText, setDebouncedText] = useState('')
   const [page, setPage] = useState(1)
@@ -66,11 +107,12 @@ export default function ErrorMonitor() {
   const load = useCallback((silent) => {
     const seq = ++fetchSeq.current
     if (!silent) setLoading(true)
-    getErrorLogs({ from: range.from, to: range.to, level, q: debouncedText, page, pageSize })
+    getErrorLogs({ from: range.from, to: range.to, level, q: debouncedText, page, pageSize, user, category })
       .then(res => {
         if (seq !== fetchSeq.current) return
         if (res && res.ok) {
           setData({ entries: res.entries || [], total: res.total || 0 })
+          setFacets({ users: res.users || [], categories: res.categories || [] })
           setError(null)
         } else {
           setError('Loglar yüklenemedi.')
@@ -78,7 +120,7 @@ export default function ErrorMonitor() {
       })
       .catch(() => { if (seq === fetchSeq.current) setError('Loglar yüklenemedi (ağ hatası).') })
       .finally(() => { if (seq === fetchSeq.current) setLoading(false) })
-  }, [range, level, debouncedText, page, pageSize])
+  }, [range, level, debouncedText, page, pageSize, user, category])
 
   useEffect(() => { load(false) }, [load])
 
@@ -90,8 +132,14 @@ export default function ErrorMonitor() {
     return () => window.removeEventListener('keydown', onKey)
   }, [selected])
 
-  const clearFilters = () => { setLevel('all'); setText(''); setPage(1) }
-  const hasFilter = level !== 'all' || debouncedText
+  const clearFilters = () => { setLevel('all'); setText(''); setUser(''); setCategory(''); setPage(1) }
+  const hasFilter = level !== 'all' || debouncedText || user || category
+
+  const pickPreset = id => {
+    setPreset(id)
+    // "Özel" mevcut aralığı KORUR — kullanıcı elle tarih girmeye o aralıktan devam eder.
+    if (id !== 'custom') { setRange(presetRange(id)); setPage(1) }
+  }
 
   const totalPages = Math.max(1, Math.ceil(data.total / pageSize))
 
@@ -122,13 +170,24 @@ export default function ErrorMonitor() {
         </div>
       </div>
 
-      {/* Filtreler */}
+      {/* Filtreler — İşlem Logları sekmesiyle aynı düzen: aralık yuvarlakları, sonra seçimler */}
       <div className="elog-filters">
-        <input type="date" data-native-date value={range.from}
-          onChange={e => { setRange(r => ({ ...r, from: e.target.value || r.from })); setPage(1) }} />
-        <span className="elog-filter-dash">–</span>
-        <input type="date" data-native-date value={range.to}
-          onChange={e => { setRange(r => ({ ...r, to: e.target.value || r.to })); setPage(1) }} />
+        <div className="elog-chipset">
+          {RANGE_PRESETS.map(r => (
+            <button key={r.id} type="button"
+              className={'elog-chip' + (preset === r.id ? ' is-active' : '')}
+              onClick={() => pickPreset(r.id)}>{r.label}</button>
+          ))}
+        </div>
+        {preset === 'custom' && (
+          <>
+            <input type="date" data-native-date value={range.from}
+              onChange={e => { setRange(r => ({ ...r, from: e.target.value || r.from })); setPage(1) }} />
+            <span className="elog-filter-dash">–</span>
+            <input type="date" data-native-date value={range.to}
+              onChange={e => { setRange(r => ({ ...r, to: e.target.value || r.to })); setPage(1) }} />
+          </>
+        )}
         <div className="elog-sep" />
         <div className="elog-chipset">
           {LEVELS.map(l => (
@@ -137,6 +196,18 @@ export default function ErrorMonitor() {
               onClick={() => { setLevel(l.id); setPage(1) }}>{l.label}</button>
           ))}
         </div>
+        <select className="elog-select" value={category}
+          onChange={e => { setCategory(e.target.value); setPage(1) }}>
+          <option value="">Tüm Kaynaklar</option>
+          {withSelected(facets.categories, category).map(c => (
+            <option key={c} value={c} title={c}>{shortCategory(c)}</option>
+          ))}
+        </select>
+        <select className="elog-select" value={user}
+          onChange={e => { setUser(e.target.value); setPage(1) }}>
+          <option value="">Tüm Kullanıcılar</option>
+          {withSelected(facets.users, user).map(u => <option key={u} value={u}>{u}</option>)}
+        </select>
         {hasFilter ? (
           <button type="button" className="elog-clear-btn" onClick={clearFilters}>
             <X size={12} /> Filtreleri temizle

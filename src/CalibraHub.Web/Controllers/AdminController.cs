@@ -277,7 +277,8 @@ public sealed class AdminController : Controller
     [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> ErrorLogData(
         DateTime? from, DateTime? to, string? level, string? q,
-        int page = 1, int pageSize = 50, CancellationToken cancellationToken = default)
+        int page = 1, int pageSize = 50, string? user = null, string? category = null,
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -288,7 +289,9 @@ public sealed class AdminController : Controller
 
             var result = await _errorLogQuery.SearchAsync(
                 new CalibraHub.Application.Diagnostics.SystemErrorSearchRequest(
-                    fromUtc, toUtc, normalizedLevel, string.IsNullOrWhiteSpace(q) ? null : q.Trim(), page, pageSize),
+                    fromUtc, toUtc, normalizedLevel, string.IsNullOrWhiteSpace(q) ? null : q.Trim(), page, pageSize,
+                    UserName: string.IsNullOrWhiteSpace(user) ? null : user.Trim(),
+                    Category: string.IsNullOrWhiteSpace(category) ? null : category.Trim()),
                 cancellationToken);
 
             return Json(new
@@ -297,6 +300,9 @@ public sealed class AdminController : Controller
                 total = result.Total,
                 page,
                 pageSize,
+                // Açılır liste seçenekleri — aralıkta gerçekten görülen değerler.
+                users = result.Users,
+                categories = result.Categories,
                 entries = result.Items.Select(e => new
                 {
                     id = e.Id,
@@ -316,8 +322,8 @@ public sealed class AdminController : Controller
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[ErrorLogData] Hata log sorgusu başarısız. from={From} to={To} level={Level}",
-                from, to, level);
+            _logger.LogError(ex, "[ErrorLogData] Hata log sorgusu başarısız. from={From} to={To} level={Level} user={User} category={Category}",
+                from, to, level, user, category);
             return Json(new { ok = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
