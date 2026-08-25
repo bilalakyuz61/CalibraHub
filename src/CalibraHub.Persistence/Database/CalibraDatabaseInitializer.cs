@@ -5236,12 +5236,20 @@ END;";
         }
 
         var adminEmail = _bootstrapAdminOptions.Email.Trim();
+        // 2026-08-24 (K4): sabit "12345678" KALDIRILDI. Yapilandirmada parola yoksa KURULUMA
+        // OZGU rastgele bir parola uretilir ve BIR KEZ loglanir — eskiden bos birakilinca seed
+        // sessizce atlaniyordu (bootstrap admin hic olusmuyordu), o davranis da duzeltildi.
         var adminPassword = _bootstrapAdminOptions.DefaultPassword;
+        var adminPasswordGenerated = false;
+        if (string.IsNullOrWhiteSpace(adminPassword))
+        {
+            adminPassword = CalibraHub.Application.Services.Security.TemporaryPassword.Generate();
+            adminPasswordGenerated = true;
+        }
         var adminFullName = _bootstrapAdminOptions.FullName.Trim();
         var adminEmployeeCode = _bootstrapAdminOptions.EmployeeCode.Trim();
 
         if (string.IsNullOrWhiteSpace(adminEmail) ||
-            string.IsNullOrWhiteSpace(adminPassword) ||
             string.IsNullOrWhiteSpace(adminFullName) ||
             string.IsNullOrWhiteSpace(adminEmployeeCode))
         {
@@ -5289,6 +5297,15 @@ END;";
         insertCommand.Parameters.Add(new SqlParameter("@ThemeCode", UserProfile.DefaultThemeCode));
 
         await insertCommand.ExecuteNonQueryAsync(cancellationToken);
+
+        if (adminPasswordGenerated)
+        {
+            // Operator iceri girebilsin diye uretilen parola BIR KEZ bildirilir (yalniz ilk
+            // seed'de calisir). Ilk giristen sonra degistirilmelidir. Onceden belirlemek icin
+            // appsettings BootstrapAdmin:DefaultPassword kullanilir.
+            Console.WriteLine($"[DB INIT] Bootstrap admin olusturuldu: {adminEmail} — " +
+                              $"gecici parola: {adminPassword} (ilk giristen sonra DEGISTIRIN)");
+        }
     }
 
     private async Task EnsureIntegratorLoginColumnsAsync(SqlConnection connection, CancellationToken cancellationToken)

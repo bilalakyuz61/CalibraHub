@@ -992,7 +992,7 @@ public sealed class AccountController : Controller
     [HttpGet("/Account/GetDbSettings")]
     public async Task<IActionResult> GetDbSettings()
     {
-        if (await IsSetupCompleteAsync() && !User.Identity!.IsAuthenticated)
+        if (await DbSettingsAccessDeniedAsync())
             return Json(new { success = false, message = "Yetkisiz erişim." });
 
         var appSettingsPath = Path.Combine(_env.ContentRootPath, "appsettings.json");
@@ -1031,7 +1031,7 @@ public sealed class AccountController : Controller
     [HttpPost("/Account/TestDbSettings")]
     public async Task<IActionResult> TestDbSettings([FromBody] DbSettingsInput? input)
     {
-        if (await IsSetupCompleteAsync() && !User.Identity!.IsAuthenticated)
+        if (await DbSettingsAccessDeniedAsync())
             return Json(new { success = false, message = "Yetkisiz erişim." });
 
         try
@@ -1046,6 +1046,10 @@ public sealed class AccountController : Controller
                 return Json(new { success = false, message = "Veritabani adi zorunludur." });
 
             // Mevcut ayarları baz al, sadece değiştirilen alanları üzerine yaz
+            var relayError = ValidateNoCredentialRelay(input);
+            if (relayError is not null)
+                return Json(new { success = false, message = relayError });
+
             var connStr = MergeWithSaved(input);
             var builder = new SqlConnectionStringBuilder(connStr) { ConnectTimeout = 3 };
             await using var conn = new SqlConnection(builder.ConnectionString);
@@ -1069,7 +1073,7 @@ public sealed class AccountController : Controller
     [HttpPost("/Account/SaveDbSettings")]
     public async Task<IActionResult> SaveDbSettings([FromBody] DbSettingsInput? input)
     {
-        if (await IsSetupCompleteAsync() && !User.Identity!.IsAuthenticated)
+        if (await DbSettingsAccessDeniedAsync())
             return Json(new { success = false, message = "Yetkisiz erişim." });
 
         try
@@ -1084,6 +1088,10 @@ public sealed class AccountController : Controller
                 return Json(new { success = false, message = "Veritabani adi zorunludur." });
 
             // Mevcut ayarları baz al, sadece değiştirilen alanları üzerine yaz
+            var relayError = ValidateNoCredentialRelay(input);
+            if (relayError is not null)
+                return Json(new { success = false, message = relayError });
+
             var connStr = MergeWithSaved(input);
 
             // Kaydetmeden önce bağlantıyı test et
@@ -1133,6 +1141,72 @@ public sealed class AccountController : Controller
     /// Kaydedilmiş bağlantı dizesini okur, input'ta dolu olan alanları üzerine yazar.
     /// Şifre alanı boş bırakıldığında mevcut şifre korunur.
     /// </summary>
+    /// <summary>
+    /// DB ayarlari uclarinin erisim kapisi (2026-08-24 K3 guvenlik denetimi).
+    ///
+    /// <para>ONCEDEN: kurulum tamamsa yalnizca "giris yapmis olmak" araniyordu — EN DUSUK
+    /// yetkili kullanici bile baglanti dizesini okuyabiliyor, sunucu adresini degistirip
+    /// kayitli SQL kimlik bilgisini disariya sizdirabiliyor (SSRF + relay) ve appsettings'i
+    /// kalici olarak saldirganin veritabanina yonlendirebiliyordu.</para>
+    ///
+    /// <para>SIMDI: kurulum tamamsa /Gate sifresinden gecilmis bir oturum sart
+    /// (Sistem Yonetimi bucket'i — CLAUDE.md). Bu uclar zaten YALNIZCA Gate ekranindan
+    /// (Views/Gate/DbSettings.cshtml) cagriliyor, dolayisiyla mesru akis etkilenmez.</para>
+    ///
+    /// <para>Kurulum TAMAMLANMAMISSA anonim erisim KORUNUR — o asamada henuz giris
+    /// yapabilecek kullanici yoktur (CLAUDE.md kurulum korumasi karari).</para>
+    /// </summary>
+    private async Task<bool> DbSettingsAccessDeniedAsync()
+    {
+        if (!await IsSetupCompleteAsync()) return false; // kurulum oncesi: serbest
+
+        var raw = HttpContext.Session.GetString("GateUnlockedAt");
+        var unlocked = !string.IsNullOrEmpty(raw)
+            && long.TryParse(raw, out var unix)
+            && DateTimeOffset.FromUnixTimeSeconds(unix) > DateTimeOffset.UtcNow.AddMinutes(-30);
+
+        if (!unlocked)
+        {
+            _logger.LogWarning(
+                "[DbSettings] Gate acilmamis oturumdan erisim denemesi. Email={Email} Ip={Ip}",
+                User.FindFirstValue(ClaimTypes.Email) ?? "-",
+                HttpContext.Connection.RemoteIpAddress?.ToString() ?? "-");
+        }
+        return !unlocked;
+    }
+
+    /// <summary>
+    /// Kimlik-bilgisi RELAY guard'i (2026-08-24 K3): kayitli SQL sifresi, KAYITLI OLANDAN
+    /// FARKLI bir sunucuya baglanmak icin yeniden kullanilamaz. Aksi halde saldirgan
+    /// {Server:"kendi-sunucusu", Password:""} gonderip uygulamanin gercek kimlik bilgisiyle
+    /// kendi TDS dinleyicisine baglanmasini saglayabiliyordu.
+    /// </summary>
+    private string? ValidateNoCredentialRelay(DbSettingsInput input)
+    {
+        if (string.IsNullOrWhiteSpace(input.Server)) return null;       // sunucu degismiyor
+        if (!string.IsNullOrEmpty(input.Password))   return null;       // sifre acikca verilmis
+
+        string savedServer = string.Empty;
+        try
+        {
+            var appSettingsPath = Path.Combine(_env.ContentRootPath, "appsettings.json");
+            var json = System.IO.File.ReadAllText(appSettingsPath);
+            var raw = JsonNode.Parse(json)?["CalibraDatabase"]?["ConnectionString"]?.GetValue<string>() ?? string.Empty;
+            var plain = raw.StartsWith(DpapiPrefix, StringComparison.Ordinal) ? DecryptDpapi(raw) : raw;
+            if (!string.IsNullOrWhiteSpace(plain))
+                savedServer = new SqlConnectionStringBuilder(plain).DataSource?.Trim() ?? string.Empty;
+        }
+        catch { /* okunamadi — asagida farkli kabul edilip sifre istenir (fail-closed) */ }
+
+        if (string.Equals(savedServer, input.Server.Trim(), StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        _logger.LogWarning(
+            "[DbSettings] Sunucu degisikligi sifresiz denendi (relay guard). Kayitli={Saved} Istenen={Requested} Ip={Ip}",
+            savedServer, input.Server.Trim(), HttpContext.Connection.RemoteIpAddress?.ToString() ?? "-");
+        return "Sunucu adresi degistiriliyorsa SQL sifresi yeniden girilmelidir.";
+    }
+
     private string MergeWithSaved(DbSettingsInput input)
     {
         // Mevcut bağlantı dizesini oku

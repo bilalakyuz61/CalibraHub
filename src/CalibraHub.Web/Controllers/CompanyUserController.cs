@@ -1,4 +1,4 @@
-using CalibraHub.Application.Constants;
+﻿using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Auditing;
@@ -27,7 +27,10 @@ namespace CalibraHub.Web.Controllers;
 [CalibraHub.Web.Authorization.PermissionScope(FormCodes.UserManagement)]
 public sealed class CompanyUserController : Controller
 {
-    private const string DefaultPassword = "12345678";
+    // 2026-08-24 (K4): sabit "12345678" KALDIRILDI — her istek icin rastgele gecici parola
+    // uretilir ve yanit mesajinda yoneticiye BIR KEZ gosterilir (mevcut UX ile ayni).
+    private static string NewTempPassword() =>
+        CalibraHub.Application.Services.Security.TemporaryPassword.Generate();
 
     private readonly IUserProfileRepository _userRepo;
     private readonly IAdminManagementService _adminService;
@@ -407,9 +410,8 @@ public sealed class CompanyUserController : Controller
                 }
 
                 // Ilk giris sifresi: form'dan gelirse onu kullan, yoksa DefaultPassword.
-                var initialPassword = string.IsNullOrWhiteSpace(dto.Password)
-                    ? DefaultPassword
-                    : dto.Password.Trim();
+                var generatedPassword = string.IsNullOrWhiteSpace(dto.Password) ? NewTempPassword() : null;
+                var initialPassword = generatedPassword ?? dto.Password!.Trim();
                 if (initialPassword.Length < 6)
                     return Json(new { ok = false, error = "Şifre en az 6 karakter olmalı." });
 
@@ -455,7 +457,7 @@ public sealed class CompanyUserController : Controller
                 }
 
                 var msg = string.IsNullOrWhiteSpace(dto.Password)
-                    ? $"Kullanıcı oluşturuldu. Varsayılan şifre: {DefaultPassword}"
+                    ? $"Kullanıcı oluşturuldu. Geçici şifre: {generatedPassword} — ilk girişten sonra değiştirilmeli."
                     : "Kullanıcı oluşturuldu. Belirlediğiniz şifre ile giriş yapılabilir.";
                 return Json(new { ok = true, message = msg });
             }
@@ -519,9 +521,10 @@ public sealed class CompanyUserController : Controller
 
         try
         {
-            user.SetPasswordHash(_passwordHashService.HashPassword(DefaultPassword));
+            var tempPassword = NewTempPassword();
+            user.SetPasswordHash(_passwordHashService.HashPassword(tempPassword));
             await _userRepo.UpdateAsync(user, ct);
-            return Json(new { ok = true, message = $"Şifre sıfırlandı: {DefaultPassword}" });
+            return Json(new { ok = true, message = $"Şifre sıfırlandı. Geçici şifre: {tempPassword}" });
         }
         catch (Exception ex)
         {

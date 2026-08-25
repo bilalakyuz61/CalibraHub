@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Integrations;
+﻿using CalibraHub.Application.Abstractions.Integrations;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Auditing;
@@ -14,7 +14,11 @@ namespace CalibraHub.Application.Services;
 
 public sealed class AdminManagementService : IAdminManagementService
 {
-    public const string DefaultInitialPassword = "12345678";
+    /// <summary>2026-08-24 (K4): sabit "12345678" KALDIRILDI. Parola verilmezse her cagride
+    /// KRIPTOGRAFIK RASTGELE bir gecici parola uretilir (bkz. TemporaryPassword). Cagiran
+    /// taraf bu degeri kullaniciya bir kez gostermelidir.</summary>
+    public static string NewInitialPassword() =>
+        Services.Security.TemporaryPassword.Generate();
     private const int ConnectionTestLogRetentionDays = 30;
     private const int IntegratorConnectionTestLogSourceId = -1;
     private const int SmtpConnectionTestLogSourceId = -2;
@@ -893,7 +897,7 @@ public sealed class AdminManagementService : IAdminManagementService
             Role = role,
             Permissions = normalizedPermissions,
         };
-        var password = string.IsNullOrWhiteSpace(request.Password) ? DefaultInitialPassword : request.Password;
+        var password = string.IsNullOrWhiteSpace(request.Password) ? NewInitialPassword() : request.Password;
         userProfile.SetPasswordHash(_passwordHashService.HashPassword(password));
 
         await _userProfileRepository.AddAsync(userProfile, cancellationToken);

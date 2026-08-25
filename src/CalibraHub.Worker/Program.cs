@@ -84,7 +84,7 @@ var host = Host.CreateDefaultBuilder(args)
             FullName = configuration[$"{BootstrapAdminOptions.SectionName}:FullName"] ?? "Sistem Admin",
             Email = configuration[$"{BootstrapAdminOptions.SectionName}:Email"] ?? "admin@calibra.local",
             EmployeeCode = configuration[$"{BootstrapAdminOptions.SectionName}:EmployeeCode"] ?? "ADM-001",
-            DefaultPassword = configuration[$"{BootstrapAdminOptions.SectionName}:DefaultPassword"] ?? "12345678"
+            DefaultPassword = configuration[$"{BootstrapAdminOptions.SectionName}:DefaultPassword"] ?? string.Empty  // 2026-08-24 K4
         };
 
         // Named HTTP clients — IHttpClientFactory ile pool yonetilir

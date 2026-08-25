@@ -84,7 +84,7 @@ var bootstrapAdminOptions = new BootstrapAdminOptions
     FullName = builder.Configuration[$"{BootstrapAdminOptions.SectionName}:FullName"] ?? "Sistem Admin",
     Email = builder.Configuration[$"{BootstrapAdminOptions.SectionName}:Email"] ?? "admin@calibra.local",
     EmployeeCode = builder.Configuration[$"{BootstrapAdminOptions.SectionName}:EmployeeCode"] ?? "ADM-001",
-    DefaultPassword = builder.Configuration[$"{BootstrapAdminOptions.SectionName}:DefaultPassword"] ?? "12345678"
+    DefaultPassword = builder.Configuration[$"{BootstrapAdminOptions.SectionName}:DefaultPassword"] ?? string.Empty  // 2026-08-24 K4: sabit parola fallback KALDIRILDI (bos ise seed rastgele uretir)
 };
 var forceInMemory = builder.Configuration.GetValue<bool>("CalibraDatabase:ForceInMemory");
 var useInMemoryPersistence = builder.Environment.IsDevelopment() && forceInMemory;
