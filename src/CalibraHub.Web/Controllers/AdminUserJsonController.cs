@@ -24,13 +24,16 @@ public sealed class AdminUserJsonController : Controller
 {
     private readonly IAdminReadService _adminReadService;
     private readonly IAdminManagementService _adminManagementService;
+    private readonly ILogger<AdminUserJsonController> _logger;
 
     public AdminUserJsonController(
         IAdminReadService adminReadService,
-        IAdminManagementService adminManagementService)
+        IAdminManagementService adminManagementService,
+        ILogger<AdminUserJsonController> logger)
     {
         _adminReadService = adminReadService;
         _adminManagementService = adminManagementService;
+        _logger = logger;
     }
 
     [HttpGet("/Admin/GetAdminUsersJson")]
@@ -107,11 +110,24 @@ public sealed class AdminUserJsonController : Controller
         if (string.IsNullOrWhiteSpace(input.Role) || !TryParseRole(input.Role, out var role))
             return Json(new { success = false, message = "Gecerli bir rol seciniz." });
 
+        // GUVENLIK (2026-08-24, Y2): yetki yukseltme korumasi. Bu kontrol yalnizca
+        // CompanyUserController'da vardi; burada YOKTU — UserManagement yetkisi verilmis bir
+        // DepartmentManager, dogrudan POST ile kendine/baskasina SystemAdmin yaratabiliyordu
+        // (UI dropdown'u gizliyor ama sunucu engellemiyordu).
+        if (role == CalibraHub.Domain.Enums.UserRole.SystemAdmin && !IsSystemAdmin())
+        {
+            _logger.LogWarning(
+                "[SaveAdminUserJson] SystemAdmin atama denemesi reddedildi. Email={Email} Hedef={Target}",
+                User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "-", input.Email);
+            return Json(new { success = false, message = "\"Sistem Admin\" yetkisini yalnizca bir Sistem Admini atayabilir." });
+        }
+
         input.Permissions ??= new List<string>();
         input.Permissions = input.Permissions.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (!TryParsePermissions(input.Permissions, out var permissions))
             return Json(new { success = false, message = "Secilen yetkilerden biri gecersiz." });
 
+        var tempPassword = CalibraHub.Application.Services.Security.TemporaryPassword.Generate();
         try
         {
             await _adminManagementService.CreateUserAsync(
@@ -124,9 +140,11 @@ public sealed class AdminUserJsonController : Controller
                     input.SupervisorUserId,
                     role,
                     permissions,
-                    Password: null),
+                    Password: tempPassword),
                 cancellationToken);
-            return Json(new { success = true, message = "Kullanici olusturuldu." });
+            // K4 (2026-08-24): sabit "12345678" kaldirildi; uretilen gecici parola
+            // yoneticiye BIR KEZ gosterilir — aksi halde yeni kullanici giris yapamaz.
+            return Json(new { success = true, message = $"Kullanici olusturuldu. Gecici sifre: {tempPassword} — ilk giristen sonra degistirilmeli." });
         }
         catch (ArgumentException ex)
         {
@@ -167,6 +185,15 @@ public sealed class AdminUserJsonController : Controller
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
+
+    /// <summary>Mevcut kullanicinin SystemAdmin olup olmadigi (CompanyUserController ile ayni desen).</summary>
+    private bool IsSystemAdmin()
+    {
+        var roleString = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        return CalibraHub.Application.Security.UserAuthorizationCatalog.TryParseRole(roleString, out var r)
+               && r == CalibraHub.Domain.Enums.UserRole.SystemAdmin;
+    }
+
     private static bool TryParseRole(string value, out UserRole role) =>
         Enum.TryParse(value, true, out role) && Enum.IsDefined(role);
 
