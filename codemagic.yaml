@@ -60,6 +60,16 @@ workflows:
     name: iOS TestFlight (imzali) — Apple + Codemagic ayari GEREKIR
     instance_type: mac_mini_m2
     max_build_duration: 90
+    # Tag ile OTOMATİK tetik: `ios-release-*` etiketi push'lanınca imzalı IPA üretilir ve
+    # TestFlight'a yüklenir. Böylece Codemagic arayüzüne girip "Start new build" demeye GEREK
+    # KALMAZ — sürüm çıkarmak `git tag ios-release-<ad> && git push origin ios-release-<ad>`
+    # komutuna iner. main'e her push'ta (src/ auto-commit) tetiklenmez; yalnız kasıtlı etikette.
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'ios-release-*'
+          include: true
     # ⬇ Codemagic UI → Teams/App settings → Integrations → App Store Connect ile bir
     #   API anahtari olustur ve adini buraya yaz. Apple Developer hesabi ($99/yil) sart.
     integrations:
