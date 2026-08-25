@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
@@ -389,6 +389,13 @@ public sealed class SqlDocumentRepository : IDocumentRepository
 
     public async Task<Document?> GetByIdAsync(int id, CancellationToken ct)
     {
+        // GUVENLIK (2026-08-24, Y5): satir gorunurluk (veri perdeleme) predikati burada da
+        // uygulanir. Eskiden YALNIZ liste sorgularinda vardi; tekil okuma sadece
+        // "WHERE q.[Id] = @Id" idi. Sonuc: listede gizlenen bir belge, kullanici adres
+        // cubuguna /Sales/DocumentEdit?id=N yazinca TUM baslik/kalem/fiyat bilgisiyle
+        // aciliyordu — perdeleme salt-gorsel kaliyordu.
+        var dv = await _dvFilter.BuildAsync(FormCodes.SalesQuote, "q", "id", ct);
+
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         // Cari ismi Contact.AccountTitle'dan gelir — contact_name kolonu Faz 2'de drop edildi.
@@ -408,9 +415,10 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             LEFT JOIN [{_schema}].[Currency] cur ON cur.[Id] = q.[CurrencyId]
             LEFT JOIN [{_schema}].[Personnel] p ON p.[Id] = q.[RequesterPersonnelId]
             LEFT JOIN [{_schema}].[Location] hloc ON hloc.[Id] = q.[LocationId]
-            WHERE q.[Id] = @Id;
+            WHERE q.[Id] = @Id{dv.Sql};
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        foreach (var prm in dv.Parameters) cmd.Parameters.Add(new SqlParameter(prm.Name, prm.Value));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? MapQuote(r) : null;
     }

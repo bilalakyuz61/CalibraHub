@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Security.Claims;
 using System.Text;
 using CalibraHub.Application.Abstractions.Persistence;
@@ -94,10 +94,19 @@ public sealed class SqlDataVisibilityFilter : IDataVisibilityFilter
         //   • Grants doluysa → kural SADECE o kullanıcılara uygulanır; diğerleri atlanır.
         var userIdStr = httpUser.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         int.TryParse(userIdStr, out var currentUserId);
-        IReadOnlyList<DataVisibilityRule> rules = currentUserId > 0
+        // GUVENLIK (2026-08-24, Y5): DEPARTMAN grant'i eskiden HIC degerlendirilmiyordu.
+        // Yalnizca g.UserId'ye bakildigi icin, "bu kural Muhasebe departmanina uygulansin"
+        // seklinde tanimlanmis bir kuralda Grants.Count > 0 olur ama hicbir UserId eslesmez
+        // -> kural HERKES icin atlanirdi. Sonuc: yonetici ekranda kurali "aktif" gorurken
+        // perdeleme fiilen KAPALI kalirdi (sessiz kirik). Artik kullanicinin departmani da
+        // (login'de set edilen "department_id" claim'i) eslestirilir.
+        int.TryParse(httpUser.FindFirst("department_id")?.Value, out var currentDepartmentId);
+        IReadOnlyList<DataVisibilityRule> rules = (currentUserId > 0 || currentDepartmentId > 0)
             ? allRules.Where(r =>
                 r.Grants.Count == 0 ||
-                r.Grants.Any(g => g.UserId.HasValue && g.UserId.Value == currentUserId)).ToList()
+                r.Grants.Any(g =>
+                    (g.UserId.HasValue && currentUserId > 0 && g.UserId.Value == currentUserId) ||
+                    (g.DepartmentId.HasValue && currentDepartmentId > 0 && g.DepartmentId.Value == currentDepartmentId))).ToList()
             : allRules;
         if (rules.Count == 0) return DataVisibilityPredicate.Empty;
 
