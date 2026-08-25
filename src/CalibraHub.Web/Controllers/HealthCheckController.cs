@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
@@ -43,6 +43,7 @@ public sealed class HealthCheckController : Controller
     private readonly Microsoft.AspNetCore.Mvc.Infrastructure.IActionDescriptorCollectionProvider _actionProvider;
     // Şifreleme anahtarı kontrolü eski (ContentRoot altındaki) konumu da raporlar.
     private readonly IWebHostEnvironment _hostEnvironment;
+    private readonly CalibraHub.Persistence.Database.SchemaInitStatusStore _schemaStatus;
 
     public HealthCheckController(
         IHttpClientFactory httpFactory,
@@ -57,8 +58,10 @@ public sealed class HealthCheckController : Controller
         CalibraHub.Application.Abstractions.Persistence.IDocumentTypeRepository documentTypeRepo,
         Microsoft.AspNetCore.Mvc.Infrastructure.IActionDescriptorCollectionProvider actionProvider,
         IWebHostEnvironment hostEnvironment,
-        CalibraDatabaseOptions dbOptions)
+        CalibraDatabaseOptions dbOptions,
+        CalibraHub.Persistence.Database.SchemaInitStatusStore schemaStatus)
     {
+        _schemaStatus = schemaStatus;
         _actionProvider = actionProvider;
         _hostEnvironment = hostEnvironment;
         _httpFactory = httpFactory;
@@ -352,6 +355,22 @@ public sealed class HealthCheckController : Controller
                 return Task.FromResult(("error",
                     "Hiç Data Protection anahtarı bulunamadı. Şifreli not içerikleri açılamaz — " +
                     "yedekten anahtar klasörünü geri yükleyin."));
+            }),
+            // Yarım göçmüş şema — açılışta bir şirketin migration'ı patlarsa startup DEVAM
+            // eder (tek bozuk şirket uygulamayı engellemesin diye). O şirket normal
+            // görünmeye devam ettiği için ariza ancak eksik kolon ilk kullanıldığında,
+            // "Invalid column name" 500'ü olarak ortaya çıkar. Burada açıkça raporlanır.
+            new("infra.schema", "Şirket şema göçü (açılış)", gsec, (conn, ct) =>
+            {
+                var broken = _schemaStatus.Snapshot();
+                if (broken.Count == 0)
+                    return Task.FromResult(("ok", "Tüm şirketlerin şema göçü başarılı."));
+
+                var detail = string.Join(" · ", broken.Take(5).Select(kv => $"Şirket #{kv.Key}: {kv.Value}"));
+                return Task.FromResult(("error",
+                    $"{broken.Count} şirketin şeması yarım kaldı ve girişi kapatıldı. {detail}" +
+                    (broken.Count > 5 ? " …" : "") +
+                    " Sorun giderilip uygulama yeniden başlatılmalı."));
             }),
             new("infra.conn", "Veritabanı bağlantısı", gdb, async (conn, ct) =>
             {

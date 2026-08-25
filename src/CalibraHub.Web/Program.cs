@@ -476,6 +476,8 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IApprova
 
 // 2026-06-20 Şablon-tabanlı içe aktarım (AI'sız) — Cari pilotu.
 // Repo + Service scoped (per-company DB + IFinanceService bağımlılığı); ExcelReader stateless singleton.
+// Sema init sonucunun sirket bazinda hafizasi — startup yazar, giris/sirket degistirme okur.
+builder.Services.AddSingleton<CalibraHub.Persistence.Database.SchemaInitStatusStore>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IImportTemplateRepository,
                            CalibraHub.Persistence.Repositories.SqlImportTemplateRepository>();
 builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IExcelReader,
@@ -1296,6 +1298,7 @@ using (var scope = app.Services.CreateScope())
     if (!useInMemoryPersistence)
     {
         var dbInitForCompanies = scope.ServiceProvider.GetRequiredService<CalibraDatabaseInitializer>();
+        var schemaStatus = app.Services.GetRequiredService<CalibraHub.Persistence.Database.SchemaInitStatusStore>();
 
         // Master (system) DB adini connection string'den cozup vw_ReportDocument view'inde
         // 3-parcali isim [Calibra].[dbo].[Company] referansi icin kullaniriz.
@@ -1324,14 +1327,21 @@ using (var scope = app.Services.CreateScope())
                 var initSw = System.Diagnostics.Stopwatch.StartNew();
                 await dbInitForCompanies.InitializeForConnectionAsync(
                     resolvedConnectionString, CancellationToken.None);
+                schemaStatus.MarkSucceeded(c.Id);
                 app.Logger.LogInformation(
                     "[Company Schema] Sirket {CompanyId} tam sema init tamamlandi ({ElapsedMs} ms)",
                     c.Id, initSw.ElapsedMilliseconds);
             }
             catch (Exception ex)
             {
-                app.Logger.LogWarning(ex,
-                    "[Company Schema] Sirket {CompanyId} icin tam sema init basarisiz — sirket DB'si eski semada kalmis olabilir", c.Id);
+                // LogWarning DEGIL LogError: hata logu yazicisi Error seviyesinin ALTINI hic
+                // kaydetmiyor (SystemErrorLogger.IsEnabled). Uyari olarak kalsaydi bu ariza
+                // yalnizca konsola dusup canlida hicbir iz birakmazdi — sirket yarim gocmus
+                // semayla calismaya devam ederken.
+                schemaStatus.MarkFailed(c.Id, ex.Message);
+                app.Logger.LogError(ex,
+                    "[Company Schema] Sirket {CompanyId} icin tam sema init BASARISIZ — sirket yarim gocmus semada. " +
+                    "Bu sirkete giris engellendi; sorun giderilip uygulama yeniden baslatilmali.", c.Id);
             }
 
             // DocDesigner belge view'i — vw_ReportDocument + stored proc.

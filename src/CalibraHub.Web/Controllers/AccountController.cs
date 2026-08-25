@@ -36,6 +36,7 @@ public sealed class AccountController : Controller
     private readonly CalibraHub.Application.Services.LoginLockoutTracker _loginLockout;
     private readonly CalibraHub.Application.Auditing.IAuditTrailService _audit;
     private readonly CalibraHub.Persistence.Database.SqlServerConnectionFactory _connectionFactory;
+    private readonly CalibraHub.Persistence.Database.SchemaInitStatusStore _schemaStatus;
     private readonly ILogger<AccountController> _logger;
 
     public AccountController(
@@ -51,8 +52,10 @@ public sealed class AccountController : Controller
         CalibraHub.Application.Services.LoginLockoutTracker loginLockout,
         CalibraHub.Application.Auditing.IAuditTrailService audit,
         CalibraHub.Persistence.Database.SqlServerConnectionFactory connectionFactory,
+        CalibraHub.Persistence.Database.SchemaInitStatusStore schemaStatus,
         ILogger<AccountController> logger)
     {
+        _schemaStatus = schemaStatus;
         _companyDefinitionRepository = companyDefinitionRepository;
         _uiConfigurationService = uiConfigurationService;
         _userProfileRepository = userProfileRepository;
@@ -185,6 +188,26 @@ public sealed class AccountController : Controller
         => string.Equals(a.Database ?? "", b.Database ?? "", StringComparison.OrdinalIgnoreCase)
         && string.Equals(a.Server ?? "", b.Server ?? "", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Sirkete girilebilir mi — iki ayri ariza tek yerde sorulur:
+    ///   1) DB'ye baglanilabiliyor mu (silinmis DB / kapali sunucu)
+    ///   2) Acilistaki sema migration'i BASARILI miydi (yarim gocmus sema)
+    /// Ikincisi olmadan kullanici iceri girer, eksik kolon ilk kullanildiginda
+    /// "Invalid column name" 500'u alir ve nedenini hicbir yerde goremez.
+    /// </summary>
+    private async Task<(bool Ok, string? Reason)> CanEnterCompanyAsync(
+        int companyId, string? connectionString, CancellationToken ct)
+    {
+        if (_schemaStatus.IsBroken(companyId, out var reason))
+            return (false, "Bu şirketin veritabanı şeması güncellenemedi; giriş geçici olarak kapalı. " +
+                           "Sistem yöneticisine bildirin. (" + reason + ")");
+
+        if (!await CanOpenCompanyDatabaseAsync(connectionString, ct))
+            return (false, "Veritabanına ulaşılamıyor.");
+
+        return (true, null);
+    }
+
     private static async Task<bool> CanOpenCompanyDatabaseAsync(string? connectionString, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(connectionString)) return true;
@@ -239,8 +262,9 @@ public sealed class AccountController : Controller
             // fail-open davranıp (bkz. CanOpenCompanyDatabaseAsync) HER şirketi "erişilebilir"
             // sayıyordu → "Veritabanına ulaşılamıyor" durumu hiç tetiklenemiyordu. Artık
             // uygulamanın gerçekten kullandığı bağlantı dizesi çözülüp yoklanıyor. (2026-08-23)
-            return (Id: oid, Ok: await CanOpenCompanyDatabaseAsync(
-                _connectionFactory.ResolveConnectionStringForCompany(oid), cancellationToken));
+            var probe = await CanEnterCompanyAsync(
+                oid, _connectionFactory.ResolveConnectionStringForCompany(oid), cancellationToken);
+            return (Id: oid, Ok: probe.Ok);
         }));
         var reachable = probes.ToDictionary(p => p.Id, p => p.Ok);
 
@@ -320,16 +344,17 @@ public sealed class AccountController : Controller
             // zorlaşır (artık ulaşılamayan şirkette). Bu yüzden geçiş HİÇ yapılmaz.
             // Aynı sebeple (bkz. MyCompanies) çözülmüş bağlantı dizesi kullanılır — aksi halde
             // bu "veritabanı kapısı" hiçbir zaman kapanmıyordu.
-            if (!await CanOpenCompanyDatabaseAsync(
-                    _connectionFactory.ResolveConnectionStringForCompany(targetId), cancellationToken))
+            var switchGate = await CanEnterCompanyAsync(
+                targetId, _connectionFactory.ResolveConnectionStringForCompany(targetId), cancellationToken);
+            if (!switchGate.Ok)
             {
                 _logger.LogWarning(
-                    "[SwitchCompany] Hedef şirketin veritabanına ulaşılamadı, geçiş yapılmadı. Email={Email} Hedef={CompanyId} Db={Db}",
-                    email, targetId, company.DatabaseName);
+                    "[SwitchCompany] Hedef şirkete geçiş engellendi. Email={Email} Hedef={CompanyId} Db={Db} Sebep={Reason}",
+                    email, targetId, company.DatabaseName, switchGate.Reason);
                 return Json(new
                 {
                     ok = false,
-                    error = $"'{company.Name}' şirketinin veritabanına ulaşılamıyor. Geçiş yapılmadı — sistem yöneticisiyle görüşün.",
+                    error = $"'{company.Name}' şirketine geçilemedi. {switchGate.Reason}",
                 });
             }
 
@@ -588,12 +613,18 @@ public sealed class AccountController : Controller
         // bilgisi sızmasın.
         var loginCompany = (await _companyDefinitionRepository.GetAllAsync(cancellationToken))
             .FirstOrDefault(c => c.Id == authenticatedUser.CompanyId);
-        if (!await CanOpenCompanyDatabaseAsync(loginCompany?.DatabaseConnectionString, cancellationToken))
+        // Bağlantı dizesi entity'de artık dolmuyor (2026-07-19) — MyCompanies/SwitchCompany
+        // ile aynı çözüm kullanılır, yoksa kapı hiç kapanmaz.
+        var loginGate = await CanEnterCompanyAsync(
+            authenticatedUser.CompanyId,
+            _connectionFactory.ResolveConnectionStringForCompany(authenticatedUser.CompanyId),
+            cancellationToken);
+        if (!loginGate.Ok)
         {
             _logger.LogWarning(
-                "[Login] Şirket veritabanına ulaşılamadı, oturum açılmadı. Email={Email} Sirket={CompanyId} Db={Db}",
-                input.Email, authenticatedUser.CompanyId, loginCompany?.DatabaseName);
-            var dbMsg = $"'{authenticatedUser.CompanyName}' şirketinin veritabanına ulaşılamıyor. Sistem yöneticisiyle görüşün.";
+                "[Login] Şirkete giriş engellendi. Email={Email} Sirket={CompanyId} Db={Db} Sebep={Reason}",
+                input.Email, authenticatedUser.CompanyId, loginCompany?.DatabaseName, loginGate.Reason);
+            var dbMsg = $"'{authenticatedUser.CompanyName}' şirketine giriş yapılamıyor. {loginGate.Reason}";
             if (isAjax)
                 return Json(new { ok = false, error = "database", message = dbMsg });
             ModelState.AddModelError(string.Empty, dbMsg);
