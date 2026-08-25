@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Messaging;
+﻿using CalibraHub.Application.Abstractions.Messaging;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.WhatsApp;
@@ -341,7 +341,11 @@ public static class WaMediaFiles
             "application/vnd.ms-excel" => "xls",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => "xlsx",
             "text/plain" => "txt",
-            _ => m.Contains('/') ? m.Split('/')[1] : "bin",
+            // GUVENLIK (2026-08-24, Y4): eskiden bilinmeyen MIME'in alt tipi uzanti olarak
+            // kullaniliyordu — "text/html" gelince dosya ".html" olarak wwwroot'a yazilip
+            // AYNI ORIGIN'de servis ediliyordu (depolanmis XSS). Artik allowlist disi her sey
+            // ".bin" olur: dosya yine indirilebilir ama tarayicida calistirilamaz.
+            _ => "bin",
         };
     }
 }

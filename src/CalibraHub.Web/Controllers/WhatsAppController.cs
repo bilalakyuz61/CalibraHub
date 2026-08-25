@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.WhatsApp;
@@ -234,21 +234,11 @@ public sealed class WhatsAppController : Controller
                     "audio" => "audio",
                     _       => "document",
                 };
-                var extRaw = Path.GetExtension(file.FileName ?? string.Empty).TrimStart('.');
-                var ext = !string.IsNullOrEmpty(extRaw)
-                    ? extRaw.ToLowerInvariant()
-                    : mime switch
-                    {
-                        "image/jpeg"      => "jpg",
-                        "image/png"       => "png",
-                        "image/gif"       => "gif",
-                        "image/webp"      => "webp",
-                        "video/mp4"       => "mp4",
-                        "audio/ogg"       => "ogg",
-                        "audio/mpeg"      => "mp3",
-                        "application/pdf" => "pdf",
-                        _                 => "bin",
-                    };
+                // GUVENLIK (2026-08-24, Y4): uzanti ISTEMCININ dosya adindan TURETILMEZ.
+                // Eskiden "payload.html" adli bir dosya wwwroot'a ".html" olarak yazilip
+                // AYNI ORIGIN'de servis ediliyordu -> depolanmis XSS. Artik tek kaynak
+                // MIME allowlist'i (WaMediaFiles.MimeToExtension); bilinmeyen tip -> "bin".
+                var ext = CalibraHub.Application.Services.Messaging.WaMediaFiles.MimeToExtension(mime);
 
                 // Dosyayı kaydet — wwwroot/uploads/whatsapp/yyyy/MM/<msgId>.<ext>
                 var safeId = string.Concat(msgId.Where(c => char.IsLetterOrDigit(c) || c == '-' || c == '_'));

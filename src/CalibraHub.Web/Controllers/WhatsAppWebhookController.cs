@@ -352,16 +352,19 @@ public sealed class WhatsAppWebhookController : ControllerBase
             var bytes = await fileResp.Content.ReadAsByteArrayAsync(ct);
 
             // Step 3: Diske kaydet
-            var ext = knownFileName is not null
-                ? Path.GetExtension(knownFileName)
-                : MimeToExt(knownMime);
+            // GUVENLIK (2026-08-24, Y4): uzanti DIS GONDERICININ dosya adindan turetilmez.
+            // knownFileName Meta payload'undaki "document.filename" — yani sirketin WhatsApp
+            // numarasina mesaj atan HERHANGI biri belirliyor. "fatura.html" gonderip wwwroot'a
+            // ayni origin'de servis edilen HTML koyabiliyordu. Tek kaynak MIME allowlist'i.
+            var ext = "." + CalibraHub.Application.Services.Messaging.WaMediaFiles.MimeToExtension(knownMime);
             var yyyy = now.Year.ToString("D4");
             var mm   = now.Month.ToString("D2");
             var uploadsDir = Path.Combine(_env.WebRootPath, "uploads", "whatsapp", yyyy, mm);
             Directory.CreateDirectory(uploadsDir);
-            var diskPath = Path.Combine(uploadsDir, $"{fileBaseName}{ext}");
+            var safeBase = CalibraHub.Application.Services.Messaging.WaMediaFiles.SafeId(fileBaseName);
+            var diskPath = Path.Combine(uploadsDir, $"{safeBase}{ext}");
             await System.IO.File.WriteAllBytesAsync(diskPath, bytes, ct);
-            var urlPath = $"/uploads/whatsapp/{yyyy}/{mm}/{fileBaseName}{ext}";
+            var urlPath = $"/uploads/whatsapp/{yyyy}/{mm}/{safeBase}{ext}";
 
             return (urlPath, bytes.Length, knownMime);
         }

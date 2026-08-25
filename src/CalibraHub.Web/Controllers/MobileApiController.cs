@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
@@ -424,7 +424,10 @@ public sealed class MobileApiController : ControllerBase
                               : mime.StartsWith("video/")  ? "video"
                               : mime.StartsWith("audio/")  ? "audio"
                               : "document";
-                var ext = Path.GetExtension(file.FileName);
+                // GUVENLIK (2026-08-24, Y4): uzanti istemcinin dosya adindan DEGIL MIME
+                // allowlist'inden gelir (".html" ile wwwroot'a yazip ayni origin'de
+                // calistirma yolu kapatildi). Nokta basta olacak sekilde normalize edilir.
+                var ext = "." + CalibraHub.Application.Services.Messaging.WaMediaFiles.MimeToExtension(mime);
                 var yyyy = now.Year.ToString("D4");
                 var mm   = now.Month.ToString("D2");
                 string? urlPath = null;
@@ -432,9 +435,10 @@ public sealed class MobileApiController : ControllerBase
                 {
                     var uploadsDir = Path.Combine(env.WebRootPath, "uploads", "whatsapp", yyyy, mm);
                     Directory.CreateDirectory(uploadsDir);
-                    var diskPath = Path.Combine(uploadsDir, $"{msgId}{ext}");
+                    var safeMsgId = CalibraHub.Application.Services.Messaging.WaMediaFiles.SafeId(msgId);
+                    var diskPath = Path.Combine(uploadsDir, $"{safeMsgId}{ext}");
                     await System.IO.File.WriteAllBytesAsync(diskPath, bytes, ct);
-                    urlPath = $"/uploads/whatsapp/{yyyy}/{mm}/{msgId}{ext}";
+                    urlPath = $"/uploads/whatsapp/{yyyy}/{mm}/{safeMsgId}{ext}";
                 }
                 catch { /* dosya kaydetme başarısız olursa mediaUrl olmadan devam */ }
 
