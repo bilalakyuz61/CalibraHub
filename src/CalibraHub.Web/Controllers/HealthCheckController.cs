@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
@@ -329,6 +329,10 @@ public sealed class HealthCheckController : Controller
         const string gdb = "Altyapı / Veritabanı";
         const string gseed = "Altyapı / Seed";
         const string gsec = "Altyapı / Güvenlik";
+        // Veri bütünlüğü: YALNIZCA SELECT COUNT — canlı sistemde de güvenle çalışır,
+        // hiçbir şey yazmaz/düzeltmez. Amaç "bozulmuş veri VAR MI" sorusunu yanıtlamak;
+        // düzeltme kararı insana aittir (otomatik onarım, sebebi bilinmeden veri kaybettirir).
+        const string gint = "Veri Bütünlüğü";
         return new List<InfraSpec>
         {
             new("infra.permgate", "Yetki kapısı taraması", gsec, (conn, ct) => Task.FromResult(ScanPermissionGates())),
@@ -371,6 +375,101 @@ public sealed class HealthCheckController : Controller
                     $"{broken.Count} şirketin şeması yarım kaldı ve girişi kapatıldı. {detail}" +
                     (broken.Count > 5 ? " …" : "") +
                     " Sorun giderilip uygulama yeniden başlatılmalı."));
+            }),
+            // ── Veri bütünlüğü ────────────────────────────────────────────────
+            // Kolon/tablo adları şemadan DOĞRULANDI (2026-08-25): Document PK'si küçük harf
+            // "id", ItemFeatureMappings ÇOĞUL, FeatureValue kolonları küçük harf. Bu isimler
+            // tahminle yazılsaydı sorgular "Invalid column name" verip sessiz catch'te kaybolurdu.
+            new("data.orphan_docline", "Sahipsiz belge kalemi", gint, async (conn, ct) =>
+            {
+                if (conn is null) return ("error", "Bağlantı yok");
+                if (!await ObjExistsAsync(conn, $"[{_schema}].[DocumentLine]", ct)) return ("skip", "DocumentLine yok");
+                var n = await ScalarCountAsync(conn, $@"
+                    SELECT COUNT(*) FROM [{_schema}].[DocumentLine] dl
+                     WHERE NOT EXISTS (SELECT 1 FROM [{_schema}].[Document] d WHERE d.[id] = dl.[DocumentId])", ct);
+                return n == 0
+                    ? ("ok", "Her kalem bir belgeye bağlı.")
+                    : ("error", $"{n} kalem, var olmayan bir belgeye işaret ediyor. Bu satırlar hiçbir ekranda görünmez ama stok/tutar toplamlarına karışabilir.");
+            }),
+            new("data.orphan_lineitem", "Kalemde kayıp malzeme", gint, async (conn, ct) =>
+            {
+                if (conn is null) return ("error", "Bağlantı yok");
+                if (!await ObjExistsAsync(conn, $"[{_schema}].[DocumentLine]", ct)) return ("skip", "DocumentLine yok");
+                var n = await ScalarCountAsync(conn, $@"
+                    SELECT COUNT(*) FROM [{_schema}].[DocumentLine] dl
+                     WHERE dl.[ItemId] IS NOT NULL
+                       AND NOT EXISTS (SELECT 1 FROM [{_schema}].[Items] i WHERE i.[Id] = dl.[ItemId])", ct);
+                return n == 0
+                    ? ("ok", "Tüm kalemlerin malzemesi mevcut.")
+                    : ("error", $"{n} kalemin malzeme kaydı yok — belge açılışında ad/birim çözülemez.");
+            }),
+            new("data.missing_combination", "Kombinasyonsuz varyant kalemi", gint, async (conn, ct) =>
+            {
+                if (conn is null) return ("error", "Bağlantı yok");
+                if (!await ObjExistsAsync(conn, $"[{_schema}].[DocumentLine]", ct)) return ("skip", "DocumentLine yok");
+                var n = await ScalarCountAsync(conn, $@"
+                    SELECT COUNT(*) FROM [{_schema}].[DocumentLine] dl
+                     INNER JOIN [{_schema}].[Items] i ON i.[Id] = dl.[ItemId]
+                     WHERE i.[Combinations] = 1 AND dl.[CombinationId] IS NULL", ct);
+                return n == 0
+                    ? ("ok", "Varyantlı malzemelerin kalemlerinde kombinasyon dolu.")
+                    : ("warn", $"{n} kalem kombinasyon takipli bir malzemeye ait ama kombinasyonu boş. " +
+                               "Eski kayıtlar meşru olabilir; yeni kayıtlarda hangi varyantın satıldığı belirsizdir.");
+            }),
+            new("data.orphan_bomline", "Sahipsiz reçete kalemi", gint, async (conn, ct) =>
+            {
+                if (conn is null) return ("error", "Bağlantı yok");
+                if (!await ObjExistsAsync(conn, $"[{_schema}].[BOMLine]", ct)) return ("skip", "BOMLine yok");
+                var n = await ScalarCountAsync(conn, $@"
+                    SELECT COUNT(*) FROM [{_schema}].[BOMLine] bl
+                     WHERE NOT EXISTS (SELECT 1 FROM [{_schema}].[BOM] b WHERE b.[Id] = bl.[BOMId])", ct);
+                return n == 0
+                    ? ("ok", "Her reçete kalemi bir reçeteye bağlı.")
+                    : ("error", $"{n} reçete kalemi, var olmayan bir reçeteye işaret ediyor.");
+            }),
+            new("data.bom_selfref", "Kendini içeren reçete", gint, async (conn, ct) =>
+            {
+                if (conn is null) return ("error", "Bağlantı yok");
+                if (!await ObjExistsAsync(conn, $"[{_schema}].[BOMLine]", ct)) return ("skip", "BOMLine yok");
+                var n = await ScalarCountAsync(conn, $@"
+                    SELECT COUNT(*) FROM [{_schema}].[BOMLine] bl
+                     INNER JOIN [{_schema}].[BOM] b ON b.[Id] = bl.[BOMId]
+                     WHERE bl.[ItemId] = b.[ItemId]", ct);
+                return n == 0
+                    ? ("ok", "Hiçbir reçete kendini bileşen olarak içermiyor.")
+                    : ("error", $"{n} reçete kaleminde bileşen, mamulün KENDİSİ. " +
+                                "İhtiyaç patlatma ve maliyet hesabı sonsuz döngüye girer.");
+            }),
+            new("data.dup_base_bom", "Çift baz reçete", gint, async (conn, ct) =>
+            {
+                if (conn is null) return ("error", "Bağlantı yok");
+                if (!await ObjExistsAsync(conn, $"[{_schema}].[BOM]", ct)) return ("skip", "BOM yok");
+                // UX_BOM_Base bunu bugün ENGELLER; ama indeks eklenmeden önce oluşmuş veri
+                // varsa indeks hiç kurulamamış olabilir — o durumda kopyalar hâlâ durur.
+                var n = await ScalarCountAsync(conn, $@"
+                    SELECT COUNT(*) FROM (
+                        SELECT [ItemId], [ConfigId]
+                          FROM [{_schema}].[BOM]
+                         WHERE [IsActive] = 1 AND [VersionCode] IS NULL
+                         GROUP BY [ItemId], [ConfigId]
+                        HAVING COUNT(*) > 1) x", ct);
+                return n == 0
+                    ? ("ok", "Her mamulün tek aktif baz reçetesi var.")
+                    : ("error", $"{n} mamulde birden fazla aktif baz reçete var — hangisinin kullanılacağı belirsiz.");
+            }),
+            new("data.orphan_featuremap", "Kayıp özellik/değer bağı", gint, async (conn, ct) =>
+            {
+                if (conn is null) return ("error", "Bağlantı yok");
+                if (!await ObjExistsAsync(conn, $"[{_schema}].[ItemFeatureMappings]", ct)) return ("skip", "ItemFeatureMappings yok");
+                var n = await ScalarCountAsync(conn, $@"
+                    SELECT COUNT(*) FROM [{_schema}].[ItemFeatureMappings] m
+                     WHERE m.[IsActive] = 1
+                       AND (NOT EXISTS (SELECT 1 FROM [{_schema}].[ItemFeature] f WHERE f.[Id] = m.[FeatureId])
+                            OR (m.[FeatureValueId] IS NOT NULL
+                                AND NOT EXISTS (SELECT 1 FROM [{_schema}].[FeatureValue] v WHERE v.[id] = m.[FeatureValueId])))", ct);
+                return n == 0
+                    ? ("ok", "Stok-özellik bağlarının hepsi geçerli.")
+                    : ("error", $"{n} stok-özellik bağı silinmiş bir özelliğe/değere işaret ediyor.");
             }),
             new("infra.conn", "Veritabanı bağlantısı", gdb, async (conn, ct) =>
             {
@@ -487,6 +586,18 @@ public sealed class HealthCheckController : Controller
         if (string.IsNullOrWhiteSpace(connStr)) return null;
         try { var c = new SqlConnection(connStr); await c.OpenAsync(ct); return c; }
         catch { return null; }
+    }
+
+    /// <summary>
+    /// Salt-okunur sayım. Bütünlük kontrollerinin TEK yazma-dışı aracı — buradan geçmeyen
+    /// bir SQL bu gruba eklenmemeli (canlıda çalışacağı garantisi buna dayanıyor).
+    /// </summary>
+    private static async Task<int> ScalarCountAsync(SqlConnection conn, string sql, CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        var raw = await cmd.ExecuteScalarAsync(ct);
+        return raw is null || raw is DBNull ? 0 : Convert.ToInt32(raw);
     }
 
     private static async Task<bool> ObjExistsAsync(SqlConnection conn, string objName, CancellationToken ct)
