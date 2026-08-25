@@ -1,0 +1,192 @@
+/* Veritabanı Haritası — tablo ilişki evreni.
+   Tuval (Konva) CSS değişkeni okuyamaz; renkler JS'te palet olarak tutulur ve tema
+   değişiminde yeniden çizilir. Buradaki CSS yalnız tuval ÇEVRESİNDEKİ kabuk içindir. */
+
+.dbm-root {
+  color-scheme: light;
+  --dbm-bg: #f8fafc;
+  --dbm-panel: #ffffff;
+  --dbm-border: #e2e8f0;
+  --dbm-text: #0f172a;
+  --dbm-muted: #64748b;
+  --dbm-muted-2: #94a3b8;
+  --dbm-accent: #4f46e5;
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--dbm-bg);
+  color: var(--dbm-text);
+}
+
+body.app-theme-dark .dbm-root {
+  color-scheme: dark;
+  --dbm-bg: #070b16;
+  --dbm-panel: #0f172a;
+  --dbm-border: #1e293b;
+  --dbm-text: #e2e8f0;
+  --dbm-muted: #94a3b8;
+  --dbm-muted-2: #64748b;
+  --dbm-accent: #818cf8;
+}
+
+/* ── Üst şerit ─────────────────────────────────────────────────────────── */
+.dbm-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--dbm-border);
+  background: var(--dbm-panel);
+  flex-wrap: wrap;
+}
+.dbm-header-icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+}
+.dbm-title { font-size: .98rem; font-weight: 700; line-height: 1.2; }
+.dbm-sub { font-size: .76rem; color: var(--dbm-muted); }
+
+.dbm-search {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--dbm-border);
+  background: var(--dbm-bg);
+  min-width: 230px;
+}
+.dbm-search input {
+  border: none; outline: none; background: transparent;
+  color: var(--dbm-text); font-size: 12.5px; width: 100%;
+}
+.dbm-btn {
+  appearance: none; cursor: pointer;
+  border: 1px solid var(--dbm-border);
+  background: var(--dbm-panel);
+  color: var(--dbm-text);
+  border-radius: 8px; padding: 6px 11px;
+  font-size: 12.5px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.dbm-btn:hover { border-color: var(--dbm-accent); color: var(--dbm-accent); }
+.dbm-btn:disabled { opacity: .45; cursor: default; }
+
+/* Arama önerileri */
+.dbm-suggest {
+  position: absolute; z-index: 20;
+  margin-top: 4px;
+  max-height: 260px; overflow-y: auto;
+  min-width: 230px;
+  border-radius: 10px;
+  border: 1px solid var(--dbm-border);
+  background: var(--dbm-panel);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, .18);
+}
+.dbm-suggest button {
+  display: block; width: 100%; text-align: left;
+  appearance: none; border: none; background: transparent; cursor: pointer;
+  padding: 7px 12px; font-size: 12.5px; color: var(--dbm-text);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.dbm-suggest button:hover { background: var(--dbm-bg); color: var(--dbm-accent); }
+
+/* ── Gövde: tuval + yan panel ─────────────────────────────────────────── */
+.dbm-body { flex: 1 1 auto; min-height: 0; display: flex; }
+.dbm-canvas-wrap { flex: 1 1 auto; min-width: 0; position: relative; overflow: hidden; }
+
+.dbm-hint {
+  position: absolute; left: 14px; bottom: 12px;
+  font-size: 11.5px; color: var(--dbm-muted);
+  background: color-mix(in srgb, var(--dbm-panel) 82%, transparent);
+  border: 1px solid var(--dbm-border);
+  border-radius: 8px; padding: 6px 10px;
+  pointer-events: none;
+}
+.dbm-legend {
+  position: absolute; right: 14px; bottom: 12px;
+  display: flex; flex-direction: column; gap: 5px;
+  font-size: 11.5px; color: var(--dbm-muted);
+  background: color-mix(in srgb, var(--dbm-panel) 82%, transparent);
+  border: 1px solid var(--dbm-border);
+  border-radius: 8px; padding: 8px 11px;
+  pointer-events: none;
+}
+.dbm-legend-row { display: flex; align-items: center; gap: 7px; }
+.dbm-legend-line { width: 22px; height: 0; border-top: 2px solid var(--dbm-accent); }
+.dbm-legend-line--dashed { border-top-style: dashed; border-color: var(--dbm-muted-2); }
+
+/* Yan panel — SABİT genişlik ve HER ZAMAN mount (modal boyut sabitliği kuralının
+   aynı gerekçesi: içerik değiştikçe tuvalin genişliği zıplamamalı). */
+.dbm-side {
+  flex: 0 0 320px;
+  width: 320px;
+  border-left: 1px solid var(--dbm-border);
+  background: var(--dbm-panel);
+  display: flex; flex-direction: column;
+  min-height: 0;
+}
+.dbm-side-head {
+  flex: 0 0 auto;
+  padding: 13px 15px;
+  border-bottom: 1px solid var(--dbm-border);
+}
+.dbm-side-title {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: .92rem; font-weight: 700;
+  word-break: break-all;
+}
+.dbm-side-meta { margin-top: 4px; font-size: .75rem; color: var(--dbm-muted); }
+.dbm-side-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px 15px; }
+
+.dbm-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; height: 100%; padding: 24px;
+  color: var(--dbm-muted); font-size: 12.5px; text-align: center;
+}
+
+.dbm-group-title {
+  font-size: .74rem; font-weight: 700; color: var(--dbm-muted);
+  margin: 14px 0 6px;
+}
+.dbm-group-title:first-child { margin-top: 0; }
+
+.dbm-rel {
+  display: flex; align-items: baseline; gap: 6px;
+  width: 100%; text-align: left;
+  appearance: none; border: none; background: transparent; cursor: pointer;
+  padding: 6px 8px; border-radius: 7px;
+  color: var(--dbm-text); font-size: 12px;
+}
+.dbm-rel:hover { background: var(--dbm-bg); }
+.dbm-rel-name {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-weight: 600;
+}
+.dbm-rel-col { color: var(--dbm-muted); font-size: 11px; }
+.dbm-rel-badge {
+  margin-left: auto;
+  font-size: 10px; font-weight: 700;
+  padding: 1px 6px; border-radius: 999px;
+  border: 1px solid var(--dbm-border);
+  color: var(--dbm-muted);
+  white-space: nowrap;
+}
+.dbm-rel-badge--fk { color: #4f46e5; border-color: #c7d2fe; }
+body.app-theme-dark .dbm-rel-badge--fk { color: #a5b4fc; border-color: #3730a3; }
+
+.dbm-note {
+  margin-top: 16px; padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px dashed var(--dbm-border);
+  font-size: 11.5px; line-height: 1.5;
+  color: var(--dbm-muted);
+}
+
+/* Yenile butonundaki dönme — ağ beklemesi görünür olsun. */
+@keyframes dbm-spin-kf { to { transform: rotate(360deg); } }
+.dbm-spin { animation: dbm-spin-kf .9s linear infinite; }

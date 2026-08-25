@@ -53,6 +53,7 @@ import AuditMonitor from './components/AuditLog/AuditMonitor'
 import AuditTrailPanel from './components/AuditLog/AuditTrailPanel'
 import './components/AuditLog/auditLog.css'
 import ViewBuilder from './components/ViewBuilder/ViewBuilder'
+import DatabaseMap from './components/DatabaseMap/DatabaseMap'
 import './components/ViewBuilder/ViewBuilder.css'
 import CapaDashboard from './components/CapaDashboard/CapaDashboard'
 import './components/CapaDashboard/CapaDashboard.css'
@@ -2071,6 +2072,27 @@ function mountViewBuilder(element, config) {
   return { unmount: function () { root.unmount(); mountedRoots.delete(element) } }
 }
 window.CalibraHub.mountViewBuilder = mountViewBuilder
+
+/**
+ * DatabaseMap mount — Veritabanı Haritası (/Admin/DatabaseMap, SystemAdmin-only).
+ * @param {HTMLElement} element
+ */
+function mountDatabaseMap(element) {
+  if (!element) return { unmount: function () {} }
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(DatabaseMap, null)
+    )
+  )
+  return { unmount: function () { root.unmount(); mountedRoots.delete(element) } }
+}
+window.CalibraHub.mountDatabaseMap = mountDatabaseMap
 
 /**
  * CapaDashboard mount — "DÖF Panosu" KPI ekranı (/Quality/CapaDashboard).
