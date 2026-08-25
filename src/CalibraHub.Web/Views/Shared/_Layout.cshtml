@@ -1,4 +1,4 @@
-@using System.Security.Claims
+﻿@using System.Security.Claims
 @using System.Text.Json
 @using CalibraHub.Application.Ui
 @using Microsoft.AspNetCore.Antiforgery
@@ -357,6 +357,10 @@
             system = new
             {
                 company = profileCompany,
+                // Kullanici tercihlerinin TARAYICI tarafinda sirkete gore ayrilmasi icin
+                // (bkz. shellShortcutsService.js). Sunucuda zaten per-company DB var;
+                // localStorage bu ayrimi kendiliginden yapmaz, anahtar ile yapilir.
+                companyId = User.FindFirstValue("company_id") ?? "0",
                 year = DateTime.Now.Year.ToString(),
                 status = layoutUi.Text("system_status"),
                 appVersion = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "?",
