@@ -502,6 +502,14 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportT
                            CalibraHub.Application.Services.Import.PersonnelImportHandler>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
                            CalibraHub.Application.Services.Import.MachineImportHandler>();
+// 2026-08-25 — Stok özellik/değer aktarımı. SIRA ÖNEMLİ (kullanıcı önce Özellik, sonra
+// Değer, sonra Stok Özelliği şablonunu aktarır); handler'lar birbirini adına göre çözer.
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
+                           CalibraHub.Application.Services.Import.FeatureImportHandler>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
+                           CalibraHub.Application.Services.Import.FeatureValueImportHandler>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
+                           CalibraHub.Application.Services.Import.ItemFeatureImportHandler>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
                            CalibraHub.Application.Services.Import.OperationImportHandler>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
