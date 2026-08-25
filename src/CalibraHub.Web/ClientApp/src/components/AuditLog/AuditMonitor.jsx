@@ -319,10 +319,6 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
     }
   }
 
-  const chartMax = useMemo(() => {
-    if (!stats || !stats.byDay || !stats.byDay.length) return 0
-    return Math.max(...stats.byDay.map(d => d.count))
-  }, [stats])
 
   const actionIcon = (a) => {
     switch ((a || '').toLowerCase()) {
@@ -422,16 +418,6 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
         <div className="al-stat al-stat--blue" title="Aralıkta işlem yapan farklı kullanıcı sayısı">
           <div className="al-stat-ic"><Users size={16} /></div>
           <div><div className="al-stat-num">{stats ? stats.distinctUsers.toLocaleString('tr-TR') : '—'}</div><div className="al-stat-lbl">Kullanıcı</div></div>
-        </div>
-        <div className="al-stat-chart">
-          <div className="al-stat-chart-title">Gün Bazlı İşlem Dağılımı</div>
-          <div className="al-chart">
-            {stats && stats.byDay && stats.byDay.length > 0 ? stats.byDay.map(d => (
-              <div key={d.day} className="al-chart-bar"
-                style={{ height: chartMax ? Math.max(6, Math.round((d.count / chartMax) * 100)) + '%' : '6%' }}
-                title={d.day.split('-').reverse().join('.') + ' — ' + d.count.toLocaleString('tr-TR') + ' işlem'} />
-            )) : <div style={{ fontSize: 11, color: 'var(--al-muted-2)', alignSelf: 'center' }}>Veri yok</div>}
-          </div>
         </div>
       </div>
       )}

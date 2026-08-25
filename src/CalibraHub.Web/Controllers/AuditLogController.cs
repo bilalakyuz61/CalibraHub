@@ -269,13 +269,6 @@ public sealed class AuditLogController : Controller
                 fromUtc, toUtc, Unpaged: true, CompanyScope: CurrentCompanyId()),
             ct);
 
-        var byDay = stats.ByDay.ToDictionary(d => d.Day, d => d.Count, StringComparer.Ordinal);
-        foreach (var e in errors.Items)
-        {
-            var day = e.TimestampUtc.ToLocalTime().ToString("yyyy-MM-dd");
-            byDay[day] = byDay.GetValueOrDefault(day) + 1;
-        }
-
         return Json(new
         {
             ok = true,
@@ -288,8 +281,10 @@ public sealed class AuditLogController : Controller
                 securityEvents = stats.SecurityEvents,
                 errors = errors.Total,
                 distinctUsers = stats.DistinctUsers,
-                byDay = byDay.OrderBy(kv => kv.Key, StringComparer.Ordinal)
-                             .Select(kv => new { day = kv.Key, count = kv.Value }),
+                // Gün bazlı dağılım grafiği kaldırıldı (2026-08-25) — hata satırlarını gün gün
+                // toplayan birleştirme de kaldırıldı: kimsenin çizmediği bir dizi için tüm hata
+                // kayıtlarını dolaşmak boşa iş. Servis zaten üretiyor, olduğu gibi geçirilir.
+                byDay = stats.ByDay,
                 topEntities = stats.TopEntities,
                 topUsers = stats.TopUsers,
             },
