@@ -3052,6 +3052,26 @@ function ProfilePopover(props) {
         </button>
         <a
           href="/Account/Logout"
+          onClick={function(e) {
+            // 2026-08-25 kullanici istegi: cikis ONAY ister. Proje standardi geregi
+            // native confirm() DEGIL, ekran-ortasi ozel modal (window.showConfirm,
+            // _Layout'ta global yuklenir). Helper yoksa (beklenmedik durum) baglanti
+            // normal calisir — fail-open: kullanici cikamaz halde kalmasin.
+            if (typeof window.showConfirm !== 'function') return
+            e.preventDefault()
+            var tr = (props.lang || 'TR') === 'TR'
+            window.showConfirm({
+              title: tr ? 'Çıkış Yap' : 'Sign Out',
+              message: tr
+                ? 'Oturumunuz kapatılacak. Çıkış yapmak istediğinize emin misiniz?'
+                : 'Your session will be closed. Are you sure you want to sign out?',
+              okLabel: tr ? 'Evet, Çıkış Yap' : 'Yes, Sign Out',
+              cancelLabel: tr ? 'Vazgeç' : 'Cancel',
+              danger: true,
+            }).then(function(ok) {
+              if (ok) window.location.href = '/Account/Logout'
+            })
+          }}
           className={
             'flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all no-underline ' +
             (isDark
@@ -3343,10 +3363,12 @@ function CompanySwitchModal(props) {
     originStyle = { transformOrigin: openUp ? 'bottom right' : 'top right' }
   }
 
-  // Yay: iOS baglam menusune yakin his (hafif zipla, cabuk otur).
+  // Yay: iOS baglam menusune yakin his. 2026-08-25 kullanici istegi uzerine DAHA CANLI
+  // ayarlandi — sonumleme (damping) dusuruldu, sertlik artirildi: panel hedefi bir miktar
+  // asip geri oturuyor (gorunur "zipla" etkisi). reduceMotion'da animasyon yine sade kalir.
   var bubbleIn = reduceMotion
     ? { duration: 0.12 }
-    : { type: 'spring', stiffness: 460, damping: 30, mass: 0.7 }
+    : { type: 'spring', stiffness: 620, damping: 17, mass: 0.8, restDelta: 0.001 }
 
   return (
     <motion.div
@@ -3361,9 +3383,9 @@ function CompanySwitchModal(props) {
         anchor ? {} : { paddingTop: '14vh' })}
     >
       <motion.div
-        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.82 }}
+        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.72 }}
         animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
-        exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
+        exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.88, transition: { duration: 0.13 } }}
         transition={bubbleIn}
         onClick={function(e) { e.stopPropagation() }}
         role="dialog"
