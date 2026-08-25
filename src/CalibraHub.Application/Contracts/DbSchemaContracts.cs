@@ -1,4 +1,4 @@
-namespace CalibraHub.Application.Contracts;
+﻿namespace CalibraHub.Application.Contracts;
 
 /// <summary>Tablo ozet bilgisi (liste paneli icin).</summary>
 public sealed record DbTableSummaryDto(
@@ -77,6 +77,41 @@ public sealed record DbForeignKeyDto(
     string ToColumn,
     string DeleteAction,
     string UpdateAction);
+
+// ── Veritabani Haritasi (iliski grafigi) ──────────────────────────────────
+
+/// <summary>Haritadaki bir dugum — tablo.</summary>
+public sealed record DbMapTableDto(
+    string Name,
+    long RowCount,
+    int ColumnCount,
+    string? Description);
+
+/// <summary>
+/// Haritadaki bir kenar. <paramref name="Kind"/> iki degerden biridir ve GUVENILIRLIK
+/// farkini tasir: "fk" = veritabaninda tanimli FOREIGN KEY (kesin), "inferred" = kisit
+/// yok, iliski kolon adindan cikarildi. Ekran ikisini farkli cizer.
+/// </summary>
+public sealed record DbMapEdgeDto(
+    string FromTable,
+    string FromColumn,
+    string ToTable,
+    string ToColumn,
+    string Kind,
+    string? ConstraintName);
+
+/// <summary>
+/// Harita + KAPSAM ozeti. <paramref name="UnmatchedIdColumns"/> bilincli olarak disari
+/// verilir: harita "tum iliskileri gosteriyorum" iddiasinda bulunmaz, eslesmeyen
+/// "*Id" kolonlarinin sayisini kullaniciya soyler.
+/// </summary>
+public sealed record DbRelationMapDto(
+    IReadOnlyList<DbMapTableDto> Tables,
+    IReadOnlyList<DbMapEdgeDto> Edges,
+    int UnmatchedIdColumns);
+
+/// <summary>Cikarim icin okunan ham kolon satiri (tablo + kolon adi).</summary>
+public sealed record DbColumnRefDto(string TableName, string ColumnName);
 
 // ── Report Designer — view introspection ──────────────────────────────────
 

@@ -2074,10 +2074,12 @@ function mountViewBuilder(element, config) {
 window.CalibraHub.mountViewBuilder = mountViewBuilder
 
 /**
- * DatabaseMap mount — Veritabanı Haritası (/Admin/DatabaseMap, SystemAdmin-only).
+ * DatabaseMap mount — Veritabanı Haritası ekranının (/admin/db-schema) "Harita" görünümü.
  * @param {HTMLElement} element
+ * @param {{ apiBase?: string }} config
  */
-function mountDatabaseMap(element) {
+function mountDatabaseMap(element, config) {
+  config = config || {}
   if (!element) return { unmount: function () {} }
   if (mountedRoots.has(element)) {
     mountedRoots.get(element).unmount()
@@ -2087,7 +2089,7 @@ function mountDatabaseMap(element) {
   mountedRoots.set(element, root)
   root.render(
     React.createElement(ErrorBoundary, null,
-      React.createElement(DatabaseMap, null)
+      React.createElement(DatabaseMap, { apiBase: config.apiBase || '/admin/db-schema/api' })
     )
   )
   return { unmount: function () { root.unmount(); mountedRoots.delete(element) } }

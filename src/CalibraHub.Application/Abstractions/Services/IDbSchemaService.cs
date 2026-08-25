@@ -1,4 +1,4 @@
-using CalibraHub.Application.Contracts;
+﻿using CalibraHub.Application.Contracts;
 
 namespace CalibraHub.Application.Abstractions.Services;
 
@@ -22,6 +22,13 @@ public interface IDbSchemaService
     /// Açıklamalar: katalog view'ları için statik, kullanıcı view'ları için ViewMeta tablosundan.
     /// </summary>
     Task<IReadOnlyList<DbViewInfoDto>> GetViewsAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Veritabanı Haritası verisi: tablolar + aralarındaki ilişkiler.
+    /// Tablo listesi <see cref="GetTablesAsync"/> ile AYNI süzgeçten geçer (CalibraTableCatalog) —
+    /// aksi halde aynı ekranın listesi ile haritası farklı tablo kümesi gösterirdi.
+    /// </summary>
+    Task<DbRelationMapDto> GetRelationMapAsync(CancellationToken cancellationToken);
 
     /// <summary>Bir view için kullanıcı açıklamasını ViewMeta tablosuna kaydeder.</summary>
     Task SaveViewDescriptionAsync(string viewName, string? description, string updatedBy, CancellationToken cancellationToken);

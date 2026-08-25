@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
 using System.Reflection;
 using System.Text;
@@ -54,6 +54,65 @@ public sealed class DbSchemaService : IDbSchemaService
             Description = tableDescription,
             ClrTypeName = entityType.FullName,
         };
+    }
+
+    /// <summary>
+    /// Harita verisi. Kenarlar iki kaynaktan gelir ve AYRI isaretlenir:
+    ///   · gercek FK  → sys.foreign_keys (kesin)
+    ///   · cikarim    → kisiti olmayan "&lt;Tablo&gt;Id" kolonu, ad birebir eslesirse
+    ///
+    /// Cikarim BILEREK dar: yalniz "&lt;Tablo&gt;" ve "&lt;Tablo&gt;s" birebir eslesmesi kabul edilir.
+    /// "ParentDocumentId" gibi onekli kolonlar TAHMIN EDILMEZ — uydurma iliski cizmek, eksik
+    /// cizmekten kotudur: haritaya bakan kisi yanlis sonuc cikarir ve bunu fark edemez.
+    /// Eslesmeyen kolon sayisi <see cref="DbRelationMapDto.UnmatchedIdColumns"/> ile bildirilir.
+    /// </summary>
+    public async Task<DbRelationMapDto> GetRelationMapAsync(CancellationToken cancellationToken)
+    {
+        var tables = await GetTablesAsync(cancellationToken);          // IsOwned suzgeci burada
+        var owned = new Dictionary<string, DbTableSummaryDto>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in tables) owned[t.Name] = t;
+
+        var edges = new List<DbMapEdgeDto>();
+        var constrained = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var fk in await _repository.GetAllForeignKeysAsync(cancellationToken))
+        {
+            // Repo "schema.tablo" doner; harita sade ad kullanir.
+            var from = StripSchema(fk.FromTable);
+            var to = StripSchema(fk.ToTable);
+            constrained.Add(from + "." + fk.FromColumn);
+            if (!owned.ContainsKey(from) || !owned.ContainsKey(to)) continue;
+            edges.Add(new DbMapEdgeDto(from, fk.FromColumn, to, fk.ToColumn, "fk", fk.ConstraintName));
+        }
+
+        var unmatched = 0;
+        foreach (var col in await _repository.GetIdColumnsAsync(cancellationToken))
+        {
+            if (!owned.ContainsKey(col.TableName)) continue;
+            if (constrained.Contains(col.TableName + "." + col.ColumnName)) continue;
+
+            var target = col.ColumnName[..^2];                          // "ItemId" -> "Item"
+            if (target.Length == 0) continue;
+
+            string? hit = null;
+            if (owned.TryGetValue(target, out var direct)) hit = direct.Name;
+            else if (owned.TryGetValue(target + "s", out var plural)) hit = plural.Name;
+
+            if (hit is null) { unmatched++; continue; }
+            edges.Add(new DbMapEdgeDto(col.TableName, col.ColumnName, hit, "Id", "inferred", null));
+        }
+
+        var nodes = tables
+            .Select(t => new DbMapTableDto(t.Name, t.RowCount, t.ColumnCount, t.Description))
+            .ToList();
+
+        return new DbRelationMapDto(nodes, edges, unmatched);
+    }
+
+    private static string StripSchema(string qualified)
+    {
+        var i = qualified.LastIndexOf('.');
+        return i >= 0 && i < qualified.Length - 1 ? qualified[(i + 1)..] : qualified;
     }
 
     public async Task<string> BuildMermaidErAsync(CancellationToken cancellationToken)

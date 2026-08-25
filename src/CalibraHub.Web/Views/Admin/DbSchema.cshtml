@@ -1,4 +1,4 @@
-@{
+﻿@{
     ViewData["Title"] = "Veritabani Haritasi";
     ViewData["HelpKey"] = "db-schema";
     ViewData["AdminMenu"] = "db-schema";
@@ -11,8 +11,41 @@
 
 @section Styles {
 <link rel="stylesheet" href="~/css/dbSchema.css" asp-append-version="true" />
+<style>
+    /* Ekran iki GORUNUM tasir: Liste (mevcut) ve Harita (iliski evreni).
+       Ayri bir ekran DEGIL — aynı veri, iki bakis. Gorunumler yan yana degil,
+       biri gizli tutulur; harita tuvali gizliyken 0 olculur, bu yuzden ilk
+       acilista mount edilir (asagidaki tembel mount). */
+    .sch-mode-shell { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+    .sch-mode-bar {
+        flex: 0 0 auto;
+        display: flex; align-items: center; gap: 6px;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--app-border, #e2e8f0);
+    }
+    .sch-mode-btn {
+        appearance: none; cursor: pointer;
+        border: 1px solid var(--app-border, #e2e8f0);
+        background: var(--app-surface, #fff);
+        color: var(--bs-body-color, #0f172a);
+        border-radius: 8px; padding: 6px 13px;
+        font-size: .82rem; font-weight: 600;
+    }
+    .sch-mode-btn.is-active { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+    .sch-mode-pane { flex: 1 1 auto; min-height: 0; display: none; }
+    .sch-mode-pane.is-active { display: flex; flex-direction: column; }
+    .sch-mode-pane > .sch-layout { flex: 1 1 auto; min-height: 0; }
+    #databaseMapRoot { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+</style>
 }
 
+<div class="sch-mode-shell">
+<div class="sch-mode-bar">
+    <button type="button" class="sch-mode-btn is-active" data-sch-mode="list">Liste</button>
+    <button type="button" class="sch-mode-btn" data-sch-mode="map">Harita</button>
+</div>
+
+<div class="sch-mode-pane is-active" data-sch-pane="list">
 <div class="sch-layout">
     <div class="sch-list-panel">
         <div class="sch-toolbar">
@@ -53,7 +86,68 @@
         </div>
     </div>
 </div>
+</div>
+
+<div class="sch-mode-pane" data-sch-pane="map">
+    <div id="databaseMapRoot"></div>
+</div>
+</div>
 
 @section Scripts {
 <script src="~/js/dbSchema.js?v=2" asp-append-version="true"></script>
+<script>
+(function () {
+    // Harita React bileseni ayni bundle'da; sayfa acilisini yavaslatmamak icin
+    // YALNIZ Harita gorunumune ilk gecildiginde yuklenir ve mount edilir.
+    var BUNDLE_URL = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL    = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
+    var mapEl = document.getElementById('databaseMapRoot');
+    var mounted = false;
+
+    function showError(msg) {
+        if (mapEl) mapEl.innerHTML = '<div style="padding:24px;color:#dc2626;font-size:13px;">' + msg + '</div>';
+    }
+    function loadCss() {
+        if (document.querySelector('link[data-dbm-css]')) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL; link.setAttribute('data-dbm-css', '1');
+        document.head.appendChild(link);
+    }
+    function loadScript(cb) {
+        var prev = document.querySelector('script[data-dbm-js]');
+        if (prev) { prev.addEventListener('load', cb); return; }
+        var sc = document.createElement('script');
+        sc.src = BUNDLE_URL; sc.setAttribute('data-dbm-js', '1');
+        sc.onload = function () { setTimeout(cb, 0); };
+        sc.onerror = function () { showError('React bundle yüklenemedi.'); };
+        document.head.appendChild(sc);
+    }
+    function doMount() {
+        if (mounted) return;
+        if (!window.CalibraHub || !window.CalibraHub.mountDatabaseMap) { showError('mountDatabaseMap bulunamadı.'); return; }
+        mounted = true;
+        // Veri ucu ekranin KENDISIYLE ayni yetki kapsaminda (admin/db-schema) —
+        // ayri kapsamda olsaydi ekrani acabilen kullanici bos harita gorurdu.
+        window.CalibraHub.mountDatabaseMap(mapEl, { apiBase: '/admin/db-schema/api' });
+    }
+    function mountMap() {
+        loadCss();
+        if (window.CalibraHub && window.CalibraHub.mountDatabaseMap) doMount();
+        else loadScript(doMount);
+    }
+
+    document.querySelectorAll('[data-sch-mode]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var mode = btn.getAttribute('data-sch-mode');
+            document.querySelectorAll('[data-sch-pane]').forEach(function (p) {
+                p.classList.toggle('is-active', p.getAttribute('data-sch-pane') === mode);
+            });
+            document.querySelectorAll('[data-sch-mode]').forEach(function (b) {
+                b.classList.toggle('is-active', b === btn);
+            });
+            if (mode === 'map') mountMap();
+        });
+    });
+})();
+</script>
 }

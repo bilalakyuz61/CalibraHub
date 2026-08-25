@@ -1,4 +1,4 @@
-using CalibraHub.Application.Contracts;
+﻿using CalibraHub.Application.Contracts;
 
 namespace CalibraHub.Application.Abstractions.Persistence;
 
@@ -14,6 +14,12 @@ public interface IDbSchemaRepository
 
     /// <summary>Tum FK'leri tek sorguda doner (Mermaid ER export icin).</summary>
     Task<IReadOnlyList<DbForeignKeyDto>> GetAllForeignKeysAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// FK kisiti OLMAYAN "*Id" kolonlarini doner — Veritabani Haritasi bunlardan ad benzerligi
+    /// ile iliski cikarir. Tek sorgu: tablo basina detay cekmek yuzlerce gidis-donus olurdu.
+    /// </summary>
+    Task<IReadOnlyList<DbColumnRefDto>> GetIdColumnsAsync(CancellationToken cancellationToken);
 
     /// <summary>Sistem DB'sindeki user-defined view adlarini doner (ViewReport task icin).</summary>
     Task<IReadOnlyList<string>> GetViewNamesAsync(CancellationToken cancellationToken);

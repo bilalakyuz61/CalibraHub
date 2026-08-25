@@ -51,6 +51,44 @@ public sealed class DbSchemaController : Controller
         return Json(detail, JsonOptions);
     }
 
+    /// <summary>
+    /// Veritabani Haritasi verisi. Ekranin KENDISIYLE ayni yetki kapsaminda (CompanySettings)
+    /// olmasi icin bu controller'da durur — ayri bir kapsamda dursaydi haritayi acabilen ama
+    /// verisini cekemeyen kullanicilar sessizce bos ekran gorurdu.
+    /// </summary>
+    [HttpGet("api/map")]
+    public async Task<IActionResult> GetMap(CancellationToken ct)
+    {
+        var map = await _service.GetRelationMapAsync(ct);
+        return Json(new
+        {
+            ok = true,
+            tables = map.Tables.Select(t => new
+            {
+                name = t.Name,
+                rowCount = t.RowCount,
+                columnCount = t.ColumnCount,
+                description = t.Description,
+            }),
+            edges = map.Edges.Select(e => new
+            {
+                from = e.FromTable,
+                fromColumn = e.FromColumn,
+                to = e.ToTable,
+                toColumn = e.ToColumn,
+                kind = e.Kind,
+                name = e.ConstraintName,
+            }),
+            summary = new
+            {
+                tableCount = map.Tables.Count,
+                fkCount = map.Edges.Count(e => e.Kind == "fk"),
+                inferredCount = map.Edges.Count(e => e.Kind == "inferred"),
+                unmatchedIdColumns = map.UnmatchedIdColumns,
+            },
+        }, JsonOptions);
+    }
+
     [HttpGet("api/views")]
     public async Task<IActionResult> GetViews(CancellationToken ct)
     {

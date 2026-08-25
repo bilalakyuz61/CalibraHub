@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Persistence.Database;
 using Microsoft.Data.SqlClient;
@@ -110,6 +110,27 @@ public sealed class SqlDbSchemaRepository : IDbSchemaRepository
                 DeleteAction: reader.GetString(5),
                 UpdateAction: reader.GetString(6)));
         }
+        return list;
+    }
+
+    public async Task<IReadOnlyList<DbColumnRefDto>> GetIdColumnsAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT t.name AS table_name, c.name AS column_name
+              FROM sys.columns c
+              INNER JOIN sys.tables t ON t.object_id = c.object_id
+             WHERE t.is_ms_shipped = 0
+               AND c.name LIKE '%Id'
+               AND c.name <> 'Id'
+             ORDER BY t.name, c.name;
+            """;
+
+        var list = new List<DbColumnRefDto>();
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            list.Add(new DbColumnRefDto(reader.GetString(0), reader.GetString(1)));
         return list;
     }
 
