@@ -17,7 +17,17 @@ public sealed record SystemErrorSearchRequest(
     int Page = 1,
     int PageSize = 50,
     string? UserName = null,
-    string? Category = null);
+    string? Category = null,
+    /// <summary>true ise sayfalama uygulanmaz — İşlem Logları listesiyle birleştirme için.</summary>
+    bool Unpaged = false,
+    /// <summary>
+    /// Verilirse yalnız bu şirkete ait VEYA şirketi OLMAYAN kayıtlar döner.
+    /// Şirketsiz kayıtları dışarıda bırakmak KABUL EDİLEMEZ: açılış, migration, arka plan
+    /// worker'ı ve kimliksiz istek hataları şirket bilgisi taşımaz (yalnız oturumlu bir HTTP
+    /// isteğinde doldurulabiliyor) — yani en kritik hatalar tam da bunlar. Süzgeç dışı
+    /// bırakılsalardı liste "hata yok" der, hata sessizce kaybolurdu.
+    /// </summary>
+    int? CompanyScope = null);
 
 /// <param name="Users">
 /// Aralıkta görülen kullanıcı adları (açılır listeyi doldurur). Kullanıcı/kaynak seçimi
@@ -25,11 +35,13 @@ public sealed record SystemErrorSearchRequest(
 /// düşer ve seçim geri alınamaz hale gelirdi.
 /// </param>
 /// <param name="Categories">Aralıkta görülen logger kategorileri — aynı gerekçe.</param>
+/// <param name="ExceptionTypes">Aralıkta görülen exception türleri — "Kayıt Türü" listesini besler.</param>
 public sealed record SystemErrorSearchResult(
     IReadOnlyList<SystemErrorEntry> Items,
     int Total,
     IReadOnlyList<string> Users,
-    IReadOnlyList<string> Categories);
+    IReadOnlyList<string> Categories,
+    IReadOnlyList<string> ExceptionTypes);
 
 /// <summary>
 /// Günlük JSONL hata log dosyalarından okuma/sorgulama servisi (sunucu geneli — per-company

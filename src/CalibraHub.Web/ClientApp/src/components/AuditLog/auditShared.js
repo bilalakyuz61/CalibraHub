@@ -8,6 +8,10 @@ export const ACTION_META = {
   loginfailed: { cls: 'loginfailed', dot: 'delete' },
   logout:      { cls: 'logout',      dot: 'event' },
   event:       { cls: 'event',       dot: 'event' },
+  // Hata logu satirlari (2026-08-25) — ayri ekran olmaktan cikip bu listede bir islem
+  // turu oldu. Silme ile ayni kirmizi aile: ikisi de "dikkat" isteyen kayitlar.
+  error:       { cls: 'delete',      dot: 'delete' },
+  critical:    { cls: 'delete',      dot: 'delete' },
 }
 
 /** UTC ISO → "10.07.2026 21:34" (yerel saat, tr-TR) */

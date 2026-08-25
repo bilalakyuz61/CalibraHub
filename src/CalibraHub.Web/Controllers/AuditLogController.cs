@@ -34,13 +34,16 @@ public sealed class AuditLogController : Controller
     private readonly IAuditQueryService _auditQuery;
     private readonly IWidgetService _widgetService;
     private readonly IPermissionService _permService;
+    private readonly CalibraHub.Application.Diagnostics.ISystemErrorLogQueryService _errorLogQuery;
 
     public AuditLogController(
-        IAuditQueryService auditQuery, IWidgetService widgetService, IPermissionService permService)
+        IAuditQueryService auditQuery, IWidgetService widgetService, IPermissionService permService,
+        CalibraHub.Application.Diagnostics.ISystemErrorLogQueryService errorLogQuery)
     {
         _auditQuery = auditQuery;
         _widgetService = widgetService;
         _permService = permService;
+        _errorLogQuery = errorLogQuery;
     }
 
     /// <summary>
@@ -78,31 +81,170 @@ public sealed class AuditLogController : Controller
         // route value provider query'den önce geldiği için parametre her istekte "Search"
         // değerini alır ve arama hep 0 döner. FromQuery bağlamayı query string'e kilitler.
         [FromQuery(Name = "action")] string? action,
-        string? entity, string? user, string? text,
+        string? entity, string? user, string? text, string? source,
         int page = 1, int pageSize = 50, CancellationToken ct = default)
     {
         var (fromUtc, toUtc) = NormalizeRange(from, to);
-        var result = await _auditQuery.SearchAsync(
-            new AuditSearchRequest(fromUtc, toUtc, action, entity, user, text, page, pageSize), ct);
+        var (userId, role, departmentId) = GetCurrentUser();
+
+        // Hata logu satirlari yalniz SystemAdmin'e (SetupDefinitions) gorunur. Bu TEK kontrol
+        // hem SATIRLARI hem FACET'leri kapsar - ikisi ayri yollardan gelseydi satirlar gizliyken
+        // acilir listede "SqlException" gorunup varligi sizardi.
+        var canViewErrors = await _permService.CheckAnyAsync(
+            userId, role, departmentId, FormCodes.SetupDefinitions, new[] { "VIEW", "VIEW_OWN" }, ct);
+
+        if (!canViewErrors)
+        {
+            // Yetkisiz kullanici icin davranis birebir eski hali - sayfalama servis icinde.
+            var plain = await _auditQuery.SearchAsync(
+                new AuditSearchRequest(fromUtc, toUtc, action, entity, user, text, page, pageSize), ct);
+
+            return Json(new
+            {
+                ok = true,
+                canViewErrors = false,
+                items = plain.Items.Select(ToDto),
+                total = plain.Total,
+                page,
+                pageSize,
+                facets = new
+                {
+                    entities = plain.Entities.Select(e => new { code = e, label = AuditFieldLabels.EntityLabel(e) }),
+                    users = plain.Users,
+                    actions = AuditActions.All.Select(a => new
+                    {
+                        code = a,
+                        label = AuditFieldLabels.ActionLabels.GetValueOrDefault(a, a),
+                    }),
+                    sources = Array.Empty<object>(),
+                },
+            });
+        }
+
+        // -- Birlesik yol -----------------------------------------------------
+        // Iki kaynak AYRI AYRI sayfalanamaz: her biri kendi ilk 50'sini dondurse birlesik liste
+        // zaman sirasina gore eksik olur (2. sayfada kayitlar atlanir). Bu yuzden ikisi de
+        // sayfalanmadan cekilir, zaman sirasina gore birlestirilir, sayfalama EN SON yapilir.
+        var auditResult = await _auditQuery.SearchAsync(
+            new AuditSearchRequest(fromUtc, toUtc, action, entity, user, text, Unpaged: true), ct);
+
+        var errorResult = await _errorLogQuery.SearchAsync(
+            new CalibraHub.Application.Diagnostics.SystemErrorSearchRequest(
+                fromUtc, toUtc,
+                Level: MapActionToLevel(action),
+                Text: string.IsNullOrWhiteSpace(text) ? null : text.Trim(),
+                UserName: string.IsNullOrWhiteSpace(user) ? null : user.Trim(),
+                Category: string.IsNullOrWhiteSpace(source) ? null : source.Trim(),
+                Unpaged: true,
+                CompanyScope: CurrentCompanyId()),
+            ct);
+
+        // "Islem" filtresi audit islemlerinden birine ayarliysa hata satiri gosterilmez;
+        // "Kayit turu" filtresi verilmisse hata satirinin exception turuyle eslesmeli.
+        var errorRowsVisible = string.IsNullOrWhiteSpace(action) || IsErrorAction(action);
+        var errorEntries = !errorRowsVisible
+            ? new List<CalibraHub.Application.Diagnostics.SystemErrorEntry>()
+            : errorResult.Items
+                .Where(e => string.IsNullOrWhiteSpace(entity)
+                         || string.Equals(e.ExceptionType, entity, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+        // Audit satiri "Kaynak" secimiyle daraltilamaz - o alan hata logunun kategorisidir;
+        // secim yapildiginda audit satirlari listeden cikar.
+        var auditEntries = string.IsNullOrWhiteSpace(source)
+            ? auditResult.Items
+            : (IReadOnlyList<AuditEntry>)Array.Empty<AuditEntry>();
+
+        var merged = auditEntries.Select(e => (Ts: e.Ts, Dto: ToDto(e)))
+            .Concat(errorEntries.Select(e => (Ts: e.TimestampUtc, Dto: ErrorToDto(e))))
+            .OrderByDescending(x => x.Ts)
+            .ToList();
+
+        var pageNo = Math.Max(1, page);
+        var size = Math.Clamp(pageSize, 1, 500);
+        var pageItems = merged.Skip((pageNo - 1) * size).Take(size).Select(x => x.Dto).ToList();
+
+        var entityFacets = auditResult.Entities
+            .Select(e => new { code = e, label = AuditFieldLabels.EntityLabel(e) })
+            .Concat(errorResult.ExceptionTypes.Select(t => new { code = t, label = ShortTypeName(t) }))
+            .ToList();
 
         return Json(new
         {
             ok = true,
-            items = result.Items.Select(ToDto),
-            total = result.Total,
-            page,
-            pageSize,
+            canViewErrors = true,
+            items = pageItems,
+            total = merged.Count,
+            page = pageNo,
+            pageSize = size,
             facets = new
             {
-                entities = result.Entities.Select(e => new { code = e, label = AuditFieldLabels.EntityLabel(e) }),
-                users = result.Users,
-                actions = AuditActions.All.Select(a => new
+                entities = entityFacets,
+                users = auditResult.Users.Concat(errorResult.Users)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(u => u, StringComparer.OrdinalIgnoreCase),
+                actions = AuditActions.All.Concat(AuditActions.ErrorOnly).Select(a => new
                 {
                     code = a,
                     label = AuditFieldLabels.ActionLabels.GetValueOrDefault(a, a),
                 }),
+                sources = errorResult.Categories.Select(c => new { code = c, label = ShortTypeName(c) }),
             },
         });
+    }
+
+    /// <summary>Islem filtresi hata satirlarina mi bakiyor.</summary>
+    private static bool IsErrorAction(string? action)
+        => AuditActions.ErrorOnly.Any(a => string.Equals(a, action, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Islem secimini hata logu seviyesine cevirir; digeri/bos ise tumu.</summary>
+    private static string? MapActionToLevel(string? action)
+        => IsErrorAction(action) ? action : null;
+
+    /// <summary>"CalibraHub.Web.Controllers.AdminController" -> "AdminController".</summary>
+    private static string ShortTypeName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var i = value.LastIndexOf('.');
+        return i >= 0 && i < value.Length - 1 ? value[(i + 1)..] : value;
+    }
+
+    private int? CurrentCompanyId()
+        => int.TryParse(User.FindFirstValue("company_id"), out var cid) && cid > 0 ? cid : null;
+
+    /// <summary>
+    /// Hata logu satirini Islem Loglari satir sozlesmesine cevirir. Alan eslemesi:
+    ///   islem      -> seviye (Hata / Kritik Hata)
+    ///   kayit turu -> exception turu (kullanici karari 2026-08-25)
+    ///   kaynak     -> logger kategorisi (mevcut "Kaynak" kolonu)
+    ///   degisiklik -> exception mesaji (hata satirinda alan degisimi yoktur)
+    /// stack / requestPath yalniz hata satirlarinda dolu; genisletilen satirda gosterilir.
+    /// </summary>
+    private static object ErrorToDto(CalibraHub.Application.Diagnostics.SystemErrorEntry e)
+    {
+        var action = string.Equals(e.Level, "Critical", StringComparison.OrdinalIgnoreCase)
+            ? AuditActions.Critical
+            : AuditActions.Error;
+        return new
+        {
+            ts = e.TimestampUtc,
+            user = string.IsNullOrWhiteSpace(e.UserName) ? "SISTEM" : e.UserName,
+            userId = (int?)null,
+            action,
+            actionLabel = AuditFieldLabels.ActionLabels.GetValueOrDefault(action, action),
+            entity = e.ExceptionType ?? string.Empty,
+            entityLabel = string.IsNullOrWhiteSpace(e.ExceptionType) ? "Hata" : ShortTypeName(e.ExceptionType),
+            entityId = (string?)null,
+            title = e.Message,
+            changes = (object?)null,
+            detail = string.IsNullOrWhiteSpace(e.ExceptionMessage) ? e.Message : e.ExceptionMessage,
+            ip = (string?)null,
+            src = ShortTypeName(e.Category),
+            // Hata satirina ozgu alanlar - audit satirlarinda hic bulunmaz.
+            stack = e.StackTrace,
+            requestPath = e.RequestPath,
+            sourceFull = e.Category,
+        };
     }
 
     [HttpGet("/AuditLog/Stats")]
@@ -111,7 +253,47 @@ public sealed class AuditLogController : Controller
     {
         var (fromUtc, toUtc) = NormalizeRange(from, to);
         var stats = await _auditQuery.GetStatsAsync(fromUtc, toUtc, ct);
-        return Json(new { ok = true, stats });
+
+        var (userId, role, departmentId) = GetCurrentUser();
+        var canViewErrors = await _permService.CheckAnyAsync(
+            userId, role, departmentId, FormCodes.SetupDefinitions, new[] { "VIEW", "VIEW_OWN" }, ct);
+
+        if (!canViewErrors)
+            return Json(new { ok = true, stats });
+
+        // Hata satirlari listeye karisiyorsa SAYAÇLARA da karismali. Aksi halde ust kart
+        // "Toplam 120" derken liste 145 kayit gosterir; kullanici hangisinin dogru oldugunu
+        // bilemez. Sayaclar da satirlarla AYNI yetki kontrolunden gecer.
+        var errors = await _errorLogQuery.SearchAsync(
+            new CalibraHub.Application.Diagnostics.SystemErrorSearchRequest(
+                fromUtc, toUtc, Unpaged: true, CompanyScope: CurrentCompanyId()),
+            ct);
+
+        var byDay = stats.ByDay.ToDictionary(d => d.Day, d => d.Count, StringComparer.Ordinal);
+        foreach (var e in errors.Items)
+        {
+            var day = e.TimestampUtc.ToLocalTime().ToString("yyyy-MM-dd");
+            byDay[day] = byDay.GetValueOrDefault(day) + 1;
+        }
+
+        return Json(new
+        {
+            ok = true,
+            stats = new
+            {
+                total = stats.Total + errors.Total,
+                inserts = stats.Inserts,
+                updates = stats.Updates,
+                deletes = stats.Deletes,
+                securityEvents = stats.SecurityEvents,
+                errors = errors.Total,
+                distinctUsers = stats.DistinctUsers,
+                byDay = byDay.OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                             .Select(kv => new { day = kv.Key, count = kv.Value }),
+                topEntities = stats.TopEntities,
+                topUsers = stats.TopUsers,
+            },
+        });
     }
 
     /// <summary>

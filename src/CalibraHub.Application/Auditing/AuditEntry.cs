@@ -1,4 +1,4 @@
-namespace CalibraHub.Application.Auditing;
+﻿namespace CalibraHub.Application.Auditing;
 
 /// <summary>
 /// İşlem log modülü (audit trail) — standart aksiyon kodları.
@@ -14,8 +14,19 @@ public static class AuditActions
     public const string Logout      = "Logout";
     public const string Event       = "Event";
 
+    // Hata logu satırları (2026-08-25): hata logu ayrı bir ekran/sekme olmaktan çıkıp
+    // İşlem Logları listesinde bir İŞLEM TÜRÜ oldu. Bu iki kod audit DOSYALARINA hiç
+    // yazılmaz — yalnız okuma anında hata logu dosyalarından türetilir (bkz.
+    // AuditLogController.Search). Seviye ayrımı (Error/Critical) böylece işlem
+    // filtresinde korunur.
+    public const string Error       = "Error";
+    public const string Critical    = "Critical";
+
     public static readonly IReadOnlyList<string> All =
         [Insert, Update, Delete, Login, LoginFailed, Logout, Event];
+
+    /// <summary>Yalnız hata logu satırlarında görülen işlem kodları (audit dosyalarında yok).</summary>
+    public static readonly IReadOnlyList<string> ErrorOnly = [Error, Critical];
 }
 
 /// <summary>Tek bir alan değişikliği — update loglarında yalnızca değişen alanlar tutulur.</summary>

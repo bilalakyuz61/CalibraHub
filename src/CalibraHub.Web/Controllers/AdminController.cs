@@ -33,7 +33,6 @@ public sealed class AdminController : Controller
     private readonly ICompanyParameterService _companyParameters;
     private readonly IFormRepository _formRepository;
     private readonly CollaborationRuntimeStore _collaborationStore;
-    private readonly CalibraHub.Application.Diagnostics.ISystemErrorLogQueryService _errorLogQuery;
     private readonly ILogger<AdminController> _logger;
     private static readonly JsonSerializerOptions ProjectRequestJsonOptions = new()
     {
@@ -58,7 +57,6 @@ public sealed class AdminController : Controller
         ICompanyParameterService companyParameters,
         IFormRepository formRepository,
         CollaborationRuntimeStore collaborationStore,
-        CalibraHub.Application.Diagnostics.ISystemErrorLogQueryService errorLogQuery,
         ILogger<AdminController> logger)
     {
         _adminReadService = adminReadService;
@@ -72,7 +70,6 @@ public sealed class AdminController : Controller
         _companyParameters = companyParameters;
         _formRepository = formRepository;
         _collaborationStore = collaborationStore;
-        _errorLogQuery = errorLogQuery;
         _logger = logger;
     }
 
@@ -257,92 +254,15 @@ public sealed class AdminController : Controller
     }
 
     /// <summary>
-    /// Yazılım/DB hata logları izleme ekranı (React ErrorLog, AuditMonitor deseni).
-    /// Veri /Admin/ErrorLogData'dan gelir. SystemAdmin-only (dev/sistem bucket — CLAUDE.md
-    /// "DepartmentManager Rolü" bölümü: SetupDefinitions admin'e açılmaz).
+    /// Eski hata logları adresi — içerik İşlem Logları (/AuditLog) listesine taşındı.
     /// </summary>
     [HttpGet]
     [PermissionScope(FormCodes.SetupDefinitions)]
     public IActionResult ErrorLog()
-        // 2026-08-24: iki ayrı log menüsü tek ekranda birleşti — hata logları artık
-        // /AuditLog sayfasının "Hata Logları" sekmesi. Bu action yalnızca eski
-        // bağlantılar/yer imleri kırılmasın diye duruyor (içerik taşındı, adres değişti).
-        => Redirect("/AuditLog?tab=errors");
-
-    /// <summary>
-    /// Hata log arama JSON endpoint'i. <paramref name="from"/>/<paramref name="to"/> yerel gün
-    /// (yyyy-MM-dd); boşsa son 7 gün. <paramref name="level"/>: all|error|critical.
-    /// </summary>
-    [HttpGet]
-    [PermissionScope(FormCodes.SetupDefinitions)]
-    public async Task<IActionResult> ErrorLogData(
-        DateTime? from, DateTime? to, string? level, string? q,
-        int page = 1, int pageSize = 50, string? user = null, string? category = null,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var (fromUtc, toUtc) = NormalizeErrorLogRange(from, to);
-            var normalizedLevel = string.IsNullOrWhiteSpace(level) || string.Equals(level, "all", StringComparison.OrdinalIgnoreCase)
-                ? null
-                : level.Trim();
-
-            var result = await _errorLogQuery.SearchAsync(
-                new CalibraHub.Application.Diagnostics.SystemErrorSearchRequest(
-                    fromUtc, toUtc, normalizedLevel, string.IsNullOrWhiteSpace(q) ? null : q.Trim(), page, pageSize,
-                    UserName: string.IsNullOrWhiteSpace(user) ? null : user.Trim(),
-                    Category: string.IsNullOrWhiteSpace(category) ? null : category.Trim()),
-                cancellationToken);
-
-            return Json(new
-            {
-                ok = true,
-                total = result.Total,
-                page,
-                pageSize,
-                // Açılır liste seçenekleri — aralıkta gerçekten görülen değerler.
-                users = result.Users,
-                categories = result.Categories,
-                entries = result.Items.Select(e => new
-                {
-                    id = e.Id,
-                    timestampUtc = e.TimestampUtc,
-                    level = e.Level,
-                    category = e.Category,
-                    source = e.Source,
-                    message = e.Message,
-                    exceptionType = e.ExceptionType,
-                    exceptionMessage = e.ExceptionMessage,
-                    stackTrace = e.StackTrace,
-                    requestPath = e.RequestPath,
-                    userName = e.UserName,
-                    companyId = e.CompanyId,
-                }),
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[ErrorLogData] Hata log sorgusu başarısız. from={From} to={To} level={Level} user={User} category={Category}",
-                from, to, level, user, category);
-            return Json(new { ok = false, message = "İşlem sırasında bir hata oluştu." });
-        }
-    }
-
-    /// <summary>
-    /// Yerel gün girdilerini (tarih) UTC aralığına çevirir; boşsa son 7 gün. Dönen aralık:
-    /// FromUtc dahil, ToUtc HARİÇ (AuditLogController.NormalizeRange ile aynı desen).
-    /// </summary>
-    private static (DateTime FromUtc, DateTime ToUtc) NormalizeErrorLogRange(DateTime? from, DateTime? to)
-    {
-        var localTo = (to ?? DateTime.Now.Date).Date;
-        var localFrom = (from ?? localTo.AddDays(-6)).Date;
-        if (localFrom > localTo) (localFrom, localTo) = (localTo, localFrom);
-        if ((localTo - localFrom).TotalDays > 400) localFrom = localTo.AddDays(-400);
-
-        var fromUtc = DateTime.SpecifyKind(localFrom, DateTimeKind.Local).ToUniversalTime();
-        var toUtc = DateTime.SpecifyKind(localTo.AddDays(1), DateTimeKind.Local).ToUniversalTime();
-        return (fromUtc, toUtc);
-    }
+        // 2026-08-25: hata logları ayrı ekran/sekme olmaktan çıkıp İşlem Logları
+        // listesinde bir işlem türü ("Hata" / "Kritik Hata") oldu. Bu action yalnızca
+        // eski bağlantılar/yer imleri kırılmasın diye duruyor.
+        => Redirect("/AuditLog");
 
     [HttpGet]
     [PermissionScope(FormCodes.SetupDefinitions)]

@@ -26,6 +26,7 @@ public sealed class SystemErrorLogQueryService : ISystemErrorLogQueryService
         // yapıldığında listenin tek seçeneğe düşüp seçimin geri alınamaz hale gelmemesi için.
         var users = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var categories = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var exceptionTypes = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var (_, path) in SystemErrorLogFileNaming.EnumerateDayFilesDescending(
                      _options.RootPath, request.FromUtc, request.ToUtc))
@@ -43,6 +44,7 @@ public sealed class SystemErrorLogQueryService : ISystemErrorLogQueryService
 
                 if (!string.IsNullOrWhiteSpace(entry.UserName)) users.Add(entry.UserName!);
                 if (!string.IsNullOrWhiteSpace(entry.Category)) categories.Add(entry.Category!);
+                if (!string.IsNullOrWhiteSpace(entry.ExceptionType)) exceptionTypes.Add(entry.ExceptionType!);
 
                 if (!SelectionFilter(entry, request)) continue;
 
@@ -54,11 +56,20 @@ public sealed class SystemErrorLogQueryService : ISystemErrorLogQueryService
             matches.AddRange(dayMatches);
         }
 
-        var page = Math.Max(1, request.Page);
-        var size = Math.Clamp(request.PageSize, 1, 500);
-        var items = matches.Skip((page - 1) * size).Take(size).ToList();
+        List<SystemErrorEntry> items;
+        if (request.Unpaged)
+        {
+            items = matches;
+        }
+        else
+        {
+            var page = Math.Max(1, request.Page);
+            var size = Math.Clamp(request.PageSize, 1, 500);
+            items = matches.Skip((page - 1) * size).Take(size).ToList();
+        }
 
-        return new SystemErrorSearchResult(items, matches.Count, users.ToList(), categories.ToList());
+        return new SystemErrorSearchResult(
+            items, matches.Count, users.ToList(), categories.ToList(), exceptionTypes.ToList());
     }
 
     // ── Yardımcılar ─────────────────────────────────────────────────────────
@@ -94,6 +105,8 @@ public sealed class SystemErrorLogQueryService : ISystemErrorLogQueryService
             if (!hit) return false;
         }
         if (entry.TimestampUtc < req.FromUtc || entry.TimestampUtc >= req.ToUtc) return false;
+        // Şirket kapsamı: bu şirket VEYA şirketsiz (açılış/worker/kimliksiz istek hataları).
+        if (req.CompanyScope is int scope && entry.CompanyId is int owner && owner != scope) return false;
         return true;
     }
 

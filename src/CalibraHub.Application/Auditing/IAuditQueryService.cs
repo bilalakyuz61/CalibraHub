@@ -1,4 +1,4 @@
-namespace CalibraHub.Application.Auditing;
+﻿namespace CalibraHub.Application.Auditing;
 
 /// <summary>
 /// Merkezi log ekranı arama isteği. <paramref name="FromUtc"/> dahil,
@@ -13,7 +13,14 @@ public sealed record AuditSearchRequest(
     string? User = null,
     string? Text = null,
     int Page = 1,
-    int PageSize = 50);
+    int PageSize = 50,
+    /// <summary>
+    /// true ise sayfalama UYGULANMAZ, eşleşen tüm kayıtlar döner. Hata logu satırlarıyla
+    /// birleştirme için gerekli: iki kaynak ayrı ayrı sayfalanıp sonra birleştirilirse
+    /// sıralama ve sayfa sınırları bozulur (2. sayfada bazı kayıtlar hiç görünmez).
+    /// Bellek profili değişmez — servis zaten tüm eşleşmeleri listeye topluyor.
+    /// </summary>
+    bool Unpaged = false);
 
 /// <summary>Arama sonucu + filtre facet'leri (taranan aralıktaki değerler).</summary>
 public sealed record AuditSearchResult(

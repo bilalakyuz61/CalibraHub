@@ -1,4 +1,4 @@
-namespace CalibraHub.Application.Auditing;
+﻿namespace CalibraHub.Application.Auditing;
 
 /// <summary>
 /// Alan/aksiyon/entity kodlarının kullanıcıya gösterilecek Türkçe etiketleri.
@@ -79,6 +79,8 @@ public static class AuditFieldLabels
             [AuditActions.LoginFailed] = "Başarısız Giriş",
             [AuditActions.Logout]      = "Çıkış",
             [AuditActions.Event]       = "Olay",
+            [AuditActions.Error]       = "Hata",
+            [AuditActions.Critical]    = "Kritik Hata",
         };
 
     /// <summary>

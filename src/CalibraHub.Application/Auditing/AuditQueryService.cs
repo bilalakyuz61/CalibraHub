@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 
 namespace CalibraHub.Application.Auditing;
 
@@ -49,9 +49,13 @@ public sealed class AuditQueryService : IAuditQueryService
                 if (entry is null) continue;
                 if (!FullFilter(entry, request)) continue;
 
-                dayMatches.Add(entry);
+                // Secenekler SECIM UYGULANMADAN toplanir (bkz. SelectionFilter).
                 if (entry.Entity is not null) entities.Add(entry.Entity);
                 if (entry.User is not null) users.Add(entry.User);
+
+                if (!SelectionFilter(entry, request)) continue;
+
+                dayMatches.Add(entry);
             }
 
             // Dosya içi sıra kronolojik (eski→yeni); global sıralama yeniden-eskiye
@@ -59,9 +63,17 @@ public sealed class AuditQueryService : IAuditQueryService
             matches.AddRange(dayMatches);
         }
 
-        var page = Math.Max(1, request.Page);
-        var size = Math.Clamp(request.PageSize, 1, 500);
-        var items = matches.Skip((page - 1) * size).Take(size).ToList();
+        List<AuditEntry> items;
+        if (request.Unpaged)
+        {
+            items = matches;
+        }
+        else
+        {
+            var page = Math.Max(1, request.Page);
+            var size = Math.Clamp(request.PageSize, 1, 500);
+            items = matches.Skip((page - 1) * size).Take(size).ToList();
+        }
 
         return new AuditSearchResult(
             items,
@@ -166,21 +178,32 @@ public sealed class AuditQueryService : IAuditQueryService
     // ── Yardımcılar ─────────────────────────────────────────────────────────
 
     /// <summary>JSON parse öncesi ucuz satır ön-filtresi.</summary>
+    /// <summary>
+    /// JSON parse oncesi ucuz satir on-filtresi. Yalniz SERBEST METIN'e bakar: islem/kayit
+    /// turu/kullanici SECIMLERI burada elenemez, cunku acilir liste secenekleri (facet)
+    /// secim uygulanmadan ONCE toplanir. Elenirse liste secim yapilinca tek satira duser
+    /// ve baska bir degere gecilemez.
+    /// </summary>
     private static bool QuickFilter(string line, AuditSearchRequest req)
     {
-        if (!string.IsNullOrEmpty(req.Action) &&
-            !line.Contains("\"action\":\"" + req.Action + "\"", StringComparison.Ordinal))
-            return false;
-        if (!string.IsNullOrEmpty(req.Entity) &&
-            !line.Contains("\"entity\":\"" + req.Entity + "\"", StringComparison.Ordinal))
-            return false;
         if (!string.IsNullOrEmpty(req.Text) &&
             !line.Contains(req.Text, StringComparison.OrdinalIgnoreCase))
             return false;
         return true;
     }
 
+    /// <summary>Facet'leri de kapsayan taban suzgec: tarih araligi (+ serbest metin).</summary>
     private static bool FullFilter(AuditEntry entry, AuditSearchRequest req)
+    {
+        if (entry.Ts < req.FromUtc || entry.Ts >= req.ToUtc) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Acilir listelerden yapilan secimler. FullFilter'dan AYRI: secenek listesi bu
+    /// suzgecten gecmeyen kayitlardan da beslenir, boylece secim geri alinabilir kalir.
+    /// </summary>
+    private static bool SelectionFilter(AuditEntry entry, AuditSearchRequest req)
     {
         if (!string.IsNullOrEmpty(req.Action) &&
             !string.Equals(entry.Action, req.Action, StringComparison.OrdinalIgnoreCase))
@@ -191,7 +214,6 @@ public sealed class AuditQueryService : IAuditQueryService
         if (!string.IsNullOrEmpty(req.User) &&
             !(entry.User?.Contains(req.User, StringComparison.OrdinalIgnoreCase) ?? false))
             return false;
-        if (entry.Ts < req.FromUtc || entry.Ts >= req.ToUtc) return false;
         return true;
     }
 

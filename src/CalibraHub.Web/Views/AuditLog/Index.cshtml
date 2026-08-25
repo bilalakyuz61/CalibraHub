@@ -1,18 +1,18 @@
 @*
-    Loglar — TEK ekran, iki sekme (2026-08-24).
+    Loglar — TEK ekran, TEK liste (2026-08-25).
 
-    Önce "İşlem Logları" (/AuditLog) ve "Hata Logları" (/Admin/ErrorLog) iki ayrı menü
-    maddesiydi; ikisi de App_Data altında dosya-JSONL okuyan, aynı kabuğu kullanan
-    izleme ekranlarıydı. Kullanıcı isteğiyle tek ekranda birleştirildi:
-      · İşlem Logları  → iş kaydı geçmişi (kim neyi değiştirdi) — AUDIT_LOG yetkisi
-      · Hata Logları   → yazılım/DB istisnaları — SetupDefinitions (SystemAdmin) yetkisi
+    Geçmiş: önce "İşlem Logları" (/AuditLog) ve "Hata Logları" (/Admin/ErrorLog) iki ayrı
+    menü maddesiydi. 2026-08-24'te tek sayfada iki sekme oldu. 2026-08-25'te kullanıcı
+    kararıyla sekme de kalktı: hata kayıtları artık aynı listede bir İŞLEM TÜRÜ
+    ("Hata" / "Kritik Hata"), kayıt türü kolonunda exception türüyle görünür.
 
-    Yetki DEĞİŞMEDİ: hata sekmesi yalnızca ViewData["CanViewErrorLog"] true iken basılır,
-    o da controller'da eski ekranın kapısıyla (SetupDefinitions) çözülür. Yetkisi olmayan
-    kullanıcı bugünküyle birebir aynı ekranı görür — sekme şeridi hiç çizilmez.
+    Yetki DEĞİŞMEDİ: hata satırları yalnız SetupDefinitions (SystemAdmin) yetkisi olan
+    kullanıcıya döner ve bu kontrol tek noktada — AuditLogController.Search içinde —
+    hem satırlara hem açılır liste seçeneklerine uygulanır. Yetkisi olmayan kullanıcı
+    yalnızca iş kaydı loglarını görür; hata satırının varlığını dahi sezemez.
 
     Kayda-kilitli mod (?entity=&recordId= ile açılan "Değişiklik Geçmişi" bağlantısı)
-    CanViewErrorLog taşımaz → orada da sekme yoktur, tek kaydın çizelgesi gelir.
+    /AuditLog/Record üzerinden çalışır — hata satırı içermez, değişmedi.
 *@
 @{
     ViewData["Title"] = "Loglar";
@@ -21,14 +21,13 @@
     ViewData["BodyClass"] = "page-audit-log";
 
     var canViewErrorLog = ViewData["CanViewErrorLog"] is bool cve && cve;
-    var startTab = (Context.Request.Query["tab"].ToString() == "errors" && canViewErrorLog) ? "errors" : "audit";
 
     ViewData["DbInfo"] =
         "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
         + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;'>App_Data/AuditLogs</td><td style='padding:6px 8px;'>Günlük JSONL log dosyaları (DB'de tutulmaz) — company-{id}/yyyy-MM/audit-yyyy-MM-dd.jsonl</td></tr>"
         + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;'>WidgetTraLog</td><td style='padding:6px 8px;'>Ek Alanlar (EAV) değişiklik geçmişi — kayıt çizelgesine merge edilir</td></tr>"
         + (canViewErrorLog
-            ? "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;'>App_Data/ErrorLogs</td><td style='padding:6px 8px;'>Dosya tabanlı hata logu — /Admin/ErrorLogData üzerinden okunur, DB'de tutulmaz.</td></tr>"
+            ? "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;'>App_Data/ErrorLogs</td><td style='padding:6px 8px;'>Dosya tabanlı hata logu (sunucu geneli, DB'de tutulmaz) — aynı listeye \"Hata\" işlem türü olarak karışır.</td></tr>"
             : "")
         + "</table>";
 }
@@ -39,65 +38,11 @@
         height: 100dvh; display: flex; flex-direction: column; overflow: hidden; padding: 0;
     }
     .lg-shell { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; height: 100%; }
-
-    /* Sekme şeridi — sabit yükseklikli, panolar kalan alanı paylaşır. */
-    .lg-tabs {
-        flex: 0 0 auto;
-        display: flex; align-items: center; gap: 6px;
-        padding: 8px 14px 0;
-        border-bottom: 1px solid var(--app-border, #e2e8f0);
-        background: var(--app-surface, #fff);
-    }
-    .lg-tab {
-        appearance: none; border: 1px solid transparent; border-bottom: none;
-        background: transparent; cursor: pointer;
-        padding: 7px 14px; border-radius: 8px 8px 0 0;
-        font-size: .82rem; font-weight: 600;
-        color: var(--app-text-muted, #64748b);
-        display: inline-flex; align-items: center; gap: 7px;
-        transition: background-color .12s ease, color .12s ease;
-    }
-    .lg-tab:hover { background: var(--app-surface-muted, #f1f5f9); color: var(--bs-body-color, #0f172a); }
-    .lg-tab.is-active {
-        background: var(--app-surface, #fff);
-        border-color: var(--app-border, #e2e8f0);
-        color: #4f46e5;
-        margin-bottom: -1px;
-    }
-    .lg-tab-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .55; }
-
-    /* Panolar: gizli olan display:none — React kökü DOM'da kalır, yeniden mount edilmez. */
-    .lg-pane { flex: 1 1 auto; min-height: 0; display: none; flex-direction: column; height: 100%; }
-    .lg-pane.is-active { display: flex; }
-
-    body.app-theme-dark .lg-tabs { background: var(--app-surface, #0f172a); }
-    body.app-theme-dark .lg-tab.is-active { background: var(--app-surface, #0f172a); color: #a5b4fc; }
 </style>
 }
 
 <div class="lg-shell">
-@if (canViewErrorLog)
-{
-    <div class="lg-tabs" role="tablist">
-        <button type="button" class="lg-tab @(startTab == "audit" ? "is-active" : "")"
-                data-lg-tab="audit" role="tab" onclick="window.lgSwitchTab('audit')">
-            <span class="lg-tab-dot"></span>İşlem Logları
-        </button>
-        <button type="button" class="lg-tab @(startTab == "errors" ? "is-active" : "")"
-                data-lg-tab="errors" role="tab" onclick="window.lgSwitchTab('errors')">
-            <span class="lg-tab-dot"></span>Hata Logları
-        </button>
-    </div>
-}
-    <div class="lg-pane @(startTab == "audit" ? "is-active" : "")" data-lg-pane="audit">
-        <div id="auditMonitorRoot" style="flex:1 1 auto;min-height:0;display:flex;flex-direction:column;height:100%;"></div>
-    </div>
-@if (canViewErrorLog)
-{
-    <div class="lg-pane @(startTab == "errors" ? "is-active" : "")" data-lg-pane="errors">
-        <div id="errorLogRoot" style="flex:1 1 auto;min-height:0;display:flex;flex-direction:column;height:100%;"></div>
-    </div>
-}
+    <div id="auditMonitorRoot" style="flex:1 1 auto;min-height:0;display:flex;flex-direction:column;height:100%;"></div>
 </div>
 
 @section Scripts {
@@ -105,12 +50,9 @@
 (function () {
     var BUNDLE_URL = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
     var CSS_URL    = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
-    var HAS_ERRORS = @(canViewErrorLog ? "true" : "false");
-    var START_TAB  = '@startTab';
 
     var auditEl = document.getElementById('auditMonitorRoot');
-    var errorEl = document.getElementById('errorLogRoot');
-    var auditMounted = false, errorMounted = false;
+    var mounted = false;
 
     function showError(el, msg) {
         if (el) el.innerHTML = '<div style="padding:24px;color:#dc2626;font-size:13px;">' + msg + '</div>';
@@ -131,43 +73,16 @@
         document.head.appendChild(s);
     }
 
-    function mountAudit() {
-        if (auditMounted || !auditEl) return;
+    function mount() {
+        if (mounted || !auditEl) return;
         if (!window.CalibraHub || !window.CalibraHub.mountAuditMonitor) { showError(auditEl, 'mountAuditMonitor bulunamadı.'); return; }
-        auditMounted = true;
+        mounted = true;
         window.CalibraHub.mountAuditMonitor(auditEl, { apiBase: '/AuditLog' });
-    }
-    function mountErrors() {
-        if (errorMounted || !errorEl) return;
-        if (!window.CalibraHub || !window.CalibraHub.mountErrorLog) { showError(errorEl, 'mountErrorLog bulunamadı.'); return; }
-        errorMounted = true;
-        window.CalibraHub.mountErrorLog(errorEl);
-    }
-
-    // Inline onclick YALNIZCA window.* görebilir — bu IIFE'nin içindeki isimleri değil
-    // (Razor script bloğu kapanış tuzağı, CLAUDE.md/oturum dersi). Bu yüzden window'a yazılır.
-    window.lgSwitchTab = function (key) {
-        var panes = document.querySelectorAll('[data-lg-pane]');
-        for (var i = 0; i < panes.length; i++) {
-            panes[i].classList.toggle('is-active', panes[i].getAttribute('data-lg-pane') === key);
-        }
-        var tabs = document.querySelectorAll('[data-lg-tab]');
-        for (var j = 0; j < tabs.length; j++) {
-            tabs[j].classList.toggle('is-active', tabs[j].getAttribute('data-lg-tab') === key);
-        }
-        // Tembel mount: sekme ilk kez açıldığında bileşen kurulur (gizli panoda ölçüler
-        // 0 çıkar, sanal liste yanlış hesaplar — bu yüzden görünür olunca mount edilir).
-        if (key === 'errors') mountErrors(); else mountAudit();
-    };
-
-    function boot() {
-        if (START_TAB === 'errors' && HAS_ERRORS) mountErrors();
-        else mountAudit();
     }
 
     loadCss();
-    if (window.CalibraHub && window.CalibraHub.mountAuditMonitor) boot();
-    else loadScript(boot);
+    if (window.CalibraHub && window.CalibraHub.mountAuditMonitor) mount();
+    else loadScript(mount);
 })();
 </script>
 }

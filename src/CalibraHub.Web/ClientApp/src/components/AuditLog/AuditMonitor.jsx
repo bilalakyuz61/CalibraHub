@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ScrollText, Search, RefreshCw, Download, X, ChevronDown, ChevronRight,
   ChevronLeft, PlusCircle, PencilLine, Trash2, LogIn, LogOut, ShieldAlert,
-  Users, Activity, Sparkles,
+  Users, Activity, Sparkles, ServerCrash,
 } from 'lucide-react'
 import './auditLog.css'
 import { ACTION_META, formatTs, changePreview } from './auditShared'
@@ -31,6 +31,20 @@ function presetRange(id) {
   const preset = RANGE_PRESETS.find(r => r.id === id)
   const from = new Date(today); from.setDate(from.getDate() - (preset && preset.days ? preset.days : 6))
   return { from: toDateInput(from), to: toDateInput(today) }
+}
+
+/**
+ * Seçili değeri seçenek listesinde GARANTİLER. Aralık değiştiğinde seçilen kayıt türü /
+ * kullanıcı yeni aralıkta hiç geçmeyebilir; seçenek listeden düşerse kutu "Tümü" gösterir
+ * ama filtre uygulanmaya devam eder — kullanıcı boş listeye bakıp nedenini anlayamaz.
+ * @param {Array} options seçenek dizisi
+ * @param {string} selected seçili kod
+ * @param {(o:any)=>string} codeOf seçenekten kodu okuyan işlev
+ * @param {(code:string)=>any} make eksikse seçenek üreten işlev
+ */
+function withSelected(options, selected, codeOf, make) {
+  if (!selected) return options
+  return options.some(o => codeOf(o) === selected) ? options : [make(selected)].concat(options)
 }
 
 /**
@@ -64,11 +78,14 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
   const [action, setAction] = useState('')
   const [entity, setEntity] = useState('')
   const [user, setUser] = useState('')
+  // Kaynak = hata logunun logger kategorisi. Yalniz hata satirlarini daraltir;
+  // secildiginde audit satirlari listeden cikar (audit kaydinin kategorisi yoktur).
+  const [source, setSource] = useState('')
   const [text, setText] = useState('')
   const [debouncedText, setDebouncedText] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
-  const [data, setData] = useState({ items: [], total: 0, facets: null })
+  const [data, setData] = useState({ items: [], total: 0, facets: null, canViewErrors: false })
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(false)
   const [expanded, setExpanded] = useState(null)
@@ -104,10 +121,11 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
     if (action) p.set('action', action)
     if (entity) p.set('entity', entity)
     if (user) p.set('user', user)
+    if (source) p.set('source', source)
     if (debouncedText) p.set('text', debouncedText)
     if (extra) Object.keys(extra).forEach(k => p.set(k, extra[k]))
     return p.toString()
-  }, [range, action, entity, user, debouncedText])
+  }, [range, action, entity, user, source, debouncedText])
 
   const load = useCallback((silent) => {
     if (locked) return
@@ -121,7 +139,10 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
     ])
       .then(([s, st]) => {
         if (seq !== fetchSeq.current) return
-        if (s && s.ok) setData({ items: s.items || [], total: s.total || 0, facets: s.facets || null })
+        if (s && s.ok) setData({
+          items: s.items || [], total: s.total || 0, facets: s.facets || null,
+          canViewErrors: !!s.canViewErrors,
+        })
         if (st && st.ok) setStats(st.stats || null)
       })
       .catch(() => { /* ağ hatası — mevcut veri korunur */ })
@@ -143,15 +164,15 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
   }
 
   const clearFilters = () => {
-    setAction(''); setEntity(''); setUser(''); setText(''); setPage(1)
+    setAction(''); setEntity(''); setUser(''); setSource(''); setText(''); setPage(1)
   }
-  const hasFilter = action || entity || user || debouncedText
+  const hasFilter = action || entity || user || source || debouncedText
 
   // Stat kartı tıklaması → listeyi o boyuta filtrele (tekrar tıklama = temizle).
   // Kart sayıları tüm aralığı saydığı için diğer filtreler de sıfırlanır — sayı ile liste örtüşür.
   // (Yalnızca tam izleme modunda render edilir — bkz. al-stats bloğu.)
   const applyStatFilter = (kind) => {
-    setPage(1); setText(''); setUser('')
+    setPage(1); setText(''); setUser(''); setSource('')
     if (kind === 'all') { setAction(''); setEntity(''); return }
     if (kind === 'security') {
       const isOn = entity === 'Session' && !action
@@ -161,11 +182,12 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
     setEntity(''); setAction(isOn ? '' : kind)
   }
   const statActive = {
-    all: !action && !entity && !user && !debouncedText,
+    all: !action && !entity && !user && !source && !debouncedText,
     insert: action === 'Insert' && !entity,
     update: action === 'Update' && !entity,
     delete: action === 'Delete' && !entity,
     security: entity === 'Session' && !action,
+    error: action === 'Error' && !entity,
   }
 
   // ── Kayıt-kilitli mod: istemci tarafı arama/işlem/kullanıcı filtresi + facet'ler ──
@@ -223,6 +245,7 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
   const facetUsers = locked
     ? (lockedFacets ? lockedFacets.users : [])
     : ((data.facets && data.facets.users) || [])
+  const facetSources = (data.facets && data.facets.sources) || []
 
   const totalPages = Math.max(1, Math.ceil(viewTotal / pageSize))
 
@@ -309,6 +332,7 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
       case 'login': return <LogIn size={12} />
       case 'loginfailed': return <ShieldAlert size={12} />
       case 'logout': return <LogOut size={12} />
+      case 'error': case 'critical': return <ServerCrash size={12} />
       default: return <Sparkles size={12} />
     }
   }
@@ -386,6 +410,15 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
           <div className="al-stat-ic"><ShieldAlert size={16} /></div>
           <div><div className="al-stat-num">{stats ? stats.securityEvents.toLocaleString('tr-TR') : '—'}</div><div className="al-stat-lbl">Güvenlik Olayı</div></div>
         </div>
+        {/* Hata karti — yalniz hata satirlarini gorebilen kullaniciya. stats.errors alani
+            yetkisiz yanitta HIC bulunmaz, dolayisiyla kart da cizilmez. */}
+        {stats && typeof stats.errors === 'number' && (
+          <div className={'al-stat al-stat--rose al-stat--click' + (statActive.error ? ' is-active' : '')}
+            onClick={() => applyStatFilter('Error')} title="Yalnızca hata kayıtları">
+            <div className="al-stat-ic"><ServerCrash size={16} /></div>
+            <div><div className="al-stat-num">{stats.errors.toLocaleString('tr-TR')}</div><div className="al-stat-lbl">Hata</div></div>
+          </div>
+        )}
         <div className="al-stat al-stat--blue">
           <div className="al-stat-ic"><Users size={16} /></div>
           <div><div className="al-stat-num">{stats ? stats.distinctUsers.toLocaleString('tr-TR') : '—'}</div><div className="al-stat-lbl">Kullanıcı</div></div>
@@ -430,13 +463,26 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
         {!locked && (
           <select value={entity} onChange={e => { setEntity(e.target.value); setPage(1) }}>
             <option value="">Tüm Kayıt Türleri</option>
-            {facetEntities.map(e2 => <option key={e2.code} value={e2.code}>{e2.label}</option>)}
+            {withSelected(facetEntities, entity, o => o.code, c => ({ code: c, label: c }))
+              .map(e2 => <option key={e2.code} value={e2.code} title={e2.code}>{e2.label}</option>)}
           </select>
         )}
         <select value={user} onChange={e => { setUser(e.target.value); setPage(1) }}>
           <option value="">Tüm Kullanıcılar</option>
-          {facetUsers.map(u => <option key={u} value={u}>{u}</option>)}
+          {withSelected(facetUsers, user, u => u, c => c).map(u => <option key={u} value={u}>{u}</option>)}
         </select>
+        {/* Yalniz hata satirlarini gorebilen kullaniciya gosterilir — liste bos olsa da
+            secim yapilabilsin diye secili deger her zaman listede tutulur. */}
+        {!locked && data.canViewErrors && (facetSources.length > 0 || source) && (
+          <select value={source} onChange={e => { setSource(e.target.value); setPage(1) }}
+            title="Hatanın kaynaklandığı modül">
+            <option value="">Tüm Kaynaklar</option>
+            {(facetSources.some(s2 => s2.code === source) || !source
+              ? facetSources
+              : [{ code: source, label: source }].concat(facetSources)
+            ).map(s2 => <option key={s2.code} value={s2.code} title={s2.code}>{s2.label}</option>)}
+          </select>
+        )}
         {hasFilter ? (
           <button type="button" className="al-clear-btn" onClick={clearFilters}>
             <X size={12} /> Filtreleri temizle
@@ -539,8 +585,15 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
                                 {e.detail || 'Bu işlem için alan değişikliği kaydı yok.'}
                               </div>
                             )}
+                            {/* Hata satirina ozgu: cagri yigini. Audit satirlarinda bu alan
+                                hic bulunmaz, dolayisiyla kosul tek basina yeterli. */}
+                            {e.stack ? (
+                              <pre className="al-stack">{e.stack}</pre>
+                            ) : null}
                             <div className="al-expand-meta">
                               {e.entityId ? <span>Kayıt No: <b>#{e.entityId}</b></span> : null}
+                              {e.requestPath ? <span>İstek Yolu: <b>{e.requestPath}</b></span> : null}
+                              {e.sourceFull ? <span>Kaynak: {e.sourceFull}</span> : null}
                               {e.detail && hasChanges ? <span>{e.detail}</span> : null}
                               {e.ip ? <span>IP: {e.ip}</span> : null}
                               {e.src ? <span>Kaynak: {e.src}</span> : null}
