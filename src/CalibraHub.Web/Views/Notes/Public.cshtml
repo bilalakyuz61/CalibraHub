@@ -1,4 +1,4 @@
-@model CalibraHub.Domain.Entities.Note
+﻿@model CalibraHub.Domain.Entities.Note
 @{
     Layout = null;
     var title = Model.Title ?? "Not";
@@ -329,7 +329,11 @@
 
             <div class="pub-body">
                 <div class="pub-content">
-                    @Html.Raw(Model.Content)
+                    @* GUVENLIK (2026-08-24, Y1): bu sayfa [AllowAnonymous]. Not icerigi kullanici
+                       yazimi Tiptap HTML'idir ve kaydedilirken temizlenmiyor. Ham basilirsa
+                       herkese acik link uzerinden ANONIM ziyaretcinin tarayicisinda script
+                       calisir. Allowlist tabanli sanitizer (AngleSharp) ile temizlenir. *@
+                    @Html.Raw(CalibraHub.Application.Services.Security.NoteHtmlSanitizer.Sanitize(Model.Content))
                 </div>
             </div>
 
