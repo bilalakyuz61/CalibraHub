@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
@@ -167,7 +167,9 @@ public sealed class GuidesController : ControllerBase
         catch (Microsoft.Data.SqlClient.SqlException sqlEx)
         {
             _logger.LogWarning(sqlEx, "GuideDistinct SQL hatasi (guide={GuideCode}, col={Column}, number={SqlNumber})", guideCode, column, sqlEx.Number);
-            return StatusCode(500, new { success = false, message = sqlEx.Message });
+            // GUVENLIK: ham SQL hata metni istemciye DONMEZ — hata-tabanli SQL injection'a
+            // yardim eder ve sema/veri sizdirir. Detay yukarida loglandi. (2026-08-24)
+            return StatusCode(500, new { success = false, message = "Rehber sorgusu calistirilamadi." });
         }
         catch (Exception ex)
         {
@@ -231,7 +233,7 @@ public sealed class GuidesController : ControllerBase
             return StatusCode(500, new
             {
                 success = false,
-                message = $"SQL hatasi ({sqlEx.Number}): {sqlEx.Message}",
+                message = "Rehber sorgusu calistirilamadi.",   // ham SQL hatasi istemciye SIZDIRILMAZ (2026-08-24)
                 guide = guideCode
             });
         }

@@ -237,7 +237,9 @@ public sealed class SqlGuideRepository : IGuideRepository
         }
         if (constraints is { Count: > 0 })
         {
-            effectiveConstraints.AddRange(constraints);
+            // GUVENLIK: istemciden gelen RawSql fragment'leri once dogrulanir
+            // (bkz. SanitizeClientRawSql — K1 SQL injection fix, 2026-08-24).
+            effectiveConstraints.AddRange(SanitizeClientConstraints(constraints)!);
         }
         var constraintParams = new List<(string ParamName, object Value)>();
         var constraintSqlParts = new List<(string Sql, string Logic)>(); // (SQL fragment, logic)
@@ -496,7 +498,7 @@ public sealed class SqlGuideRepository : IGuideRepository
         //    listede gosterilen satirlardan turetilir â†’ "view'a verilen filtrelere
         //    gore dolar" (rapor: kullanici geri bildirimi 2026-05-18).
         var (constraintClause, constraintParams) =
-            BuildConstraintWhereFragment(guide, constraints);
+            BuildConstraintWhereFragment(guide, SanitizeClientConstraints(constraints));
 
         var whereParts = new List<string>
         {
@@ -831,4 +833,17 @@ public sealed class SqlGuideRepository : IGuideRepository
         return cols;
     }
 
+    private static IReadOnlyCollection<GuideConstraintDto>? SanitizeClientConstraints(
+        IReadOnlyCollection<GuideConstraintDto>? constraints)
+    {
+        if (constraints is not { Count: > 0 }) return constraints;
+        var safe = new List<GuideConstraintDto>(constraints.Count);
+        foreach (var c in constraints)
+        {
+            safe.Add(string.IsNullOrWhiteSpace(c.RawSql)
+                ? c
+                : c with { RawSql = Security.GuideRawSqlGuard.Sanitize(c.RawSql!.Trim()) });
+        }
+        return safe;
+    }
 }

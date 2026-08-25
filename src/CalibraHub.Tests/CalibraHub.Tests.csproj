@@ -20,6 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\CalibraHub.Domain\CalibraHub.Domain.csproj" />
     <ProjectReference Include="..\CalibraHub.Application\CalibraHub.Application.csproj" />
+    <ProjectReference Include="..\CalibraHub.Persistence\CalibraHub.Persistence.csproj" />
   </ItemGroup>
 
 </Project>
