@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Stage, Layer, Circle, Line, Text, Group } from 'react-konva'
 import { Network, Search, RefreshCw, X, Home, Table2 } from 'lucide-react'
 import './databaseMap.css'
@@ -17,11 +17,38 @@ import './databaseMap.css'
  *
  * Tuval (Konva) CSS değişkenlerini okuyamaz — renkler burada palet olarak tutulur ve
  * <body> tema sınıfı değiştiğinde yeniden okunur (bkz. useThemePalette).
+ *
+ * Görünüm dönüşümü (pan + zoom) iki katmana bölünür: Stage kendi x/y'siyle SÜRÜKLEMEYİ
+ * taşır, içteki Group sabit ortalama ofseti (size/2) + zoom ölçeğini taşır — ikisi ayrı
+ * kalınca fare tekerleği zoom'unun imleç-merkezli matematiği bozulmadan sürükleme eklenebildi.
+ * Düğüm konumları (posRef) ve görünüm (viewRef) TEK bir requestAnimationFrame döngüsünde
+ * hedefe doğru yumuşatılır (bkz. viewTargetRef); `prefers-reduced-motion` açıksa yumuşatma
+ * atlanır ve hedefe anında geçilir.
  */
 
 const RING1 = 210     // doğrudan ilişkili tabloların yörünge yarıçapı
 const RING2 = 395     // ikinci derece
 const GOLDEN = 2.399963229728653   // altın açı — halkalarda düğümlerin üst üste binmesini önler
+const LARGE_GRAPH_NODE_COUNT = 160  // bu sayının üstünde render sıklığı kısılır (performans)
+
+/** Kullanıcı "hareketi azalt" istiyorsa (erişilebilirlik) animasyonları atla. */
+function usePrefersReducedMotion() {
+  const query = '(prefers-reduced-motion: reduce)'
+  const [reduced, setReduced] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(query).matches : false)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined
+    const mq = window.matchMedia(query)
+    const handler = () => setReduced(mq.matches)
+    if (mq.addEventListener) mq.addEventListener('change', handler)
+    else mq.addListener(handler)
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener('change', handler)
+      else mq.removeListener(handler)
+    }
+  }, [])
+  return reduced
+}
 
 function useThemePalette() {
   const read = () => {
@@ -36,7 +63,7 @@ function useThemePalette() {
           edgeInferred: '#64748b',
           label: '#cbd5e1',
           labelDim: '#475569',
-          node: ['#334155', '#4338ca', '#7c3aed', '#c2410c'],
+          node: readNodeColors(['#334155', '#4338ca', '#7c3aed', '#c2410c']),
           nodeStroke: '#0b1220',
           focusRing: '#a5b4fc',
         }
@@ -48,12 +75,14 @@ function useThemePalette() {
           edgeInferred: '#94a3b8',
           label: '#334155',
           labelDim: '#94a3b8',
-          node: ['#cbd5e1', '#a5b4fc', '#c4b5fd', '#fdba74'],
+          node: readNodeColors(['#cbd5e1', '#a5b4fc', '#c4b5fd', '#fdba74']),
           nodeStroke: '#ffffff',
           focusRing: '#4f46e5',
         }
   }
   const [palette, setPalette] = useState(read)
+  // Ilk okuma .dbm-root henuz DOM'da yokken yapilmis olabilir -> mount sonrasi bir kez daha oku.
+  useEffect(() => { setPalette(read()) }, [])
   useEffect(() => {
     // Tema <body> sınıfıyla değişiyor; tuval kendini yeniden boyayabilmek için haber almalı.
     const obs = new MutationObserver(() => setPalette(read()))
@@ -61,6 +90,32 @@ function useThemePalette() {
     return () => obs.disconnect()
   }, [])
   return palette
+}
+
+/**
+ * Düğüm renkleri TEK KAYNAKTAN: databaseMap.css'teki --dbm-node-0..3 değişkenleri.
+ * Efsanedeki renk noktaları da aynı değişkenleri kullanıyor; palet burada ayrıca sabit
+ * yazılsaydı iki kaynak zamanla ayrışır ve efsane tuvalden BAŞKA bir renk gösterirdi
+ * (yanlış açıklama, hiç açıklama olmamasından kötü). Konva CSS değişkeni okuyamadığı için
+ * hesaplanmış değeri buradan alıp veriyoruz. Değişken tanımsız/boşsa parametredeki
+ * yedeğe düşülür — renk kaybolmaz.
+ */
+function readNodeColors(fallback) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return fallback
+  try {
+    // Degiskenler .dbm-root'a scope'lu (body'ye DEGIL) — body'den okumak bos doner ve
+    // sessizce yedege duserdi, yani birlestirme hic calismazdi. Kok element henuz
+    // basilmadiysa (ilk render) yedek kullanilir; mount sonrasi tekrar okunur.
+    const root = document.querySelector('.dbm-root')
+    if (!root) return fallback
+    const cs = window.getComputedStyle(root)
+    return fallback.map((fb, i) => {
+      const v = cs.getPropertyValue('--dbm-node-' + i)
+      return v && v.trim() ? v.trim() : fb
+    })
+  } catch (_) {
+    return fallback
+  }
 }
 
 /** Bağlantı sayısına göre düğüm rengi — uydurma modül/grup yok, ölçü gerçek veriden. */
@@ -83,6 +138,7 @@ function formatCount(n) {
 
 export default function DatabaseMap({ apiBase = '/api/database' }) {
   const palette = useThemePalette()
+  const reducedMotion = usePrefersReducedMotion()
 
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -91,10 +147,13 @@ export default function DatabaseMap({ apiBase = '/api/database' }) {
   const [hover, setHover] = useState(null)
   const [term, setTerm] = useState('')
   const [size, setSize] = useState({ w: 900, h: 600 })
-  const [view, setView] = useState({ x: 0, y: 0, scale: 1 })
 
   const wrapRef = useRef(null)
   const posRef = useRef(new Map())             // ad → {x, y} (animasyonun ANLIK konumu)
+  // Görünüm (pan + zoom) de aynı desenle ref'te tutulur — Stage'in kendi x/y'si (sürükleme)
+  // ile Group'un zoom ölçeği buradan okunur; setState yerine forceTick ile yeniden çizdirilir.
+  const viewRef = useRef({ x: 0, y: 0, scale: 0.78 })
+  const viewTargetRef = useRef({ x: 0, y: 0, scale: 0.78 })
   const rafRef = useRef(0)
   const [, forceTick] = useState(0)
 
@@ -198,38 +257,57 @@ export default function DatabaseMap({ apiBase = '/api/database' }) {
     return { targets, visible: [focus, ...ring1, ...ring2], ring1, ring2 }
   }, [graph, focus])
 
-  // ── Konumları hedefe doğru yumuşat (gezegenler yörüngeye otursun) ───────
+  // Odak değişince görünüm hedefi değişir (kullanıcı kaybolmasın); asıl geçiş aşağıdaki
+  // tek RAF döngüsünde yumuşatılır — bu artık ani bir "zıplama" değil akan bir uçuş.
   useEffect(() => {
+    viewTargetRef.current = { x: 0, y: 0, scale: focus ? 1 : 0.78 }
+  }, [focus])
+
+  // ── Konumları VE görünümü hedefe doğru yumuşat (gezegenler yörüngeye otursun) ───
+  // Düğüm sayısı çoksa (LARGE_GRAPH_NODE_COUNT üstü) hesap her karede yapılır ama
+  // React yeniden çizimi (forceTick) seyreltilir — akıcılık kare atlamadan korunur.
+  useEffect(() => {
+    let frame = 0
+    const renderEvery = layout.visible.length > LARGE_GRAPH_NODE_COUNT ? 2 : 1
     const step = () => {
       let moving = false
       layout.targets.forEach((t, name) => {
         const cur = posRef.current.get(name)
         if (!cur) {
-          // Yeni giren düğüm merkezden doğar — "içeri süzülme" hissi.
-          posRef.current.set(name, { x: t.x * 0.2, y: t.y * 0.2 })
-          moving = true
+          // Yeni giren düğüm merkezden doğar — "içeri süzülme" hissi (azaltılmış harekette atlanır).
+          posRef.current.set(name, reducedMotion ? { x: t.x, y: t.y } : { x: t.x * 0.2, y: t.y * 0.2 })
+          moving = !reducedMotion
           return
         }
         const dx = t.x - cur.x
         const dy = t.y - cur.y
-        if (Math.abs(dx) < 0.4 && Math.abs(dy) < 0.4) {
+        if (reducedMotion || (Math.abs(dx) < 0.4 && Math.abs(dy) < 0.4)) {
           cur.x = t.x; cur.y = t.y
           return
         }
-        cur.x += dx * 0.16
-        cur.y += dy * 0.16
+        cur.x += dx * 0.18
+        cur.y += dy * 0.18
         moving = true
       })
-      forceTick(v => v + 1)
+
+      const vt = viewTargetRef.current
+      const vc = viewRef.current
+      const vdx = vt.x - vc.x, vdy = vt.y - vc.y, vds = vt.scale - vc.scale
+      if (reducedMotion || (Math.abs(vdx) < 0.3 && Math.abs(vdy) < 0.3 && Math.abs(vds) < 0.002)) {
+        vc.x = vt.x; vc.y = vt.y; vc.scale = vt.scale
+      } else {
+        vc.x += vdx * 0.18; vc.y += vdy * 0.18; vc.scale += vds * 0.18
+        moving = true
+      }
+
+      frame++
+      if (frame % renderEvery === 0 || !moving) forceTick(v => v + 1)
       rafRef.current = moving ? requestAnimationFrame(step) : 0
     }
     cancelAnimationFrame(rafRef.current)
     rafRef.current = requestAnimationFrame(step)
     return () => cancelAnimationFrame(rafRef.current)
-  }, [layout])
-
-  // Odak değişince görünümü ortala — kullanıcı kaybolmasın.
-  useEffect(() => { setView({ x: 0, y: 0, scale: focus ? 1 : 0.78 }) }, [focus])
+  }, [layout, reducedMotion])
 
   // ── Çizilecek kenarlar ──────────────────────────────────────────────────
   const visibleSet = useMemo(() => new Set(layout.visible), [layout])
@@ -266,22 +344,62 @@ export default function DatabaseMap({ apiBase = '/api/database' }) {
 
   const pick = (name) => { setFocus(name); setTerm(''); setHover(null) }
 
-  // ── Tuval etkileşimi: tekerlek ile yakınlaş/uzaklaş ─────────────────────
+  // ── Tuval etkileşimi: tekerlek ile yakınlaş/uzaklaş (anında — imleç altında hisseder) ──
   const onWheel = (e) => {
     e.evt.preventDefault()
     const stage = e.target.getStage()
-    const old = view.scale
+    const vc = viewRef.current
+    const old = vc.scale
     const next = Math.max(0.25, Math.min(2.4, old * (e.evt.deltaY > 0 ? 0.92 : 1.08)))
     const pointer = stage.getPointerPosition()
-    if (!pointer) { setView(v => ({ ...v, scale: next })); return }
-    // İmlecin gösterdiği noktayı sabit tut — yoksa yakınlaşma sürekli merkeze kaçar.
-    const cx = size.w / 2, cy = size.h / 2
-    const mx = (pointer.x - cx - view.x) / old
-    const my = (pointer.y - cy - view.y) / old
-    setView({ scale: next, x: pointer.x - cx - mx * next, y: pointer.y - cy - my * next })
+    let nx = vc.x, ny = vc.y
+    if (pointer) {
+      // İmlecin gösterdiği noktayı sabit tut — yoksa yakınlaşma sürekli merkeze kaçar.
+      const cx = size.w / 2, cy = size.h / 2
+      const mx = (pointer.x - cx - vc.x) / old
+      const my = (pointer.y - cy - vc.y) / old
+      nx = pointer.x - cx - mx * next
+      ny = pointer.y - cy - my * next
+    }
+    viewRef.current = { x: nx, y: ny, scale: next }
+    viewTargetRef.current = viewRef.current   // hedefi de eşitle — RAF döngüsüyle çekişmesin
+    forceTick(v => v + 1)
+  }
+
+  // Stage'in kendi x/y'si sürüklemeyi taşır (bkz. dosya başı yorum). Konva anlık olarak
+  // görsel konumu kendisi günceller; burada yalnız React state'ini (ref) senkron tutuyoruz
+  // ki başka bir yeniden çizim (ör. hover) Stage'i eski konuma geri ZIPLATMASIN.
+  const onStageDragMove = (e) => {
+    const node = e.target
+    viewRef.current = { ...viewRef.current, x: node.x(), y: node.y() }
+    viewTargetRef.current = viewRef.current
+    forceTick(v => v + 1)
   }
 
   const pos = (name) => posRef.current.get(name) || { x: 0, y: 0 }
+
+  // ── Hover ipucu: düğüme sabitlenir (fareyi izlemez — sabit, titremeyen bir referans
+  // noktası), ekran konumu view/zoom'a göre HER ÇİZİMDE yeniden hesaplanır (memoize
+  // edilmez) — yoksa sürükleme/zoom sırasında ipucu düğümden geride kalır. Kenara
+  // taşmasın diye kutunun ekranın hangi yarısında olduğuna göre tarafı/dikeyi çevirir.
+  const hoverTable = hover ? graph.byName.get(hover) : null
+  let tooltip = null
+  if (hoverTable) {
+    const p = pos(hover)
+    const vc = viewRef.current
+    const r = nodeRadius(hoverTable.rowCount, hoverTable.degree)
+    const screenX = size.w / 2 + vc.x + p.x * vc.scale
+    const screenY = size.h / 2 + vc.y + p.y * vc.scale
+    const flipX = screenX > size.w - 280
+    const flipY = screenY > size.h - 190
+    tooltip = {
+      table: hoverTable,
+      left: screenX + (flipX ? -(r * vc.scale) - 12 : r * vc.scale + 12),
+      top: screenY + (flipY ? -12 : 12),
+      flipX,
+      flipY,
+    }
+  }
 
   return (
     <div className="dbm-root">
@@ -329,10 +447,17 @@ export default function DatabaseMap({ apiBase = '/api/database' }) {
             <div className="dbm-empty">{error}</div>
           ) : (
             <Stage width={size.w} height={size.h} onWheel={onWheel}
-              onMouseDown={e => { if (e.target === e.target.getStage()) setFocus(null) }}>
+              x={viewRef.current.x} y={viewRef.current.y}
+              draggable
+              onDragMove={onStageDragMove}
+              onDragEnd={onStageDragMove}
+              onMouseEnter={e => { const c = e.target.getStage().container(); if (c) c.style.cursor = 'grab' }}
+              onDragStart={e => { const c = e.target.getStage().container(); if (c) c.style.cursor = 'grabbing' }}
+              onClick={e => { if (e.target === e.target.getStage()) setFocus(null) }}
+              onTap={e => { if (e.target === e.target.getStage()) setFocus(null) }}>
               <Layer>
-                <Group x={size.w / 2 + view.x} y={size.h / 2 + view.y}
-                  scaleX={view.scale} scaleY={view.scale}>
+                <Group x={size.w / 2} y={size.h / 2}
+                  scaleX={viewRef.current.scale} scaleY={viewRef.current.scale}>
 
                   {/* Kenarlar — yanan yollar üstte kalsın diye iki geçişte çizilir. */}
                   {drawEdges.map((e, i) => {
@@ -384,7 +509,7 @@ export default function DatabaseMap({ apiBase = '/api/database' }) {
                         onMouseLeave={e => {
                           setHover(null)
                           const c = e.target.getStage().container()
-                          if (c) c.style.cursor = 'default'
+                          if (c) c.style.cursor = 'grab'
                         }}>
                         {isFocus && (
                           <Circle radius={r + 9} stroke={palette.focusRing} strokeWidth={1.6}
@@ -418,14 +543,35 @@ export default function DatabaseMap({ apiBase = '/api/database' }) {
             </Stage>
           )}
 
+          {tooltip && (
+            <div className={'dbm-tooltip' + (tooltip.flipX ? ' dbm-tooltip--flip-x' : '') + (tooltip.flipY ? ' dbm-tooltip--flip-y' : '')}
+              style={{ left: tooltip.left, top: tooltip.top }}>
+              <div className="dbm-tooltip-title">{tooltip.table.name}</div>
+              {tooltip.table.description && (
+                <div className="dbm-tooltip-desc">{tooltip.table.description}</div>
+              )}
+              <div className="dbm-tooltip-meta">
+                <div><span>{formatCount(tooltip.table.rowCount)}</span>Kayıt</div>
+                <div><span>{formatCount(tooltip.table.columnCount)}</span>Kolon</div>
+                <div><span>{formatCount(tooltip.table.degree)}</span>İlişki</div>
+              </div>
+            </div>
+          )}
+
           <div className="dbm-hint">
             {focus
-              ? 'Yörüngedeki tabloya tıklayın · boşluğa tıklayın = genel görünüm · tekerlek = yakınlaştır'
-              : 'Bir tabloya tıklayın — ilişkileri yörüngeye dizilir · tekerlek = yakınlaştır'}
+              ? 'Yörüngedeki tabloya tıklayın · boşluğa tıklayın = genel görünüm · sürükle = kaydır · tekerlek = yakınlaştır'
+              : 'Bir tabloya tıklayın — ilişkileri yörüngeye dizilir · sürükle = kaydır · tekerlek = yakınlaştır'}
           </div>
           <div className="dbm-legend">
+            <div className="dbm-legend-title">Çizgi Tipi</div>
             <div className="dbm-legend-row"><span className="dbm-legend-line" /> Tanımlı ilişki (FK)</div>
             <div className="dbm-legend-row"><span className="dbm-legend-line dbm-legend-line--dashed" /> Ad benzerliğinden çıkarım</div>
+            <div className="dbm-legend-title">Düğüm Rengi (Bağlantı Sayısı)</div>
+            <div className="dbm-legend-row"><span className="dbm-legend-dot" style={{ background: 'var(--dbm-node-0)' }} /> 0-1 bağlantı</div>
+            <div className="dbm-legend-row"><span className="dbm-legend-dot" style={{ background: 'var(--dbm-node-1)' }} /> 2-5 bağlantı</div>
+            <div className="dbm-legend-row"><span className="dbm-legend-dot" style={{ background: 'var(--dbm-node-2)' }} /> 6-11 bağlantı</div>
+            <div className="dbm-legend-row"><span className="dbm-legend-dot" style={{ background: 'var(--dbm-node-3)' }} /> 12+ bağlantı (merkez tablo)</div>
           </div>
         </div>
 
