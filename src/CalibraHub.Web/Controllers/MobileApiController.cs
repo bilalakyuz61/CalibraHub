@@ -273,6 +273,7 @@ public sealed class MobileApiController : ControllerBase
     // ──────────────────────────────────────────────────────────────────────
 
     [Authorize]
+    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.WhatsApp)]
     [HttpGet("whatsapp/conversations")]
     public async Task<IActionResult> Conversations(
         [FromServices] IWaInboxRepository inbox,
@@ -293,6 +294,7 @@ public sealed class MobileApiController : ControllerBase
     }
 
     [Authorize]
+    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.WhatsApp)]
     [HttpGet("whatsapp/messages")]
     public async Task<IActionResult> Messages(
         [FromServices] IWaInboxRepository inbox,
@@ -320,6 +322,7 @@ public sealed class MobileApiController : ControllerBase
     }
 
     [Authorize]
+    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.WhatsApp)]
     [HttpPost("whatsapp/send")]
     public async Task<IActionResult> SendText(
         [FromServices] IWhatsAppService whatsApp,
@@ -364,6 +367,7 @@ public sealed class MobileApiController : ControllerBase
     }
 
     [Authorize]
+    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.WhatsApp)]
     [HttpPost("whatsapp/send-media")]
     [RequestSizeLimit(60_000_000)]   // 60 MB — web ile ayni
     public async Task<IActionResult> SendMedia(

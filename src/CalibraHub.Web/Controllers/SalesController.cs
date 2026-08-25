@@ -1548,7 +1548,12 @@ public sealed class SalesController : Controller
         public sealed class KeyBody { public int ItemId { get; set; } public int? ConfigId { get; set; } }
     }
 
+    // GUVENLIK (2026-08-24, Y6): scope YOKTU -> filtre bu action'i hic gormuyordu
+    // (PermissionEnforcementFilter opt-in). Fiyat listesi bilgisi satis yetkisi olmayan
+    // kullaniciya siziyordu. Salt-okuma oldugu icin VIEW yeterli.
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SalesQuote)]
+    [CalibraHub.Web.Authorization.PermissionAction("VIEW", "VIEW_OWN")]
     public async Task<IActionResult> ResolveLinePrices([FromBody] ResolveLinePricesBody? body, CancellationToken ct)
     {
         if (body?.Keys is null || body.Keys.Count == 0 || body.CurrencyId <= 0)
@@ -1801,7 +1806,10 @@ public sealed class SalesController : Controller
     /// Aynı özellik-değer setine sahip mevcut CONFIG varsa onu döner (matched=true);
     /// yoksa yeni bir CONFIG kaydı üretilir (matched=false).
     /// </summary>
+    // GUVENLIK (2026-08-24, Y6): scope YOKTU. Bu uc kalici CONFIG kaydi YARATABILIYOR,
+    // dolayisiyla yazma yetkisi aranir (filtrenin POST varsayilani: CREATE/EDIT_*).
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SalesQuote)]
     public async Task<IActionResult> ResolveOrCreateCombination(
         [FromBody] ResolveCombinationRequest request, CancellationToken ct)
     {
