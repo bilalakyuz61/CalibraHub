@@ -317,6 +317,8 @@ export default function Shell(props) {
   // Şirket değiştirme modalı — popover'ın İÇİNDE değil Shell kökünde tutulur,
   // yoksa menü kapanınca modal da kapanır.
   var [companySwitchOpen, setCompanySwitchOpen] = useState(false)
+  // Sirket baloncugunun cikacagi nokta (tetikleyici butonun ekran konumu).
+  var [companySwitchAnchor, setCompanySwitchAnchor] = useState(null)
 
   /* ── Menü state — sayfa yüklemesinde config'den gelir, focus'ta sunucudan tazelenir ── */
   var [menu, setMenu] = useState(function() {
@@ -1118,7 +1120,7 @@ export default function Shell(props) {
                 user={user}
                 lang={lang}
                 antiforgery={antiforgery}
-                onOpenCompanySwitch={function() { setCompanySwitchOpen(true) }}
+                onOpenCompanySwitch={function(rect) { setCompanySwitchAnchor(rect || null); setCompanySwitchOpen(true) }}
                 onLangChange={handleChangeLang}
                 onThemeToggle={handleToggleTheme}
                 onOpenWorkspaceTab={function(arg) {
@@ -1357,6 +1359,7 @@ export default function Shell(props) {
             isDark={isDark}
             lang={lang}
             antiforgery={antiforgery}
+            anchorRect={companySwitchAnchor}
             onClose={function() { setCompanySwitchOpen(false) }}
           />
         )}
@@ -3030,8 +3033,11 @@ function ProfilePopover(props) {
       <div className="p-2 flex items-center gap-2">
         <button
           type="button"
-          onClick={function() {
-            if (props.onOpenCompanySwitch) props.onOpenCompanySwitch()
+          onClick={function(e) {
+            // Baloncuk animasyonunun butondan cikmasi icin tetikleyicinin ekran
+            // konumu yukari tasinir (iOS baglam menusu hissi).
+            var rect = e && e.currentTarget ? e.currentTarget.getBoundingClientRect() : null
+            if (props.onOpenCompanySwitch) props.onOpenCompanySwitch(rect)
             if (props.onClose) props.onClose()
           }}
           className={
@@ -3299,6 +3305,49 @@ function CompanySwitchModal(props) {
     )
   }
 
+  // ── iOS tarzi "baloncuk" acilis (2026-08-25 kullanici istegi) ────────────
+  // Panel, tiklanan butondan cikiyormus gibi buyur: transform-origin tetikleyiciye
+  // bakar ve yay (spring) gecisi kullanilir. Tetikleyici konumu bilinmiyorsa
+  // (rect yok) eski ortalanmis davranisa duser — fail-safe.
+  var anchor = props.anchorRect || null
+  var reduceMotion = typeof window !== 'undefined'
+    && window.matchMedia
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  var panelStyle = {
+    background: 'var(--app-surface)',
+    border: '1px solid var(--app-border)',
+    boxShadow: '0 24px 70px rgba(0,0,0,0.45)',
+    maxHeight: '70vh',
+  }
+  var originStyle = {}
+  if (anchor) {
+    var gap = 10
+    var vw = window.innerWidth
+    var vh = window.innerHeight
+    // Panel butonun ALTINDA acilir; asagida yer yoksa USTUNDE acilir.
+    var below = vh - anchor.bottom - gap
+    var openUp = below < 260 && anchor.top > below
+    var topPx = openUp ? undefined : anchor.bottom + gap
+    var bottomPx = openUp ? (vh - anchor.top + gap) : undefined
+    // Sag kenara hizala (buton kullanici menusunun sagindadir), ekran disina tasma.
+    var rightPx = Math.max(12, vw - anchor.right)
+    panelStyle = Object.assign({}, panelStyle, {
+      position: 'fixed',
+      right: rightPx,
+      top: topPx,
+      bottom: bottomPx,
+      width: 'min(384px, calc(100vw - 24px))',
+      maxHeight: openUp ? Math.min(vh * 0.7, anchor.top - gap - 12) : Math.min(vh * 0.7, below - 12),
+    })
+    originStyle = { transformOrigin: openUp ? 'bottom right' : 'top right' }
+  }
+
+  // Yay: iOS baglam menusune yakin his (hafif zipla, cabuk otur).
+  var bubbleIn = reduceMotion
+    ? { duration: 0.12 }
+    : { type: 'spring', stiffness: 460, damping: 30, mass: 0.7 }
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -3306,19 +3355,21 @@ function CompanySwitchModal(props) {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.15 }}
       onClick={function() { if (!busyId && props.onClose) props.onClose() }}
-      className="fixed inset-0 z-[10010] flex items-start justify-center p-4"
-      style={{ background: 'rgba(0,0,0,.45)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', paddingTop: '14vh' }}
+      className={'fixed inset-0 z-[10010]' + (anchor ? '' : ' flex items-start justify-center p-4')}
+      style={Object.assign(
+        { background: anchor ? 'rgba(0,0,0,.28)' : 'rgba(0,0,0,.45)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)' },
+        anchor ? {} : { paddingTop: '14vh' })}
     >
       <motion.div
-        initial={{ opacity: 0, y: -8, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: -8, scale: 0.97 }}
-        transition={{ duration: 0.16 }}
+        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.82 }}
+        animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
+        exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
+        transition={bubbleIn}
         onClick={function(e) { e.stopPropagation() }}
         role="dialog"
         aria-modal="true"
-        className={'w-full max-w-sm rounded-2xl overflow-hidden flex flex-col ' + (isDark ? 'text-white' : 'text-slate-900')}
-        style={{ maxHeight: '70vh', background: 'var(--app-surface)', border: '1px solid var(--app-border)', boxShadow: '0 24px 70px rgba(0,0,0,0.45)' }}
+        className={'rounded-2xl overflow-hidden flex flex-col ' + (anchor ? '' : 'w-full max-w-sm ') + (isDark ? 'text-white' : 'text-slate-900')}
+        style={Object.assign({}, panelStyle, originStyle)}
       >
         <div className={'flex items-center gap-2.5 px-4 py-3.5 border-b flex-shrink-0 ' + (isDark ? 'border-white/10' : 'border-slate-200')}>
           <div
