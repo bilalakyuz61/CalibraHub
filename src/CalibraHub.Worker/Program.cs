@@ -133,7 +133,14 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddScoped<IDepartmentRepository, SqlDepartmentRepository>();
         services.AddScoped<IUserProfileRepository, SqlUserProfileRepository>();
         services.AddScoped<IIncomingDocumentRepository, SqlIncomingDocumentRepository>();
-        services.AddScoped<IIntegratorImportLogRepository, SqlPltSystemLogRepository>();
+        // PLT_SISTEM_LOG bagi kesildi (2026-08-25) — dosya tabanli depo (bkz. Web/Program.cs).
+        services.AddSingleton(new CalibraHub.Persistence.Repositories.IntegratorImportLogOptions
+        {
+            RootPath = context.Configuration["Diagnostics:IntegratorLogRootPath"]
+                       ?? Path.Combine(AppContext.BaseDirectory, "App_Data", "IntegratorLogs"),
+        });
+        services.AddScoped<IIntegratorImportLogRepository,
+                           CalibraHub.Persistence.Repositories.FileIntegratorImportLogRepository>();
         services.AddScoped<INoteRepository, SqlNoteRepository>();
         services.AddScoped<IUserNotificationRepository, SqlUserNotificationRepository>();
         services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IDataVisibilityRuleRepository,

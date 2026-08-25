@@ -725,7 +725,6 @@ END;";
             await EnsureCompanySchemaAsync(connection, cancellationToken);
             await MigrateTableRenamesAsync(connection, cancellationToken);
             await MigrateColumnRenamesAsync(connection, cancellationToken);
-            await EnsurePltSystemLogTableAsync(connection, cancellationToken);
             await EnsureNotesTablesAsync(connection, cancellationToken);
             await EnsureNoteExtensionsAsync(connection, cancellationToken);
             await EnsureBOMTablesAsync(connection, cancellationToken);
@@ -1594,8 +1593,6 @@ END;";
             ("company", "created_at_utc", "created_at"),
             ("company", "updated_at_utc", "updated_at"),
             ("document_approvals", "action_date_utc", "action_date"),
-            ("PLT_SISTEM_LOG", "occurred_at_utc", "occurred_at"),
-            ("PLT_SISTEM_LOG", "OccurredAtUtc", "occurred_at"),
             // Document tablosu — snake_case → PascalCase (kullanici karari).
             ("Document", "company_id",         "CompanyId"),
             ("Document", "document_number",    "DocumentNumber"),
@@ -1672,7 +1669,6 @@ END;";
             ("MaterialDefinitions", "UpdatedAt"),
             ("company", "created_at"),
             ("company", "updated_at"),
-            ("PLT_SISTEM_LOG", "occurred_at"),
         };
 
         // Execute Phase 1 renames first
@@ -4652,243 +4648,6 @@ END;";
         command.Parameters.Add(new SqlParameter("@CompanyTaxOffice", "Beyoglu"));
         command.Parameters.Add(new SqlParameter("@CompanyTaxNumber", "1234567890"));
         command.Parameters.Add(new SqlParameter("@Now", DateTime.Now));
-        await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    private async Task EnsurePltSystemLogTableAsync(SqlConnection connection, CancellationToken cancellationToken)
-    {
-        var schemaForSql = _schema.Replace("]", "]]");
-        var schemaLiteral = _schema.Replace("'", "''");
-
-        var commandText = $"""
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NULL
-            BEGIN
-                CREATE TABLE [{schemaForSql}].[PLT_SISTEM_LOG]
-                (
-                    [ID] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                    [VERITABANI] VARCHAR(50) NULL,
-                    [UYGULAMA_ID] INT NULL,
-                    [ACIKLAMA] VARCHAR(200) NULL,
-                    [MODUL_NO] INT NULL,
-                    [PROGRAM_NO] INT NULL,
-                    [KAYIT_NO] INT NULL,
-                    [ISLETME_KODU] INT NULL,
-                    [SUBE_KODU] INT NULL,
-                    [BELGE_TURU] VARCHAR(50) NULL,
-                    [STOK_KODU] VARCHAR(50) NULL,
-                    [CARI_KOD] VARCHAR(50) NULL,
-                    [MUH_KODU] VARCHAR(50) NULL,
-                    [PROJE_KODU] VARCHAR(50) NULL,
-                    [BELGE_NO] VARCHAR(50) NULL,
-                    [DEPO_KODU] INT NULL,
-                    [HESAP_KODU] VARCHAR(50) NULL,
-                    [TARIH] DATETIME NULL,
-                    [MIKTAR] DECIMAL(18, 8) NULL,
-                    [FIYAT] DECIMAL(18, 8) NULL,
-                    [TUTAR] DECIMAL(18, 8) NULL,
-                    [SIRA_NO] INT NULL,
-                    [SERI_NO] VARCHAR(50) NULL,
-                    [S_SAHA_01] VARCHAR(50) NULL,
-                    [S_SAHA_02] VARCHAR(100) NULL,
-                    [S_SAHA_03] VARCHAR(50) NULL,
-                    [S_SAHA_04] VARCHAR(50) NULL,
-                    [S_SAHA_05] VARCHAR(50) NULL,
-                    [C_SAHA_01] CHAR(1) NULL,
-                    [C_SAHA_02] CHAR(1) NULL,
-                    [C_SAHA_03] CHAR(1) NULL,
-                    [C_SAHA_04] CHAR(1) NULL,
-                    [C_SAHA_05] CHAR(1) NULL,
-                    [I_SAHA_01] INT NULL,
-                    [I_SAHA_02] INT NULL,
-                    [I_SAHA_03] INT NULL,
-                    [I_SAHA_04] INT NULL,
-                    [I_SAHA_05] INT NULL,
-                    [F_SAHA_01] DECIMAL(18, 8) NULL,
-                    [F_SAHA_02] DECIMAL(18, 8) NULL,
-                    [F_SAHA_03] DECIMAL(18, 8) NULL,
-                    [F_SAHA_04] DECIMAL(18, 8) NULL,
-                    [F_SAHA_05] DECIMAL(18, 8) NULL,
-                    [D_SAHA_01] DATETIME NULL,
-                    [D_SAHA_02] DATETIME NULL,
-                    [D_SAHA_03] DATETIME NULL,
-                    [D_SAHA_04] DATETIME NULL,
-                    [D_SAHA_05] DATETIME NULL,
-                    [N_SAHA_01] NVARCHAR(MAX) NULL,
-                    [N_SAHA_02] NVARCHAR(MAX) NULL,
-                    [COMPANY_ID] INT NULL,
-                    [KAYITYAPANKUL] VARCHAR(50) NULL,
-                    [KAYITTARIHI] DATETIME NULL,
-                    [DUZELTMEYAPANKUL] VARCHAR(50) NULL,
-                    [DUZELTMETARIHI] DATETIME NULL,
-                    [ONAYTIPI] NCHAR(10) NULL,
-                    [ONAYNUM] NCHAR(10) NULL
-                );
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'VERITABANI') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[PLT_SISTEM_LOG] ADD [VERITABANI] VARCHAR(50) NULL;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'UYGULAMA_ID') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[PLT_SISTEM_LOG] ADD [UYGULAMA_ID] INT NULL;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'ACIKLAMA') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[PLT_SISTEM_LOG] ADD [ACIKLAMA] VARCHAR(200) NULL;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'MODUL_NO') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[PLT_SISTEM_LOG] ADD [MODUL_NO] INT NULL;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'PROGRAM_NO') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[PLT_SISTEM_LOG] ADD [PROGRAM_NO] INT NULL;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'KAYIT_NO') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[PLT_SISTEM_LOG] ADD [KAYIT_NO] INT NULL;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'BELGE_TURU') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[PLT_SISTEM_LOG] ADD [BELGE_TURU] VARCHAR(50) NULL;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'TARIH') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[PLT_SISTEM_LOG] ADD [TARIH] DATETIME NULL;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'S_SAHA_01') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[PLT_SISTEM_LOG] ADD [S_SAHA_01] VARCHAR(50) NULL;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'S_SAHA_02') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[PLT_SISTEM_LOG] ADD [S_SAHA_02] VARCHAR(100) NULL;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'S_SAHA_03') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[PLT_SISTEM_LOG] ADD [S_SAHA_03] VARCHAR(50) NULL;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'I_SAHA_01') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[PLT_SISTEM_LOG] ADD [I_SAHA_01] INT NULL;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'I_SAHA_02') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[PLT_SISTEM_LOG] ADD [I_SAHA_02] INT NULL;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'N_SAHA_01') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[PLT_SISTEM_LOG] ADD [N_SAHA_01] NVARCHAR(MAX) NULL;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'KAYITYAPANKUL') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[PLT_SISTEM_LOG] ADD [KAYITYAPANKUL] VARCHAR(50) NULL;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'KAYITTARIHI') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[PLT_SISTEM_LOG] ADD [KAYITTARIHI] DATETIME NULL;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'COMPANY_ID') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[PLT_SISTEM_LOG] ADD [COMPANY_ID] INT NULL;
-            END;
-
-            -- Migration: COMPANY_ID was UNIQUEIDENTIFIER, drop table so it recreates with INT column
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'COMPANY_ID') IS NOT NULL
-               AND EXISTS (
-                   SELECT 1 FROM sys.columns
-                   WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]')
-                     AND name = 'COMPANY_ID'
-                     AND system_type_id = TYPE_ID('uniqueidentifier')
-               )
-            BEGIN
-                -- Can't ALTER uniqueidentifier to int directly — drop and recreate
-                DROP TABLE [{schemaForSql}].[PLT_SISTEM_LOG];
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'COMPANY_ID') IS NOT NULL
-               AND OBJECT_ID(N'[{schemaForSql}].[Company]', N'U') IS NOT NULL
-               AND NOT EXISTS (
-                   SELECT 1
-                   FROM sys.foreign_keys
-                   WHERE [name] = N'fk_plt_sistem_log_company_company_id'
-                     AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]')
-               )
-            BEGIN
-                EXEC(N'
-                    IF NOT EXISTS (
-                        SELECT 1
-                        FROM [{schemaForSql}].[PLT_SISTEM_LOG] logTable
-                        LEFT JOIN [{schemaForSql}].[Company] company
-                            ON company.[id] = logTable.[COMPANY_ID]
-                        WHERE logTable.[COMPANY_ID] IS NOT NULL
-                          AND company.[id] IS NULL
-                    )
-                    BEGIN
-                        ALTER TABLE [{schemaForSql}].[PLT_SISTEM_LOG]
-                        ADD CONSTRAINT [fk_plt_sistem_log_company_company_id]
-                        FOREIGN KEY ([COMPANY_ID]) REFERENCES [{schemaForSql}].[Company]([id]);
-                    END
-                ');
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.PLT_SISTEM_LOG', N'COMPANY_ID') IS NOT NULL
-               AND NOT EXISTS (
-                   SELECT 1
-                   FROM sys.indexes
-                   WHERE [object_id] = OBJECT_ID(N'[{schemaForSql}].[PLT_SISTEM_LOG]')
-                     AND [name] = N'ix_plt_sistem_log_company_id'
-               )
-            BEGIN
-                EXEC(N'
-                    IF COL_LENGTH(N''{schemaLiteral}.PLT_SISTEM_LOG'', N''COMPANY_ID'') IS NOT NULL
-                    BEGIN
-                        CREATE INDEX [ix_plt_sistem_log_company_id]
-                        ON [{schemaForSql}].[PLT_SISTEM_LOG]([COMPANY_ID]);
-                    END
-                ');
-            END;
-            """;
-
-        await using var command = connection.CreateCommand();
-        command.CommandText = commandText;
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

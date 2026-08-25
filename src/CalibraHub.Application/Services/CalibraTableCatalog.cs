@@ -1,4 +1,4 @@
-namespace CalibraHub.Application.Services;
+﻿namespace CalibraHub.Application.Services;
 
 /// <summary>
 /// CalibraHub.Persistence/Database/CalibraDatabaseInitializer tarafindan
@@ -72,7 +72,6 @@ public static class CalibraTableCatalog
         "CBT_EBELGEMAS", // Legacy ERP e-belge tablosu — IncomingDocumentRepository kullaniyor
 
         // Sistem / Log
-        "PLT_SISTEM_LOG",
 
         // Dinamik Raporlama
         "RptDef", "RptDefRole", "RptRunLog", "RptView", "RptViewCol", "RptViewRole",

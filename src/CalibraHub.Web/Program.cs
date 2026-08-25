@@ -392,6 +392,14 @@ builder.Services.AddSingleton<CalibraHub.Application.Diagnostics.ISystemErrorLog
                               CalibraHub.Application.Diagnostics.SystemErrorLog>();
 builder.Services.AddScoped<CalibraHub.Application.Diagnostics.ISystemErrorLogQueryService,
                            CalibraHub.Application.Diagnostics.SystemErrorLogQueryService>();
+
+// Entegrator aktarim logu — 2026-08-25'te PLT_SISTEM_LOG tablosundan dosya-JSONL'e tasindi
+// (o tablo dis bir sistemin semasiydi; bag tamamen kesildi). Audit ve hata logu ile ayni desen.
+builder.Services.AddSingleton(new CalibraHub.Persistence.Repositories.IntegratorImportLogOptions
+{
+    RootPath = builder.Configuration["Diagnostics:IntegratorLogRootPath"]
+               ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "IntegratorLogs"),
+});
 builder.Services.AddHostedService<CalibraHub.Application.Diagnostics.SystemErrorLogWriter>();
 // ILoggerProvider DI kaydı — logging factory DI'daki tüm ILoggerProvider'ları tüketir,
 // bu yüzden builder.Logging.AddProvider(...) yerine services.AddSingleton kullanılır
@@ -968,7 +976,9 @@ else
                                CalibraHub.Persistence.Repositories.SqlApprovalInstanceRepository>();
     builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IApprovalNodeLogger,
                                CalibraHub.Persistence.Repositories.SqlApprovalNodeLogRepository>();
-    builder.Services.AddScoped<IIntegratorImportLogRepository, SqlPltSystemLogRepository>();
+    // PLT_SISTEM_LOG bagi kesildi (2026-08-25) — dosya tabanli depo.
+    builder.Services.AddScoped<IIntegratorImportLogRepository,
+                               CalibraHub.Persistence.Repositories.FileIntegratorImportLogRepository>();
     builder.Services.AddScoped<INoteRepository, SqlNoteRepository>();
     builder.Services.AddScoped<IUserNotificationRepository, SqlUserNotificationRepository>();
     builder.Services.AddScoped<IOrgChartRepository, SqlOrgChartRepository>();
