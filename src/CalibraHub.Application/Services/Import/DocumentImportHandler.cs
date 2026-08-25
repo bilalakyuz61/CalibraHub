@@ -494,9 +494,21 @@ public sealed class DocumentImportHandler : IImportTargetHandler
 
             if (!string.IsNullOrWhiteSpace(combo))
             {
-                // Kod verilmişse KOD kazanır — en kesin bilgi odur.
                 var hit = combos.FirstOrDefault(c => string.Equals(c.Code?.Trim(), combo, StringComparison.OrdinalIgnoreCase));
                 if (hit is null) return (null, $"Kombinasyon bulunamadı: '{combo}' ({itemCode})");
+
+                // İKİSİ DE doluysa çelişki aranır. Kod sessizce kazansaydı, tarifi yanlış
+                // üretmiş bir kaynak sistem fark edilmeden yanlış varyantı sipariş ederdi:
+                // belge "aktarıldı" görünür, satırda başka bir ürün durur.
+                if (!string.IsNullOrWhiteSpace(configText))
+                {
+                    var pairs = ParseConfigurationPairs(configText!);
+                    var conflict = pairs.FirstOrDefault(p => !CombinationHasPair(hit, p.Feature, p.Value));
+                    if (conflict.Feature is not null)
+                        return (null, $"Kombinasyon kodu '{combo}' ile Konfigürasyon tarifi çelişiyor ({itemCode}): " +
+                                      $"bu kombinasyonda '{conflict.Feature}={conflict.Value}' yok.");
+                }
+
                 configId = hit.ConfigId;
             }
             else
