@@ -167,15 +167,26 @@ body.app-theme-dark .al-root {
 }
 
 /* ── Stat kartları ───────────────────────────────────────────────────── */
+/* Kart şeridi TEK SATIR. Önce sabit 7 sütunlu grid'di; "Hata" kartı (yalnız yetkili
+   kullanıcıya çizilir) eklenince öğe sayısı 8'e çıktı ve grafik alt satıra düştü.
+   Sütun sayısını saymak yerine esnek yerleşim: kartlar kalan genişliği paylaşır,
+   kart sayısı değişse de satır bozulmaz. */
 .al-stats {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(120px, 1fr)) minmax(220px, 1.6fr);
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
   gap: 10px;
   padding: 4px 18px 12px;
 }
+.al-stats > .al-stat { flex: 1 1 0; min-width: 0; }
+.al-stats > .al-stat-chart { flex: 1.6 1 0; min-width: 0; }
+
+/* Dar ekranda tek satırda ısrar etmek kartları okunamaz hale getirir — orada sarmaya
+   geri dönülür (grafik tam genişlik). */
 @media (max-width: 1200px) {
-  .al-stats { grid-template-columns: repeat(3, 1fr); }
-  .al-stats .al-stat-chart { grid-column: span 3; }
+  .al-stats { flex-wrap: wrap; }
+  .al-stats > .al-stat { flex: 1 1 150px; }
+  .al-stats > .al-stat-chart { flex: 1 1 100%; }
 }
 .al-stat {
   background: var(--al-surface);
@@ -206,7 +217,14 @@ body.app-theme-dark .al-root {
   flex-shrink: 0;
 }
 .al-stat-num { font-size: 18px; font-weight: 700; line-height: 1.1; }
-.al-stat-lbl { font-size: 11px; color: var(--al-muted); margin-top: 1px; white-space: nowrap; }
+/* Tek satıra sığmak için kartlar daralabilir; etiket taşmak yerine kısalır
+   (tam metin başlıkta zaten var). */
+.al-stat-lbl {
+  font-size: 11px; color: var(--al-muted); margin-top: 1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.al-stat > div:last-child { min-width: 0; }
+.al-stat-ic { flex: 0 0 auto; }
 .al-stat--indigo .al-stat-ic { background: var(--al-indigo-soft); color: var(--al-indigo); }
 .al-stat--emerald .al-stat-ic { background: var(--al-emerald-soft); color: var(--al-emerald); }
 .al-stat--amber .al-stat-ic { background: var(--al-amber-soft); color: var(--al-amber); }

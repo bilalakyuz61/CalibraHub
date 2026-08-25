@@ -419,7 +419,7 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
             <div><div className="al-stat-num">{stats.errors.toLocaleString('tr-TR')}</div><div className="al-stat-lbl">Hata</div></div>
           </div>
         )}
-        <div className="al-stat al-stat--blue">
+        <div className="al-stat al-stat--blue" title="Aralıkta işlem yapan farklı kullanıcı sayısı">
           <div className="al-stat-ic"><Users size={16} /></div>
           <div><div className="al-stat-num">{stats ? stats.distinctUsers.toLocaleString('tr-TR') : '—'}</div><div className="al-stat-lbl">Kullanıcı</div></div>
         </div>
