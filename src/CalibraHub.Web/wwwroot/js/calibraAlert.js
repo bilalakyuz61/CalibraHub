@@ -1,4 +1,4 @@
-/**
+﻿/**
  * CalibraAlert — ekran ortasinda modal-style uyari/hata gosterimi.
  * Native browser alert() yerine tema-uyumlu (light/dark) overlay.
  *
@@ -150,7 +150,13 @@
         style.id = '__calibra_alert_keyframes__';
         style.textContent =
             '@keyframes __ca_fadein__ { from { opacity: 0; } to { opacity: 1; } }\n' +
-            '@keyframes __ca_popin__ { from { opacity: 0; transform: translateY(-6px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }';
+            '@keyframes __ca_popin__ { from { opacity: 0; transform: translateY(-6px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }\n' +
+            // 2026-08-25 kullanici istegi: ONAY modali (silme/cikis vb.) sirket listesiyle
+            // AYNI canli baloncuk hissiyle acilir. Saf CSS'te yay yok; hedefi bir miktar
+            // asip (1.04) geri oturarak (0.985 -> 1) spring taklit edilir.
+            // NOT: toast/uyari kutusu (__ca_popin__) BILINCLI olarak degismedi.
+            '@keyframes __ca_bubblein__ { 0% { opacity: 0; transform: scale(0.72); } 55% { opacity: 1; transform: scale(1.04); } 78% { transform: scale(0.985); } 100% { opacity: 1; transform: scale(1); } }\n' +
+            '@media (prefers-reduced-motion: reduce) { @keyframes __ca_bubblein__ { from { opacity: 0; } to { opacity: 1; } } }';
         doc.head.appendChild(style);
     }
 
@@ -224,7 +230,7 @@
                 'font-family:inherit', 'font-size:0.9rem', 'line-height:1.5',
                 'display:flex', 'flex-direction:column', 'align-items:center',
                 'gap:12px', 'text-align:center',
-                'animation:__ca_popin__ 160ms cubic-bezier(0.2,0.8,0.3,1)'
+                'animation:__ca_bubblein__ 300ms cubic-bezier(0.22,1,0.36,1)'
             ].join(';');
 
             var iconWrap = hostDoc.createElement('div');
