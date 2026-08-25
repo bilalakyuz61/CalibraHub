@@ -156,7 +156,12 @@ public sealed class DocumentImportHandler : IImportTargetHandler
         header.Add(new ImportTargetFieldDto("UnitCode", "Birim", "string", false, false,
             "Mevcut birim kodu/adı (opsiyonel; boşsa malzemenin ana birimi kullanılır)"));
         header.Add(new ImportTargetFieldDto("Combination", "Kombinasyon", "string", false, false,
-            "Stok kombinasyon kodu — kombinasyon takipli stoklarda ZORUNLU"));
+            "Stok kombinasyon kodu — biliniyorsa en kesin yol"));
+        // Kombinasyon KODU sunucuda otomatik üretilir; dış sistemden Excel hazırlayan kullanıcı
+        // onu bilemez. Bu kolon aynı kombinasyonu ÖZELLİK=DEĞER çiftleriyle tarif etmeyi sağlar.
+        header.Add(new ImportTargetFieldDto("Configuration", "Konfigürasyon", "string", false, false,
+            "Kombinasyon kodu yerine özellik tarifi: \"Renk=Kırmızı; Uzunluk=120\". " +
+            "Kombinasyon takipli stokta Kombinasyon veya Konfigürasyon'dan biri ZORUNLU."));
         if (!_profile.IsPurchaseRequest)
         {
             header.Add(new ImportTargetFieldDto("UnitPrice", "Birim Fiyat", "decimal", false, false, "Boşsa 0"));
@@ -472,13 +477,34 @@ public sealed class DocumentImportHandler : IImportTargetHandler
 
         int? configId = null;
         var combo = ImportParse.Get(row, "Combination")?.Trim();
+        var configText = ImportParse.Get(row, "Configuration")?.Trim();
+
+        // Konfigürasyon tarifi verilmiş ama stok kombinasyon takipli DEĞİLSE satır reddedilir.
+        // Sessizce yok saymak, kullanıcının varyant sandığı satırı jenerik ürün olarak
+        // kaydetmek demektir — siparişte yanlış ürün, fark edilmesi zor.
+        if (!item.Combinations && !string.IsNullOrWhiteSpace(configText))
+            return (null, $"'{itemCode}' kombinasyon takipli değil; Konfigürasyon alanı doldurulamaz.");
+
         if (item.Combinations)
         {
-            if (string.IsNullOrWhiteSpace(combo)) return (null, $"Kombinasyon zorunlu (stok kombinasyon takipli): '{itemCode}'");
+            if (string.IsNullOrWhiteSpace(combo) && string.IsNullOrWhiteSpace(configText))
+                return (null, $"Kombinasyon zorunlu (stok kombinasyon takipli): '{itemCode}'. Kombinasyon kodu ya da Konfigürasyon tarifi verin.");
+
             var combos = await GetCombosAsync(itemCode, ct);
-            var hit = combos.FirstOrDefault(c => string.Equals(c.Code?.Trim(), combo, StringComparison.OrdinalIgnoreCase));
-            if (hit is null) return (null, $"Kombinasyon bulunamadı: '{combo}' ({itemCode})");
-            configId = hit.ConfigId;
+
+            if (!string.IsNullOrWhiteSpace(combo))
+            {
+                // Kod verilmişse KOD kazanır — en kesin bilgi odur.
+                var hit = combos.FirstOrDefault(c => string.Equals(c.Code?.Trim(), combo, StringComparison.OrdinalIgnoreCase));
+                if (hit is null) return (null, $"Kombinasyon bulunamadı: '{combo}' ({itemCode})");
+                configId = hit.ConfigId;
+            }
+            else
+            {
+                var (resolved, error) = ResolveCombinationByConfiguration(itemCode, configText!, combos);
+                if (error is not null) return (null, error);
+                configId = resolved;
+            }
         }
 
         decimal unitPrice = 0m, lineDiscount = 0m;
@@ -558,6 +584,79 @@ public sealed class DocumentImportHandler : IImportTargetHandler
 
         _loaded = true;
     }
+
+    /// <summary>
+    /// "Renk=Kırmızı; Uzunluk=120" tarifini kombinasyona çözer.
+    ///
+    /// Kural: verilen ÇİFTLERİN TAMAMINI karşılayan kombinasyonlar aranır.
+    ///   · tam 1 aday  → o kullanılır
+    ///   · 0 aday      → reddedilir (tarife uyan kombinasyon tanımlı değil)
+    ///   · 1'den fazla → BELİRSİZ sayılır ve reddedilir
+    ///
+    /// Son madde kritik: 3 özellikli bir üründe yalnız 2 özellik yazılırsa birden çok
+    /// kombinasyon uyar. İlkini seçmek, siparişe yanlış varyantı yazmak olurdu — üstelik
+    /// belge "başarıyla aktarıldı" göründüğü için kimse fark etmezdi. Belirsizlik hata
+    /// olarak bildirilir ve kullanıcıdan eksik özelliği yazması istenir.
+    /// </summary>
+    private static (int? ConfigId, string? Error) ResolveCombinationByConfiguration(
+        string itemCode, string configText, IReadOnlyCollection<CombinationLookupRow> combos)
+    {
+        var pairs = ParseConfigurationPairs(configText);
+        if (pairs.Count == 0)
+            return (null, $"Konfigürasyon okunamadı: '{configText}'. Beklenen biçim: Özellik=Değer; Özellik=Değer");
+
+        var matches = combos.Where(c => pairs.All(p => CombinationHasPair(c, p.Feature, p.Value))).ToList();
+
+        if (matches.Count == 1) return (matches[0].ConfigId, null);
+
+        if (matches.Count == 0)
+        {
+            // Hangi çiftin tutmadığını söyle — "bulunamadı" tek başına teşhis ettirmez.
+            var culprit = pairs.FirstOrDefault(p => !combos.Any(c => CombinationHasPair(c, p.Feature, p.Value)));
+            var detail = culprit.Feature is null
+                ? "çiftlerin bu bileşimi tanımlı değil"
+                : $"'{culprit.Feature}={culprit.Value}' hiçbir kombinasyonda yok";
+            return (null, $"Konfigürasyona uyan kombinasyon yok ({itemCode}): {detail}.");
+        }
+
+        var eksik = matches
+            .SelectMany(c => c.FeatureValues.Select(fv => fv.Feature))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(f => !pairs.Any(p => string.Equals(p.Feature, f, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        var eksikText = eksik.Count > 0 ? " Eksik özellik(ler): " + string.Join(", ", eksik) + "." : "";
+        return (null, $"Konfigürasyon {matches.Count} kombinasyona birden uyuyor ({itemCode}) — hangisi olduğu belirsiz.{eksikText}");
+    }
+
+    /// <summary>
+    /// "Renk=Kırmızı; Uzunluk=120" → [(Renk, Kırmızı), (Uzunluk, 120)].
+    /// Ayraçlar: çiftler arası ';' veya satır sonu, çift içinde '='.
+    /// Değerin kendisinde '=' geçerse ilk '=' bölme noktasıdır (özellik adında '=' olmaz).
+    /// </summary>
+    private static List<(string Feature, string Value)> ParseConfigurationPairs(string text)
+    {
+        var result = new List<(string, string)>();
+        foreach (var part in text.Split(new[] { ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var i = part.IndexOf('=');
+            if (i <= 0) continue;
+            var feature = part[..i].Trim();
+            var value = part[(i + 1)..].Trim();
+            if (feature.Length == 0 || value.Length == 0) continue;
+            result.Add((feature, value));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Kombinasyon bu özellik=değer çiftini taşıyor mu. Değer hem kendi metniyle hem
+    /// kodu ile eşleşebilir — kullanıcı ikisinden birini yazmış olabilir.
+    /// </summary>
+    private static bool CombinationHasPair(CombinationLookupRow combo, string feature, string value)
+        => combo.FeatureValues.Any(fv =>
+            string.Equals(fv.Feature?.Trim(), feature, StringComparison.OrdinalIgnoreCase) &&
+            (string.Equals(fv.Value?.Trim(), value, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(fv.ValueCode?.Trim(), value, StringComparison.OrdinalIgnoreCase)));
 
     private async Task<IReadOnlyCollection<CombinationLookupRow>> GetCombosAsync(string itemCode, CancellationToken ct)
     {
