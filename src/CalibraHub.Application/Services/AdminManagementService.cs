@@ -897,7 +897,21 @@ public sealed class AdminManagementService : IAdminManagementService
             Role = role,
             Permissions = normalizedPermissions,
         };
-        var password = string.IsNullOrWhiteSpace(request.Password) ? NewInitialPassword() : request.Password;
+        // GUVENLIK (2026-08-24, Y7): parola politikasi SERVIS katmaninda zorlanir — hangi
+        // controller cagirirsa cagirsin ayni kural gecerli olsun (eskiden burada HIC kontrol
+        // yoktu; controller'lar 6/8 karakter gibi tutarsiz esikler uyguluyordu).
+        // Uretilen parola zaten politikaya uygundur.
+        string password;
+        if (string.IsNullOrWhiteSpace(request.Password))
+        {
+            password = NewInitialPassword();
+        }
+        else
+        {
+            var (pwOk, pwError) = CalibraHub.Application.Security.PasswordHasher.ValidateStrength(request.Password);
+            if (!pwOk) throw new ArgumentException(pwError ?? "Sifre politikaya uymuyor.");
+            password = request.Password;
+        }
         userProfile.SetPasswordHash(_passwordHashService.HashPassword(password));
 
         await _userProfileRepository.AddAsync(userProfile, cancellationToken);

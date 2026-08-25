@@ -48,11 +48,21 @@ public sealed class MobileApiController : ControllerBase
 
     public MobileApiController(
         IUserAuthenticationService userAuth,
-        ICompanyRepository companyRepo)
+        ICompanyRepository companyRepo,
+        CalibraHub.Application.Services.LoginLockoutTracker loginLockout,
+        ILogger<MobileApiController> logger)
     {
         _userAuth = userAuth;
         _companyRepo = companyRepo;
+        _loginLockout = loginLockout;
+        _logger = logger;
     }
+
+    // 2026-08-24 (Y8): web login'deki hesap kilidi mobilde YOKTU — web'de 5 hatali
+    // denemede kilitlenen hesap /api/mobile/login uzerinden kilitsiz denenebiliyordu
+    // (kanal degistirerek kilit bypass'i). Ayni tracker, ayni e-posta anahtar uzayi.
+    private readonly CalibraHub.Application.Services.LoginLockoutTracker _loginLockout;
+    private readonly ILogger<MobileApiController> _logger;
 
     // ──────────────────────────────────────────────────────────────────────
     // Auth
@@ -97,9 +107,26 @@ public sealed class MobileApiController : ControllerBase
                     "Birden cok sirket var; companyId alanini doldurun."));
         }
 
+        var lockedUntil = _loginLockout.CheckLocked(req.Email);
+        if (lockedUntil is not null)
+        {
+            var kalanDk = (int)Math.Ceiling((lockedUntil.Value - DateTime.UtcNow).TotalMinutes);
+            _logger.LogWarning("[MobileLogin] Kilitli hesaba deneme. Email={Email} KalanDk={Kalan}", req.Email, kalanDk);
+            return Ok(new MobileLoginResponse(false, null,
+                $"Cok fazla hatali deneme. {Math.Max(kalanDk, 1)} dakika sonra tekrar deneyin."));
+        }
+
         var user = await _userAuth.AuthenticateAsync(req.Email, req.Password, companyId.Value, ct);
         if (user is null)
-            return Ok(new MobileLoginResponse(false, null, "E-posta veya parola hatali."));
+        {
+            var nowLocked = _loginLockout.RegisterFailure(req.Email);
+            _logger.LogWarning("[MobileLogin] Basarisiz giris. Email={Email} Kilitlendi={Locked}", req.Email, nowLocked);
+            return Ok(new MobileLoginResponse(false, null, nowLocked
+                ? "Cok fazla hatali deneme. Bir sure sonra tekrar deneyin."
+                : "E-posta veya parola hatali."));
+        }
+
+        _loginLockout.Reset(req.Email);
 
         var claims = new List<Claim>
         {

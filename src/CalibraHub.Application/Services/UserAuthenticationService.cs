@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Security;
@@ -83,9 +83,13 @@ public sealed class UserAuthenticationService : IUserAuthenticationService
             throw new ArgumentException("Mevcut sifre hatali.");
         }
 
-        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 8)
+        // GUVENLIK (2026-08-24, Y7): politika TEK KAPIDAN gecer. Eskiden burada yalnizca
+        // "8 karakter" araniyordu; sifirlama akisinda ise 10+karakter+karmasiklik isteniyordu
+        // (tutarsiz politika). Artik her iki yol da PasswordHasher.ValidateStrength kullanir.
+        var (strongOk, strongError) = CalibraHub.Application.Security.PasswordHasher.ValidateStrength(newPassword);
+        if (!strongOk)
         {
-            throw new ArgumentException("Yeni sifre en az 8 karakter olmalidir.");
+            throw new ArgumentException(strongError ?? "Yeni sifre politikaya uymuyor.");
         }
 
         user.SetPasswordHash(_passwordHashService.HashPassword(newPassword));

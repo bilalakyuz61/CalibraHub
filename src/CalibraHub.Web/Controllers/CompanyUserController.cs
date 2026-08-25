@@ -412,8 +412,14 @@ public sealed class CompanyUserController : Controller
                 // Ilk giris sifresi: form'dan gelirse onu kullan, yoksa DefaultPassword.
                 var generatedPassword = string.IsNullOrWhiteSpace(dto.Password) ? NewTempPassword() : null;
                 var initialPassword = generatedPassword ?? dto.Password!.Trim();
-                if (initialPassword.Length < 6)
-                    return Json(new { ok = false, error = "Şifre en az 6 karakter olmalı." });
+                // GUVENLIK (2026-08-24, Y7): tutarsiz "6 karakter" esigi yerine tek politika.
+                // (Servis katmaninda da zorlaniyor; burada erken ve net hata mesaji icin.)
+                if (generatedPassword is null)
+                {
+                    var (pwOk, pwError) = CalibraHub.Application.Security.PasswordHasher.ValidateStrength(initialPassword);
+                    if (!pwOk)
+                        return Json(new { ok = false, error = pwError ?? "Şifre politikaya uymuyor." });
+                }
 
                 await _adminService.CreateUserAsync(new CreateUserRequest(
                     CompanyId: companyId,
