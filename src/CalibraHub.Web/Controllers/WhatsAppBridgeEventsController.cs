@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Services.Messaging;
 using CalibraHub.Application.WhatsApp;
@@ -34,6 +34,7 @@ public sealed class WhatsAppBridgeEventsController : ControllerBase
     private readonly IWhatsAppConfigRepository _cfgRepo;
     private readonly WhatsAppInboundProcessor _processor;
     private readonly CompanyConnectionRegistry _registry;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<WhatsAppBridgeEventsController> _logger;
 
     // Şirket çözümü cache'i: 0 = sistem DB (tek-DB kurulum), >0 = per-company DB.
@@ -47,18 +48,36 @@ public sealed class WhatsAppBridgeEventsController : ControllerBase
         IWhatsAppConfigRepository cfgRepo,
         WhatsAppInboundProcessor processor,
         CompanyConnectionRegistry registry,
+        IConfiguration configuration,
         ILogger<WhatsAppBridgeEventsController> logger)
     {
-        _cfgRepo   = cfgRepo;
-        _processor = processor;
-        _registry  = registry;
-        _logger    = logger;
+        _cfgRepo       = cfgRepo;
+        _processor     = processor;
+        _registry      = registry;
+        _configuration = configuration;
+        _logger        = logger;
     }
 
     [HttpPost]
     public async Task<IActionResult> Receive(CancellationToken ct)
     {
-        // ── Yalnizca localhost — bridge ayni makinede kosar ──────────────
+        // ── Guvenlik kapisi (2026-08-24, Y3) ─────────────────────────────
+        // Bu uc [AllowAnonymous] ve gelen olaylari dogrudan wa_inbox'a yaziyor.
+        //
+        // (a) TERS PROXY DELIGI: uygulamada UseForwardedHeaders YOK. Uygulama bir proxy
+        //     arkasina alinirsa RemoteIpAddress her zaman proxy'nin IP'si olur ve asagidaki
+        //     "localhost" kontrolu HERKESI localhost sanar. Bu yuzden proxy'den gelmis
+        //     oldugunu gosteren basliklar varsa istek reddedilir.
+        // (b) OPSIYONEL PAYLASILAN SECRET: WhatsApp:BridgeKey yapilandirilmissa X-Bridge-Key
+        //     basligi ZORUNLU olur (sabit-zamanli karsilastirma). Yapilandirilmamissa mevcut
+        //     davranis korunur — calisan bridge servisi kirilmasin diye bilincli olarak
+        //     opsiyonel; tanimlanmasi siddetle onerilir.
+        if (Request.Headers.ContainsKey("X-Forwarded-For") || Request.Headers.ContainsKey("X-Real-IP"))
+        {
+            _logger.LogWarning("[WaBridgeEvents] Proxy uzerinden gelen istek reddedildi (localhost kontrolu guvenilmez).");
+            return Forbid();
+        }
+
         var remoteIp = HttpContext.Connection.RemoteIpAddress;
         var isLocalhost = remoteIp is not null
             && (remoteIp.Equals(System.Net.IPAddress.Loopback)
@@ -68,6 +87,20 @@ public sealed class WhatsAppBridgeEventsController : ControllerBase
         {
             _logger.LogWarning("[WaBridgeEvents] localhost dışından istek reddedildi — IP: {ip}", remoteIp);
             return Forbid();
+        }
+
+        var bridgeKey = _configuration["WhatsApp:BridgeKey"];
+        if (!string.IsNullOrWhiteSpace(bridgeKey))
+        {
+            var sent = Request.Headers["X-Bridge-Key"].FirstOrDefault() ?? string.Empty;
+            var ok = System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                System.Text.Encoding.UTF8.GetBytes(sent),
+                System.Text.Encoding.UTF8.GetBytes(bridgeKey));
+            if (!ok)
+            {
+                _logger.LogWarning("[WaBridgeEvents] Gecersiz/eksik X-Bridge-Key — istek reddedildi.");
+                return Forbid();
+            }
         }
 
         // ── Şirket çözümü — WebQr config'i hangi DB'de? ──────────────────

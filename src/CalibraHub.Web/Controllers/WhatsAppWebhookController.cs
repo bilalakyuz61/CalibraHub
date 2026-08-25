@@ -1,4 +1,4 @@
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -101,7 +101,18 @@ public sealed class WhatsAppWebhookController : ControllerBase
 
         // ── Güvenlik doğrulaması (provider'a göre) ──────────────────────────────────
         var cfg = await _cfgRepo.GetAsync(ct);
-        if (cfg is not null)
+
+        // GUVENLIK (2026-08-24, Y3): FAIL-CLOSED. Eskiden tum dogrulama blogu
+        // "if (cfg is not null)" icindeydi — WhatsApp hic yapilandirilmamis (ya da config
+        // okunamamis) bir kurulumda imza/localhost kontrolu TAMAMEN atlanip payload dogrudan
+        // isleniyordu: internetten sahte "gelen mesaj" kayitlari uretilebiliyordu.
+        // Yapilandirma yoksa webhook zaten anlamsizdir; reddetmek mesru akisi kirmaz.
+        if (cfg is null)
+        {
+            _logger.LogWarning("[WaWebhook] WhatsApp yapilandirmasi yok — istek reddedildi (fail-closed).");
+            return Forbid();
+        }
+
         {
             if (cfg.Provider == WhatsAppProviderType.WebQr)
             {
@@ -125,6 +136,12 @@ public sealed class WhatsAppWebhookController : ControllerBase
                     _logger.LogWarning("[WaWebhook] CloudAPI imza doğrulaması başarısız");
                     return Forbid();
                 }
+            }
+            else
+            {
+                // Bilinmeyen/yeni provider: sessizce acilmasin (fail-closed).
+                _logger.LogWarning("[WaWebhook] Taninmayan provider {Provider} — istek reddedildi.", cfg.Provider);
+                return Forbid();
             }
         }
         // ────────────────────────────────────────────────────────────────────────────
@@ -375,7 +392,10 @@ public sealed class WhatsAppWebhookController : ControllerBase
             HMACSHA256.HashData(Encoding.UTF8.GetBytes(appSecret), Encoding.UTF8.GetBytes(payload))
         ).ToLowerInvariant();
 
-        return string.Equals(signatureHeader, expected, StringComparison.OrdinalIgnoreCase);
+        // Sabit-zamanli karsilastirma (timing attack) — HMAC dogrulamasinda standart.
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(signatureHeader.ToLowerInvariant()),
+            Encoding.UTF8.GetBytes(expected));
     }
 
     private static string MimeToExt(string? mime) => mime switch
