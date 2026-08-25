@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Security;
 using CalibraHub.Domain.Entities;
@@ -34,11 +34,39 @@ namespace CalibraHub.Application.Services.Gate;
 public sealed class GatePasswordService : IGatePasswordService
 {
     /// <summary>
-    /// Hardcoded varsayilan recovery sifresi. <c>gate_credentials</c> tablosu bos oldugunda
-    /// ve appsettings'te override yoksa bu deger seed edilir. Vendor bunu unutmaz; musteriye
-    /// ilk kurulumda bildirilir, musteri derhal kendi sifresini belirler.
+    /// 2026-08-24 (K2 guvenlik denetimi): SABIT vendor-genelinde ayni recovery sifresi
+    /// KALDIRILDI. Ayni sifre tum kurulumlarda gecerli oldugu icin, bir kurulumdan (veya
+    /// binary'den) ogrenen kisi /Gate'i anonim gecip SystemAdmin yaratabiliyordu.
+    /// Artik appsettings'te <c>GateSettings:InitialPassword</c> yoksa KURULUMA OZGU
+    /// rastgele bir sifre uretilir ve bir kez log'a yazilir.
+    /// NOT: yalnizca <b>yeni</b> kurulumlari etkiler — <c>gate_credentials</c> dolu ise
+    /// seed hic calismaz, mevcut sifreler oldugu gibi kalir.
     /// </summary>
-    private const string DefaultRecoveryPassword = "Calibra-Recovery-2026!.,";
+    private static string GenerateRecoveryPassword()
+    {
+        // ValidateStrength ile uyumlu olmali (10+, buyuk/kucuk/rakam/ozel).
+        const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+        const string lower = "abcdefghijkmnpqrstuvwxyz";
+        const string digit = "23456789";
+        const string spec  = "!@#$%*?-_";
+        var all = upper + lower + digit + spec;
+        var chars = new List<char>
+        {
+            upper[System.Security.Cryptography.RandomNumberGenerator.GetInt32(upper.Length)],
+            lower[System.Security.Cryptography.RandomNumberGenerator.GetInt32(lower.Length)],
+            digit[System.Security.Cryptography.RandomNumberGenerator.GetInt32(digit.Length)],
+            spec[System.Security.Cryptography.RandomNumberGenerator.GetInt32(spec.Length)],
+        };
+        while (chars.Count < 16)
+            chars.Add(all[System.Security.Cryptography.RandomNumberGenerator.GetInt32(all.Length)]);
+        // Fisher-Yates (kriptografik rastgelelikle) — sabit pozisyon deseni birakma.
+        for (var i = chars.Count - 1; i > 0; i--)
+        {
+            var j = System.Security.Cryptography.RandomNumberGenerator.GetInt32(i + 1);
+            (chars[i], chars[j]) = (chars[j], chars[i]);
+        }
+        return new string(chars.ToArray());
+    }
 
     private readonly IGateCredentialsRepository _repo;
     private readonly IConfiguration _configuration;
@@ -102,11 +130,16 @@ public sealed class GatePasswordService : IGatePasswordService
         // 2) Bos ise hardcoded varsayilan recovery sifresi
         if (string.IsNullOrWhiteSpace(initial))
         {
-            initial = DefaultRecoveryPassword;
+            initial = GenerateRecoveryPassword();
+            // Operatorun iceri girebilmesi icin uretilen sifre BIR KEZ loglanir (yalniz ilk
+            // kurulumda calisir). Ilk giristen sonra Sistem Ayarlari -> Sifre Degistir ile
+            // degistirilmeli. Kalici hata logu Error/Critical yakaladigi icin bu Warning
+            // yalniz konsol/EventLog'a duser.
             _logger.LogWarning(
-                "Gate sifresi HARDCODED varsayilan recovery sifresine seed edildi. " +
-                "Musteri ilk girisini bu sifreyle yapip Sistem Ayarlari -> Sifre Degistir " +
-                "bolumunden DERHAL kendi sifresine cevirmeli.");
+                "Gate sifresi KURULUMA OZGU rastgele bir degere seed edildi: {Password} — " +
+                "ilk giristen sonra Sistem Ayarlari -> Sifre Degistir ile DERHAL degistirin. " +
+                "Onceden belirlemek icin appsettings GateSettings:InitialPassword kullanin.",
+                initial);
         }
         else
         {

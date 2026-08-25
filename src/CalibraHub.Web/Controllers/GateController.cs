@@ -1,7 +1,8 @@
-using CalibraHub.Application.Abstractions.Services;
+﻿using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Web.Infrastructure.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace CalibraHub.Web.Controllers;
 
@@ -16,16 +17,27 @@ public sealed class GateController : Controller
     private readonly IGatePasswordService _passwordService;
     private readonly ILicenseService      _licenseService;
     private readonly IMachineIdProvider   _machineIdProvider;
+    // 2026-08-24 K2: gate kaba-kuvvet kilidi (login ile AYNI tracker, ayri anahtar uzayi).
+    private readonly CalibraHub.Application.Services.LoginLockoutTracker _lockout;
+    private readonly ILogger<GateController> _logger;
 
     public GateController(
         IGatePasswordService passwordService,
         ILicenseService licenseService,
-        IMachineIdProvider machineIdProvider)
+        IMachineIdProvider machineIdProvider,
+        CalibraHub.Application.Services.LoginLockoutTracker lockout,
+        ILogger<GateController> logger)
     {
         _passwordService   = passwordService;
         _licenseService    = licenseService;
         _machineIdProvider = machineIdProvider;
+        _lockout           = lockout;
+        _logger            = logger;
     }
+
+    /// <summary>Kilit anahtari — gate tek paylasimli sifre oldugu icin kullanici yok; IP bazli.</summary>
+    private string LockoutKey()
+        => "gate:" + (HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown");
 
     // ── Gate Login ──────────────────────────────────────────────────────────
 
@@ -36,18 +48,42 @@ public sealed class GateController : Controller
         return View();
     }
 
+    // 2026-08-24 (K2 guvenlik denetimi): bu uc ANONIM ve arkasindaki [GateProtected]
+    // ekranlar DB baglanti ayarlari + SystemAdmin kullanici olusturmayi aciyor. Eskiden tek
+    // savunma 1 sn'lik Task.Delay idi — istek BASINA oldugu icin paralel baglantilarla
+    // etkisizdi (dakikada binlerce deneme). Artik iki katman var: IP basina rate limit
+    // ("auth" politikasi, Login ile ayni) + LoginLockoutTracker ile kalici kilit.
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> Verify(string password, string? returnUrl, CancellationToken ct)
     {
-        if (string.IsNullOrEmpty(password) || !await _passwordService.VerifyAsync(password, ct))
+        var key = LockoutKey();
+        var lockedUntil = _lockout.CheckLocked(key);
+        if (lockedUntil is not null)
         {
-            // Brute-force koruma: yanlis girisler 1 saniye geciktirilir
-            await Task.Delay(1000, ct);
-            TempData["GateError"] = "Gecersiz sifre.";
+            var kalan = (int)Math.Ceiling((lockedUntil.Value - DateTime.UtcNow).TotalMinutes);
+            _logger.LogWarning("[Gate] Kilitli IP'den deneme. Ip={Ip} KalanDk={Kalan}",
+                HttpContext.Connection.RemoteIpAddress?.ToString() ?? "-", kalan);
+            TempData["GateError"] = $"Cok fazla hatali deneme. {Math.Max(kalan, 1)} dakika sonra tekrar deneyin.";
             ViewBag.ReturnUrl = returnUrl;
             return View(nameof(Index));
         }
+
+        if (string.IsNullOrEmpty(password) || !await _passwordService.VerifyAsync(password, ct))
+        {
+            var locked = _lockout.RegisterFailure(key);
+            _logger.LogWarning("[Gate] Gecersiz sifre denemesi. Ip={Ip} Kilitlendi={Locked}",
+                HttpContext.Connection.RemoteIpAddress?.ToString() ?? "-", locked);
+            await Task.Delay(1000, ct);
+            TempData["GateError"] = locked
+                ? "Cok fazla hatali deneme. Bir sure sonra tekrar deneyin."
+                : "Gecersiz sifre.";
+            ViewBag.ReturnUrl = returnUrl;
+            return View(nameof(Index));
+        }
+
+        _lockout.Reset(key);
 
         HttpContext.Session.SetString("GateUnlockedAt",
             DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString());
