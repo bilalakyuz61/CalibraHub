@@ -68,7 +68,7 @@ public static class MenuDefinition
                 PermissionFormCode: FormCodes.PermissionMgmt),
             new("settings.datavisibility", isEn ? "Data Visibility Rules"  : "Veri Perdeleme Kuralları","EyeOff",             "/Admin/DataVisibilityRules",null,
                 PermissionFormCode: FormCodes.DataVisibility),
-            new("settings.dbschema",       isEn ? "Database Map"           : "Veritabanı Haritası",     "Database",           "/admin/db-schema",          null, AdminOnly: true),
+            new("settings.dbschema",       isEn ? "Database Map"           : "Veritabanı Haritası",     "Database",           "/Admin/DbSchema",          null, AdminOnly: true),
             new("settings.scheduledtasks", isEn ? "Scheduled Tasks"        : "Zamanlanmış Görevler",    "Clock",              "/Admin/ScheduledTasks",     null,
                 PermissionFormCode: FormCodes.Scheduler),
             // Tek log ekranı (2026-08-24): "İşlem Logları" + "Hata Logları" ayrı menüydü,

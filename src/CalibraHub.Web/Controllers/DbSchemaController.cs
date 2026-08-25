@@ -17,7 +17,7 @@ namespace CalibraHub.Web.Controllers;
 /// SetupDefinitions yapilirsa Admin menude linki gorur ama tiklayinca 403 alir (dead link).
 /// </summary>
 [Authorize]
-[Route("admin/db-schema")]
+[Route("Admin/DbSchema")]
 [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.CompanySettings)]
 public sealed class DbSchemaController : Controller
 {
@@ -35,6 +35,21 @@ public sealed class DbSchemaController : Controller
 
     [HttpGet("")]
     public IActionResult Index() => View("~/Views/Admin/DbSchema.cshtml");
+
+    // ── Eski adres (2026-08-25 oncesi: /admin/db-schema) ────────────────────
+    // Rota, projedeki tek kucuk-harfli/tireli adresti; digerleriyle ayni desene
+    // (/Admin/DbSchema) cekildi. Disariya verilmis baglantilar ve yer imleri
+    // kirilmasin diye eski adres yonlendiriliyor.
+    //
+    // 301 DEGIL 302: kalici yonlendirme tarayicida agresif onbelleklenir ve karardan
+    // donmek gerekirse kullanici eski adrese bir daha ulasamaz. Ic yonetim ekrani
+    // icin gecici yonlendirme yeterli.
+    [HttpGet("/admin/db-schema")]
+    public IActionResult LegacyIndex() => Redirect("/Admin/DbSchema");
+
+    [HttpGet("/admin/db-schema/export")]
+    public IActionResult LegacyExport(string? format)
+        => Redirect("/Admin/DbSchema/export?format=" + (string.IsNullOrWhiteSpace(format) ? "csv" : format));
 
     [HttpGet("api/tables")]
     public async Task<IActionResult> GetTables(CancellationToken ct)

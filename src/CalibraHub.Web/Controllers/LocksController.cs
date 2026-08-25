@@ -35,7 +35,6 @@ public sealed class LocksController : Controller
     [HttpGet("/Admin/Locks")]
     public IActionResult Locks()
     {
-        ViewData["AdminMenu"] = "locks";
         var activeLocks = _collaborationStore.GetAllActiveLocks(DateTime.Now);
         var boardConfig = BuildLocksBoardConfig(activeLocks);
         var boardConfigJson = JsonSerializer.Serialize(boardConfig, BoardConfigJsonOptions);

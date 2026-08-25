@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
@@ -45,7 +45,6 @@ public sealed class CompanySettingsController : Controller
         [FromServices] IWhatsAppService whatsAppService,
         CancellationToken cancellationToken)
     {
-        ViewData["AdminMenu"] = "company-settings";
         ViewBag.WhatsAppConfig = await whatsAppService.GetConfigAsync(cancellationToken);
         var companyId = GetCompanyId();
         var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
@@ -111,7 +110,6 @@ public sealed class CompanySettingsController : Controller
         [Bind(Prefix = "SmtpInput")] SmtpProfileInput smtpInput,
         CancellationToken cancellationToken)
     {
-        ViewData["AdminMenu"] = "company-settings";
         input.Id ??= GetCompanyId();
 
         ModelState.Clear();

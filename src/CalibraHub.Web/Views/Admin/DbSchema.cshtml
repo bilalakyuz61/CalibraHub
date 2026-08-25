@@ -1,7 +1,6 @@
 ﻿@{
     ViewData["Title"] = "Veritabani Haritasi";
     ViewData["HelpKey"] = "db-schema";
-    ViewData["AdminMenu"] = "db-schema";
     ViewData["FormCode"] = "ADMIN_DB_SCHEMA";
     ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
         + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sys.tables + sys.views + sys.columns + sys.indexes + sys.foreign_keys</td>"
@@ -69,10 +68,10 @@
             <div class="sch-export-dropdown">
                 <button type="button" class="sch-export-btn" id="sch-export-btn">📥 Export ▾</button>
                 <div class="sch-export-menu" id="sch-export-menu">
-                    <a href="/admin/db-schema/export?format=csv">CSV (tablo × kolon)</a>
-                    <a href="/admin/db-schema/export?format=json">JSON (tum sema)</a>
-                    <a href="/admin/db-schema/export?format=mermaid">Mermaid ER (.mmd)</a>
-                    <a href="/admin/db-schema/export?format=markdown">Markdown (.md)</a>
+                    <a href="/Admin/DbSchema/export?format=csv">CSV (tablo × kolon)</a>
+                    <a href="/Admin/DbSchema/export?format=json">JSON (tum sema)</a>
+                    <a href="/Admin/DbSchema/export?format=mermaid">Mermaid ER (.mmd)</a>
+                    <a href="/Admin/DbSchema/export?format=markdown">Markdown (.md)</a>
                 </div>
             </div>
         </div>
@@ -126,9 +125,9 @@
         if (mounted) return;
         if (!window.CalibraHub || !window.CalibraHub.mountDatabaseMap) { showError('mountDatabaseMap bulunamadı.'); return; }
         mounted = true;
-        // Veri ucu ekranin KENDISIYLE ayni yetki kapsaminda (admin/db-schema) —
+        // Veri ucu ekranin KENDISIYLE ayni yetki kapsaminda (Admin/DbSchema) —
         // ayri kapsamda olsaydi ekrani acabilen kullanici bos harita gorurdu.
-        window.CalibraHub.mountDatabaseMap(mapEl, { apiBase: '/admin/db-schema/api' });
+        window.CalibraHub.mountDatabaseMap(mapEl, { apiBase: '/Admin/DbSchema/api' });
     }
     function mountMap() {
         loadCss();

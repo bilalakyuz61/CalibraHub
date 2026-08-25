@@ -56,7 +56,6 @@ public sealed class ParametersController : Controller
     [HttpGet("/Admin/Parameters")]
     public async Task<IActionResult> Parameters(CancellationToken cancellationToken)
     {
-        ViewData["AdminMenu"] = "settings";
 
         // Genel tab'i icin: E-Belge Onay Sistemi switch'i (Sirket Ayarlari'ndan tasindi).
         var companyId = GetCompanyId();

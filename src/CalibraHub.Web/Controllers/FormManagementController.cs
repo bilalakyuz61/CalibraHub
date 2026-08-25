@@ -39,7 +39,6 @@ public sealed class FormManagementController : Controller
     [HttpGet("/Admin/FormManagement")]
     public async Task<IActionResult> FormManagement(CancellationToken ct)
     {
-        ViewData["AdminMenu"] = "form-management";
         var config = await BuildFormsBoardConfigAsync(ct);
         return View("~/Views/Admin/FormManagement.cshtml", new FormsSmartBoardViewModel { BoardConfig = config });
     }
@@ -68,7 +67,6 @@ public sealed class FormManagementController : Controller
     [HttpGet("/Admin/FormEdit")]
     public async Task<IActionResult> FormEdit(int? id, CancellationToken ct)
     {
-        ViewData["AdminMenu"] = "form-management";
         if (id.HasValue)
         {
             var form = await _formRepository.GetByIdAsync(id.Value, ct);

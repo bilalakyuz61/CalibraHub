@@ -1,4 +1,4 @@
-@using System.Security.Claims
+﻿@using System.Security.Claims
 @using CalibraHub.Application.Security
 @using CalibraHub.Domain.Enums
 @inject CalibraHub.Web.Infrastructure.Ui.IUiTextService UiText
@@ -1138,7 +1138,7 @@
                 {
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-settings-db-schema">
                     <a class="side-subitem @(controller == "dbschema" ? "active" : string.Empty)"
-                       href="/admin/db-schema" title="Veritabanı Haritası">
+                       href="/Admin/DbSchema" title="Veritabanı Haritası">
                         <span class="menu-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                                 <ellipse cx="12" cy="5" rx="8" ry="3"/>

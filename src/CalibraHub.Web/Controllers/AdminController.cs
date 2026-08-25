@@ -73,20 +73,6 @@ public sealed class AdminController : Controller
         _logger = logger;
     }
 
-    [HttpGet]
-    public async Task<IActionResult> Index(CancellationToken cancellationToken)
-    {
-        SetActiveMenu("dashboard");
-        var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
-        return View(snapshot);
-    }
-
-    [HttpGet]
-    public IActionResult Settings()
-    {
-        return RedirectToAction(nameof(Index));
-    }
-
     // NOT: Parameters + SaveGeneralParametersJson + ParametersList + SaveParameter + DeleteParameter + GeneralParametersInput + DeleteCompanyParameterRequest ParametersController'a tasindi (rapor 2.3 split).
 
     // NOT: ScheduledTask* cluster (10 endpoint + BuildScheduledTasksBoardConfig/Type/Status helper'lar) ScheduledTaskController'a tasindi (rapor 2.3 AdminController split).
@@ -108,7 +94,6 @@ public sealed class AdminController : Controller
         string? languageCode,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("appearance");
         var viewModel = await BuildAppearanceSettingsViewModelAsync(
             formKey,
             languageCode,
@@ -126,7 +111,6 @@ public sealed class AdminController : Controller
         AppearanceSettingsViewModel model,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("appearance");
 
         var userId = GetCurrentUserId();
         if (!userId.HasValue)
@@ -183,7 +167,6 @@ public sealed class AdminController : Controller
         AppearanceSettingsViewModel model,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("appearance");
 
         if (model.Labels is null || model.Labels.Count == 0)
         {
@@ -248,7 +231,6 @@ public sealed class AdminController : Controller
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("system-logs");
         var viewModel = await BuildSystemLogsViewModelAsync(searchTerm, level, companyId, page, pageSize, cancellationToken);
         return View(viewModel);
     }
@@ -268,7 +250,6 @@ public sealed class AdminController : Controller
     [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> ProjectInstructions(CancellationToken cancellationToken)
     {
-        SetActiveMenu("project-instructions");
         var viewModel = await BuildProjectInstructionsViewModelAsync(cancellationToken);
         return View(viewModel);
     }
@@ -282,7 +263,6 @@ public sealed class AdminController : Controller
         ProjectInstructionsViewModel model,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("project-instructions");
 
         var normalizedContent = model.Content ?? string.Empty;
         var filePath = ResolveProjectInstructionsPath();
@@ -301,7 +281,6 @@ public sealed class AdminController : Controller
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("integrator-settings");
         var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
 
         IntegratorSettingsInput input;
@@ -364,7 +343,6 @@ public sealed class AdminController : Controller
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("mail-settings");
         var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
 
         var input = new IntegratorSettingsInput
@@ -418,7 +396,6 @@ public sealed class AdminController : Controller
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("erp-settings");
         var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
 
         var input = new IntegratorSettingsInput
@@ -477,7 +454,6 @@ public sealed class AdminController : Controller
         Response.Headers["Pragma"] = "no-cache";
         Response.Headers["Expires"] = "0";
 
-        SetActiveMenu("view-settings-screens");
         ViewData["OpenMaterialGroupModal"] = openGroupModal;
         var viewModel = await BuildScreenDesignSettingsPageViewModelAsync(
             screenCode,
@@ -511,7 +487,6 @@ public sealed class AdminController : Controller
         MaterialCardViewSettingsViewModel model,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("view-settings-screens");
 
         // Grup kaydederken FieldInput alanlari gonderilmez — React'in
         // saveGroup akisi sadece GroupInput.* gonderir. FieldInput.FieldKey,
@@ -599,7 +574,6 @@ public sealed class AdminController : Controller
         MaterialCardViewSettingsViewModel model,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("view-settings-screens");
 
         // Field kaydederken GroupInput alanlari gonderilmez — React'in
         // saveField akisi sadece FieldInput.* gonderir. GroupInput.GroupKey
@@ -695,7 +669,6 @@ public sealed class AdminController : Controller
         StandardScreenDesignViewModel model,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("view-settings-screens");
 
         try
         {
@@ -745,7 +718,6 @@ public sealed class AdminController : Controller
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("integrator-settings");
 
         if (!TryParseIntegratorProvider(input.Provider, out var provider))
         {
@@ -821,7 +793,6 @@ public sealed class AdminController : Controller
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("integrator-settings");
         try
         {
             await _adminManagementService.DeleteIntegratorSettingsAsync(id, cancellationToken);
@@ -844,7 +815,6 @@ public sealed class AdminController : Controller
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("integrator-settings");
 
         if (!TryParseIntegratorProvider(input.Provider, out var provider))
         {
@@ -929,7 +899,6 @@ public sealed class AdminController : Controller
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("integrator-settings");
 
         try
         {
@@ -959,7 +928,6 @@ public sealed class AdminController : Controller
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("mail-settings");
 
         if (!ModelState.IsValid)
         {
@@ -1028,7 +996,6 @@ public sealed class AdminController : Controller
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("mail-settings");
 
         if (!ModelState.IsValid)
         {
@@ -1110,7 +1077,6 @@ public sealed class AdminController : Controller
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("erp-settings");
 
         if (!ModelState.IsValid)
         {
@@ -1186,7 +1152,6 @@ public sealed class AdminController : Controller
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("erp-settings");
 
         if (!ModelState.IsValid)
         {
@@ -1248,7 +1213,6 @@ public sealed class AdminController : Controller
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("erp-settings");
         try
         {
             await _adminManagementService.DeleteErpConnectionAsync(id, cancellationToken);
@@ -1297,7 +1261,6 @@ public sealed class AdminController : Controller
     [HttpGet]
     public IActionResult Permissions()
     {
-        SetActiveMenu("permissions");
         return View();
     }
 
@@ -1307,7 +1270,6 @@ public sealed class AdminController : Controller
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("departments");
         var viewModel = await BuildDepartmentViewModelAsync(new DepartmentCreateInput(), page, pageSize, cancellationToken);
         var board = await BuildDepartmentBoardConfigAsync(cancellationToken);
         return View(new DepartmentManagementViewModel
@@ -1418,7 +1380,6 @@ public sealed class AdminController : Controller
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("departments");
 
         if (!ModelState.IsValid)
         {
@@ -1450,7 +1411,6 @@ public sealed class AdminController : Controller
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("users");
         var viewModel = await BuildUserViewModelAsync(
             new UserCreateInput
             {
@@ -1472,7 +1432,6 @@ public sealed class AdminController : Controller
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("users");
 
         input.Permissions ??= new List<string>();
         input.Permissions = input.Permissions
@@ -1533,7 +1492,6 @@ public sealed class AdminController : Controller
         int? usersPageSize,
         CancellationToken cancellationToken)
     {
-        SetActiveMenu("roles");
 
         var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
         var activeCompanies = snapshot.Companies
@@ -2626,11 +2584,6 @@ public sealed class AdminController : Controller
     // NOT: TestCompanyDatabaseConnection ConnectivityTestsController'a tasindi (rapor 2.3 split).
 
     // NOT: Locks + LocksBoardConfig + BuildLocksBoardConfig LocksController'a tasindi (rapor 2.3 split).
-
-    private void SetActiveMenu(string key)
-    {
-        ViewData["AdminMenu"] = key;
-    }
 
     // ── Entegrasyon API Profilleri ───────────────────────────────────────────
     // Eski "Entegrasyon Tanimlari" (integration_event_*) ekrani kaldirildi.

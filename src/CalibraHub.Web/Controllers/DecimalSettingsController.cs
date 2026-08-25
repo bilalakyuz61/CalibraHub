@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Services;
+﻿using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -33,7 +33,6 @@ public sealed class DecimalSettingsController : Controller
     [HttpGet("/Admin/DecimalSettings")]
     public IActionResult Index()
     {
-        ViewData["AdminMenu"] = "settings";
         return View();
     }
 

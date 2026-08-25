@@ -177,7 +177,6 @@ public sealed class DepartmentController : Controller
     [HttpGet("/Admin/DepartmentEdit")]
     public async Task<IActionResult> DepartmentEdit(int? id, CancellationToken cancellationToken)
     {
-        ViewData["AdminMenu"] = "departments";
         var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
         var companies = snapshot.Companies.Where(c => c.IsActive).OrderBy(c => c.Name).ToArray();
 

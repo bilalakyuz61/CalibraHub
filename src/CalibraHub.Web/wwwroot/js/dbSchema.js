@@ -4,7 +4,7 @@
 (function () {
     'use strict';
 
-    const API_BASE = '/admin/db-schema/api';
+    const API_BASE = '/Admin/DbSchema/api';
     const ELS = {
         search: document.getElementById('sch-search'),
         count: document.getElementById('sch-count'),
@@ -284,7 +284,7 @@
             saveBtn.disabled = true;
             status.textContent = 'Kaydediliyor…';
             try {
-                const res = await fetch(`/admin/db-schema/api/views/${encodeURIComponent(viewName)}/description`, {
+                const res = await fetch(`/Admin/DbSchema/api/views/${encodeURIComponent(viewName)}/description`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ description: input.value }),
