@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
@@ -10,6 +10,14 @@ namespace CalibraHub.Application.Services.Import;
 /// satır-bazlı tabanı KULLANMAZ: her Excel satırı bir bileşendir, satırlar "Ana Ürün Kodu"na
 /// göre gruplanıp her ana ürün için tek <see cref="SaveBOMRequest"/> oluşturulur.
 /// Stok kodları Id'ye çözülür (eksikse satır hata verir). Yazma <c>SaveBOMAsync</c>.
+///
+/// TEKRAR AKTARIM = TAM DEĞİŞTİRME. <c>SaveBOMAsync</c> Id'siz çağrılır; o da mamulün BAZ
+/// reçetesini bulup GÜNCELLER (<c>UpdateBOMAsync</c> önce kalem satırlarını siler, sonra
+/// istekteki satırları yazar). Yani dosyadaki liste, o reçetenin TAMAMIDIR:
+///   · 5 kalemli reçete + 6 kalemli dosya  → reçete 6 kalem olur
+///   · 5 kalemli reçete + yalnız 1 kalemlik dosya → diğer 4 kalem SİLİNİR
+/// Bu bilinçlidir (reçete eksik gönderilemez; yarım reçete anlamsızdır) ama Stok Özelliği
+/// aktarımının "ekle, mevcutlar dursun" davranışından FARKLIDIR — karıştırılmamalı.
 /// </summary>
 public sealed class BomImportHandler : IImportTargetHandler
 {
@@ -38,27 +46,71 @@ public sealed class BomImportHandler : IImportTargetHandler
     {
         var items = (await _itemRepo.GetItemsAsync(ct)).ToList();
         bool HasItem(string code) => items.Any(i => string.Equals(i.Code?.Trim(), code.Trim(), StringComparison.OrdinalIgnoreCase));
+        Item? FindItem(string code) => items.FirstOrDefault(i => string.Equals(i.Code?.Trim(), code.Trim(), StringComparison.OrdinalIgnoreCase));
         var (keys, labels) = DisplayCols(set.MappedKeys);
 
         int total = 0, valid = 0, error = 0;
         var detail = new List<ImportPreviewRowDto>();
         var parents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // Ana ürün başına "mevcut reçete var mı" — SaveBOMAsync Id'siz çağrıldığında baz
+        // reçeteyi bulup GÜNCELLER (satırları silip yeniden yazar). Önizleme bunu "yeni kayıt"
+        // diye gösterirse kullanıcı, var olan reçetesinin üzerine yazılacağını bilmeden
+        // onaylar. Bu yüzden durum satır satır çözülüp doğru etiketlenir.
+        var existsCache = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        async Task<bool> BomExistsAsync(string parentCode)
+        {
+            if (existsCache.TryGetValue(parentCode, out var cached)) return cached;
+            var item = FindItem(parentCode);
+            var found = false;
+            if (item is not null)
+            {
+                // Kombinasyonlu reçete ayrı bir kayıttır; önizlemede yalnız BAZ reçete
+                // (ConfigId = null) kontrol edilir — kombinasyon çözümü commit tarafında yapılır.
+                var existing = await _itemRepo.GetBOMByItemAsync(item.Id, null, ct);
+                found = existing is not null;
+            }
+            existsCache[parentCode] = found;
+            return found;
+        }
+
+        var willUpdate = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var row in set.Rows)
         {
             ct.ThrowIfCancellationRequested();
             total++;
             var errs = ValidateRow(row, HasItem, out var parent);
-            if (errs.Count > 0) error++;
-            else { valid++; if (!string.IsNullOrWhiteSpace(parent)) parents.Add(parent!); }
+
+            var action = "insert";
+            if (errs.Count > 0) { error++; action = "error"; }
+            else
+            {
+                valid++;
+                if (!string.IsNullOrWhiteSpace(parent))
+                {
+                    parents.Add(parent!);
+                    var hasCombo = !string.IsNullOrWhiteSpace(ImportParse.Get(row, "ParentCombination"));
+                    if (!hasCombo && await BomExistsAsync(parent!))
+                    {
+                        action = "update";
+                        willUpdate.Add(parent!);
+                    }
+                }
+            }
+
             if (detail.Count < PreviewDetailLimit)
             {
                 var cells = keys.Select(k => new ImportPreviewCellDto(k, row.TryGetValue(k, out var v) ? v : null)).ToList();
-                detail.Add(new ImportPreviewRowDto(total, errs.Count > 0 ? "error" : "insert", cells, errs));
+                detail.Add(new ImportPreviewRowDto(total, action, cells, errs));
             }
         }
-        // insertCount = farklı reçete (ana ürün) sayısı; updateCount kullanılmıyor.
-        return new ImportPreviewResultDto(true, null, total, valid, error, parents.Count, 0, keys, labels, detail);
+
+        // Sayımlar REÇETE bazında (satır değil): kaç yeni reçete açılacak, kaçının içeriği
+        // baştan yazılacak.
+        var updateCount = willUpdate.Count;
+        var insertCount = parents.Count - updateCount;
+        return new ImportPreviewResultDto(true, null, total, valid, error, insertCount, updateCount, keys, labels, detail);
     }
 
     public async Task<ImportCommitResultDto> CommitAsync(ImportRowSet set, int? userId, CancellationToken ct)
