@@ -1634,15 +1634,10 @@
 
 </style>
 }
-@* PageComment Seq 1117 (2026-08-26): ust seritteki "Islemler" (Settings/dislar
-   ikonu) menusune yumusak acilis animasyonu eklendi. Menu Shell.jsx'te (React
-   Shell, TUM ekranlarda ortak) render edilir ve workspace-tab mimarisinde
-   genelde bu sayfanin KENDI iframe'i DEGIL, DIS dokuman icinde yasar — bu
-   yuzden CSS'i burada scope'lamak islemez (iki ayri DOM agaci). Animasyon
-   bunun yerine Shell.jsx icinde, calisma-zamaninda "aktif sekme Malzeme Karti
-   mi" kontroluyle (mceIsMaterialCardEditActiveTab) SADECE bu ekran icin
-   devreye giriyor; diger tum ekranlarda menu eskisi gibi aninda acilir,
-   davranis degismedi. Detay: ClientApp/src/components/Shell/Shell.jsx. *@
+@* PageComment Seq 1117: ust seritteki "Islemler" menusunun acilis animasyonu
+   Shell.jsx'te tanimlidir (React Shell, TUM ekranlarda ortak) — bu sayfada
+   scope'lanmaz. Kullanici karariyla animasyon tum ekranlarda standarttir.
+   Detay: ClientApp/src/components/Shell/Shell.jsx. *@
 
 <div class="ux-edit-shell">
 @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)

@@ -890,6 +890,11 @@ END;";
             // temizlenince bir sonraki acilista otomatik kurulur. Per-company DB'lerin her biri
             // icin ayri calisir — bir sirketteki cift digerlerini engellemez.
             await EnsureItemsBarcodeUniqueIndexAsync(connection, cancellationToken);
+            // 2026-08-26: Ad-benzerligi cikarimindan gercek FK'ye terfi ettirilen referanslar
+            // (Veritabani Haritasi ekrani "cikarim" olarak gosteriyordu). Zincirin SONUNDA —
+            // hem cocuk hem ebeveyn tablonun kurulu oldugu tek nokta. Oksuz satir varsa kisit
+            // KURULMAZ, uyari loglanir ve acilis NORMAL devam eder (bkz. metod ozeti).
+            await EnsureInferredForeignKeysAsync(connection, cancellationToken);
             // Startup override pass (clobber savunması) — BİRİNCİL geçiş. Kod baseline'ı
             // yukarıdaki tüm program view'larını ensure ettikten SONRA aktif kullanıcı
             // override'larını uygular (kullanıcı sürümü kazanır). NOT: flat view'lar +
@@ -1201,6 +1206,167 @@ END;";
         {
             Console.Error.WriteLine(
                 $"[DB INIT WARN] [{connection.Database}] Items.Barcode unique index adimi atlandi: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Ad-benzerligi cikarimindan GERCEK FK'ye terfi ettirilen referanslar (PageComment #1118).
+    /// Veritabani Haritasi (/admin/dbschema) bu kolonlari "kolon adi benzerligi" ile cikarim
+    /// olarak gosteriyordu; asagidaki liste, kolonun hedef tabloya gercekten isaret ettigi
+    /// repository SQL'i (JOIN) ile TEK TEK dogrulanmis olanlardir.
+    ///
+    /// Listeye ALINMAYANLAR (bilincli):
+    ///  • ApprovalInstance.DocumentId  — POLIMORFIK. [EntityKind] ayirt edicisi var
+    ///    ('Document' | 'Capa' | ileride digerleri); SqlApprovalInstanceRepository JOIN'i
+    ///    "EntityKind NOT IN (N'Document', N'Capa')" dalini bilerek aciik birakiyor.
+    ///    FK, tasarimin genisleme noktasini kalicilastirip kirar.
+    ///  • Attachment.FormId — Forms.Id DEGIL; elle yazilmis sabit kumesi
+    ///    (AttachmentFormIds: 1=DocMgr, 2=Asset, 3=AssetImage, 4=AssetAssignment,
+    ///    5=WidgetAttachment). Forms tablosunda 1=NOTES, 2=ORG_CHART... → harita yanilgisi.
+    ///  • CardGroupMapping.CardGroupId — referans DOGRU ama CardGroup silme akisi
+    ///    (SqlCardGroupRepository.DeleteAsync) mapping satirlarini temizlemiyor; FK, rutin
+    ///    grup silmeyi fiilen imkansiz kilardi. Once backend temizligi, sonra FK.
+    ///
+    /// GUVENLIK: bu metod acilisi ASLA cokertmez. Her kisit icin (1) her iki tablo + kolon
+    /// varligi, (2) kisit zaten var mi, (3) OKSUZ SATIR SAYIMI yapilir. Oksuz varsa kisit
+    /// KURULMAZ; hangi FK'nin kac oksuz (ve kac adet 0-sentinel) yuzunden atlandigi
+    /// Console.Error'a yazilir — sessiz atlama YOK. WITH NOCHECK kullanilmaz (yanlis guven
+    /// verir). Oksuz temizlenince bir sonraki acilista kisit OTOMATIK kurulur.
+    /// ON DELETE CASCADE / SET NULL YOK (proje karari: kayitlar soft-delete edilir).
+    /// </summary>
+    private static readonly (string Name, string Child, string Column, string Parent)[] InferredForeignKeys =
+    {
+        // ── Contact → tanim tablolari ────────────────────────────────────────
+        ("FK_Contact_PriceGroup",           "Contact",              "PriceGroupId",          "PriceGroup"),
+        ("FK_Contact_SalesRepresentative",  "Contact",              "SalesRepresentativeId", "SalesRepresentative"),
+        // ── Belge basligi / kalemi ───────────────────────────────────────────
+        ("FK_Document_Contact",             "Document",             "ContactId",             "Contact"),
+        ("FK_Document_DocumentType",        "Document",             "DocumentTypeId",        "DocumentType"),
+        ("FK_Document_Location",            "Document",             "LocationId",            "Location"),
+        ("FK_DocumentLine_Location",        "DocumentLine",         "LocationId",            "Location"),
+        ("FK_DocumentLine_Unit",            "DocumentLine",         "UnitId",                "Unit"),
+        // ── Alan ayarlari ────────────────────────────────────────────────────
+        ("FK_FldSet_Forms",                 "FldSet",               "FormId",                "Forms"),
+        // ── Sayim ────────────────────────────────────────────────────────────
+        ("FK_InventoryCount_Location",      "InventoryCount",       "LocationId",            "Location"),
+        ("FK_InventoryCountLine_Location",  "InventoryCountLine",   "LocationId",            "Location"),
+        ("FK_InventoryCountLine_Unit",      "InventoryCountLine",   "UnitId",                "Unit"),
+        // ── Stok / lokasyon ──────────────────────────────────────────────────
+        ("FK_ItemLocation_Location",        "ItemLocation",         "LocationId",            "Location"),
+        ("FK_Personnel_Location",           "Personnel",            "LocationId",            "Location"),
+        // ── Uretim: operasyon referanslari ───────────────────────────────────
+        // NOT (ad karari): OperationMachineTime uzerindeki mevcut uc kisit
+        // FK_OpMachineTime_* kisaltmasini kullaniyor (Unit/Routing/ItemGroup/MachineGroup).
+        // Tablo ici tutarlilik icin dorduncusu de ayni kisaltmayla adlandirildi.
+        ("FK_OpMachineTime_Operation",      "OperationMachineTime", "OperationId",           "Operation"),
+        ("FK_RoutingOperation_Operation",   "RoutingOperation",     "OperationId",           "Operation"),
+        ("FK_WorkOrderOperation_Operation", "WorkOrderOperation",   "OperationId",           "Operation"),
+        ("FK_WorkOrder_Unit",               "WorkOrder",            "UnitId",                "Unit"),
+        // ── Organizasyon semasi ──────────────────────────────────────────────
+        ("FK_OrgChartNode_Department",      "OrgChartNode",         "DepartmentId",          "Department"),
+        ("FK_OrgChartNode_Personnel",       "OrgChartNode",         "PersonnelId",           "Personnel"),
+        // ── Fiyat listesi ────────────────────────────────────────────────────
+        ("FK_PriceList_Currency",           "PriceList",            "CurrencyId",            "Currency"),
+    };
+
+    private async Task EnsureInferredForeignKeysAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var db = connection.Database;
+
+        foreach (var (name, child, column, parent) in InferredForeignKeys)
+        {
+            var fk  = name.Replace("]", "]]");
+            var ch  = child.Replace("]", "]]");
+            var col = column.Replace("]", "]]");
+            var pa  = parent.Replace("]", "]]");
+
+            try
+            {
+                // 1) Hazir mi? 0 = tablo/kolon yok (bu DB'de feature yok) → sessizce atla,
+                //    1 = kisit zaten var → no-op, 2 = kurulabilir.
+                int state;
+                await using (var probe = connection.CreateCommand())
+                {
+                    probe.CommandText = $"""
+                        SELECT CASE
+                            WHEN OBJECT_ID(N'[{s}].[{ch}]', N'U') IS NULL
+                              OR OBJECT_ID(N'[{s}].[{pa}]', N'U') IS NULL
+                              OR COL_LENGTH(N'[{s}].[{ch}]', N'{col}') IS NULL
+                              OR COL_LENGTH(N'[{s}].[{pa}]', N'Id')   IS NULL THEN 0
+                            WHEN EXISTS (SELECT 1 FROM sys.foreign_keys
+                                          WHERE [name] = N'{fk}'
+                                            AND [parent_object_id] = OBJECT_ID(N'[{s}].[{ch}]')) THEN 1
+                            ELSE 2 END;
+                        """;
+                    state = Convert.ToInt32(await probe.ExecuteScalarAsync(cancellationToken) ?? 0);
+                }
+
+                if (state != 2) continue;
+
+                // 2) Oksuz satir sayimi. Cocuk tablo/kolon bu DB'de olmayabilecegi icin
+                //    sorgu sp_executesql ile PARAMETRE olarak gecirilir → parse-time guvenli
+                //    (bu dosyadaki EXEC(N'...') deseninin ayni mantigi, tirnak kacisi yok).
+                //    0-sentinel ayrica sayilir: bu projede "yok" anlaminda NULL yerine 0
+                //    yazilmis olabilir ve Id IDENTITY(1,1) oldugu icin 0 asla eslesmez.
+                var innerSql =
+                    $"SELECT @o = SUM(CASE WHEN c.[{col}] IS NOT NULL AND p.[Id] IS NULL THEN 1 ELSE 0 END), " +
+                    $"       @z = SUM(CASE WHEN c.[{col}] = 0 THEN 1 ELSE 0 END) " +
+                    $"  FROM [{s}].[{ch}] c LEFT JOIN [{s}].[{pa}] p ON p.[Id] = c.[{col}];";
+
+                int orphanCount, zeroCount;
+                await using (var cntCmd = connection.CreateCommand())
+                {
+                    cntCmd.CommandText = """
+                        DECLARE @o INT, @z INT;
+                        EXEC sp_executesql @stmt, N'@o INT OUTPUT, @z INT OUTPUT',
+                                           @o = @o OUTPUT, @z = @z OUTPUT;
+                        SELECT ISNULL(@o, 0), ISNULL(@z, 0);
+                        """;
+                    cntCmd.Parameters.Add(new SqlParameter("@stmt", innerSql));
+
+                    await using var reader = await cntCmd.ExecuteReaderAsync(cancellationToken);
+                    if (!await reader.ReadAsync(cancellationToken)) continue;
+                    orphanCount = reader.GetInt32(0);
+                    zeroCount   = reader.GetInt32(1);
+                }
+
+                if (orphanCount > 0)
+                {
+                    Console.Error.WriteLine(
+                        $"[DB INIT WARN] [{db}] {fk} KURULMADI: {ch}.{col} icinde {orphanCount} " +
+                        $"oksuz satir var ({pa} tablosunda karsiligi yok" +
+                        (zeroCount > 0 ? $"; bunlarin {zeroCount} tanesi 0-sentinel" : string.Empty) + ").");
+                    Console.Error.WriteLine(
+                        $"[DB INIT WARN] [{db}] Tespit: SELECT c.[Id], c.[{col}] FROM [{s}].[{ch}] c " +
+                        $"LEFT JOIN [{s}].[{pa}] p ON p.[Id] = c.[{col}] " +
+                        $"WHERE c.[{col}] IS NOT NULL AND p.[Id] IS NULL; " +
+                        $"— temizlik (NULL'a cekme/duzeltme) KULLANICI karari; duzeltildikten sonra " +
+                        $"{fk} bir sonraki acilista OTOMATIK kurulur.");
+                    continue;
+                }
+
+                // 3) Oksuz yok → kisiti kur. ON DELETE eylemi YOK (proje karari).
+                await using (var fkCmd = connection.CreateCommand())
+                {
+                    fkCmd.CommandText = $"""
+                        ALTER TABLE [{s}].[{ch}]
+                            ADD CONSTRAINT [{fk}] FOREIGN KEY ([{col}])
+                                REFERENCES [{s}].[{pa}]([Id]);
+                        """;
+                    await fkCmd.ExecuteNonQueryAsync(cancellationToken);
+                }
+            }
+            catch (SqlException ex)
+            {
+                Console.Error.WriteLine(
+                    $"[DB INIT WARN] [{db}] {fk} kurulamadi, atlandi (SqlException {ex.Number}): {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    $"[DB INIT WARN] [{db}] {fk} kurulamadi, atlandi: {ex.Message}");
+            }
         }
     }
 
