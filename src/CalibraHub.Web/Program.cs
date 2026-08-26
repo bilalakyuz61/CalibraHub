@@ -495,6 +495,9 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IApprova
 // Repo + Service scoped (per-company DB + IFinanceService bağımlılığı); ExcelReader stateless singleton.
 // Sema init sonucunun sirket bazinda hafizasi — startup yazar, giris/sirket degistirme okur.
 builder.Services.AddSingleton<CalibraHub.Persistence.Database.SchemaInitStatusStore>();
+// Hesaplanan Kolon (2026-08-26) — liste ekranlarina SQL VIEW'dan beslenen salt-okunur kolon.
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IComputedColumnRepository,
+                           CalibraHub.Persistence.Repositories.SqlComputedColumnRepository>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IImportTemplateRepository,
                            CalibraHub.Persistence.Repositories.SqlImportTemplateRepository>();
 builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IExcelReader,

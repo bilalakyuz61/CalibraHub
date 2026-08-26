@@ -2391,6 +2391,25 @@ function MiniSwitch(props) {
    Düzenleme  : kısayollar ad+X (kaldır) + "+" (picker) + "İsimler" switch + ✓ (kaydet)
    Kalıcılık  : services/shellShortcutsService.js (user_settings → yoksa localStorage).
    ══════════════════════════════════════════════════════════════ */
+// PageComment Seq 1117 (2026-08-26): "Islemler" (dislar/Settings) menusu
+// Malzeme Karti duzenleme ekraninda (/Logistics/MaterialCardEdit) animasyonlu
+// acilsin istendi. Bu menu TUM sayfalarda ortak render edilen global Shell
+// parcasidir (workspace-tab mimarisinde genelde DIS dokumanda, sayfanin
+// KENDI iframe'i icinde DEGIL) — bu yuzden scope'lama CSS dosyasi yerine
+// burada, calisma-zamaninda "aktif sekme Malzeme Karti mi" kontroluyle
+// yapiliyor. Diger tum ekranlarda bu kontrol false doner, menu eskisi gibi
+// aninda acilir/kapanir — davranis degismez.
+function mceIsMaterialCardEditActiveTab() {
+  try {
+    if (document.body && document.body.classList.contains('page-material-card-edit')) return true
+    var frames = document.querySelectorAll('iframe[src*="MaterialCardEdit" i]')
+    for (var i = 0; i < frames.length; i++) {
+      if (window.getComputedStyle(frames[i]).display !== 'none') return true
+    }
+  } catch (e) { /* cross-origin veya erisilemeyen dom — animasyonsuz devam */ }
+  return false
+}
+
 function ShortcutsBar(props) {
   var isDark = props.isDark
   var lang = props.lang || 'TR'
@@ -2505,10 +2524,18 @@ function ShortcutsBar(props) {
       </div>
       {actionsOpen && createPortal(
         <>
+          {mceIsMaterialCardEditActiveTab() && (
+            <style>{
+              '.shell-actions-menu--mce-anim{animation:shellActionsMenuMceIn 160ms cubic-bezier(0.16,1,0.3,1);transform-origin:top left;}' +
+              '@keyframes shellActionsMenuMceIn{from{opacity:0;transform:translateY(-6px) scale(0.97);}to{opacity:1;transform:translateY(0) scale(1);}}' +
+              '@media (prefers-reduced-motion: reduce){.shell-actions-menu--mce-anim{animation:none;}}'
+            }</style>
+          )}
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }} onClick={function() { setActionsOpen(false) }} />
           <div
             className={
               'shell-actions-menu min-w-[164px] rounded-lg border overflow-hidden py-0.5 ' +
+              (mceIsMaterialCardEditActiveTab() ? 'shell-actions-menu--mce-anim ' : '') +
               (isDark ? 'bg-[#15182b] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-800')
             }
             style={{ position: 'fixed', top: actionsPos.top, left: actionsPos.left, zIndex: 1001, boxShadow: '0 10px 32px rgba(0,0,0,0.32)' }}

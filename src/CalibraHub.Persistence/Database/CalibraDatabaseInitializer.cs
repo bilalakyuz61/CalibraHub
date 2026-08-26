@@ -820,6 +820,7 @@ END;";
             // 2026-06-12 — Veri Görünürlük Kuralları (satır bazlı güvenlik) tabloları.
             // Widget'lardan sonra: widget alanı kuralları WidgetMas.Id'ye referans verebilir.
             await EnsureDataVisibilityTablesAsync(connection, cancellationToken);
+            await EnsureComputedColumnTableAsync(connection, cancellationToken);
             // 2026-06-10 — EnsureEngineSchemaAsync KALDIRILDI. Engine vizyonu rafa
             // kaldırıldı; mevcut engine.* tabloları DropEngineSchemaIfExistsAsync
             // ile temizlenir (one-time cleanup, idempotent).
@@ -20115,6 +20116,64 @@ END;";
     /// Department'a FK YOK (legacy migration'larda DROP/CREATE ediliyor — UserPermission ile aynı
     /// gerekçe). UserId → Users FK CASCADE ile temizlenir.
     /// </summary>
+    /// <summary>
+    /// Hesaplanan Kolon tanımları (2026-08-26). Liste ekranlarına, bir SQL VIEW'dan
+    /// beslenen salt-okunur kolon eklemeyi sağlar.
+    ///
+    /// Tabloda SQL YOK — yalnız tanımlayıcılar (view adı, anahtar/değer kolonu). Sorgunun
+    /// kendisi view'ın içindedir ve ViewBuilder'ın doğrulamalarından geçer. Serbest SQL
+    /// fragmanı saklamak, depolanmış injection yüzeyi açardı (bu projede rehber ham SQL'i
+    /// aynı sebeple kritik bulgu olarak kaydedilmişti).
+    /// </summary>
+    private async Task EnsureComputedColumnTableAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $@"
+            IF OBJECT_ID(N'[{s}].[BoardComputedColumn]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[BoardComputedColumn]
+                (
+                    [Id]           INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_BoardComputedColumn] PRIMARY KEY,
+                    -- Kullanıcıya görünen başlık (tanımdaki TEK serbest metin).
+                    [Label]        NVARCHAR(120)  NOT NULL,
+                    -- Hangi varlığa asılı: Item / Contact / Document. Anahtar kolonun neyi
+                    -- gösterdiğini belirler; kolon yalnız satırları bu varlık olan listelerde çıkar.
+                    [EntityKind]   NVARCHAR(40)   NOT NULL,
+                    -- Kaynak view + kolonlar. Hepsi tanımlayıcı; sys kataloğuna karşı doğrulanır.
+                    [ViewName]     NVARCHAR(128)  NOT NULL,
+                    [KeyColumn]    NVARCHAR(128)  NOT NULL,
+                    [ValueColumn]  NVARCHAR(128)  NOT NULL,
+                    -- Satır bazında birim/para birimi taşıyan kolon (ops.). Birim malzemeye göre
+                    -- değiştiği için tanım zamanı sabiti OLAMAZ.
+                    [UnitColumn]   NVARCHAR(128)  NULL,
+                    -- number | decimal | money | date | duration | text | bool
+                    [DataType]     NVARCHAR(20)   NOT NULL CONSTRAINT [DF_BoardComputedColumn_DataType] DEFAULT(N'number'),
+                    -- Tipe özgü biçim ayarları (ondalık hane, tarih deseni, süre kaynağı...).
+                    [FormatJson]   NVARCHAR(MAX)  NULL,
+                    -- Değer yoksa ne basılacak: empty | dash | zero
+                    [NullDisplay]  NVARCHAR(10)   NOT NULL CONSTRAINT [DF_BoardComputedColumn_NullDisplay] DEFAULT(N'dash'),
+                    -- Boş = varlığın TÜM listelerinde kullanılabilir; dolu = virgüllü boardKey listesi.
+                    [BoardKeys]    NVARCHAR(400)  NULL,
+                    -- Kötü yazılmış bir view liste ekranını kilitlemesin.
+                    [TimeoutSec]   INT            NOT NULL CONSTRAINT [DF_BoardComputedColumn_Timeout] DEFAULT(3),
+                    [SortOrder]    INT            NOT NULL CONSTRAINT [DF_BoardComputedColumn_SortOrder] DEFAULT(0),
+                    [IsActive]     BIT            NOT NULL CONSTRAINT [DF_BoardComputedColumn_IsActive] DEFAULT(1),
+                    [CreatedById]  INT            NULL,
+                    [Created]      DATETIME       NOT NULL CONSTRAINT [DF_BoardComputedColumn_Created] DEFAULT(SYSUTCDATETIME()),
+                    [UpdatedById]  INT            NULL,
+                    [Updated]      DATETIME       NULL
+                );
+                CREATE INDEX [IX_BoardComputedColumn_Entity]
+                    ON [{s}].[BoardComputedColumn] ([EntityKind]) WHERE [IsActive] = 1;
+            END;
+        ";
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+        Console.WriteLine("[DB INIT] EnsureComputedColumnTableAsync completed successfully.");
+    }
+
     private async Task EnsureDataVisibilityTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
         var s = _schema.Replace("]", "]]");
