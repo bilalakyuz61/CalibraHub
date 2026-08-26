@@ -44,6 +44,10 @@ workflows:
         script: chmod +x "$KMP_DIR/gradlew"
       - name: iOS uygulamasini derle (imzasiz, simulator SDK)
         script: |
+          # ARCHS/EXCLUDED_ARCHS: CMP 1.11.1 iosX64 klib YAYINLAMIYOR (o hedef kaldirildi).
+          # "generic/platform=iOS Simulator" x86_64'u de denedigi icin
+          # :shared:syncComposeResourcesForIos "Unknown iOS simulator arch: x86_64" ile patliyor.
+          # Ayni duzeltme ios-sim-run workflow'unda da var — ikisi senkron tutulmali.
           cd "$KMP_DIR/iosApp"
           xcodebuild \
             -project iosApp.xcodeproj \
@@ -51,6 +55,8 @@ workflows:
             -configuration Debug \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
+            ARCHS=arm64 \
+            EXCLUDED_ARCHS=x86_64 \
             build \
             CODE_SIGNING_ALLOWED=NO
     artifacts:

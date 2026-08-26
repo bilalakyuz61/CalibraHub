@@ -6,8 +6,12 @@ package com.calibrahub.mobile.storage
  * (bkz. CalibraHubAndroid SessionManager.kt / PersistentCookieJar.kt).
  *
  * androidMain -> DataStore Preferences (bkz. AndroidSecureStorage).
- * iosMain     -> NSUserDefaults (bkz. IosSecureStorage) — TODO: prod'da Keychain kullanilmali,
- * NSUserDefaults duz metin saklar (Faz 1 kasitli sadelestirme, KMP_GOC_PLANI ile tutarli).
+ * iosMain     -> Keychain, kSecClassGenericPassword (bkz. IosSecureStorage). Faz 1'de kasitli
+ * olarak NSUserDefaults kullaniliyordu (duz metin plist); oturum cookie'si hassas oldugu icin
+ * Keychain'e tasindi — eski defaults degerleri ilk okumada tembel gecisle aktarilir.
+ *
+ * NOT (Android tarafi hala acik): DataStore Preferences de SIFRELENMEMIS saklar. iOS ile simetri
+ * icin EncryptedSharedPreferences / DataStore + Tink'e tasinmasi ayri bir is olarak duruyor.
  */
 interface SecureStorage {
     suspend fun getString(key: String): String?
