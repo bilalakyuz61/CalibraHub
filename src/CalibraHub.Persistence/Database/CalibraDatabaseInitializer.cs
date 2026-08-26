@@ -821,6 +821,7 @@ END;";
             // Widget'lardan sonra: widget alanı kuralları WidgetMas.Id'ye referans verebilir.
             await EnsureDataVisibilityTablesAsync(connection, cancellationToken);
             await EnsureComputedColumnTableAsync(connection, cancellationToken);
+            await EnsureComputedColumnSampleViewsAsync(connection, cancellationToken);
             // 2026-06-10 — EnsureEngineSchemaAsync KALDIRILDI. Engine vizyonu rafa
             // kaldırıldı; mevcut engine.* tabloları DropEngineSchemaIfExistsAsync
             // ile temizlenir (one-time cleanup, idempotent).
@@ -20291,6 +20292,53 @@ END;";
     /// fragmanı saklamak, depolanmış injection yüzeyi açardı (bu projede rehber ham SQL'i
     /// aynı sebeple kritik bulgu olarak kaydedilmişti).
     /// </summary>
+    /// <summary>
+    /// Hesaplanan Kolon için hazır kaynak view'lar (2026-08-26).
+    ///
+    /// "Açık satış siparişi" tanımı SIFIRDAN yazılmadı: NegativeBalanceGuard'ın kullandığı
+    /// konvansiyonun aynısı — <c>BaseQuantity - DeliveredQuantity</c>, yalnız teslim
+    /// edilmemiş satırlar, iptal/red DIŞI belgeler. İkinci bir hesap yazmak, aynı stok için
+    /// iki farklı "açık sipariş" rakamı üretir ve hangisinin doğru olduğu tartışılırdı.
+    ///
+    /// Miktar ANA BİRİMDE (BaseQuantity). Birim kolonu da döner ki hücrede "1.240,00 AD"
+    /// yazılabilsin — birim malzemeden malzemeye değiştiği için tanım zamanı sabiti olamaz.
+    /// </summary>
+    private async Task EnsureComputedColumnSampleViewsAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $@"
+            CREATE OR ALTER VIEW [{s}].[vw_ItemOpenSalesQty]
+            AS
+            SELECT  dl.[ItemId]                                        AS [ItemId],
+                    SUM(dl.[BaseQuantity] - dl.[DeliveredQuantity])     AS [OpenQty],
+                    MAX(u.[Code])                                       AS [UnitCode]
+              FROM [{s}].[DocumentLine] dl
+              INNER JOIN [{s}].[Document]     doc ON doc.[id] = dl.[DocumentId]
+              INNER JOIN [{s}].[DocumentType] dt  ON dt.[id]  = doc.[DocumentTypeId]
+              INNER JOIN [{s}].[Items]        i   ON i.[Id]   = dl.[ItemId]
+              LEFT  JOIN [{s}].[Unit]         u   ON u.[Id]   = i.[UnitId]
+             WHERE dt.[code] = N'satis_siparisi'
+               AND doc.[IsActive] = 1
+               AND doc.[status] NOT IN (N'Rejected', N'Cancelled')
+               AND dl.[BaseQuantity] > dl.[DeliveredQuantity]
+             GROUP BY dl.[ItemId];
+        ";
+
+        try
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = sql;
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+            Console.WriteLine("[DB INIT] EnsureComputedColumnSampleViewsAsync completed successfully.");
+        }
+        catch (SqlException ex)
+        {
+            // Örnek view zorunlu değil — eksik bir tablo yüzünden açılış zincirinin geri
+            // kalanı durmamalı. Sessizce yutulmuyor: sebebi konsola yazılır.
+            Console.Error.WriteLine($"[DB INIT] vw_ItemOpenSalesQty olusturulamadi ({ex.Number}): {ex.Message}");
+        }
+    }
+
     private async Task EnsureComputedColumnTableAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
         var s = _schema.Replace("]", "]]");

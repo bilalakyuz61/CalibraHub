@@ -85,6 +85,9 @@ public static class MenuDefinition
                 new("settings.viewbuilder", isEn ? "SQL View Management" : "SQL View Yönetimi",       "Layers", "/ViewBuilder", null,
                     MatchPath: "/ViewBuilder"));
             settingsChildren.Add(
+                new("settings.calccol",     isEn ? "Computed Columns"   : "Hesaplanan Kolonlar",     "Calculator", "/ComputedColumn", null,
+                    MatchPath: "/ComputedColumn"));
+            settingsChildren.Add(
                 new("settings.gateadmin",   isEn ? "System Management"   : "Sistem Yönetimi",         "ShieldCheck", "/Gate", null,
                     MatchPath: "/Gate"));
         }
