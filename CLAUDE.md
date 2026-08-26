@@ -433,7 +433,12 @@ CREATE TABLE dbo.<TableName> (
 ### Legacy istisnalar (2026-07-05 itibarıyla tamamlandı)
 Önceki tüm snake_case tablolar (`user_settings`, `notes*`, `card_groups*`, `integration_api_profiles`, `sales_quote_line_details`, `sales_representatives`, `document_types`, `currencies`, `whatsapp_*`, `wa_inbox`, `item_locations`, `design_templates`) `MigrateTableRenamesAsync` + `MigrateColumnRenamesAsync` ile PascalCase'e migrate edildi. **Artık istisna yok.**
 
-**İstisna kalan tek tablo:** `PLT_SISTEM_LOG` — dış sistem entegrasyonu, ALL_CAPS kasıtlı kalıyor.
+**İstisna kalmadı (2026-08-25).** Eskiden tek istisna `PLT_SISTEM_LOG` idi (dış sistemin
+ALL_CAPS şeması). Kullanıcı kararıyla bağ **tamamen kesildi**: ne yazılıyor ne okunuyor,
+yeni veritabanlarında oluşturulmuyor. Entegratör aktarım logu artık dosya-JSONL
+(`App_Data/IntegratorLogs/{yyyy-MM}/integrator-{yyyy-MM-dd}.jsonl`) — audit ve hata
+logu ile aynı desen. **Mevcut müşteri veritabanlarındaki tablo SİLİNMEDİ**; içindeki
+geçmiş kayıtlar müşteri verisidir, DROP geri dönüşsüz kayıp olurdu.
 
 Refactor yaklaşımı: **full-rename + IF EXISTS migration guard** — `MigrateTableRenamesAsync` ve `MigrateColumnRenamesAsync` metodlarına IF EXISTS sp_rename blokları eklenir, idempotent çalışır.
 

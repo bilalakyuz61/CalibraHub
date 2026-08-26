@@ -26,58 +26,6 @@
 
 @section Styles {
 <style>
-    /* ─────────────────────────────────────────────────────────────────────
-       LISTE ACILIS ANIMASYONU (2026-08-26 — Malzeme Kartlari)
-
-       Duzenleme ekraniyla AYNI kurumsal dil: ziplama yok, kisa mesafeden
-       yerine oturma. Listeye ozgu fark, SATIRLARIN SIRAYLA belirmesidir.
-
-       KRITIK TASARIM NOTU — neden `.mc-anim-intro` kapisi var:
-       Satirlari React (SmartTable) render eder ve arama/filtre her tuslamada
-       satirlari YENIDEN olusturur. Saf CSS ile animasyon, yeni olusan her
-       satirda TEKRAR calisirdi -> kullanici filtrelerken liste surekli
-       "yanip sonerdi". Bu yuzden satir animasyonu yalnizca gövdedeki
-       `.mc-anim-intro` sinifi varken gecerlidir; sinif ilk cizimden ~900ms
-       sonra JS ile kaldirilir (asagidaki Scripts bolumu). Boylece animasyon
-       yalnizca SAYFA ACILISINDA bir kez calisir.
-
-       Yalnizca opacity/transform animlenir -> layout kaymaz.
-       ───────────────────────────────────────────────────────────────────── */
-    @@keyframes mcEnterDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
-    @@keyframes mcEnterUp   { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-    @@keyframes mcRowIn     { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-
-    /* Board kabugu: baslik seridi + tablo govdesi */
-    .page-material-cards.mc-anim-intro #reactSmartBoard > div > div:first-child {
-        animation: mcEnterDown 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
-    }
-    .page-material-cards.mc-anim-intro .cst-table {
-        animation: mcEnterUp 300ms cubic-bezier(0.22, 1, 0.36, 1) 70ms both;
-    }
-
-    /* Satirlar sirayla — ilk 12 satir kademeli, sonrasi ayni gecikmede
-       (uzun listede bekleme hissi olusmasin; ekranda zaten ~15 satir gorunur). */
-    .page-material-cards.mc-anim-intro .cst-row {
-        animation: mcRowIn 220ms ease-out both;
-    }
-    .page-material-cards.mc-anim-intro .cst-row:nth-child(1)  { animation-delay: 150ms; }
-    .page-material-cards.mc-anim-intro .cst-row:nth-child(2)  { animation-delay: 175ms; }
-    .page-material-cards.mc-anim-intro .cst-row:nth-child(3)  { animation-delay: 200ms; }
-    .page-material-cards.mc-anim-intro .cst-row:nth-child(4)  { animation-delay: 222ms; }
-    .page-material-cards.mc-anim-intro .cst-row:nth-child(5)  { animation-delay: 242ms; }
-    .page-material-cards.mc-anim-intro .cst-row:nth-child(6)  { animation-delay: 260ms; }
-    .page-material-cards.mc-anim-intro .cst-row:nth-child(7)  { animation-delay: 276ms; }
-    .page-material-cards.mc-anim-intro .cst-row:nth-child(8)  { animation-delay: 290ms; }
-    .page-material-cards.mc-anim-intro .cst-row:nth-child(9)  { animation-delay: 302ms; }
-    .page-material-cards.mc-anim-intro .cst-row:nth-child(10) { animation-delay: 312ms; }
-    .page-material-cards.mc-anim-intro .cst-row:nth-child(11) { animation-delay: 320ms; }
-    .page-material-cards.mc-anim-intro .cst-row:nth-child(n+12) { animation-delay: 326ms; }
-
-    @@media (prefers-reduced-motion: reduce) {
-        .page-material-cards.mc-anim-intro #reactSmartBoard > div > div:first-child,
-        .page-material-cards.mc-anim-intro .cst-table,
-        .page-material-cards.mc-anim-intro .cst-row { animation: none !important; }
-    }
     .page-material-cards .integrator-dashboard {
         height: 100% !important; min-height: 0 !important;
         padding: 0 !important; max-width: none !important;
@@ -107,17 +55,6 @@
 
 
 @section Scripts {
-<script>
-    // Acilis animasyonu penceresi (2026-08-26): satir animasyonu YALNIZCA sayfa
-    // acilisinda calissin. Sinif kaldirilinca sonraki render'lar (arama/filtre/
-    // yenileme) animasyonsuz olur — aksi halde her tuslamada liste yanip sonerdi.
-    (function () {
-        var b = document.body;
-        if (!b) return;
-        b.classList.add('mc-anim-intro');
-        window.setTimeout(function () { b.classList.remove('mc-anim-intro'); }, 900);
-    })();
-</script>
 <script>
 (function() {
     var BOARD_CONFIG = @Html.Raw(boardConfigJson);
