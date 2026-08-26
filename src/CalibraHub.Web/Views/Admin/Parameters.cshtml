@@ -451,6 +451,7 @@ body.app-theme-dark .ap-tab.is-active::before {
             <button type="button" class="ap-tab"           data-pane="ihtiyac"   data-label="İhtiyaç Kayıtları">İhtiyaç Kayıtları</button>
             <button type="button" class="ap-tab"           data-pane="stok"      data-label="Stok">Stok</button>
             <button type="button" class="ap-tab"           data-pane="guvenlik"  data-label="Güvenlik">Güvenlik</button>
+            <button type="button" class="ap-tab"           data-pane="kalite"    data-label="Kalite">Kalite</button>
         </aside>
 
         <main class="ap-content">
@@ -1149,6 +1150,34 @@ body.app-theme-dark .ap-tab.is-active::before {
                 </div>
             </section>
 
+            @* ── Kalite ─────────────────────────────────── *@
+            <section class="ap-pane" id="ap-pane-kalite">
+                <h2>Kalite</h2>
+                <div class="ap-hint">Kalite / DÖF (Düzeltici-Önleyici Faaliyet) modülü parametreleri.</div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Cari DÖF Açma Desteklensin</div>
+                        <div class="ap-row-desc">
+                            Açıkken Cari (Finans) liste ekranının satır <strong>İşlemler</strong> menüsünde
+                            "DÖF Aç" aksiyonu görünür ve seçilen cariye bağlı yeni bir DÖF kaydı açılabilir.
+                            <strong>Varsayılan: kapalı.</strong> Kapalıyken aksiyon menüde hiç görünmez ve
+                            cari kaynaklı yeni DÖF kaydetme isteği sunucu tarafında da reddedilir.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" id="ap-contact-capa-enabled" @(contactCapaEnabled ? "checked" : null) />
+                            <span class="ap-switch-track @(contactCapaEnabled ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(contactCapaEnabled ? "is-active" : "")"
+                                  id="ap-contact-capa-enabled-label">@(contactCapaEnabled ? "Aktif" : "Pasif")</span>
+                        </label>
+                    </div>
+                </div>
+            </section>
+
         </main>
     </div>
 
@@ -1300,6 +1329,7 @@ body.app-theme-dark .ap-tab.is-active::before {
     wireSwitch('ap-wo-recipe-edit', 'ap-wo-recipe-edit-label');
     wireSwitch('ap-fc-min-stock', 'ap-fc-min-stock-label');
     wireSwitch('ap-fc-consolidate', 'ap-fc-consolidate-label');
+    wireSwitch('ap-contact-capa-enabled', 'ap-contact-capa-enabled-label');
     // Belge türü onay switch'leri + TL müdahale — her biri kendi modül sekmesinde,
     // markup _ApprovalParamRows / _TlPriceEditRow partial'larından gelir. Id yerine
     // SINIF üzerinden bağlanır (yeni sekme eklendiğinde JS'e dokunmak gerekmez).
@@ -1421,7 +1451,7 @@ body.app-theme-dark .ap-tab.is-active::before {
     // Kendi kaydetme dalı OLAN sekmeler — bunlarda başarı/hata mesajını dal verir,
     // ortak kaydedici yalnızca sonucu AND'ler. Listede olmayan sekmede mesajı
     // ortak kaydedici verir.
-    var PANES_WITH_BRANCH = ['general', 'production', 'ihtiyac', 'stok', 'satissiparis', 'salesquote', 'guvenlik'];
+    var PANES_WITH_BRANCH = ['general', 'production', 'ihtiyac', 'stok', 'satissiparis', 'salesquote', 'guvenlik', 'kalite'];
 
     // ── Aksiyon seridi Kaydet handler ──────────────────────
     saveBtn.addEventListener('click', async function () {
@@ -1598,6 +1628,18 @@ body.app-theme-dark .ap-tab.is-active::before {
                 ok = !!dsec.ok;
                 if (ok) flash('Kaydedildi. Yeni süre bir sonraki oturum yenilemesinde geçerli olur.', true);
                 else    flash(dsec.error || 'Kaydetme basarisiz.', false);
+            } else if (activePane === 'kalite') {
+                var capaEl = document.getElementById('ap-contact-capa-enabled');
+                var rq = await fetch('/Admin/SaveParameter', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({ formCode: 'QUALITY', paramKey: 'CONTACT_CAPA_ENABLED', paramValue: (capaEl && capaEl.checked) ? 'true' : 'false', dataType: 3 })
+                });
+                var dq = await rq.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
+                ok = !!dq.ok;
+                if (ok) flash('Kaydedildi.', true);
+                else    flash(dq.error || 'Kaydetme basarisiz.', false);
             }
 
             // Ortak parametrelerin sonucu: kendi dalı olmayan sekmede mesajı da bu verir.
