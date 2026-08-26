@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Persistence.Database;
@@ -205,6 +205,25 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         return user;
     }
 
+    /// <summary>
+    /// Sifre sifirlama token'ini DB'de saklamadan once tek yonlu hash'ler.
+    ///
+    /// <para><b>Neden (2026-08-24 guvenlik denetimi, ORTA):</b> token DB'ye DUZ METIN
+    /// yaziliyordu. DB yedegini/okuma yetkisini ele geciren biri (veya bir SQL okuma
+    /// acigi) aktif token'lari okuyup herhangi bir hesabin sifresini sifirlayabilirdi.
+    /// Token zaten 256-bit CSRNG oldugundan salt/PBKDF2 gereksiz; kaba kuvvetle
+    /// on-goruntu aramak imkansiz. Bu yuzden duz SHA-256 yeterli ve hizli.</para>
+    ///
+    /// <para><b>Geriye donuk etki:</b> bu degisiklikten ONCE uretilmis (duz metin
+    /// saklanan) token'lar artik eslesmez -> o linkler gecersiz olur. Kullanici yeni
+    /// sifirlama linki ister; veri kaybi yok.</para>
+    /// </summary>
+    private static string HashResetToken(string token)
+    {
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token ?? string.Empty));
+        return Convert.ToHexString(bytes); // 64 karakter — kolon NVARCHAR(128), sigar
+    }
+
     public async Task SetResetTokenAsync(int userId, string token, DateTime expiry, CancellationToken ct)
     {
         await using var connection = await _connectionFactory.OpenSystemConnectionAsync(ct);
@@ -214,7 +233,7 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
             SET [PasswordResetToken] = @Token, [PasswordResetTokenExpiry] = @Expiry
             WHERE [Id] = @Id;
             """;
-        command.Parameters.Add(new SqlParameter("@Token", token));
+        command.Parameters.Add(new SqlParameter("@Token", HashResetToken(token)));
         command.Parameters.Add(new SqlParameter("@Expiry", expiry));
         command.Parameters.Add(new SqlParameter("@Id", userId));
         await command.ExecuteNonQueryAsync(ct);
@@ -230,7 +249,7 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
               AND [PasswordResetTokenExpiry] > @Now
               AND [IsActive] = 1;
             """;
-        command.Parameters.Add(new SqlParameter("@Token", token));
+        command.Parameters.Add(new SqlParameter("@Token", HashResetToken(token)));
         command.Parameters.Add(new SqlParameter("@Now", DateTime.UtcNow));
         await using var reader = await command.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? MapUser(reader) : null;

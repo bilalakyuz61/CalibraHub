@@ -408,15 +408,6 @@ public sealed class AdminManagementService : IAdminManagementService
             throw new ArgumentException("Secilen sirket pasif durumda.");
         }
 
-        var (name, fromEmail, fromDisplayName, host, port, username, password) = ValidateSmtpInput(
-            request.Name,
-            request.FromEmail,
-            request.FromDisplayName,
-            request.Host,
-            request.Port,
-            request.Username,
-            request.Password);
-
         var existingById = request.Id.HasValue
             ? await _smtpProfileRepository.GetByIdAsync(request.Id.Value, cancellationToken)
             : null;
@@ -425,6 +416,32 @@ public sealed class AdminManagementService : IAdminManagementService
         {
             throw new ArgumentException("Guncellenecek SMTP profili bulunamadi.");
         }
+
+        // ── Sir alanlari: BOS gelen = "degistirme" ───────────────────────────
+        // 2026-08-24 guvenlik denetimi (ORTA): SMTP sifresi ve OAuth2 client
+        // secret/refresh token ekran HTML'ine deger olarak basiliyordu; Sirket
+        // Ayarlari ekrani SystemAdmin-only OLMADIGI icin admin (DepartmentManager)
+        // posta kimlik bilgilerini kaynak koddan okuyabiliyordu. Artik ekran bu
+        // alanlari BOS gonderir; bos gelen sir alani kayitli degeri KORUR.
+        // Tek kapi burasi -> hangi ekran kaydederse kaydetsin ayni davranis.
+        var effectivePassword = string.IsNullOrWhiteSpace(request.Password)
+            ? (existingById?.Password ?? request.Password)
+            : request.Password;
+        var effectiveClientSecret = string.IsNullOrWhiteSpace(request.OAuth2ClientSecret)
+            ? existingById?.OAuth2ClientSecret
+            : request.OAuth2ClientSecret;
+        var effectiveRefreshToken = string.IsNullOrWhiteSpace(request.OAuth2RefreshToken)
+            ? existingById?.OAuth2RefreshToken
+            : request.OAuth2RefreshToken;
+
+        var (name, fromEmail, fromDisplayName, host, port, username, password) = ValidateSmtpInput(
+            request.Name,
+            request.FromEmail,
+            request.FromDisplayName,
+            request.Host,
+            request.Port,
+            request.Username,
+            effectivePassword);
 
         var allProfiles = await _smtpProfileRepository.GetAllAsync(cancellationToken);
         var duplicateNameExists = allProfiles.Any(x =>
@@ -449,8 +466,8 @@ public sealed class AdminManagementService : IAdminManagementService
             password: password,
             authMethod: request.AuthMethod ?? "Normal",
             oAuth2ClientId: request.OAuth2ClientId,
-            oAuth2ClientSecret: request.OAuth2ClientSecret,
-            oAuth2RefreshToken: request.OAuth2RefreshToken,
+            oAuth2ClientSecret: effectiveClientSecret,
+            oAuth2RefreshToken: effectiveRefreshToken,
             useSsl: request.UseSsl,
             isActive: request.IsActive,
             createdAt: existingById?.Created ?? DateTime.Now);
@@ -601,6 +618,29 @@ public sealed class AdminManagementService : IAdminManagementService
             throw new ArgumentException("Secilen sirket bulunamadi veya pasif durumda.");
         }
 
+        // ── Bos sifre = "kayitli sifreyi kullan" (ekran artik sirri HTML'e basmiyor) ──
+        // KIMLIK BILGISI RELAY KORUMASI: kayitli sifre YALNIZCA host/port/kullanici
+        // kayitli profille birebir ayniysa kullanilir. Aksi halde sunucu, kullanicinin
+        // yazdigi YABANCI bir SMTP adresine sirketin gercek sifresini gonderirdi
+        // (K3'teki DB-ayarlari relay acigiyla ayni sinif).
+        var effectivePassword = request.Password;
+        if (string.IsNullOrWhiteSpace(effectivePassword))
+        {
+            var profiles = await _smtpProfileRepository.GetAllAsync(cancellationToken);
+            var stored = profiles.FirstOrDefault(x =>
+                x.CompanyId == request.CompanyId &&
+                string.Equals(x.Host?.Trim(), request.Host?.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                x.Port == request.Port &&
+                string.Equals(x.Username?.Trim(), request.Username?.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (stored is null)
+            {
+                throw new ArgumentException(
+                    "Sifre bos. Kayitli sifreyi kullanmak icin sunucu/port/kullanici adi kayitli profille ayni olmali; " +
+                    "farkli bir sunucuyu test ediyorsaniz sifreyi de girin.");
+            }
+            effectivePassword = stored.Password;
+        }
+
         var (_, fromEmail, fromDisplayName, host, port, username, password) = ValidateSmtpInput(
             request.Name,
             request.FromEmail,
@@ -608,7 +648,7 @@ public sealed class AdminManagementService : IAdminManagementService
             request.Host,
             request.Port,
             request.Username,
-            request.Password);
+            effectivePassword);
 
         var recipientEmail = string.IsNullOrWhiteSpace(request.TestRecipientEmail)
             ? fromEmail

@@ -542,7 +542,8 @@
                     <div class="cs-line">
                         <label id="smtpPasswordLabel">Sifre</label>
                         <input asp-for="SmtpInput.Password" class="form-control form-control-sm" type="password"
-                               autocomplete="new-password" value="@Model.SmtpInput.Password" />
+                               autocomplete="new-password" value=""
+                               placeholder="@(Model.CurrentSmtp != null && !string.IsNullOrEmpty(Model.CurrentSmtp.Password) ? "Kayitli - degistirmek icin yeni sifre girin" : "")" />
                     </div>
 
                     <div id="oauthPanel" style="display:none;">
@@ -553,12 +554,14 @@
                         <div class="cs-line">
                             <label>Client Secret</label>
                             <input asp-for="SmtpInput.OAuth2ClientSecret" class="form-control form-control-sm" type="password"
-                                   value="@Model.SmtpInput.OAuth2ClientSecret" />
+                                   autocomplete="new-password" value=""
+                                   placeholder="@(Model.CurrentSmtp != null && !string.IsNullOrEmpty(Model.CurrentSmtp.OAuth2ClientSecret) ? "Kayitli - degistirmek icin yeni deger girin" : "")" />
                         </div>
                         <div class="cs-line">
                             <label>Refresh Token</label>
                             <input asp-for="SmtpInput.OAuth2RefreshToken" class="form-control form-control-sm" type="password"
-                                   value="@Model.SmtpInput.OAuth2RefreshToken" />
+                                   autocomplete="new-password" value=""
+                                   placeholder="@(Model.CurrentSmtp != null && !string.IsNullOrEmpty(Model.CurrentSmtp.OAuth2RefreshToken) ? "Kayitli - degistirmek icin yeni deger girin" : "")" />
                         </div>
                     </div>
 

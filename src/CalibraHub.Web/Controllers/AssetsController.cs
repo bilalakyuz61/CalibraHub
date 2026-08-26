@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using CalibraHub.Application.Abstractions.DesignProvider;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
@@ -497,8 +497,15 @@ public sealed class AssetsController : Controller
     {
         var meta = await _attachments.GetByIdAsync(id, ct);
         if (meta is null || !meta.IsActive) return NotFound();
+        // IDOR koruması (2026-08-24 güvenlik denetimi, ORTA): Attachment tablosu
+        // TÜM formlar için ortaktır. FormId doğrulanmazsa bu uç, yalnız Id tahmin
+        // ederek başka ekranların (widget eki, belge eki…) dosyalarını da servis eder.
+        // Doğru desen: WidgetsController attachment indirmesi.
+        if (meta.FormId != AttFormDoc) return NotFound();
         var bytes = await _attachments.GetBinaryAsync(id, ct);
         if (bytes is null) return NotFound();
+        // Tarayıcıda çalıştırılabilir içerik (html/svg) inline açılmasın.
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
         return File(bytes, meta.ContentType ?? "application/octet-stream", meta.FileName);
     }
 
@@ -506,6 +513,10 @@ public sealed class AssetsController : Controller
     public async Task<IActionResult> DeleteAssetAttachmentJson(int id, CancellationToken ct)
     {
         if (id <= 0) return Json(new { success = false, message = "Geçersiz istek." });
+        // Silme de aynı IDOR sınıfı: FormId doğrulanmazsa başka ekranın eki silinebilir.
+        var meta = await _attachments.GetByIdAsync(id, ct);
+        if (meta is null || meta.FormId != AttFormDoc)
+            return Json(new { success = false, message = "Kayıt bulunamadı." });
         await _attachments.DeleteAsync(id, ct);
         return Json(new { success = true });
     }
@@ -520,14 +531,23 @@ public sealed class AssetsController : Controller
         if (!(file.ContentType ?? "").StartsWith("image/", StringComparison.OrdinalIgnoreCase))
             return Json(new { success = false, message = "Yalnızca görsel dosyası yüklenebilir (JPG/PNG vb.)." });
 
-        await _attachments.DeleteByFormRefAsync(AttFormImage, assetId, ct);
         var bytes = await ReadFileAsync(file, ct);
+        // İstemcinin bildirdiği MIME'a GÜVENİLMEZ (2026-08-24 güvenlik denetimi, ORTA):
+        // "image/svg+xml" (veya image/* etiketiyle gönderilen HTML) aynı origin'de
+        // inline servis edilince script çalıştırır → depolanmış XSS. Gerçek tip
+        // dosyanın imzasından (magic byte) belirlenir; SVG bir XML metnidir ve
+        // imzası olmadığı için bu kontrolde otomatik olarak elenir.
+        var sniffed = SniffImageContentType(bytes);
+        if (sniffed is null)
+            return Json(new { success = false, message = "Dosya tanınmadı. JPG, PNG, GIF, BMP veya WEBP yükleyin (SVG desteklenmez)." });
+
+        await _attachments.DeleteByFormRefAsync(AttFormImage, assetId, ct);
         await _attachments.AddAsync(new Attachment
         {
             FormId = AttFormImage,
             RefId = assetId,
             FileName = file.FileName ?? "gorsel",
-            ContentType = file.ContentType,
+            ContentType = sniffed,
             FileSize = bytes.LongLength,
             CreatedById = CurrentUserId(),
             BinaryContent = bytes,
@@ -545,7 +565,12 @@ public sealed class AssetsController : Controller
         var bytes = await _attachments.GetBinaryAsync(img.Id, ct);
         if (bytes is null) return NotFound();
         Response.Headers.CacheControl = "no-cache";
-        return File(bytes, img.ContentType ?? "image/jpeg");
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        // Content-type DB'deki (eski kayıtlarda istemciden gelmiş olabilir) değere değil,
+        // içeriğin kendisine göre belirlenir; tanınmayan içerik inline gösterilmez.
+        var safeType = SniffImageContentType(bytes);
+        if (safeType is null) return NotFound();
+        return File(bytes, safeType);
     }
 
     [HttpPost]
@@ -554,6 +579,23 @@ public sealed class AssetsController : Controller
         if (assetId <= 0) return Json(new { success = false, message = "Geçersiz istek." });
         await _attachments.DeleteByFormRefAsync(AttFormImage, assetId, ct);
         return Json(new { success = true });
+    }
+
+    /// <summary>
+    /// Görsel içeriğini imzasından (magic byte) tanır; tanıyamazsa <c>null</c> döner.
+    /// SVG/HTML gibi metin tabanlı, script taşıyabilen içerikler bilinçli olarak
+    /// tanınmaz — bu uç onları asla inline servis etmemeli.
+    /// </summary>
+    private static string? SniffImageContentType(byte[] b)
+    {
+        if (b is null || b.Length < 12) return null;
+        if (b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF) return "image/jpeg";
+        if (b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47) return "image/png";
+        if (b[0] == 0x47 && b[1] == 0x49 && b[2] == 0x46 && b[3] == 0x38) return "image/gif";
+        if (b[0] == 0x42 && b[1] == 0x4D) return "image/bmp";
+        if (b[0] == 0x52 && b[1] == 0x49 && b[2] == 0x46 && b[3] == 0x46 &&
+            b[8] == 0x57 && b[9] == 0x45 && b[10] == 0x42 && b[11] == 0x50) return "image/webp";
+        return null;
     }
 
     private static async Task<byte[]> ReadFileAsync(IFormFile file, CancellationToken ct)

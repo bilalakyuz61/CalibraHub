@@ -83,11 +83,17 @@ public sealed class CompanySettingsController : Controller
                 Host = currentSmtp.Host,
                 Port = currentSmtp.Port,
                 Username = currentSmtp.Username,
-                Password = currentSmtp.Password,
+                // ── Sir alanlari EKRANA BASILMAZ (2026-08-24 guvenlik denetimi, ORTA) ──
+                // SMTP sifresi + OAuth2 client secret/refresh token daha once
+                // input value'suna duz metin yaziliyordu; "kaynagi goruntule" ile
+                // okunabiliyordu ve bu ekran SystemAdmin-only degil. Bos birakiyoruz;
+                // AdminManagementService.SaveSmtpProfileAsync bos geleni "degistirme"
+                // olarak yorumlar, yani kayitli deger korunur.
+                Password = string.Empty,
                 AuthMethod = currentSmtp.AuthMethod,
                 OAuth2ClientId = currentSmtp.OAuth2ClientId,
-                OAuth2ClientSecret = currentSmtp.OAuth2ClientSecret,
-                OAuth2RefreshToken = currentSmtp.OAuth2RefreshToken,
+                OAuth2ClientSecret = string.Empty,
+                OAuth2RefreshToken = string.Empty,
                 UseSsl = currentSmtp.UseSsl,
                 IsActive = currentSmtp.IsActive
             }

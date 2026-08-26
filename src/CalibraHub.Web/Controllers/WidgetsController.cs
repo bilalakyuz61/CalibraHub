@@ -574,6 +574,21 @@ public sealed class WidgetsController : ControllerBase
     private static readonly string[] BlockedAttachmentExtensions =
     {
         ".exe", ".dll", ".bat", ".cmd", ".ps1", ".msi", ".scr", ".com", ".vbs", ".jar", ".sh",
+        // 2026-08-24 güvenlik denetimi (ORTA): tarayıcıda ÇALIŞAN içerik türleri.
+        // Ek dosyalar aynı origin'den servis edildiği için bir .html/.svg eki,
+        // oturum çerezine erişebilen depolanmış XSS'e dönüşür.
+        ".html", ".htm", ".xhtml", ".svg", ".svgz", ".mhtml", ".xml", ".xsl", ".xslt",
+        ".js", ".mjs", ".hta", ".jsp", ".asp", ".aspx", ".php", ".cshtml",
+    };
+
+    /// <summary>
+    /// Inline (Content-Disposition: inline) gösterime İZİN VERİLEN tipler.
+    /// Allowlist bilinçli: denylist'e takılmayan yeni bir çalıştırılabilir tip
+    /// çıktığında varsayılan davranış "indir" olur, "çalıştır" değil.
+    /// </summary>
+    private static readonly string[] InlineSafeContentTypes =
+    {
+        "image/jpeg", "image/png", "image/gif", "image/bmp", "image/webp", "application/pdf",
     };
 
     private int? CurrentUserIdOrNull()
@@ -639,7 +654,14 @@ public sealed class WidgetsController : ControllerBase
             return NotFound(new { success = false, message = "Dosya icerigi bulunamadi." });
 
         var contentType = string.IsNullOrWhiteSpace(att.ContentType) ? "application/octet-stream" : att.ContentType;
-        if (inline)
+        // Tarayıcının içeriği kendi tahminiyle "html" sanıp çalıştırmasını engelle.
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+
+        // inline SADECE güvenli tiplerde (2026-08-24 güvenlik denetimi, ORTA).
+        // Eski kayıtlarda ContentType istemciden geldiği için ayrıca allowlist gerekir;
+        // güvenli olmayan her şey indirme (attachment) olarak döner → script çalışmaz.
+        var isInlineSafe = InlineSafeContentTypes.Contains(contentType.Split(';')[0].Trim(), StringComparer.OrdinalIgnoreCase);
+        if (inline && isInlineSafe)
         {
             Response.Headers.Append("Content-Disposition",
                 $"inline; filename*=UTF-8''{Uri.EscapeDataString(att.FileName)}");
