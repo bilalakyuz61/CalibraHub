@@ -1898,6 +1898,15 @@ END;";
                 IF NOT EXISTS (SELECT 1 FROM sys.columns
                                WHERE [object_id] = OBJECT_ID(N'[{schemaForSql}].[Users]') AND [name] = N'PasswordResetTokenExpiry')
                     ALTER TABLE [{schemaForSql}].[Users] ADD [PasswordResetTokenExpiry] DATETIME NULL;
+
+                -- 2026-08-26 (guvenlik denetimi K4 tamamlayicisi): gecici parolayla
+                -- olusturulan/sifirlanan hesap ilk giriste parolasini DEGISTIRMEK ZORUNDA.
+                -- Mevcut hesaplar 0 ile gelir → calisan kurulum etkilenmez.
+                IF NOT EXISTS (SELECT 1 FROM sys.columns
+                               WHERE [object_id] = OBJECT_ID(N'[{schemaForSql}].[Users]') AND [name] = N'MustChangePassword')
+                    ALTER TABLE [{schemaForSql}].[Users]
+                        ADD [MustChangePassword] BIT NOT NULL
+                        CONSTRAINT [DF_Users_MustChangePassword] DEFAULT 0;
             END;
 
             -- 2026-07-15: Grafana/Tasarim raporlama kaldirildi — kullanilmayan [GrafanaRole]

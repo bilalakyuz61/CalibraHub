@@ -648,6 +648,11 @@ public sealed class AccountController : Controller
         // çözümlemesinde kullanır. NULL ise eklenmez.
         if (authenticatedUser.DepartmentId.HasValue)
             claims.Add(new Claim("department_id", authenticatedUser.DepartmentId.Value.ToString()));
+        // Zorunlu parola degisimi (2026-08-26): claim varsa MustChangePasswordMiddleware
+        // kullaniciyi parola degistirme ekranina kilitler. Claim, parola degisince yeniden
+        // giris yapilmasa bile middleware tarafindan DB'den dogrulanir (asagidaki nota bak).
+        if (authenticatedUser.MustChangePassword)
+            claims.Add(new Claim("must_change_password", "1"));
 
         var principal = new ClaimsPrincipal(
             new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme));
@@ -773,6 +778,18 @@ public sealed class AccountController : Controller
                 input.CurrentPassword,
                 input.NewPassword,
                 cancellationToken);
+
+            // Zorunlu degisim claim'i cerezde duruyor olabilir; parola degistigine gore
+            // kullaniciyi kilitli tutmamak icin claim'siz yeniden imzala (2026-08-26).
+            if (User.HasClaim("must_change_password", "1"))
+            {
+                var refreshed = new List<Claim>(User.Claims.Where(c => c.Type != "must_change_password"));
+                await HttpContext.SignInAsync(
+                    CookieAuthenticationDefaults.AuthenticationScheme,
+                    new ClaimsPrincipal(new ClaimsIdentity(refreshed, CookieAuthenticationDefaults.AuthenticationScheme)));
+                TempData["PasswordSuccess"] = "Sifre basariyla degistirildi.";
+                return RedirectToAction("Index", "Home");
+            }
 
             TempData["PasswordSuccess"] = "Sifre basariyla degistirildi.";
             return RedirectToAction(nameof(ChangePassword));

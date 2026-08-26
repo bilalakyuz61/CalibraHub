@@ -1,4 +1,4 @@
-using CalibraHub.Domain.Common;
+﻿using CalibraHub.Domain.Common;
 using CalibraHub.Domain.Enums;
 
 namespace CalibraHub.Domain.Entities;
@@ -23,6 +23,19 @@ public sealed class UserProfile : EntityInt
     public string ThemeCode { get; private set; } = DefaultThemeCode;
     public string GridPreferencesJson { get; private set; } = string.Empty;
     public bool IsActive { get; private set; } = true;
+
+    /// <summary>
+    /// Kullanıcı bir sonraki girişinde parolasını DEĞİŞTİRMEK ZORUNDA mı?
+    /// Yönetici tarafından üretilen geçici parolalarda (yeni kullanıcı, parola
+    /// sıfırlama, bootstrap admin) <c>true</c> yapılır; kullanıcı parolasını
+    /// değiştirince temizlenir. 2026-08-24 güvenlik denetimi (K4 tamamlayıcısı):
+    /// geçici parola üretiliyordu ama değiştirilmesi hiçbir zaman zorunlu değildi.
+    /// </summary>
+    public bool MustChangePassword { get; private set; }
+
+    public void RequirePasswordChange() => MustChangePassword = true;
+
+    public void ClearPasswordChangeRequirement() => MustChangePassword = false;
 
     // Not: Üretim operatörü PIN/Kart bilgileri Personnel tablosunda tutuluyor (Faz 3a revize).
     // Personnel.UserId üzerinden bu kullanıcıyla bağlanabilir; sistem login'i olmadan da

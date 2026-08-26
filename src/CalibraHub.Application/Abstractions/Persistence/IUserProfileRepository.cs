@@ -1,4 +1,4 @@
-using CalibraHub.Domain.Entities;
+﻿using CalibraHub.Domain.Entities;
 
 namespace CalibraHub.Application.Abstractions.Persistence;
 
@@ -15,4 +15,7 @@ public interface IUserProfileRepository
     Task SetResetTokenAsync(int userId, string token, DateTime expiry, CancellationToken ct);
     Task<UserProfile?> GetByResetTokenAsync(string token, CancellationToken ct);
     Task ClearResetTokenAsync(int userId, CancellationToken ct);
+
+    /// <summary>Zorunlu parola değişimi bayrağını ayarlar (geçici parola verildiğinde true).</summary>
+    Task SetMustChangePasswordAsync(int userId, bool mustChange, CancellationToken ct);
 }

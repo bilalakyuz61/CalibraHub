@@ -83,5 +83,6 @@ public static class FunctionalTestScenarioRegistry
 
         // 2026-08-25 — bu oturumda eklenen içe aktarım şablonlarının uçtan uca sınaması.
         new ImportFeatureScenario(),
+        new ImportBomPreviewScenario(),
     };
 }

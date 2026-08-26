@@ -22,7 +22,7 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
     }
 
     private const string SelectColumns =
-        "[Id], [CompanyId], [FullName], [Email], [EmployeeCode], [DepartmentId], [SupervisorUserId], [Role], [Permissions], [PasswordHash], [LanguageCode], [ThemeCode], [GridPreferencesJson], [IsActive], [PhoneNumber]";
+        "[Id], [CompanyId], [FullName], [Email], [EmployeeCode], [DepartmentId], [SupervisorUserId], [Role], [Permissions], [PasswordHash], [LanguageCode], [ThemeCode], [GridPreferencesJson], [IsActive], [PhoneNumber], [MustChangePassword]";
 
     public async Task<IReadOnlyCollection<UserProfile>> GetAllAsync(CancellationToken cancellationToken)
     {
@@ -174,6 +174,9 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         var gridPreferencesJson = reader.IsDBNull(12) ? string.Empty : reader.GetString(12);
         var isActive = reader.GetBoolean(13);
         string? phoneNumber = reader.IsDBNull(14) ? null : reader.GetString(14);
+        // Kolon eski veritabanlarinda henuz yoksa (initializer ALTER'i calismadan once
+        // acilan baglanti) FieldCount kontrolu ile guvenli oku.
+        var mustChangePassword = reader.FieldCount > 15 && !reader.IsDBNull(15) && reader.GetBoolean(15);
 
         if (!Enum.TryParse(roleRaw, true, out UserRole role) || !Enum.IsDefined(role))
         {
@@ -195,6 +198,7 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         };
 
         user.SetPasswordHash(passwordHash);
+        if (mustChangePassword) user.RequirePasswordChange();
         user.SetInterfacePreferences(languageCode, themeCode);
         user.SetGridPreferencesJson(gridPreferencesJson);
         if (!isActive)
@@ -253,6 +257,18 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         command.Parameters.Add(new SqlParameter("@Now", DateTime.UtcNow));
         await using var reader = await command.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? MapUser(reader) : null;
+    }
+
+    public async Task SetMustChangePasswordAsync(int userId, bool mustChange, CancellationToken ct)
+    {
+        await using var connection = await _connectionFactory.OpenSystemConnectionAsync(ct);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            UPDATE {_tableName} SET [MustChangePassword] = @Flag WHERE [Id] = @Id;
+            """;
+        command.Parameters.Add(new SqlParameter("@Flag", mustChange));
+        command.Parameters.Add(new SqlParameter("@Id", userId));
+        await command.ExecuteNonQueryAsync(ct);
     }
 
     public async Task ClearResetTokenAsync(int userId, CancellationToken ct)

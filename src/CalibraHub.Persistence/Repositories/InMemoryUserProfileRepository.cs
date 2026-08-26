@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Domain.Entities;
 
 namespace CalibraHub.Persistence.Repositories;
@@ -81,6 +81,18 @@ public sealed class InMemoryUserProfileRepository : IUserProfileRepository
     public Task ClearResetTokenAsync(int userId, CancellationToken ct)
     {
         _resetTokens.Remove(userId);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Gelistirme (in-memory) modunda kalici depo yok; bayrak nesne uzerinde tutulur.</summary>
+    public Task SetMustChangePasswordAsync(int userId, bool mustChange, CancellationToken ct)
+    {
+        var user = _dataStore.Users.Values.FirstOrDefault(u => u.Id == userId);
+        if (user is not null)
+        {
+            if (mustChange) user.RequirePasswordChange();
+            else user.ClearPasswordChangeRequirement();
+        }
         return Task.CompletedTask;
     }
 }

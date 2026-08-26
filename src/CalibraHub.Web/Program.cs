@@ -1490,6 +1490,10 @@ app.UseSession();  // GateController'in Session'a erisimi icin
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Gecici parolayla acilan hesap, parolasini degistirene kadar kilitli (2026-08-26).
+// Sirasi: kimlik dogrulamadan SONRA (claim'e ihtiyaci var), endpoint calismadan ONCE.
+app.UseMiddleware<CalibraHub.Web.Middleware.MustChangePasswordMiddleware>();
+
 // Auth'tan SONRA: "expensive" policy'si kullanici kimligine gore partition'lar,
 // bu yuzden HttpContext.User dolmus olmali.
 app.UseRateLimiter();

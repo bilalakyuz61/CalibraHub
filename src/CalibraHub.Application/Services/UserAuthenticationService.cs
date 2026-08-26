@@ -63,7 +63,8 @@ public sealed class UserAuthenticationService : IUserAuthenticationService
             UserAuthorizationCatalog.GetRoleLabel(user.Role),
             company.Id,
             company.Name,
-            user.DepartmentId);
+            user.DepartmentId,
+            user.MustChangePassword);
     }
 
     public async Task ChangePasswordAsync(
@@ -94,5 +95,11 @@ public sealed class UserAuthenticationService : IUserAuthenticationService
 
         user.SetPasswordHash(_passwordHashService.HashPassword(newPassword));
         await _userProfileRepository.UpdateAsync(user, cancellationToken);
+
+        // Zorunlu degisim tamamlandi — bayrak temizlenir (2026-08-26). UpdateAsync bu
+        // kolonu yazmadigi icin ayri bir cagri gerekiyor; unutulursa kullanici parolasini
+        // degistirse bile her giriste zorunlu ekrana dusmeye devam ederdi.
+        if (user.MustChangePassword)
+            await _userProfileRepository.SetMustChangePasswordAsync(userId, false, cancellationToken);
     }
 }
