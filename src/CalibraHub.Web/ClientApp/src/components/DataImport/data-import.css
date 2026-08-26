@@ -239,7 +239,6 @@ body.app-theme-dark .di-root {
 .di-chip--upd b { color: var(--di-update); }
 .di-chip--err b { color: var(--di-danger); }
 
-.di-stat--ok .di-stat--err .di-stat--upd 
 /* ── Önizleme tablosu ─────────────────────────────────────────────────── */
 .di-preview-wrap { overflow: auto; max-height: 420px; border: 1px solid var(--di-border); border-radius: 10px; }
 .di-preview { width: 100%; border-collapse: collapse; font-size: 12px; }
