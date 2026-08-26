@@ -58,6 +58,18 @@ public sealed class LogisticsController : Controller
         return int.TryParse(raw, out var id) ? id : 0;
     }
 
+    /// <summary>
+    /// In-place refresh ucu (2026-08-26). Öncesinde board'da <c>refreshUrl</c> YOKTU; bu
+    /// durumda SmartBoard'ın "Yenile" düğmesi <c>window.location.reload()</c> yapıyordu —
+    /// CLAUDE.md C-Grid kuralının açıkça yasakladığı davranış ("in-place refresh zorunludur").
+    /// Tam sayfa yenileme, iframe'li çalışma alanında sekme durumunu ve kaydırma konumunu
+    /// da sıfırlıyordu.
+    /// </summary>
+    [HttpGet("/Logistics/MaterialCardsBoardConfig")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MaterialCardEdit)]
+    public async Task<IActionResult> MaterialCardsBoardConfig(CancellationToken ct)
+        => Json(await BuildMaterialCardsBoardConfigAsync(ct));
+
     [HttpGet]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MaterialCardEdit)]
     public async Task<IActionResult> MaterialCards(CancellationToken cancellationToken)
@@ -219,6 +231,8 @@ public sealed class LogisticsController : Controller
             searchPlaceholder = "Malzeme ara... (kod, isim)",
             emptyText = "Henuz malzeme eklenmemis",
             apiUrl = "/Logistics/GetMaterialCardsPage",
+            // Yenile → tam sayfa reload DEĞİL, board'u yerinde tazele (C-Grid kuralı).
+            refreshUrl = "/Logistics/MaterialCardsBoardConfig",
             totalCount,
             pageSize = MaterialCardPageSize,
             actions = new[]
