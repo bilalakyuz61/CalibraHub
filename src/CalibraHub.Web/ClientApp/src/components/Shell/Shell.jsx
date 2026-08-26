@@ -2508,7 +2508,7 @@ function ShortcutsBar(props) {
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }} onClick={function() { setActionsOpen(false) }} />
           <div
             className={
-              'min-w-[164px] rounded-lg border overflow-hidden py-0.5 ' +
+              'shell-actions-menu min-w-[164px] rounded-lg border overflow-hidden py-0.5 ' +
               (isDark ? 'bg-[#15182b] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-800')
             }
             style={{ position: 'fixed', top: actionsPos.top, left: actionsPos.left, zIndex: 1001, boxShadow: '0 10px 32px rgba(0,0,0,0.32)' }}

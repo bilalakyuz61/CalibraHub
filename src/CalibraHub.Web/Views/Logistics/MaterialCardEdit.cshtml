@@ -1632,6 +1632,30 @@
     body.app-theme-light .mce-cbx__option.is-used { color: rgba(15,23,42,0.40); background: rgba(239,68,68,0.04); }
     body.app-theme-light .mce-cbx__option.is-inactive { color: rgba(220,38,38,0.65); background: rgba(239,68,68,0.04); }
 
+    /* PageComment Seq 1117 (2026-08-26): ust seritteki "Islemler" (dislar ikonu)
+       menusu anlik beliriyordu — bu ekrana ozgu yumusak acilis animasyonu eklendi.
+       Menu (Shell.jsx .shell-actions-menu) TUM sayfalarda ortak render edilen
+       global bilesendir; yayilmayi onlemek icin animasyon SADECE bu ekranin
+       body class'i (page-material-card-edit) altinda scope'landi — diger
+       ekranlarda menu eskisi gibi anlik acilir/kapanir, davranis degismedi.
+       Yalnizca acilis animasyonlu: React {actionsOpen && createPortal(...)}
+       kalibiyla kapanista element aninda DOM'dan sokuluyor, cikis animasyonu
+       icin ayrica state/timeout mekanizmasi eklemek bu ekranin sinirlarini
+       asardi — kapanis aninda-kapanma olarak birakildi (rapor edildi). *@
+    body.page-material-card-edit .shell-actions-menu {
+        animation: mceShellActionsMenuIn 160ms cubic-bezier(0.16, 1, 0.3, 1);
+        transform-origin: top left;
+    }
+    @@keyframes mceShellActionsMenuIn {
+        from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @@media (prefers-reduced-motion: reduce) {
+        body.page-material-card-edit .shell-actions-menu {
+            animation: none;
+        }
+    }
+
 </style>
 }
 
