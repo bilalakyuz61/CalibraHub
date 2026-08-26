@@ -34,7 +34,16 @@ targets:
         # GEREKMEZ — yalniz Portrait yeterli ve dogru (iPad hedeflenmiyor).
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        # Geliştirme backend'i HTTP (cleartext) → ATS gevşetildi. PRODUCTION'da KALDIR.
+        # ATS gevsetmesi — KARAR (2026-08-25, kullanici): SIMDILIK KALIYOR.
+        # Backend duz HTTP (http://<lan-ip>:61001) uzerinde calisiyor; bu anahtar kaldirilirsa
+        # uygulama backend'e HIC baglanamaz. Yani bu bir "temizlik" isi degil, backend'in
+        # HTTPS'e gecmesine BAGLI. Dagitim su an TestFlight dahili test; App Store'a cikarken
+        # Apple bu anahtar icin gerekce soruyor.
+        # CIKIS KRITERI: backend gecerli sertifika ile HTTPS'e gecince bu blok TAMAMEN silinir.
+        # Ara secenek olarak NSAllowsLocalNetworking degerlendirildi ve ELENDI: Apple onu
+        # "niteliksiz host adi / .local / link-local" icin tanimliyor, duz 192.168.x.x IP'sinin
+        # kapsandigi cihazda denenmeden garanti edilemiyor (Codemagic simulatoru yerel aga ulasamaz)
+        # -> calisan kurulumu dogrulanamayan bir degisiklikle riske atmamak icin secilmedi.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         # Faz 3 — AVFoundation kamera erişimi (barkod tarama). Bu anahtar olmadan
