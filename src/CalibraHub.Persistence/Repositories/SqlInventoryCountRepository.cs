@@ -433,13 +433,27 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
         var baseQtyExpr = StockUnitSql.BaseQtyExpr(T("Items"), T("ItemUnits"), "@Quantity", "@ItemId", "@UnitId");
         await using var insCmd = conn.CreateCommand();
         insCmd.Transaction = tx;
+        // UnitCost — sayım farkı satırı da birim maliyet taşır (2026-08-22). Ambar giriş/çıkış
+        // fişleriyle AYNI fallback: malzemenin fiyat listesindeki ('m' = maliyet tipi) geçerli
+        // fiyatı. Tarih olarak sayım fişinin KENDİ tarihi alınır — düzeltme o tarihe aittir.
+        // Eşleşen fiyat yoksa NULL kalır (eski davranış); maliyet uydurulmaz.
+        var unitCostExpr = $"""
+            (SELECT TOP 1 pl.[Price]
+             FROM {T("PriceList")} pl
+             CROSS APPLY (SELECT TOP 1 dd.[DocumentDate] FROM {T("Document")} dd WHERE dd.[Id] = @DocumentId) d
+             WHERE pl.[ItemId] = @ItemId AND pl.[PriceType] = N'm' AND pl.[IsActive] = 1
+               AND pl.[ValidFrom] <= d.[DocumentDate]
+               AND (pl.[ValidTo] IS NULL OR pl.[ValidTo] >= d.[DocumentDate])
+             ORDER BY pl.[ValidFrom] DESC)
+            """;
+
         insCmd.CommandText = $"""
             INSERT INTO {lineTable}
                 ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
-                 [CombinationId],[LocationId],[FromLocationId],[MovementType],[LotId],[LotNo],[Notes])
+                 [CombinationId],[LocationId],[FromLocationId],[MovementType],[UnitCost],[LotId],[LotNo],[Notes])
             VALUES
                 (@DocumentId,@LineNo,@ItemId,@UnitId,@Quantity,{baseQtyExpr},0,0,0,
-                 @CombinationId,@ToLoc,@FromLoc,4,@LotId,@LotNo,@Notes);
+                 @CombinationId,@ToLoc,@FromLoc,4,{unitCostExpr},@LotId,@LotNo,@Notes);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         insCmd.Parameters.AddWithValue("@DocumentId", documentId);

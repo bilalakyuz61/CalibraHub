@@ -11,12 +11,17 @@ namespace CalibraHub.Persistence.Repositories;
 public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationRepository
 {
     private readonly SqlServerConnectionFactory _connectionFactory;
+    private readonly CalibraHub.Application.Abstractions.Services.IDocumentNumberService _numberService;
     private readonly string _schema;
     private readonly string _table;
     private readonly string _routingOpTable;
 
-    public SqlWorkOrderOperationRepository(SqlServerConnectionFactory factory, CalibraDatabaseOptions options)
+    public SqlWorkOrderOperationRepository(
+        SqlServerConnectionFactory factory,
+        CalibraDatabaseOptions options,
+        CalibraHub.Application.Abstractions.Services.IDocumentNumberService numberService)
     {
+        _numberService = numberService;
         _connectionFactory = factory;
         _schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         var s = _schema.Replace("]", "]]");
@@ -272,33 +277,21 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                 // işlemine ait ayrı bir "uretim_fisi" belgesine yazılır; fiş
                 // ParentDocumentId ile iş emri belgesine bağlanır.
                 //
-                // Numara AYNI transaction içinde üretilir (MAX+1) çünkü satırın yazımı
-                // atomik olmak zorunda — Application katmanı iki repository arasında
-                // transaction paylaşamıyor (bu bloğun var olma sebebi de bu).
-                // NOT: sarf tarafı (SqlStockDocRepository) numarayı DocumentNumberRule
-                // üzerinden alır; burada kural servisi yok, aynı yedek biçim kullanılır.
-                // İkisi de aynı MAX+1 sorgusundan beslendiği için numaralar çakışmaz.
-                // uretim_fisi için bir numara KURALI tanımlanırsa iki yol ayrışır — o gün
-                // bu blok da kural servisine bağlanmalı.
+                // Numara AYNI transaction içinde üretilir çünkü satırın yazımı atomik
+                // olmak zorunda — Application katmanı iki repository arasında transaction
+                // paylaşamıyor (bu bloğun var olma sebebi de bu).
+                //
+                // 2026-08-25: numara artık sarf tarafıyla AYNI kaynaktan geliyor
+                // (DocumentNumberResolver). Önce burada satır içi MAX+1 vardı; "uretim_fisi"
+                // için bir numara kuralı tanımlandığı gün aynı iş emrinin sarf fişi kurala
+                // uyacak, mamul giriş fişi ise eski biçimde kalacaktı.
                 var woDocumentIdForVoucher = stockLine.DocumentId;
                 // DocumentLine.DocumentId init-only — varlık mutasyona uğratılmaz,
                 // satır INSERT'i bu yerel değeri kullanır.
                 int voucherDocId;
                 var companyIdForVoucher = _connectionFactory.ResolveCurrentCompanyId();
-                var yil = DateTime.Now.Year;
-                string fisNo;
-                await using (var noCmd = conn.CreateCommand())
-                {
-                    noCmd.Transaction = tx;
-                    noCmd.CommandText = $"""
-                        SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([DocumentNumber], 9, 10) AS INT)), 0) + 1
-                        FROM [{s}].[Document] WITH (UPDLOCK, HOLDLOCK)
-                        WHERE [DocumentNumber] LIKE 'UF-' + CAST(@Yil AS NVARCHAR(4)) + '-%';
-                        """;
-                    noCmd.Parameters.AddWithValue("@Yil", yil);
-                    var seq = Convert.ToInt32(await noCmd.ExecuteScalarAsync(ct));
-                    fisNo = $"UF-{yil}-{seq:D4}";
-                }
+                var fisNo = await CalibraHub.Persistence.Database.DocumentNumberResolver.ResolveAsync(
+                    conn, tx, _schema, _numberService, "uretim_fisi", "UF", null, DateTime.Today, ct);
 
                 await using (var vIns = conn.CreateCommand())
                 {

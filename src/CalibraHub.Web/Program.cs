@@ -179,7 +179,9 @@ builder.Services.AddSession(options =>
     options.Cookie.IsEssential = true;
     options.Cookie.SameSite    = SameSiteMode.Strict;
     // Development'ta HTTP çalıştığı için SameAsRequest; production IIS/Nginx HTTPS termination yapar
-    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    // https zorlanan kurulumda cerez YALNIZ https'te gonderilir (SameAsRequest,
+    // http'ye dusen tek bir istekte oturum cerezini aciga cikarirdi).
+    options.Cookie.SecurePolicy = CalibraHub.Web.HostingSecurity.CookiePolicy(builder.Configuration);
     options.IdleTimeout        = TimeSpan.FromMinutes(60);
 });
 builder.Services.AddScoped<IScheduledTaskRepository, SqlScheduledTaskRepository>();
@@ -259,6 +261,13 @@ builder.Services.AddRateLimiter(limiter =>
 
     // Webhook — Meta Cloud API burst'lerine tolerans birak
     limiter.AddPolicy("webhook", ctx => PerIpFixedWindow(ctx, 300));
+
+    // Sifre sifirlama talebi — DAR pencere (2026-08-24 guvenlik denetimi, ORTA).
+    // Neden ayri politika: "auth" (20/dk) burada cok genis. Bu uc her istekte
+    // (a) e-posta gonderiyor -> posta bombardimani ve gonderen itibarinin yanmasi,
+    // (b) kurbanin AKTIF token'ini yenisiyle eziyor -> mesru kullanici linkini
+    // hicbir zaman kullanamaz (sessiz DoS). 5/dk mesru kullanim icin fazlasiyla yeterli.
+    limiter.AddPolicy("password-reset", ctx => PerIpFixedWindow(ctx, 5));
 
     // Pahali operasyonlar (AI cagrisi, Excel export) — girisli kullanici bazinda
     limiter.AddPolicy("expensive", ctx => RateLimitPartition.GetFixedWindowLimiter(
@@ -1008,7 +1017,9 @@ builder.Services.AddAntiforgery(options =>
 {
     options.Cookie.HttpOnly     = true;
     options.Cookie.SameSite     = SameSiteMode.Strict;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    // https zorlanan kurulumda cerez YALNIZ https'te gonderilir (SameAsRequest,
+    // http'ye dusen tek bir istekte oturum cerezini aciga cikarirdi).
+    options.Cookie.SecurePolicy = CalibraHub.Web.HostingSecurity.CookiePolicy(builder.Configuration);
     options.HeaderName          = "RequestVerificationToken"; // JS fetch'ten header ile kabul et
 });
 
@@ -1029,7 +1040,9 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.Cookie.HttpOnly     = true;
         options.Cookie.SameSite     = SameSiteMode.Strict;
         // Development HTTP → SameAsRequest; production HTTPS termination → Secure gönderilir
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        // https zorlanan kurulumda cerez YALNIZ https'te gonderilir (SameAsRequest,
+    // http'ye dusen tek bir istekte oturum cerezini aciga cikarirdi).
+    options.Cookie.SecurePolicy = CalibraHub.Web.HostingSecurity.CookiePolicy(builder.Configuration);
 
         // /api/* istekleri kimlik hatasında login sayfasına 302 ATMAZ; gerçek 401/403 döner.
         // Aksi halde mobil istemci HTML login sayfasını parse etmeye çalışır ve "oturum bitti"
@@ -1369,6 +1382,57 @@ using (var scope = app.Services.CreateScope())
             }
         }
     }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Ters proxy + HTTPS zorlamasi (2026-08-24 guvenlik denetimi, ORTA)
+// ══════════════════════════════════════════════════════════════════════════
+// M7 — X-Forwarded-For: IIS/nginx/Traefik arkasinda calisildiginda
+// ctx.Connection.RemoteIpAddress PROXY'nin adresidir. Bu durumda:
+//   • rate limit tum dunyayi TEK kovaya koyar (5/dk'lik sifre-sifirlama korumasi,
+//     tek bir mesru kullanici yuzunden herkesi kilitler ya da tersi),
+//   • LoginLockoutTracker'in IP boyutu anlamsizlasir,
+//   • loopback kapilari (bridge, PageComments) HERKESI "localhost" sanar.
+//
+// Ama X-Forwarded-For SPOOF EDILEBILIR bir baslikitir: dogrulanmadan guvenilirse
+// saldirgan her istekte farkli IP yazip rate limit/kilit korumalarini tamamen
+// atlatir. Bu yuzden VARSAYILAN KAPALI; yalnizca operator proxy adres(ler)ini
+// acikca bildirirse acilir (Hosting:KnownProxies / Hosting:KnownNetworks).
+var trustedProxies = builder.Configuration.GetSection("Hosting:KnownProxies").Get<string[]>() ?? Array.Empty<string>();
+if (trustedProxies.Length > 0)
+{
+    var fwd = new Microsoft.AspNetCore.Builder.ForwardedHeadersOptions
+    {
+        ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
+                         | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto,
+        ForwardLimit = 1,
+    };
+    fwd.KnownProxies.Clear();
+    fwd.KnownNetworks.Clear();
+    foreach (var ip in trustedProxies)
+    {
+        if (System.Net.IPAddress.TryParse(ip.Trim(), out var parsed)) fwd.KnownProxies.Add(parsed);
+    }
+    app.UseForwardedHeaders(fwd);
+    app.Logger.LogInformation("[Hosting] ForwardedHeaders aktif — {Count} guvenilir proxy.", fwd.KnownProxies.Count);
+}
+
+// M8 — HTTPS zorlamasi. Otomatik acilma sarti: Development DEGIL **ve** uygulama
+// gercekten bir https adresi dinliyor. Bu sart olmadan UseHttpsRedirection,
+// hizmet verilmeyen bir https adresine yonlendirip uygulamayi tamamen erisilmez
+// yapardi (klasik "deploy sonrasi her sey 307" hatasi). Operator zorlamak/kapatmak
+// isterse Hosting:RequireHttps ile acikca belirtir.
+var requireHttpsCfg = builder.Configuration.GetValue<bool?>("Hosting:RequireHttps");
+var listeningOnHttps = (builder.Configuration["ASPNETCORE_URLS"] ?? builder.Configuration["urls"] ?? string.Empty)
+    .Contains("https://", StringComparison.OrdinalIgnoreCase)
+    || !string.IsNullOrWhiteSpace(builder.Configuration["Kestrel:Endpoints:Https:Url"]);
+var requireHttps = requireHttpsCfg ?? (!app.Environment.IsDevelopment() && listeningOnHttps);
+if (requireHttps)
+{
+    // HSTS: tarayici bir daha http'ye hic gitmesin (ilk istek disinda).
+    app.UseHsts();
+    app.UseHttpsRedirection();
+    app.Logger.LogInformation("[Hosting] HTTPS zorlamasi aktif (HSTS + yonlendirme).");
 }
 
 // Tema-uyumlu ozel hata sayfasi — hem Development hem Production'da /Home/Error kullanilir.

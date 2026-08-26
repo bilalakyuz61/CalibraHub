@@ -418,6 +418,7 @@ public sealed class AccountController : Controller
     [AllowAnonymous]
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("password-reset")]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordInputModel input, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)

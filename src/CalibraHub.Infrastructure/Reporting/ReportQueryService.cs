@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
@@ -114,6 +114,9 @@ public sealed class ReportQueryService : IReportQueryService
     // Kaynağı çalıştır → DataTable → snapshot tablosunu DROP+CREATE → SqlBulkCopy ile doldur.
     private static async Task<int> BuildSnapshotOnConnectionAsync(SqlConnection conn, int sourceId, string sql, CancellationToken ct)
     {
+        // Snapshot (materialize) yolu RunSqlAsync'ten gecmez — kapiyi burada da uygula.
+        CalibraHub.Persistence.Security.ReadOnlySqlGuard.EnsureSelectOnly(sql, "Rapor kaynagi");
+
         var dt = new DataTable();
         await using (var cmd = conn.CreateCommand())
         {
@@ -176,6 +179,11 @@ public sealed class ReportQueryService : IReportQueryService
 
     private async Task<ReportQueryResult> RunSqlAsync(string sql, CancellationToken ct)
     {
+        // Salt-okunur kapi (2026-08-24 guvenlik denetimi, ORTA): rapor SQL'i hem
+        // kayitli kaynaktan hem panel tasarimcisindan (inline) gelir; ikisi de
+        // buradan gecer. Mutasyon iceren SQL calistirilmadan reddedilir.
+        CalibraHub.Persistence.Security.ReadOnlySqlGuard.EnsureSelectOnly(sql, "Rapor sorgusu");
+
         var sw = Stopwatch.StartNew();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();

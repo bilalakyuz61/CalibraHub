@@ -1454,35 +1454,15 @@ public sealed class SqlStockDocRepository : IStockDocRepository
     }
 
     /// <summary>Belge numarasını DocumentType.Code üzerinden çözer (kural motoru → yoksa PREFIX-YYYY-NNNN).</summary>
-    private async Task<string> ResolveDocNoByCodeAsync(
+    /// <summary>
+    /// Belge numarası — ortak <see cref="CalibraHub.Persistence.Database.DocumentNumberResolver"/>
+    /// üzerinden. Gövde 2026-08-25'te oraya taşındı: aynı numaralandırma iş emri operasyon
+    /// repository'sinde de gerekiyordu ve iki kopya, kural tanımlandığında ayrışıyordu.
+    /// </summary>
+    private Task<string> ResolveDocNoByCodeAsync(
         SqlConnection conn, SqlTransaction tx, string typeCode, string prefix, int? createdById, DateTime docDate, CancellationToken ct)
-    {
-        await using (var typeCmd = conn.CreateCommand())
-        {
-            typeCmd.Transaction = tx;
-            typeCmd.CommandText = $"SELECT [Id] FROM {T("DocumentType")} WHERE [Code] = @Code;";
-            typeCmd.Parameters.AddWithValue("@Code", typeCode);
-            var typeIdObj = await typeCmd.ExecuteScalarAsync(ct);
-            if (typeIdObj is int typeId)
-            {
-                var ruleNo = await _numberService.GenerateNextAsync(
-                    new DocumentNumberContext(typeId, null, null, createdById, null, docDate), ct);
-                if (!string.IsNullOrWhiteSpace(ruleNo)) return ruleNo;
-            }
-        }
-        var year = DateTime.Now.Year;
-        await using var cmd = conn.CreateCommand();
-        cmd.Transaction = tx;
-        cmd.CommandText = $"""
-            SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([DocumentNumber], LEN(@Prefix) + 7, 10) AS INT)), 0) + 1
-            FROM {T("Document")}
-            WHERE [DocumentNumber] LIKE @Prefix + '-' + CAST(@Year AS NVARCHAR(4)) + '-%';
-            """;
-        cmd.Parameters.AddWithValue("@Prefix", prefix);
-        cmd.Parameters.AddWithValue("@Year", year);
-        var seq = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
-        return $"{prefix}-{year}-{seq:D4}";
-    }
+        => CalibraHub.Persistence.Database.DocumentNumberResolver.ResolveAsync(
+            conn, tx, _schema, _numberService, typeCode, prefix, createdById, docDate, ct);
 
     // ── Sipariş seri rezervasyonu (2026-07-11) ────────────────────────────────
     // Sipariş satırlarına seçilen seriler DocumentLineSerial ile bağlanır. reserve=true

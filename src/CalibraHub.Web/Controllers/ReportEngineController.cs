@@ -23,12 +23,18 @@ public sealed class ReportEngineController : Controller
     private readonly IReportSourceRepository  _sources;
     private readonly IReportQueryService      _query;
     private readonly IScheduledTaskRepository  _tasks;
+    private readonly ILogger<ReportEngineController> _logger;
 
-    public ReportEngineController(IReportSourceRepository sources, IReportQueryService query, IScheduledTaskRepository tasks)
+    public ReportEngineController(
+        IReportSourceRepository sources,
+        IReportQueryService query,
+        IScheduledTaskRepository tasks,
+        ILogger<ReportEngineController> logger)
     {
         _sources = sources;
         _query   = query;
         _tasks   = tasks;
+        _logger  = logger;
     }
 
     // ── Kayıtlı kaynaklar ────────────────────────────────────────────────────
@@ -117,10 +123,16 @@ public sealed class ReportEngineController : Controller
     }
 
     /// <summary>Inline SQL sorgusu — panel tasarımcısından gelir.</summary>
+    /// <remarks>
+    /// Yetki: <b>DesignDashboards</b> (2026-08-24 güvenlik denetimi, ORTA). Daha önce
+    /// yalnızca <c>ViewDashboards</c> isteniyordu; yani rapor <i>okuma</i> yetkisi olan
+    /// herkes serbest SQL çalıştırabiliyordu. Serbest SQL yazmak bir TASARIM işidir.
+    /// Ayrıca sorgu <c>ReadOnlySqlGuard</c> ile salt-okunur olarak doğrulanır.
+    /// </remarks>
     [HttpPost("query/inline")]
     public async Task<IActionResult> QueryInline([FromBody] InlineQueryRequest req, CancellationToken ct)
     {
-        if (!CanView()) return Forbid();
+        if (!CanDesign()) return Forbid();
         if (string.IsNullOrWhiteSpace(req.Sql))
             return Json(new { ok = false, error = "SQL boş olamaz" });
         try
@@ -128,8 +140,14 @@ public sealed class ReportEngineController : Controller
             var result = await _query.QueryInlineAsync(req.Sql, req.CacheTtlMinutes, ct);
             return Json(ToResponse(result));
         }
+        catch (ArgumentException ex)
+        {
+            // Guard mesajı kullanıcıya gösterilir (iç detay değil, kural ihlali açıklaması).
+            return Json(new { ok = false, error = ex.Message });
+        }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ReportEngine] Inline sorgu başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }

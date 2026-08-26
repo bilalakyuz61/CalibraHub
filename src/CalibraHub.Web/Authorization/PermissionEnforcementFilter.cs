@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Security;
 using CalibraHub.Domain.Enums;
@@ -183,9 +183,15 @@ public sealed class PermissionEnforcementFilter : IAsyncAuthorizationFilter
     /// Başka formların dropdown/guide olarak tükettiği salt-okunur GET endpoint'leri.
     /// Kaynak formda VIEW yetkisi olmasa bile cross-form seçim engellenmez.
     /// </summary>
+    /// NOT (2026-08-24 guvenlik denetimi, ORTA): <c>*BoardConfig</c> bu listeden
+    /// CIKARILDI. Diger maddeler (lookup/search/options) tek bir alan icin kucuk
+    /// bir secim listesi doner; BoardConfig ise EKRANIN TAMAMINI — tum kayitlar,
+    /// tum widget degerleriyle — doner. Muafiyet, yetkisi olmayan bir kullanicinin
+    /// /X/XBoardConfig adresini cagirip listenin tamamini okumasina izin veriyordu.
+    /// Artik normal GET kurali (VIEW / VIEW_OWN) uygulanir; ekranin kendi
+    /// in-place refresh'i zaten o ekrani gorebilen kullanici tarafindan cagrilir.
     private static bool IsCrossFormReadAction(string actionLower) =>
         actionLower.EndsWith("lookup")       ||   // *Lookup  → dropdown/rehber listesi
-        actionLower.EndsWith("boardconfig")  ||   // *BoardConfig → C-Grid in-place refresh
         actionLower.EndsWith("search")       ||   // *Search  → autocomplete/arama
         actionLower.EndsWith("autocomplete") ||   // *Autocomplete
         actionLower.EndsWith("options")      ||   // *Options → select option listesi
