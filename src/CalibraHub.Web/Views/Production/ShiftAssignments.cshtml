@@ -124,13 +124,13 @@
     @if (personnel.Count == 0)
     {
         <div style="padding:40px; text-align:center; color: rgba(148,163,184,.7); font-size:14px;">
-            Henüz aktif personel yok. <a href="/Production/Personnel" style="color:#a5b4fc;">Personel ekle</a> →
+            Henüz aktif personel yok. <a href="/Production/Personnel" data-workspace-tab="Personel" style="color:#a5b4fc;">Personel ekle</a> →
         </div>
     }
     else if (shifts.Count == 0)
     {
         <div style="padding:40px; text-align:center; color: rgba(148,163,184,.7); font-size:14px;">
-            Henüz vardiya tanımlı değil. <a href="/Production/ShiftEdit" style="color:#a5b4fc;">Vardiya ekle</a> →
+            Henüz vardiya tanımlı değil. <a href="/Production/ShiftEdit" data-workspace-tab="Yeni Vardiya" style="color:#a5b4fc;">Vardiya ekle</a> →
         </div>
     }
     else

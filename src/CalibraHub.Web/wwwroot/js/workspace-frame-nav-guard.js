@@ -40,6 +40,33 @@
         if (tgt && tgt !== '_self' && tgt !== '') return;
         var rawHref = el.getAttribute('href') || '';
         if (!rawHref || rawHref.charAt(0) === '#') return;
+
+        // data-workspace-tab: ekranlar arası referans linki — aynı sekmede navigasyon
+        // yerine shell'de yeni workspace sekmesi olarak açılır (attribute değeri sekme
+        // başlığıdır; boşsa link metni kullanılır). Shell API'si yoksa normal akışa
+        // düşer, link kırılmaz.
+        var wsTabTitle = el.getAttribute('data-workspace-tab');
+        if (wsTabTitle !== null && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+            var wsUrl = (el.pathname || '') + (el.search || '');
+            var wsTitle = wsTabTitle || (el.textContent || '').trim() || 'Sayfa';
+            try {
+                if (W.top && W.top.CalibraHub && typeof W.top.CalibraHub.openWorkspaceTab === 'function') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    W.top.CalibraHub.openWorkspaceTab({ url: wsUrl, title: wsTitle, matchPath: el.pathname });
+                    return;
+                }
+            } catch (_) {}
+            try {
+                if (W.top && typeof W.top.calibraOpenWorkspaceTab === 'function') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    W.top.calibraOpenWorkspaceTab(wsUrl, wsTitle);
+                    return;
+                }
+            } catch (_) {}
+        }
+
         var resolved = el.href || rawHref;
         var fixed = ensureWorkspace(resolved);
         if (fixed === resolved) return;

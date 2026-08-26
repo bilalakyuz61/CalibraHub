@@ -122,7 +122,7 @@
             }
             return '<div class="mt-card' + cardCls + '" id="mt-task-' + t.taskId + '">' +
                 '<div class="mt-card__body">' +
-                    '<div class="mt-card__proj"><a href="/Arge/ProjectEdit?id=' + t.projectId + '">' + esc(t.documentNumber) + ' · ' + esc(t.projectName) + '</a></div>' +
+                    '<div class="mt-card__proj"><a href="/Arge/ProjectEdit?id=' + t.projectId + '" data-workspace-tab="AR-GE Projesi">' + esc(t.documentNumber) + ' · ' + esc(t.projectName) + '</a></div>' +
                     '<div class="mt-card__title">' + esc(t.title) + ' ' + st + '</div>' +
                     (meta.length ? '<div class="mt-card__meta">' + meta.join(' &nbsp;·&nbsp; ') + '</div>' : '') +
                 '</div>' + btn +
