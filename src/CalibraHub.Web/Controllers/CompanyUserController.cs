@@ -530,7 +530,10 @@ public sealed class CompanyUserController : Controller
             var tempPassword = NewTempPassword();
             user.SetPasswordHash(_passwordHashService.HashPassword(tempPassword));
             await _userRepo.UpdateAsync(user, ct);
-            return Json(new { ok = true, message = $"Şifre sıfırlandı. Geçici şifre: {tempPassword}" });
+            // Geçici parola bir kanal üzerinden iletilecek; kullanıcı ilk girişinde
+            // kendi parolasını belirlemek ZORUNDA (2026-08-26, K4 tamamlayıcısı).
+            await _userRepo.SetMustChangePasswordAsync(user.Id, true, ct);
+            return Json(new { ok = true, message = $"Şifre sıfırlandı. Geçici şifre: {tempPassword} (kullanıcı ilk girişte değiştirmek zorunda)" });
         }
         catch (Exception ex)
         {

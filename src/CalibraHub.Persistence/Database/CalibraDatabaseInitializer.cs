@@ -5049,10 +5049,13 @@ END;";
         await using var insertCommand = connection.CreateCommand();
         insertCommand.CommandText = $"""
             INSERT INTO [{_schema}].[Users]
-                ([CompanyId], [FullName], [Email], [EmployeeCode], [DepartmentId], [SupervisorUserId], [Role], [Permissions], [PasswordHash], [LanguageCode], [ThemeCode], [GridPreferencesJson], [IsActive])
+                ([CompanyId], [FullName], [Email], [EmployeeCode], [DepartmentId], [SupervisorUserId], [Role], [Permissions], [PasswordHash], [LanguageCode], [ThemeCode], [GridPreferencesJson], [IsActive], [MustChangePassword])
             VALUES
-                (@CompanyId, @FullName, @Email, @EmployeeCode, @DepartmentId, NULL, @Role, @Permissions, @PasswordHash, @LanguageCode, @ThemeCode, NULL, 1);
+                (@CompanyId, @FullName, @Email, @EmployeeCode, @DepartmentId, NULL, @Role, @Permissions, @PasswordHash, @LanguageCode, @ThemeCode, NULL, 1, @MustChangePassword);
             """;
+        // Parola YAPILANDIRMADAN geldiyse (dosyada duran, paylasilan bir deger) ya da
+        // uretildiyse ilk giriste degistirilmesi ZORUNLU (2026-08-26, K4 tamamlayicisi).
+        insertCommand.Parameters.Add(new SqlParameter("@MustChangePassword", true));
         insertCommand.Parameters.Add(new SqlParameter("@CompanyId", DefaultCompanyId));
         insertCommand.Parameters.Add(new SqlParameter("@FullName", adminFullName));
         insertCommand.Parameters.Add(new SqlParameter("@Email", adminEmail));

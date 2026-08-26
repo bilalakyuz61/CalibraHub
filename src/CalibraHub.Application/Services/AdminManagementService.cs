@@ -1,4 +1,5 @@
-﻿using CalibraHub.Application.Abstractions.Integrations;
+﻿using Microsoft.Extensions.Logging;
+using CalibraHub.Application.Abstractions.Integrations;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Auditing;
@@ -36,6 +37,7 @@ public sealed class AdminManagementService : IAdminManagementService
     private readonly ICompanyConnectionRegistry _companyConnectionRegistry;
     private readonly IPermissionGrantRepository _permissionGrantRepository;
     private readonly IAuditTrailService? _audit;
+    private readonly Microsoft.Extensions.Logging.ILogger<AdminManagementService>? _logger;
 
     public AdminManagementService(
         IIntegratorDocumentClient integratorDocumentClient,
@@ -49,7 +51,8 @@ public sealed class AdminManagementService : IAdminManagementService
         IIntegratorImportLogRepository integratorImportLogRepository,
         ICompanyConnectionRegistry companyConnectionRegistry,
         IPermissionGrantRepository permissionGrantRepository,
-        IAuditTrailService? audit = null)
+        IAuditTrailService? audit = null,
+        Microsoft.Extensions.Logging.ILogger<AdminManagementService>? logger = null)
     {
         _integratorDocumentClient = integratorDocumentClient;
         _integratorSettingsRepository = integratorSettingsRepository;
@@ -63,6 +66,7 @@ public sealed class AdminManagementService : IAdminManagementService
         _companyConnectionRegistry = companyConnectionRegistry;
         _permissionGrantRepository = permissionGrantRepository;
         _audit = audit;
+        _logger = logger;
     }
 
     public async Task<int> SaveCompanyAsync(
@@ -955,6 +959,21 @@ public sealed class AdminManagementService : IAdminManagementService
         userProfile.SetPasswordHash(_passwordHashService.HashPassword(password));
 
         await _userProfileRepository.AddAsync(userProfile, cancellationToken);
+
+        // Zorunlu parola değişimi (2026-08-26): parola YÖNETİCİ tarafından belirlendiyse
+        // (elle girilmiş ya da otomatik üretilmiş) kullanıcıya bir kanal üzerinden iletilir
+        // ve o kanalda durur. Kullanıcı ilk girişinde kendi parolasını belirlemek zorunda.
+        try
+        {
+            var createdForFlag = await _userProfileRepository.GetByEmailAndCompanyIdAsync(email, request.CompanyId, cancellationToken);
+            if (createdForFlag is not null)
+                await _userProfileRepository.SetMustChangePasswordAsync(createdForFlag.Id, true, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // Bayrak yazılamazsa kullanıcı yine de oluşmuş olur; sessiz yutma YOK.
+            _logger?.LogError(ex, "[Kullanici] MustChangePassword bayragi yazilamadi. Email={Email}", email);
+        }
 
         // İşlem logu — AddAsync Id dönmediği için yeni kayıt e-posta ile geri okunur
         // (okunamazsa Id'siz loglanır; audit hatası kaydı asla bozmaz)

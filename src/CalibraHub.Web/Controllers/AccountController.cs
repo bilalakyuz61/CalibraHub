@@ -514,6 +514,10 @@ public sealed class AccountController : Controller
         user.SetPasswordHash(newHash);
         await _userProfileRepository.UpdateAsync(user, cancellationToken);
         await _userProfileRepository.ClearResetTokenAsync(user.Id, cancellationToken);
+        // Kullanıcı parolasını KENDİ belirledi → zorunlu değişim yükümlülüğü kalkar
+        // (2026-08-26). Temizlenmezse geçici parolayla açılan hesap, linkten parola
+        // belirlese bile her girişte zorunlu ekrana düşerdi.
+        await _userProfileRepository.SetMustChangePasswordAsync(user.Id, false, cancellationToken);
 
         ViewBag.Success = true;
         return View(input);
