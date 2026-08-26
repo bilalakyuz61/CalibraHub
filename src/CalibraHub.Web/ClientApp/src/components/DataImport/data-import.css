@@ -222,17 +222,24 @@ body.app-theme-dark .di-root {
 .di-btn--ok:hover { filter: brightness(1.06); }
 
 /* ── Özet / istatistik ────────────────────────────────────────────────── */
-.di-stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-.di-stat {
-  flex: 1 1 90px; padding: 10px 12px; border-radius: 9px;
-  background: var(--di-surface-2); border: 1px solid var(--di-border);
+/* Önizleme üst şeridi — sayaçlar, arama ve aksiyonlar TEK satırda (2026-08-22).
+   Dar ekranda sarar; sayaçlar büyük kart yerine kompakt chip. */
+.di-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 8px;
 }
-.di-stat__n { font-size: 18px; font-weight: 700; line-height: 1; }
-.di-stat__l { font-size: 11px; color: var(--di-muted); margin-top: 4px; }
-.di-stat--ok .di-stat__n { color: var(--di-ok); }
-.di-stat--err .di-stat__n { color: var(--di-danger); }
-.di-stat--upd .di-stat__n { color: var(--di-update); }
+.di-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--di-border); background: var(--di-surface-2, transparent);
+  font-size: 12px; color: var(--di-muted); white-space: nowrap;
+}
+.di-chip b { font-size: 13px; font-weight: 700; color: var(--di-text); }
+.di-chip--ok  b { color: var(--di-ok); }
+.di-chip--upd b { color: var(--di-update); }
+.di-chip--err b { color: var(--di-danger); }
 
+.di-stat--ok .di-stat--err .di-stat--upd 
 /* ── Önizleme tablosu ─────────────────────────────────────────────────── */
 .di-preview-wrap { overflow: auto; max-height: 420px; border: 1px solid var(--di-border); border-radius: 10px; }
 .di-preview { width: 100%; border-collapse: collapse; font-size: 12px; }

@@ -27,11 +27,12 @@ const TRANSFORMS = [
   { value: 'lower', label: 'küçük harf' },
   { value: 'digits', label: 'Sadece rakam' },
 ]
+// 2026-08-22: "Önizleme" ve "Aktar" ayrı adımlardı; kullanıcı düzeltmeleri yaptığı
+// ekrandan aktaramıyor, bir adım daha ilerlemek zorunda kalıyordu. Tek adımda birleşti.
 const STEPS = [
   { n: 1, label: 'Şablon' },
   { n: 2, label: 'Dosya & Eşleme' },
-  { n: 3, label: 'Önizleme' },
-  { n: 4, label: 'Aktar' },
+  { n: 3, label: 'Önizleme ve Aktar' },
 ]
 
 function csrf() {
@@ -276,10 +277,7 @@ export default function DataImport() {
       if (requiredUnmapped.length > 0) { setError('Zorunlu alan(lar) eşlenmeli: ' + requiredUnmapped.join(', ')); return }
       setStep(3); runPreview(); return
     }
-    if (step === 3) {
-      if (!preview || preview.validRows === 0) { setError('Aktarılacak geçerli satır yok.'); return }
-      setStep(4); return
-    }
+    // 3. adım son adım — "İleri" yok, aktarım burada yapılır (bkz. askImport).
   }
   function onBack() {
     setError('')
@@ -444,63 +442,16 @@ export default function DataImport() {
 
           {step === 3 && (
             <section className="di-card">
-              <div className="di-card__title">Önizleme ve Doğrulama</div>
               {busy === 'preview' && <div className="di-map__hint"><Loader2 size={14} className="di-spin" /> Önizleniyor…</div>}
-              {preview && (
-                <>
-                  <div className="di-stats">
-                    <div className="di-stat"><div className="di-stat__n">{preview.totalRows}</div><div className="di-stat__l">Toplam Satır</div></div>
-                    <div className="di-stat di-stat--ok"><div className="di-stat__n">{preview.validRows}</div><div className="di-stat__l">Geçerli</div></div>
-                    <div className="di-stat di-stat--upd"><div className="di-stat__n">{preview.insertCount}/{preview.updateCount}</div><div className="di-stat__l">Yeni / Güncelle</div></div>
-                    <div className="di-stat di-stat--err"><div className="di-stat__n">{preview.errorRows}</div><div className="di-stat__l">Hatalı</div></div>
-                    {Object.keys(excluded).length > 0 && (
-                      <div className="di-stat"><div className="di-stat__n">{Object.keys(excluded).length}</div><div className="di-stat__l">Hariç</div></div>
-                    )}
-                  </div>
-                  <div className="di-actions" style={{ margin: '2px 0 8px' }}>
-                    <button className="di-btn" onClick={runPreview} disabled={busy === 'preview'}>
-                      {busy === 'preview' ? <Loader2 size={15} className="di-spin" /> : <RefreshCw size={15} />} Yeniden Doğrula
-                    </button>
-                    <div className="di-search" style={{ marginLeft: 'auto' }}>
-                      <Search size={14} />
-                      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Satırlarda ara…" />
-                    </div>
-                  </div>
-                  <div className="di-map__hint" style={{ marginBottom: 8 }}>Hatalı hücreleri düzeltin, gereksiz satırları <strong>×</strong> ile hariç tutun, sonra "Yeniden Doğrula" / "İçe Aktar".</div>
-                  <PreviewTable preview={preview} overrides={overrides} onEdit={setOverride}
-                    excluded={excluded} onToggleExclude={toggleExclude} search={search} />
-                </>
-              )}
-            </section>
-          )}
 
-          {step === 4 && (
-            <section className="di-card">
-              <div className="di-card__title">Aktar ve Sonuç</div>
-              {!result && (
-                <>
-                  {preview && (
-                    <div className="di-stats">
-                      <div className="di-stat di-stat--ok"><div className="di-stat__n">{preview.insertCount}</div><div className="di-stat__l">Eklenecek</div></div>
-                      <div className="di-stat di-stat--upd"><div className="di-stat__n">{preview.updateCount}</div><div className="di-stat__l">Güncellenecek</div></div>
-                      <div className="di-stat di-stat--err"><div className="di-stat__n">{preview.errorRows}</div><div className="di-stat__l">Atlanacak (hata)</div></div>
-                    </div>
-                  )}
-                  <p className="di-map__hint">Aşağıdaki "İçe Aktar" ile {preview?.validRows || 0} geçerli satır işlenecek.</p>
-                </>
-              )}
+              {/* Aktarım sonucu — aynı ekranda, önizlemenin ÜSTÜNDE. Başka adıma geçilmez. */}
               {result && (
                 <>
                   <div className="di-alert" style={{ background: 'rgba(5,150,105,.12)', color: 'var(--di-ok)', borderColor: 'rgba(5,150,105,.25)' }}>
-                    <CheckCircle2 size={16} /> İçe aktarım tamamlandı.
-                  </div>
-                  <div className="di-stats">
-                    <div className="di-stat di-stat--ok"><div className="di-stat__n">{result.inserted}</div><div className="di-stat__l">Eklendi</div></div>
-                    <div className="di-stat di-stat--upd"><div className="di-stat__n">{result.updated}</div><div className="di-stat__l">Güncellendi</div></div>
-                    <div className="di-stat di-stat--err"><div className="di-stat__n">{result.failed}</div><div className="di-stat__l">Başarısız</div></div>
+                    <CheckCircle2 size={16} /> İçe aktarım tamamlandı — {result.inserted} eklendi, {result.updated} güncellendi{result.failed > 0 ? `, ${result.failed} başarısız` : ''}.
                   </div>
                   {result.failed > 0 && (
-                    <div className="di-preview-wrap" style={{ maxHeight: 240 }}>
+                    <div className="di-preview-wrap" style={{ maxHeight: 200, marginBottom: 10 }}>
                       <table className="di-preview">
                         <thead><tr><th>Satır</th><th>Hata</th></tr></thead>
                         <tbody>
@@ -511,13 +462,48 @@ export default function DataImport() {
                       </table>
                     </div>
                   )}
-                  <div style={{ marginTop: 14 }}>
+                  <div style={{ marginBottom: 12 }}>
                     <button className="di-btn di-btn--primary" onClick={goList}><ArrowLeft size={15} /> Listeye Dön</button>
                   </div>
                 </>
               )}
+
+              {preview && !result && (
+                <>
+                  {/* TEK SATIR: özet sayaçlar + arama + Yeniden Doğrula + İçe Aktar.
+                      Önceden sayaçlar büyük kartlar hâlinde ayrı bir satırdaydı, aksiyonlar
+                      da altında ayrı satırdaydı — üst üste iki şerit yer kaplıyordu. */}
+                  <div className="di-bar">
+                    <span className="di-card__title" style={{ margin: 0 }}>Önizleme</span>
+                    <span className="di-chip"><b>{preview.totalRows}</b> satır</span>
+                    <span className="di-chip di-chip--ok"><b>{preview.validRows}</b> geçerli</span>
+                    <span className="di-chip di-chip--upd"><b>{preview.insertCount}/{preview.updateCount}</b> yeni/güncelle</span>
+                    <span className={'di-chip' + (preview.errorRows > 0 ? ' di-chip--err' : '')}><b>{preview.errorRows}</b> hatalı</span>
+                    {Object.keys(excluded).length > 0 && (
+                      <span className="di-chip"><b>{Object.keys(excluded).length}</b> hariç</span>
+                    )}
+                    <div className="di-spacer" />
+                    <div className="di-search">
+                      <Search size={14} />
+                      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Satırlarda ara…" />
+                    </div>
+                    <button className="di-btn" onClick={runPreview} disabled={busy === 'preview'} title="Düzeltmelerden sonra yeniden doğrula">
+                      {busy === 'preview' ? <Loader2 size={15} className="di-spin" /> : <RefreshCw size={15} />} Yeniden Doğrula
+                    </button>
+                    <button className="di-btn di-btn--ok" onClick={askImport}
+                            disabled={!file || !!busy || !preview.validRows}
+                            title={!preview.validRows ? 'Aktarılacak geçerli satır yok' : 'Geçerli satırları aktar'}>
+                      {busy === 'commit' ? <Loader2 size={15} className="di-spin" /> : <Play size={15} />} İçe Aktar
+                    </button>
+                  </div>
+                  <div className="di-map__hint" style={{ marginBottom: 8 }}>Hatalı hücreleri düzeltin, gereksiz satırları <strong>×</strong> ile hariç tutun, sonra "Yeniden Doğrula" / "İçe Aktar".</div>
+                  <PreviewTable preview={preview} overrides={overrides} onEdit={setOverride}
+                    excluded={excluded} onToggleExclude={toggleExclude} search={search} />
+                </>
+              )}
             </section>
           )}
+
         </div>
 
         <div className="di-wizard__foot">
@@ -538,13 +524,12 @@ export default function DataImport() {
             </button>
           )}
           <div className="di-spacer" />
-          {step < 4
-            ? <button className="di-btn di-btn--primary" onClick={onNext} disabled={busy === 'preview' || busy === 'read'}>İleri <ArrowRight size={15} /></button>
-            : !result
-              ? <button className="di-btn di-btn--ok" onClick={askImport} disabled={!file || !!busy}>
-                  {busy === 'commit' ? <Loader2 size={15} className="di-spin" /> : <Play size={15} />} İçe Aktar
-                </button>
-              : null}
+          {/* 3. adım son adım: aktarım butonu üstteki şeritte (önizlemenin yanında). */}
+          {step < 3 && (
+            <button className="di-btn di-btn--primary" onClick={onNext} disabled={busy === 'preview' || busy === 'read'}>
+              İleri <ArrowRight size={15} />
+            </button>
+          )}
         </div>
       </div>
 
