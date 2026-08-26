@@ -1,4 +1,4 @@
-@{
+﻿@{
     ViewData["Title"] = "Yetki Yönetimi";
     ViewData["HelpKey"] = "permissions";
     ViewData["BodyClass"] = "page-permissions workspace-frame-body";
@@ -299,6 +299,18 @@
         display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 10px;
         background: rgba(245,158,11,.18); color: #d97706; font-weight: 600; margin-left: 8px;
     }
+    /* Kapsanan satir: engellenmis DEGIL, daha genis bir izin tarafindan zaten iceriliyor.
+       Sari uyari rengiyle gosterilince "sorun var" diye okunuyordu — yesil dogru sinyal. */
+    .pm-action-row__note--covered {
+        background: rgba(16,185,129,.16); color: #059669;
+    }
+    /* Miras durumu: anahtarin mavi olmasi "verildi" sanildigi icin devralinanin
+       NE oldugu acikca yazilir. Notr renk — ne uyari ne onay. */
+    .pm-action-row__note--inherit {
+        background: rgba(148,163,184,.18); color: #64748b; font-weight: 500;
+    }
+    body.app-theme-dark .pm-action-row__note--covered { background: rgba(16,185,129,.22); color: #34d399; }
+    body.app-theme-dark .pm-action-row__note--inherit { background: rgba(148,163,184,.22); color: #94a3b8; }
 
     /* ── İki switch çifti (Miras | İzinli) — tüm yetki satırları için standart ── */
     .pm-perm-switches {
@@ -946,25 +958,51 @@
                               || (isDependentOnView && !viewEffectiveAllowed);
 
                 // ── Not metni
-                var noteText = '';
+                //
+                // Kapsam hiyerarşisi: Özel ⊂ Departman ⊂ Genel. Çalışma zamanı en genişten
+                // dara bakıp ilk bulduğuyla yetinir (GetAccessScopeAsync), yani GENİŞ izin
+                // dar olanı ZATEN içerir. Bu yüzden pasif satırın iki farklı sebebi var ve
+                // aynı dille anlatılamaz:
+                //   • KAPSANAN — satır dar, aktif olan geniş. Eksik bir şey yok (yeşil).
+                //   • ÇATIŞMA  — satır geniş, aktif olan dar. Genişletmek için önce dar
+                //                olanı kapatmak gerekir (sarı).
+                // Eskiden ikisine de "… izni aktif" deniyor ve ikisi de sarı gösteriliyordu;
+                // kapsanan satır engellenmiş gibi okunuyordu.
+                var noteText = '', noteCovered = false;
                 if (isDisabled) {
-                    if      (isViewOwnExcluded)  noteText = viewDeptActive   ? 'Departman izni aktif' : 'Genel izin aktif';
-                    else if (isViewDeptExcluded) noteText = viewOwnActive    ? 'Özel izin aktif'      : 'Genel izin aktif';
-                    else if (isViewAllExcluded)  noteText = viewOwnActive    ? 'Özel izin aktif'      : 'Departman izni aktif';
-                    else if (isEditOwnExcluded)  noteText = editDeptActive   ? 'Departman izni aktif' : 'Genel izin aktif';
-                    else if (isEditDeptExcluded) noteText = editOwnActive    ? 'Özel izin aktif'      : 'Genel izin aktif';
-                    else if (isEditAllExcluded)  noteText = editOwnActive    ? 'Özel izin aktif'      : 'Departman izni aktif';
-                    else if (isDelOwnExcluded)   noteText = deleteDeptActive ? 'Departman izni aktif' : 'Genel izin aktif';
-                    else if (isDelDeptExcluded)  noteText = deleteOwnActive  ? 'Özel izin aktif'      : 'Genel izin aktif';
-                    else if (isDelAllExcluded)   noteText = deleteOwnActive  ? 'Özel izin aktif'      : 'Departman izni aktif';
-                    else if (isOwnViewLimited)   noteText = 'Özel izin aktif';
-                    else if (isDependentOnViewOwn && !anyViewActive) noteText = 'İzleme gerekli';
-                    else noteText = 'İzleme (Genel) gerekli';
+                    if (isViewOwnExcluded)       { noteText = viewDeptActive   ? 'Departman izni kapsıyor' : 'Genel izin kapsıyor'; noteCovered = true; }
+                    else if (isViewDeptExcluded) { noteCovered = viewEffectiveAllowed; noteText = noteCovered ? 'Genel izin kapsıyor' : 'Özel izin seçili'; }
+                    else if (isViewAllExcluded)  { noteText = viewOwnActive    ? 'Özel izin seçili' : 'Departman izni seçili'; }
+                    else if (isEditOwnExcluded)  { noteText = editDeptActive   ? 'Departman izni kapsıyor' : 'Genel izin kapsıyor'; noteCovered = true; }
+                    else if (isEditDeptExcluded) { noteCovered = editAllActive; noteText = noteCovered ? 'Genel izin kapsıyor' : 'Özel izin seçili'; }
+                    else if (isEditAllExcluded)  { noteText = editOwnActive    ? 'Özel izin seçili' : 'Departman izni seçili'; }
+                    else if (isDelOwnExcluded)   { noteText = deleteDeptActive ? 'Departman izni kapsıyor' : 'Genel izin kapsıyor'; noteCovered = true; }
+                    else if (isDelDeptExcluded)  { noteCovered = deleteAllActive; noteText = noteCovered ? 'Genel izin kapsıyor' : 'Özel izin seçili'; }
+                    else if (isDelAllExcluded)   { noteText = deleteOwnActive  ? 'Özel izin seçili' : 'Departman izni seçili'; }
+                    // Genel düzenleme/silme, izleme yalnız ÖZEL kayıtlarda olduğu için verilemez.
+                    else if (isOwnViewLimited)   noteText = 'Genel izleme gerekli';
+                    // Ne yapılacağını söyle: "İzleme gerekli" durumu bildiriyordu, eylemi değil.
+                    else if (isDependentOnViewOwn && !anyViewActive) noteText = 'Önce bir izleme izni verin';
+                    else noteText = 'Genel izleme gerekli';
                 }
-                var note = noteText ? ' <span class="pm-action-row__note">' + noteText + '</span>' : '';
+                // Etkin GENEL izin: dar olanları kapsadığını satırın kendisi söylesin —
+                // kullanıcı "Özel'i de vermeli miyim" diye düşünmesin.
+                else if (it.actionCode === 'VIEW'       && viewEffectiveAllowed) { noteText = 'Özel ve departmanı da kapsar'; noteCovered = true; }
+                else if (it.actionCode === 'EDIT_ALL'   && editAllActive)        { noteText = 'Özel ve departmanı da kapsar'; noteCovered = true; }
+                else if (it.actionCode === 'DELETE_ALL' && deleteAllActive)      { noteText = 'Özel ve departmanı da kapsar'; noteCovered = true; }
+
+                var note = noteText
+                    ? ' <span class="pm-action-row__note' + (noteCovered ? ' pm-action-row__note--covered' : '') + '">' + noteText + '</span>'
+                    : '';
+                // Miras açıkken devralınan değeri yaz: mavi anahtar "izin verildi" gibi
+                // okunduğu için, devralınacak bir şey olmadığı durum görünmez kalıyordu.
+                var inheritNote = it.mirasOn
+                    ? ' <span class="pm-action-row__note pm-action-row__note--inherit">Devralınan: '
+                      + (it.isAllowed ? 'izinli' : 'izin yok') + '</span>'
+                    : '';
                 var badge = isBtn ? '<span class="pm-action-row__badge">Buton</span>' : '';
                 html += '<div class="pm-action-row' + (isDisabled ? ' is-disabled' : '') + (isBtn ? ' is-btn-perm' : '') + '" data-perm-id="' + it.permissionDefId + '">'
-                      + '<div class="pm-action-row__label">' + actionCodeIcon(it.actionCode) + escHtml(actionLabel) + badge + note + '</div>'
+                      + '<div class="pm-action-row__label">' + actionCodeIcon(it.actionCode) + escHtml(actionLabel) + badge + note + inheritNote + '</div>'
                       + '<div>' + renderPermSwitches(it) + '</div>'
                       + '</div>';
             });
