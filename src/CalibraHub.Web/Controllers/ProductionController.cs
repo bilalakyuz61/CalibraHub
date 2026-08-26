@@ -38,6 +38,7 @@ public sealed class ProductionController : Controller
     private readonly IWorkOrderOperationService _workOrderOperations;
     // 2026-08-24 — "Üretim Hareketleri" sekmesi: iş emrinin stok satırlarını okur.
     private readonly CalibraHub.Application.Abstractions.Persistence.IWorkOrderRepository _workOrderRepo;
+    private readonly CalibraHub.Application.Abstractions.Persistence.IComputedColumnRepository _computedColumns;
     private readonly IPersonnelService _personnel;
     private readonly IWidgetService _widgetService;
     private readonly ILogisticsConfigurationService _logisticsConfig;
@@ -72,6 +73,7 @@ public sealed class ProductionController : Controller
         IOperationMachineTimeService machineTimes,
         IWorkOrderOperationService workOrderOperations,
         CalibraHub.Application.Abstractions.Persistence.IWorkOrderRepository workOrderRepo,
+        CalibraHub.Application.Abstractions.Persistence.IComputedColumnRepository computedColumns,
         IPersonnelService personnel,
         IWidgetService widgetService,
         ILogisticsConfigurationService logisticsConfig,
@@ -97,6 +99,7 @@ public sealed class ProductionController : Controller
         _machineTimes = machineTimes;
         _workOrderOperations = workOrderOperations;
         _workOrderRepo = workOrderRepo;
+        _computedColumns = computedColumns;
         _personnel = personnel;
         _widgetService = widgetService;
         _logisticsConfig = logisticsConfig;
@@ -221,6 +224,14 @@ public sealed class ProductionController : Controller
             ? await _widgetService.GetBatchRenderModelsAsync("WORK_ORDER_EDIT", recordIds, ct)
             : new Dictionary<string, IReadOnlyCollection<WidgetRenderDto>>();
 
+        // Hesaplanan kolonlar — anahtar WorkOrder.Id. Degerler YALNIZ listedeki emirler
+        // icin okunur; is emri numarasi Document.DocumentNumber'da durdugu icin anahtar
+        // olarak NUMARA degil Id kullanilir (numara gosterim icindir, kimlik degil).
+        var calc = await new CalibraHub.Web.Infrastructure.ComputedColumnBinder(_computedColumns, _logger)
+            .LoadAsync(CalibraHub.Application.Contracts.ComputedColumnEntities.WorkOrder,
+                       "production-workorders", orders.Select(o => o.Id).ToArray(), ct);
+        masterWidgets.AddRange(calc.MasterWidgets());
+
         var entities = new List<object>();
         foreach (var o in orders)
         {
@@ -274,6 +285,8 @@ public sealed class ProductionController : Controller
             }
 
             var titleSuffix = o.RevisionNo > 0 ? $" • Rev {o.RevisionNo}" : "";
+            widgets.AddRange(calc.CellsFor(o.Id));
+
             entities.Add(new
             {
                 id = o.Id,

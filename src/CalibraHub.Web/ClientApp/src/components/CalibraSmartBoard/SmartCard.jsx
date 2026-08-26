@@ -1,4 +1,4 @@
-/**
+﻿/**
  * SmartCard — Generic, entity-agnostic kart.
  *
  * Props (tamamen JSON — hic bir hardcoded is mantigi yok):
@@ -457,7 +457,12 @@ export default function SmartCard(props) {
           // Backend konvansiyonu: { ok: true } veya { ok: false, error: "..." }
           // Eski/farklı endpoint'ler için: { success: true/false, message: "..." } da destekli.
           var serverOk = data && (data.ok === true || data.success === true)
-          var serverFailMsg = data && (data.error || data.message)
+          var serverFailMsg = data && (
+            // `error` STRING de olabilir OBJE de: ApiExceptionMiddleware
+            // { error: { message } } dondurur, eski uclar duz string. Once obje
+            // icindeki mesaji dene — aksi halde kullaniciya [object Object] gorunur
+            // ve FK ihlali gibi anlasilir mesajlar tamamen kaybolur.
+            (data.error && data.error.message) || (typeof data.error === 'string' ? data.error : null) || data.message)
 
           if (!res.ok || (data && (data.ok === false || data.success === false))) {
             var msg = serverFailMsg || ('İstek başarısız (HTTP ' + res.status + ')')

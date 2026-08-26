@@ -145,6 +145,17 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
     public async Task DeleteAsync(int id, CancellationToken ct)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(ct);
+        // 2026-08-26: grup silinirken CardGroupMapping satirlari daha once temizlenmiyordu
+        // (bu yuzden FK_CardGroupMapping_CardGroup bilinclli olarak eklenmedi — bkz. rapor
+        // Seq 1118 istege bagli madde 5). Once bagli mapping'leri sil, sonra grubu sil —
+        // ayni baglantida iki komut (transaction gerekmeyecek kadar basit, DB atomikligi
+        // yeterli: ikinci komut basarisiz olsa da yalnizca oksuz mapping kalmaz, grup kalir).
+        await using (var mappingCmd = connection.CreateCommand())
+        {
+            mappingCmd.CommandText = $"DELETE FROM {_mappingTable} WHERE [CardGroupId] = @Id;";
+            mappingCmd.Parameters.Add(new SqlParameter("@Id", id));
+            await mappingCmd.ExecuteNonQueryAsync(ct);
+        }
         await using var command = connection.CreateCommand();
         command.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id;";
         command.Parameters.Add(new SqlParameter("@Id", id));

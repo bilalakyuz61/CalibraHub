@@ -664,7 +664,12 @@ export default function SmartTableRow(props) {
         .then(function (res) {
           var data = null
           if (res.txt) { try { data = JSON.parse(res.txt) } catch (_) { /* JSON degil */ } }
-          var serverFailMsg = data && (data.error || data.message)
+          var serverFailMsg = data && (
+            // `error` STRING de olabilir OBJE de: ApiExceptionMiddleware
+            // { error: { message } } dondurur, eski uclar duz string. Once obje
+            // icindeki mesaji dene — aksi halde kullaniciya [object Object] gorunur
+            // ve FK ihlali gibi anlasilir mesajlar tamamen kaybolur.
+            (data.error && data.error.message) || (typeof data.error === 'string' ? data.error : null) || data.message)
           if (!res.ok || (data && (data.ok === false || data.success === false))) {
             var msg = serverFailMsg || ('İstek başarısız (HTTP ' + res.status + ')')
             if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(msg, 'err')
@@ -755,7 +760,12 @@ export default function SmartTableRow(props) {
       .then(function (res) {
         var data = null
         if (res.txt) { try { data = JSON.parse(res.txt) } catch (_) { /* JSON degil */ } }
-        var serverFailMsg = data && (data.error || data.message)
+        var serverFailMsg = data && (
+            // `error` STRING de olabilir OBJE de: ApiExceptionMiddleware
+            // { error: { message } } dondurur, eski uclar duz string. Once obje
+            // icindeki mesaji dene — aksi halde kullaniciya [object Object] gorunur
+            // ve FK ihlali gibi anlasilir mesajlar tamamen kaybolur.
+            (data.error && data.error.message) || (typeof data.error === 'string' ? data.error : null) || data.message)
         if (!res.ok || (data && (data.ok === false || data.success === false))) {
           var msg = serverFailMsg || ('İstek başarısız (HTTP ' + res.status + ')')
           if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(msg, 'err')
