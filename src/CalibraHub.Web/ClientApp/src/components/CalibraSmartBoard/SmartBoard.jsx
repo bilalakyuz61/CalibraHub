@@ -27,7 +27,7 @@ import SmartGroupPanel from './SmartGroupPanel'
 import SmartBoardFilterPanel, { describeFilter, entityMatchesFilters } from './SmartBoardFilterPanel'
 import { resolveIcon, resolveColor } from './DynamicWidgetFactory'
 import { loadWidgetConfig } from '../../services/widgetConfigService'
-import { loadBoardColumnConfig } from '../../services/columnConfigService'
+import { loadBoardColumnConfig, readBoardColumnConfigLocal } from '../../services/columnConfigService'
 import { navigateInWorkspace, deriveMatchPathFromUrl } from '../../utils/workspaceNav'
 
 var FILTER_STORAGE_PREFIX = 'cb-sb-filters:'
@@ -168,7 +168,12 @@ export default function SmartBoard(props) {
   //    panel de asagida sadece table modunda mount edilir (regresyonsuz —
   //    kart board'lari icin bu kod yolu hic calismaz). ──
   var [columnSettingsOpen, setColumnSettingsOpen] = useState(false)
-  var [tableColumnConfig, setTableColumnConfig] = useState(null)
+  // Ilk deger localStorage'dan SENKRON okunur: asenkron yukleme beklenirken tablo
+  // tum kolonlari varsayilan sirayla cizip sonra suzuyordu — yenilemede kolonlarin
+  // "bir gorunup kaybolmasi" bundandi. Yerel kayit yoksa null kalir (eski davranis).
+  var [tableColumnConfig, setTableColumnConfig] = useState(function () {
+    return readBoardColumnConfigLocal(props.boardKey)
+  })
   useEffect(function () {
     if (viewMode !== 'table') return undefined
     var cancelled = false

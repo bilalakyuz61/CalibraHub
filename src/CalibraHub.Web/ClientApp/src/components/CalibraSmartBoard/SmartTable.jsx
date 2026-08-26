@@ -540,7 +540,11 @@ export default function SmartTable(props) {
               )}
               <th className="cst-th cst-th--menu" aria-label="İşlemler" />
               {columns.map(function (c) {
-                var Icon = resolveIcon(c.icon, null, c.dataType)
+                // Baslikta VARSAYILAN ikon YOK (2026-08-26 kullanici karari): ucuncu
+                // parametre veri tipinden ikon TURETIYORDU, yani hicbir ikon secilmemis
+                // sutunlar da resimli cikiyordu. Artik yalnizca ACIKCA secilmis ikon
+                // cizilir — ileride sutun ayarlarina ikon secici eklenirse c.icon dolar.
+                var Icon = resolveIcon(c.icon, null)
                 var thStyle = { textAlign: c.align }
                 if (c.pinned) thStyle.left = c.stickyLeft
                 // BAŞLIK FONT'U — per-sütun Boyut/Kalınlık (fontSize/fontWeight)

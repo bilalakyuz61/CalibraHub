@@ -133,6 +133,19 @@ function writeLocal(boardKey, config) {
  * @param {string} boardKey
  * @returns {Promise<{visibleIds:string[], order:string[], columns:object}|null>}
  */
+/**
+ * Kayitli kolon tercihini SENKRON okur (yalniz localStorage).
+ *
+ * Neden gerekli: loadBoardColumnConfig asenkron (once backend). Config gelene kadar
+ * tablo TUM kolonlari varsayilan sirayla ciziyordu; config gelince suzulup yeniden
+ * siralaniyordu — kullanicinin gordugu sey, yenilemede bir kolonun "bir gorunup
+ * kaybolmasi" oluyordu. Ilk boyama bu senkron degerle yapilir, asenkron yukleme
+ * sonradan tazeler.
+ */
+export function readBoardColumnConfigLocal(boardKey) {
+  return readLocal(boardKey)
+}
+
 export async function loadBoardColumnConfig(boardKey) {
   if (!boardKey) return null
   try {
@@ -178,6 +191,7 @@ export function saveBoardColumnConfig(boardKey, config) {
 
 export default {
   loadBoardColumnConfig: loadBoardColumnConfig,
+  readBoardColumnConfigLocal: readBoardColumnConfigLocal,
   saveBoardColumnConfig: saveBoardColumnConfig,
   normalizeColumnConfig: normalizeColumnConfig,
 }
