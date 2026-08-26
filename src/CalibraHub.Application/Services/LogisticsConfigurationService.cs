@@ -3069,7 +3069,12 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 c.Created,
                 c.Updated,
                 c.UnitId,
-                c.Combinations))
+                c.Combinations,
+                // Barcode: projeksiyon bunu eskiden dolduruyordu (varsayilan null kaliyordu) —
+                // mobil Stok Sorgu ekrani barkodu gosterebilsin diye eklendi. Alanin bos
+                // birakilmasi cagiranlar icin davranis degisikligi degil (yalniz eksik veri
+                // dolduruldu); ItemDto imzasi degismedi.
+                Barcode: c.Barcode))
             .ToList();
     }
 

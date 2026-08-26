@@ -18,11 +18,13 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -132,6 +134,23 @@ private fun StockQueryResultView(dto: StockQueryDto) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+
+        // Barkod yalnizca GERCEKTEN girilmisse gosterilir — sunucu bos barkodu null'a
+        // normalize eder (items/search'teki `Barcode ?? Code` fallback'i burada YOK).
+        dto.barcode?.takeIf { it.isNotBlank() }?.let { barcode ->
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "Barkod: $barcode",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        trackingLabel(dto.trackingType, dto.autoSerial)?.let { label ->
+            Spacer(Modifier.height(8.dp))
+            TrackingBadge(label)
+        }
+
         Spacer(Modifier.height(16.dp))
 
         if (dto.balances.isEmpty()) {
@@ -141,9 +160,67 @@ private fun StockQueryResultView(dto: StockQueryDto) {
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
+            // Toplam ONCE gelir: kullanicinin ilk aradigi sayi "elimde ne kadar var" —
+            // lokasyon kirilimini kafadan toplamak zorunda kalmasin.
+            TotalBalanceRow(dto.balances.sumOf { it.quantity }, dto.unit, dto.balances.size)
+            Spacer(Modifier.height(12.dp))
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 dto.balances.forEach { balance -> StockBalanceRow(balance, dto.unit) }
             }
+        }
+    }
+}
+
+/** Takip tipi rozeti metni — takipsiz malzemede rozet HIC gosterilmez (gurultu olurdu). */
+private fun trackingLabel(trackingType: String, autoSerial: Boolean): String? = when (trackingType) {
+    "Lot" -> "Lot Takipli"
+    "Serial" -> if (autoSerial) "Seri Takipli · Otomatik Seri" else "Seri Takipli"
+    else -> null
+}
+
+@Composable
+private fun TrackingBadge(label: String) {
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun TotalBalanceRow(total: Double, unit: String?, locationCount: Int) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Toplam Bakiye", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = if (locationCount == 1) "1 lokasyon" else "$locationCount lokasyon",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Text(
+                text = formatQty(total) + (unit?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
 }

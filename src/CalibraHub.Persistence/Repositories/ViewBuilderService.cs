@@ -112,33 +112,41 @@ public sealed class ViewBuilderService : IViewBuilderService
         await using var connection = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = """
-            SELECT s.name, v.name
+            SELECT s.name, v.name, v.object_id
             FROM sys.views v
             INNER JOIN sys.schemas s ON s.schema_id = v.schema_id
             WHERE v.is_ms_shipped = 0
             ORDER BY s.name, v.name;
             """;
-        var dbViews = new List<(string Schema, string Name)>();
+        var dbViews = new List<(string Schema, string Name, int ObjectId)>();
         await using (var reader = await cmd.ExecuteReaderAsync(ct))
         {
             while (await reader.ReadAsync(ct))
-                dbViews.Add((reader.GetString(0), reader.GetString(1)));
+                dbViews.Add((reader.GetString(0), reader.GetString(1), reader.GetInt32(2)));
         }
+
+        // Kolon sayısı — tek gruplu sorgu (N+1 önlenir; C-Grid liste kartlarında "Kolon Sayısı" widget'ı için).
+        var columnCounts = await GetColumnCountsByObjectIdAsync(connection, ct);
 
         var overrides = await _repository.ListActiveAsync(ct);
         var overrideByName = overrides.ToDictionary(o => o.ViewName, StringComparer.OrdinalIgnoreCase);
+        var revisionCounts = await _repository.CountRevisionsGroupedAsync(ct);
 
         var list = new List<ViewListItemDto>();
-        foreach (var (schema, name) in dbViews)
+        foreach (var (schema, name, objectId) in dbViews)
         {
             overrideByName.TryGetValue(name, out var ov);
+            var revCount = ov is not null && revisionCounts.TryGetValue(ov.Id, out var rc) ? rc : (int?)null;
             list.Add(new ViewListItemDto(
                 schema, name,
                 HasOverride: ov is not null,
                 OverrideKind: ov?.Kind.ToString(),
                 OverrideIsActive: ov?.IsActive ?? false,
                 ViewDefinitionId: ov?.Id,
-                OverrideUpdated: ov is null ? null : (ov.Updated ?? ov.Created)));
+                OverrideUpdated: ov is null ? null : (ov.Updated ?? ov.Created),
+                ColumnCount: columnCounts.TryGetValue(objectId, out var cc) ? cc : null,
+                RevisionCount: revCount,
+                OverrideUpdatedBy: ov?.UpdatedBy ?? ov?.CreatedBy));
         }
 
         // DB'de fiziksel karşılığı bulunamayan ama override kaydı olan satırlar (örn. dışarıdan
@@ -146,13 +154,32 @@ public sealed class ViewBuilderService : IViewBuilderService
         var dbViewNames = dbViews.Select(v => v.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var ov in overrides.Where(o => !dbViewNames.Contains(o.ViewName)))
         {
-            list.Add(new ViewListItemDto(_schema, ov.ViewName, true, ov.Kind.ToString(), ov.IsActive, ov.Id, ov.Updated ?? ov.Created));
+            var revCount = revisionCounts.TryGetValue(ov.Id, out var rc) ? rc : (int?)null;
+            list.Add(new ViewListItemDto(_schema, ov.ViewName, true, ov.Kind.ToString(), ov.IsActive, ov.Id,
+                ov.Updated ?? ov.Created, ColumnCount: null, RevisionCount: revCount, OverrideUpdatedBy: ov.UpdatedBy ?? ov.CreatedBy));
         }
 
         return list
             .OrderBy(x => x.Schema, StringComparer.OrdinalIgnoreCase)
             .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private static async Task<Dictionary<int, int>> GetColumnCountsByObjectIdAsync(SqlConnection connection, CancellationToken ct)
+    {
+        var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT v.object_id, COUNT(c.column_id)
+            FROM sys.views v
+            INNER JOIN sys.columns c ON c.object_id = v.object_id
+            WHERE v.is_ms_shipped = 0
+            GROUP BY v.object_id;
+            """;
+        var dict = new Dictionary<int, int>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            dict[reader.GetInt32(0)] = reader.GetInt32(1);
+        return dict;
     }
 
     public async Task<ViewDetailDto?> GetViewDetailAsync(string viewName, CancellationToken ct)

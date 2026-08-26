@@ -105,6 +105,22 @@ public sealed class SqlViewDefinitionRepository : IViewDefinitionRepository
         return result is null ? 0 : Convert.ToInt32(result);
     }
 
+    public async Task<IReadOnlyDictionary<int, int>> CountRevisionsGroupedAsync(CancellationToken ct)
+    {
+        await using var con = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = con.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [ViewDefinitionId], COUNT(1)
+            FROM   [{_s}].[ViewDefinitionRevision]
+            GROUP  BY [ViewDefinitionId];
+            """;
+        var dict = new Dictionary<int, int>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            dict[reader.GetInt32(0)] = reader.GetInt32(1);
+        return dict;
+    }
+
     private static ViewDefinition MapRow(SqlDataReader r) => new()
     {
         Id             = r.GetInt32(0),

@@ -79,7 +79,10 @@ public sealed record ViewListItemDto(
     string? OverrideKind,
     bool OverrideIsActive,
     int? ViewDefinitionId,
-    DateTime? OverrideUpdated);
+    DateTime? OverrideUpdated,
+    int? ColumnCount,        // sys.columns'tan — DB'de fiziksel karşılığı yoksa null (yalnız override kaydı)
+    int? RevisionCount,      // ViewDefinitionRevision sayısı — override yoksa null
+    string? OverrideUpdatedBy);
 
 public sealed record ViewOverrideDto(
     int Id,

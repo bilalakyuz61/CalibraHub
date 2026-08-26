@@ -34,6 +34,9 @@ data class StockQueryDto(
     val itemCode: String,
     val itemName: String,
     val unit: String? = null,
+    /** Gercek barkod (girilmemisse null). items/search'teki `barcode` alanindan farkli —
+     * orada `Barcode ?? Code` fallback'i var, burada YOK (bkz. MobileWarehouseApiController.Stock). */
+    val barcode: String? = null,
     val balances: List<StockBalanceDto> = emptyList(),
     val trackingType: String = "None",
     val autoSerial: Boolean = false,

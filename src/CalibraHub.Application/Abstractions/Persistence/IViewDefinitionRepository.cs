@@ -24,4 +24,8 @@ public interface IViewDefinitionRepository
     Task<ViewDefinitionRevision?> GetLatestRevisionAsync(int viewDefinitionId, CancellationToken ct);
 
     Task<int> CountRevisionsAsync(int viewDefinitionId, CancellationToken ct);
+
+    /// <summary>Tüm ViewDefinitionId'ler için revizyon sayısı — liste ekranında N+1 sorgu yerine
+    /// tek gruplu sorgu (bkz. ViewBuilderService.ListViewsAsync).</summary>
+    Task<IReadOnlyDictionary<int, int>> CountRevisionsGroupedAsync(CancellationToken ct);
 }

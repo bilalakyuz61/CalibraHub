@@ -338,6 +338,11 @@ public sealed class MobileWarehouseApiController : ControllerBase
             itemCode = item.Code,
             itemName = item.Name,
             unit     = unitCode,
+            // DIKKAT — items/search'teki `barcode` alanindan FARKLI: orada `Barcode ?? Code`
+            // fallback'i var (taranan degerin kod ile de eslesebilmesi icin, bilincli). Burada
+            // GERCEK barkod donulur, girilmemisse null — ekranda "Barkod" etiketiyle kodun
+            // gosterilmesi kullaniciyi yaniltirdi. Bos string de null'a normalize edilir.
+            barcode  = string.IsNullOrWhiteSpace(item.Barcode) ? null : item.Barcode.Trim(),
             trackingType,
             autoSerial,
             balances,

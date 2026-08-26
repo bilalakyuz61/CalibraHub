@@ -1,3 +1,6 @@
+@model CalibraHub.Web.Models.ViewBuilder.ViewBuilderBoardViewModel
+@using System.Text.Json
+@inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
 @{
     ViewData["Title"] = "SQL View Yönetimi";
     ViewData["FormCode"] = "SETUP_DEFINITIONS";
@@ -5,53 +8,105 @@
     ViewData["BodyClass"] = "page-view-builder";
     ViewData["DbInfo"] =
         "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
-        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;'>ViewDefinition</td><td style='padding:6px 8px;'>Aktif view başına tek override (filtered UNIQUE) — Kind (SystemExtend/Custom), DefinitionJson, GeneratedSql, IsRawMode</td></tr>"
-        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;'>ViewDefinitionRevision</td><td style='padding:6px 8px;'>Her kaydetme/geri alma öncesi snapshot — Geri Al bu tablodaki son revizyonu tekrar uygular</td></tr>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>ViewDefinition</td><td style='padding:6px 8px;'>Aktif view başına tek override (filtered UNIQUE) — Kind (SystemExtend/Custom), DefinitionJson, GeneratedSql, IsRawMode</td></tr>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>ViewDefinitionRevision</td><td style='padding:6px 8px;'>Her kaydetme/geri alma öncesi snapshot — Geri Al bu tablodaki son revizyonu tekrar uygular</td></tr>"
         + "</table>";
+
+    var jsonOpts = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+    var boardConfigJson = Model.BoardConfig != null
+        ? JsonSerializer.Serialize(Model.BoardConfig, jsonOpts)
+        : "null";
 }
 
 @section Styles {
 <style>
-    .workspace-frame-body.page-view-builder .app-content-area--workspace-frame {
-        height: 100dvh; display: flex; flex-direction: column; overflow: hidden; padding: 0;
+    .page-view-builder .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
     }
-    #viewBuilderRoot { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; height: 100%; }
+    .page-view-builder .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    .workspace-frame-body.page-view-builder .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-view-builder .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
 </style>
 }
 
-<div id="viewBuilderRoot"></div>
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div id="reactViewBuilderBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
+</section>
 
 @section Scripts {
 <script>
-(function () {
-    var BUNDLE_URL = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
-    var CSS_URL    = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
-    var el = document.getElementById('viewBuilderRoot');
+(function() {
+    var BOARD_CONFIG = @Html.Raw(boardConfigJson);
+    var BUNDLE_URL = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL    = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
 
-    function showError(msg) { if (el) el.innerHTML = '<div style="padding:24px;color:#dc2626;font-size:13px;">' + msg + '</div>'; }
+    var el = document.getElementById('reactViewBuilderBoard');
+    if (!el) { console.error('[ViewBuilder] Mount element yok'); return; }
+
+    function showError(msg) {
+        el.innerHTML = '<div class="cb-mount-error">'
+            + '<div>' + msg + '</div>'
+            + '<button onclick="location.reload()">Sayfayı Yenile</button>'
+            + '</div>';
+    }
+
+    function doMount() {
+        if (!BOARD_CONFIG) { showError('Board config bulunamadı'); return; }
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) {
+            showError('SmartBoard mount fonksiyonu bulunamadı');
+            return;
+        }
+        try {
+            window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
+            console.log('[ViewBuilder] SmartBoard mounted,', (BOARD_CONFIG.entities || []).length, 'view');
+        } catch (ex) {
+            console.error('[ViewBuilder] Mount exception:', ex);
+            showError('Mount hatası: ' + (ex.message || ex));
+        }
+    }
+
     function loadCss() {
-        if (document.querySelector('link[data-vb-css]')) return;
+        if (document.querySelector('link[data-vb-board-css]')) return;
         var link = document.createElement('link');
-        link.rel = 'stylesheet'; link.href = CSS_URL; link.setAttribute('data-vb-css', '1');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-vb-board-css', '1');
         document.head.appendChild(link);
     }
+
     function loadScript(cb) {
-        var prev = document.querySelector('script[data-vb-js]');
-        if (prev) { prev.addEventListener('load', cb); return; }
-        var s = document.createElement('script');
-        s.src = BUNDLE_URL; s.setAttribute('data-vb-js', '1');
-        s.onload = function () { setTimeout(cb, 0); };
-        s.onerror = function () { showError('React bundle yüklenemedi.'); };
-        document.head.appendChild(s);
-    }
-    function doMount() {
-        if (!window.CalibraHub || !window.CalibraHub.mountViewBuilder) { showError('mountViewBuilder bulunamadı.'); return; }
-        window.CalibraHub.mountViewBuilder(el, { apiBase: '/api/view-builder' });
+        if (document.querySelector('script[data-vb-board-js]')) { cb(); return; }
+        var script = document.createElement('script');
+        script.src = BUNDLE_URL;
+        script.setAttribute('data-vb-board-js', '1');
+        script.onload  = function() { setTimeout(cb, 0); };
+        script.onerror = function() { showError('Bundle yüklenemedi'); };
+        document.head.appendChild(script);
     }
 
     loadCss();
-    if (window.CalibraHub && window.CalibraHub.mountViewBuilder) doMount();
-    else loadScript(doMount);
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) {
+        doMount();
+    } else {
+        loadScript(doMount);
+    }
 })();
 </script>
 }
