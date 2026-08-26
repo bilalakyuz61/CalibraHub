@@ -285,6 +285,9 @@ body.app-theme-dark .di-root {
   background: rgba(180,83,9,.12); color: var(--di-warn); border: 1px solid rgba(180,83,9,.25);
 }
 .di-alert--err { background: rgba(220,38,38,.12); color: var(--di-danger); border-color: rgba(220,38,38,.25); }
+.di-alert--ok  { background: rgba(5,150,105,.12); color: var(--di-ok); border-color: rgba(5,150,105,.25); flex: 0 0 auto; }
+body.app-theme-dark .di-alert--ok { background: rgba(52,211,153,.14); border-color: rgba(52,211,153,.28); }
+.di-alert__text { flex: 0 1 auto; }
 
 /* ── Onay modalı (silme standardı) ────────────────────────────────────── */
 .di-modal-backdrop {
@@ -386,6 +389,21 @@ body.app-theme-dark .di-root {
 .di-step-sep { width: 14px; height: 1px; background: var(--di-border); }
 
 .di-wizard__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 18px; }
+
+/* 3. adım (Önizleme ve Aktar) — kaydırma sayfanın altına, önizleme kutusunun
+   içine sabitlensin diye .di-wizard__body kendisi kaydırmaz; içindeki
+   .di-card--preview kalan tüm dikey alanı doldurur ve tablo alanı (di-preview-wrap--fill)
+   flex:1 ile o alanı kaplar — satır sayısı azken de çokken de kutu boyu sabit kalır,
+   yatay/dikey taşma kutunun KENDİ içinde kayar (2026-08-26, PageComment 1115). */
+.di-wizard__body--fill { display: flex; flex-direction: column; overflow-y: hidden; }
+.di-wizard__body--fill .di-card--preview {
+  flex: 1 1 auto; min-height: 0; margin-bottom: 0;
+  display: flex; flex-direction: column;
+}
+.di-card--preview .di-preview-wrap--fill {
+  flex: 1 1 auto; min-height: 140px; max-height: none;
+}
+
 .di-wizard__foot {
   display: flex; align-items: center; gap: 10px;
   padding: 12px 18px; border-top: 1px solid var(--di-border); background: var(--di-surface);

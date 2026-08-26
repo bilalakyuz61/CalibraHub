@@ -303,7 +303,7 @@ export default function DataImport() {
           </div>
         </div>
 
-        <div className="di-wizard__body">
+        <div className={'di-wizard__body' + (step === 3 ? ' di-wizard__body--fill' : '')}>
           {error && <div className="di-alert di-alert--err"><AlertTriangle size={15} /> {error}</div>}
 
           {step === 1 && (
@@ -441,34 +441,35 @@ export default function DataImport() {
           )}
 
           {step === 3 && (
-            <section className="di-card">
+            <section className="di-card di-card--preview">
               {busy === 'preview' && <div className="di-map__hint"><Loader2 size={14} className="di-spin" /> Önizleniyor…</div>}
 
-              {/* Aktarım sonucu — aynı ekranda, önizlemenin ÜSTÜNDE. Başka adıma geçilmez. */}
+              {/* Aktarım sonucu — aynı ekranda, önizlemenin ÜSTÜNDE gösterilir; önizleme
+                  tablosu kaybolmaz ("yeni sayfa" hissi vermesin diye). Tekrar aktarım
+                  "İçe Aktar" butonu devre dışı bırakılarak engellenir — reset için
+                  "Yeniden Doğrula" gerekir (bkz. runPreview: result'ı sıfırlar). */}
               {result && (
-                <>
-                  <div className="di-alert" style={{ background: 'rgba(5,150,105,.12)', color: 'var(--di-ok)', borderColor: 'rgba(5,150,105,.25)' }}>
-                    <CheckCircle2 size={16} /> İçe aktarım tamamlandı — {result.inserted} eklendi, {result.updated} güncellendi{result.failed > 0 ? `, ${result.failed} başarısız` : ''}.
-                  </div>
-                  {result.failed > 0 && (
-                    <div className="di-preview-wrap" style={{ maxHeight: 200, marginBottom: 10 }}>
-                      <table className="di-preview">
-                        <thead><tr><th>Satır</th><th>Hata</th></tr></thead>
-                        <tbody>
-                          {result.rows.filter(r => !r.ok).map(r => (
-                            <tr key={r.rowNumber}><td>{r.rowNumber}</td><td className="di-rowerr">{r.error}</td></tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  <div style={{ marginBottom: 12 }}>
-                    <button className="di-btn di-btn--primary" onClick={goList}><ArrowLeft size={15} /> Listeye Dön</button>
-                  </div>
-                </>
+                <div className="di-alert di-alert--ok">
+                  <CheckCircle2 size={16} />
+                  <span className="di-alert__text">İçe aktarım tamamlandı — {result.inserted} eklendi, {result.updated} güncellendi{result.failed > 0 ? `, ${result.failed} başarısız` : ''}.</span>
+                  <div className="di-spacer" />
+                  <button className="di-btn di-btn--sm" onClick={goList}><ArrowLeft size={13} /> Listeye Dön</button>
+                </div>
+              )}
+              {result && result.failed > 0 && (
+                <div className="di-preview-wrap" style={{ maxHeight: 160, marginBottom: 10, flex: '0 0 auto' }}>
+                  <table className="di-preview">
+                    <thead><tr><th>Satır</th><th>Hata</th></tr></thead>
+                    <tbody>
+                      {result.rows.filter(r => !r.ok).map(r => (
+                        <tr key={r.rowNumber}><td>{r.rowNumber}</td><td className="di-rowerr">{r.error}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
 
-              {preview && !result && (
+              {preview && (
                 <>
                   {/* TEK SATIR: özet sayaçlar + arama + Yeniden Doğrula + İçe Aktar.
                       Önceden sayaçlar büyük kartlar hâlinde ayrı bir satırdaydı, aksiyonlar
@@ -491,12 +492,16 @@ export default function DataImport() {
                       {busy === 'preview' ? <Loader2 size={15} className="di-spin" /> : <RefreshCw size={15} />} Yeniden Doğrula
                     </button>
                     <button className="di-btn di-btn--ok" onClick={askImport}
-                            disabled={!file || !!busy || !preview.validRows}
-                            title={!preview.validRows ? 'Aktarılacak geçerli satır yok' : 'Geçerli satırları aktar'}>
+                            disabled={!file || !!busy || !preview.validRows || !!result}
+                            title={result ? 'Zaten aktarıldı — tekrar aktarmak için önce "Yeniden Doğrula"' : (!preview.validRows ? 'Aktarılacak geçerli satır yok' : 'Geçerli satırları aktar')}>
                       {busy === 'commit' ? <Loader2 size={15} className="di-spin" /> : <Play size={15} />} İçe Aktar
                     </button>
                   </div>
-                  <div className="di-map__hint" style={{ marginBottom: 8 }}>Hatalı hücreleri düzeltin, gereksiz satırları <strong>×</strong> ile hariç tutun, sonra "Yeniden Doğrula" / "İçe Aktar".</div>
+                  <div className="di-map__hint" style={{ marginBottom: 8 }}>
+                    {result
+                      ? 'Aynı dosyayı tekrar aktarmak için önce "Yeniden Doğrula"ya basın.'
+                      : <>Hatalı hücreleri düzeltin, gereksiz satırları <strong>×</strong> ile hariç tutun, sonra "Yeniden Doğrula" / "İçe Aktar".</>}
+                  </div>
                   <PreviewTable preview={preview} overrides={overrides} onEdit={setOverride}
                     excluded={excluded} onToggleExclude={toggleExclude} search={search} />
                 </>
@@ -601,7 +606,7 @@ function PreviewTable({ preview, overrides = {}, onEdit, excluded = {}, onToggle
     return cellHit || errHit || String(r.rowNumber).includes(search.trim())
   })
   return (
-    <div className="di-preview-wrap">
+    <div className="di-preview-wrap di-preview-wrap--fill">
       <table className="di-preview">
         <thead>
           <tr>
