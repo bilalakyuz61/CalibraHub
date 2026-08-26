@@ -115,6 +115,22 @@ public sealed class SqlOperationRepository : IOperationRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task<(int RoutingCount, int WorkOrderCount, int MachineTimeCount)> GetUsageCountsAsync(int id, CancellationToken ct)
+    {
+        var schemaPrefix = _table[..(_table.IndexOf(".", StringComparison.Ordinal) + 1)]; // "[schema]."
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+            SELECT
+                (SELECT COUNT(*) FROM {schemaPrefix}[RoutingOperation]     WHERE [OperationId] = @Id),
+                (SELECT COUNT(*) FROM {schemaPrefix}[WorkOrderOperation]   WHERE [OperationId] = @Id),
+                (SELECT COUNT(*) FROM {schemaPrefix}[OperationMachineTime] WHERE [OperationId] = @Id);";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct)) return (0, 0, 0);
+        return (r.GetInt32(0), r.GetInt32(1), r.GetInt32(2));
+    }
+
     private static async Task<IReadOnlyCollection<Operation>> ReadListAsync(SqlCommand cmd, CancellationToken ct)
     {
         var list = new List<Operation>();

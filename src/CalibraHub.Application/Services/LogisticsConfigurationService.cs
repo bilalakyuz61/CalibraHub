@@ -1609,6 +1609,10 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Secilen lokasyonun alt kirilimlari var. Once alt kirilimlari siliniz.");
         }
 
+        var label = string.IsNullOrWhiteSpace(existingLocation.LocationName)
+            ? existingLocation.LocationCode
+            : $"{existingLocation.LocationCode} — {existingLocation.LocationName}";
+
         // FK kontrolü — Machine.LocationId NOT NULL FK var; bu lokasyon herhangi
         // bir makine tarafindan referansli ise SQL FK violation'a takiliriz.
         // Once kontrol et, kullaniciya "hangi makineler bagli" mesaji ver.
@@ -1623,12 +1627,23 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             var blockingCount = machines.Count(m => m.LocationId == locationId);
             var sample = string.Join(", ", blockingMachines);
             var suffix = blockingCount > blockingMachines.Count ? $" (+{blockingCount - blockingMachines.Count} daha)" : "";
-            var label = string.IsNullOrWhiteSpace(existingLocation.LocationName)
-                ? existingLocation.LocationCode
-                : $"{existingLocation.LocationCode} — {existingLocation.LocationName}";
             throw new ArgumentException(
                 $"'{label}' lokasyonu {blockingCount} makine tarafindan kullaniliyor; " +
                 $"once makineleri baska bir lokasyona tasiyin. Ornek: {sample}{suffix}");
+        }
+
+        // 2026-08-26: FK_Personnel_Location eklendi. Machine'in aksine burada NULL'lama
+        // (nullify) tercih edilmedi — personelin lokasyon atamasini sessizce silmek CLAUDE.md
+        // "sessiz kirik" #3 (kullanici verisinin sessizce kaybolmasi) sinifina girer; bunun
+        // yerine makine guard'iyla ayni desende reddedip nerede/kac kisi oldugunu soyleriz.
+        var (personnelCount, personnelSample) = await _repository.GetPersonnelUsageByLocationIdAsync(locationId, cancellationToken);
+        if (personnelCount > 0)
+        {
+            var sample = string.Join(", ", personnelSample);
+            var suffix = personnelCount > personnelSample.Count ? $" (+{personnelCount - personnelSample.Count} daha)" : "";
+            throw new ArgumentException(
+                $"'{label}' lokasyonu {personnelCount} personel tarafindan kullaniliyor; " +
+                $"once personelin lokasyonunu guncelleyin. Ornek: {sample}{suffix}");
         }
 
         await _repository.NullifyItemLocationsByLocationIdAsync(locationId, cancellationToken);
@@ -1859,11 +1874,24 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Secilen olcu birimi bulunamadi.");
         }
 
+        // 2026-08-26: Onceden "MaterialDefinitions tablosunda unit_name yok" gerekcesiyle
+        // devre disi birakilmis (if(false)) olu guard — Items.UnitId zaten yillardir gercek
+        // bir int FK (bkz. FK_Items_Unit) ve kullanimda bir birim silinirse SQL FK ihlali
+        // veriyordu. Burada en yaygin/dogrudan kullanim (malzeme karti) proaktif kontrol
+        // edilir; ItemUnits/ItemKitLine/OperationMachineTime/DocumentLine/InventoryCountLine/
+        // WorkOrder gibi diger 6 FK kaynagi icin genel FK-ihlali guvenlik agi (bkz.
+        // SqlExceptionMessages + ApiExceptionMiddleware) devreye girer — hepsini burada tek
+        // tek saymak asiri karmasiklik olurdu (KISS).
         var stockCards = await _repository.GetItemsAsync(cancellationToken);
-        // MaterialDefinitions tablosunda artık unit_name alanı yok; bu kontrol kaldırıldı.
-        if (false)
+        var usingItems = stockCards.Where(x => x.UnitId == id).Take(5).Select(x => x.Name).ToList();
+        if (usingItems.Count > 0)
         {
-            throw new ArgumentException("Bu olcu birimi malzeme kartlarinda kullaniliyor. Once bagli kayitlari guncelleyiniz.");
+            var totalUsing = stockCards.Count(x => x.UnitId == id);
+            var sample = string.Join(", ", usingItems);
+            var suffix = totalUsing > usingItems.Count ? $" (+{totalUsing - usingItems.Count} daha)" : "";
+            throw new ArgumentException(
+                $"'{existing.Code}' olcu birimi {totalUsing} malzeme kartinda kullaniliyor; " +
+                $"once malzeme kartlarini baska bir birime tasiyin. Ornek: {sample}{suffix}");
         }
 
         await _repository.DeleteUnitAsync(id, cancellationToken);

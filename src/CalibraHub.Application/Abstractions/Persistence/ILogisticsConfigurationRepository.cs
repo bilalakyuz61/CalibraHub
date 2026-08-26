@@ -72,6 +72,12 @@ public interface ILogisticsConfigurationRepository
         string? lockedDocType, string? search, int offset, int pageSize, CancellationToken cancellationToken);
     Task NullifyItemLocationsByLocationIdAsync(int locationId, CancellationToken cancellationToken);
     Task NullifyLocationHistoricalFkRefsAsync(int locationId, CancellationToken cancellationToken);
+    /// <summary>
+    /// Lokasyon silme guard'ı — bu lokasyonu kullanan personel sayısı + örnek isim listesi
+    /// (bkz. FK_Personnel_Location). Personelin lokasyonunu sessizce NULL'lamak veri kaybı
+    /// sayıldığı için (kimin nerede çalıştığı bilgisi) nullify yerine guard tercih edildi.
+    /// </summary>
+    Task<(int Count, IReadOnlyCollection<string> SampleNames)> GetPersonnelUsageByLocationIdAsync(int locationId, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<LocationType>> GetLocationTypesAsync(CancellationToken cancellationToken);
     Task<int> UpsertLocationTypeAsync(LocationType type, CancellationToken cancellationToken);
     Task DeleteLocationTypeAsync(int id, CancellationToken cancellationToken);

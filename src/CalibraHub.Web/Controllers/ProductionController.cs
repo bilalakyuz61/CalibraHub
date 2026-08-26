@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Common;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Web.Helpers;
@@ -708,8 +709,19 @@ public sealed class ProductionController : Controller
             await _operations.DeleteAsync(id, ct);
             return Json(new { ok = true });
         }
+        catch (ArgumentException ex)
+        {
+            // OperationService.DeleteAsync kullanim guard'i — kullaniciya oldugu gibi gosterilir.
+            return Json(new { ok = false, error = ex.Message });
+        }
         catch (Exception ex)
         {
+            // Genel FK-ihlali guvenlik agi (CLAUDE.md "sessiz kirik" #1) — guard'in
+            // yakalamadigi bir FK varsa (ornegin ileride eklenecek yeni referans) yine
+            // anlamli mesaj doner, "Islem sirasinda bir hata olustu." jenerigine dusmez.
+            if (SqlExceptionMessages.TryHandle(ex, _logger, $"ProductionController.DeleteOperation id={id}", out var friendly))
+                return Json(new { ok = false, error = friendly });
+
             _logger.LogError(ex, "[Operation.Delete] id={Id} silinemedi.", id);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }

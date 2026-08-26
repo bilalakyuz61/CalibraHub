@@ -1,0 +1,370 @@
+@*
+    Hesaplanan Kolon — tanım düzenleme (sekmeli-form standardı).
+
+    Sol sekme menüsü + sağ pane + üstte sticky aksiyon şeridi. Sekme dot'ları Malzeme
+    Kartı standardı (ring → dolu + glow); ikon kullanılmaz.
+
+    Ekranda SQL YAZILMAZ: kaynak view ve kolonlar açılır listeden seçilir, liste
+    sys.views/sys.columns'tan gelir. Tanımdaki tek serbest metin başlıktır.
+*@
+@model CalibraHub.Application.Contracts.ComputedColumnDto
+@{
+    ViewData["Title"] = Model is null ? "Yeni Hesaplanan Kolon" : Model.Label;
+    ViewData["FormCode"] = "SETUP_DEFINITIONS";
+    ViewData["HelpKey"] = "computed-column";
+    ViewData["BodyClass"] = "page-cc-edit";
+    var m = Model;
+}
+
+@section Styles {
+<style>
+    .workspace-frame-body.page-cc-edit .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column; overflow: hidden; padding: 0;
+    }
+
+    .cce-shell { display:flex; flex-direction:column; height:100%; min-height:0; }
+
+    /* ── Sticky aksiyon şeridi ─────────────────────────────────────── */
+    .cce-bar {
+        flex:0 0 auto; display:flex; align-items:center; gap:12px;
+        padding:10px 16px; border-bottom:1px solid var(--app-border, #e2e8f0);
+        background: var(--app-surface, #fff); position:relative;
+    }
+    .cce-name { font-size:.92rem; font-weight:700; color: var(--bs-body-color, #0f172a); }
+    .cce-btn {
+        appearance:none; cursor:pointer; border:1px solid var(--app-border, #e2e8f0);
+        background: var(--app-surface, #fff); color: var(--bs-body-color, #0f172a);
+        border-radius:8px; padding:7px 13px; font-size:.82rem; font-weight:600;
+        display:inline-flex; align-items:center; gap:6px;
+    }
+    .cce-btn:hover { border-color:#4f46e5; color:#4f46e5; }
+    .cce-btn--primary { background:#4f46e5; border-color:#4f46e5; color:#fff; }
+    .cce-btn--primary:hover { color:#fff; }
+
+    /* Kaydetme başarılı — KITT taraması */
+    .cce-bar::after {
+        content:''; position:absolute; left:0; bottom:-1px; height:2px; width:0;
+        background:linear-gradient(90deg, transparent, #22c55e, transparent);
+        opacity:0; pointer-events:none;
+    }
+    .cce-bar.is-save-flash::after { animation: cce-kitt 1.5s ease-out; }
+    @@keyframes cce-kitt {
+        0%   { width:0;    left:0;    opacity:1; }
+        60%  { width:45%;  left:55%;  opacity:1; }
+        100% { width:0;    left:100%; opacity:0; }
+    }
+
+    /* ── Gövde: sol sekme + sağ pane ───────────────────────────────── */
+    .cce-body { flex:1 1 auto; min-height:0; display:flex; }
+    .cce-tabs {
+        flex:0 0 220px; width:220px; padding:14px 10px;
+        border-right:1px solid var(--app-border, #e2e8f0);
+        background: var(--app-surface, #fff);
+        display:flex; flex-direction:column; gap:3px; overflow-y:auto;
+    }
+    .cce-tabs-title {
+        font-size:.68rem; font-weight:700; letter-spacing:.04em;
+        color: var(--app-text-muted, #94a3b8);
+        padding:4px 10px 8px; border-bottom:1px solid var(--app-border,#e2e8f0); margin-bottom:6px;
+    }
+    .cce-tab {
+        appearance:none; border:none; background:transparent; cursor:pointer;
+        display:flex; align-items:center; gap:9px;
+        padding:9px 11px; border-radius:8px; text-align:left;
+        font-size:.83rem; font-weight:500; color: var(--app-text-muted, #64748b);
+        border-left:2px solid transparent;
+    }
+    .cce-tab:hover { background: var(--app-surface-muted, #f1f5f9); color: var(--bs-body-color,#0f172a); }
+    .cce-tab.is-active {
+        background: var(--app-surface-muted, #f1f5f9);
+        color: var(--bs-body-color, #0f172a); border-left-color:#6366f1; font-weight:600;
+    }
+    /* Malzeme Kartı dot standardı — ring → dolu + glow */
+    .cce-tab::before {
+        content:''; width:8px; height:8px; border-radius:50%; flex-shrink:0;
+        border:1.5px solid #cbd5e1; background:transparent; transition:all .18s;
+    }
+    .cce-tab:hover::before { border-color:#94a3b8; }
+    .cce-tab.is-active::before { background:#6366f1; border-color:#6366f1; box-shadow:0 0 7px rgba(99,102,241,.5); }
+    body.app-theme-dark .cce-tab::before { border-color:rgba(255,255,255,.24); }
+    body.app-theme-dark .cce-tab:hover::before { border-color:rgba(255,255,255,.48); }
+    body.app-theme-dark .cce-tab.is-active::before { background:#6366f1; border-color:#6366f1; box-shadow:0 0 7px rgba(99,102,241,.55); }
+
+    .cce-content { flex:1 1 auto; min-width:0; overflow-y:auto; padding:18px 22px; }
+    .cce-pane { display:none; max-width:640px; }
+    .cce-pane.is-active { display:block; }
+    .cce-pane-title { font-size:.95rem; font-weight:700; margin-bottom:4px; }
+    .cce-pane-hint { font-size:.79rem; color: var(--app-text-muted,#64748b); margin-bottom:16px; }
+
+    .cce-row { display:grid; grid-template-columns:150px 1fr; gap:10px 12px; align-items:center; margin-bottom:11px; }
+    .cce-row label { font-size:.81rem; color: var(--app-text-muted,#64748b); }
+    .cce-row input, .cce-row select {
+        width:100%; padding:8px 10px; border-radius:8px; font-size:.83rem;
+        border:1px solid var(--app-border,#e2e8f0);
+        background: var(--app-surface,#fff); color: var(--bs-body-color,#0f172a);
+        color-scheme: light;
+    }
+    body.app-theme-dark .cce-row input, body.app-theme-dark .cce-row select { color-scheme: dark; }
+    .cce-help { grid-column:2; font-size:.74rem; color: var(--app-text-muted,#94a3b8); margin-top:-6px; }
+
+    /* Aktif/Pasif — switch (native checkbox UI'a düşmez) */
+    .cce-switch { display:inline-flex; align-items:center; gap:9px; cursor:pointer; }
+    .cce-switch input { display:none; }
+    .cce-switch-track {
+        width:38px; height:21px; border-radius:999px; position:relative;
+        background: var(--app-border, #cbd5e1); transition:background .18s;
+    }
+    .cce-switch-track.is-on { background:#22c55e; }
+    .cce-switch-thumb {
+        position:absolute; top:2px; left:2px; width:17px; height:17px; border-radius:50%;
+        background:#fff; transition:left .18s;
+    }
+    .cce-switch-track.is-on .cce-switch-thumb { left:19px; }
+    .cce-switch-label { font-size:.81rem; color: var(--app-text-muted,#64748b); }
+    .cce-switch-label.is-active { color:#16a34a; font-weight:600; }
+
+    .cce-msg { margin-top:14px; padding:10px 12px; border-radius:8px; font-size:.8rem; display:none; }
+    .cce-msg--ok  { background:#dcfce7; color:#166534; }
+    .cce-msg--err { background:#fee2e2; color:#991b1b; }
+    body.app-theme-dark .cce-msg--ok  { background:#052e1a; color:#4ade80; }
+    body.app-theme-dark .cce-msg--err { background:#3f1010; color:#fca5a5; }
+</style>
+}
+
+<div class="cce-shell">
+    <div class="cce-bar" id="cceBar">
+        <button type="button" class="cce-btn" onclick="history.back()">← Geri</button>
+        <span class="cce-name" id="cceName">@(m is null ? "Yeni Tanım" : m.Label)</span>
+        <span style="flex:1"></span>
+        <label class="cce-switch">
+            <input type="checkbox" id="ccActive" @(m is null || m.IsActive ? "checked" : null) />
+            <span class="cce-switch-track @(m is null || m.IsActive ? "is-on" : "")"><span class="cce-switch-thumb"></span></span>
+            <span class="cce-switch-label @(m is null || m.IsActive ? "is-active" : "")" id="ccActiveLabel">@(m is null || m.IsActive ? "Aktif" : "Kapalı")</span>
+        </label>
+        <button type="button" class="cce-btn" id="ccPreview">Önizle</button>
+        <button type="button" class="cce-btn cce-btn--primary" id="ccSave">Kaydet</button>
+    </div>
+
+    <div class="cce-body">
+        <aside class="cce-tabs">
+            <div class="cce-tabs-title">Tanım</div>
+            <button type="button" class="cce-tab is-active" data-pane="general">Genel</button>
+            <button type="button" class="cce-tab" data-pane="source">Kaynak</button>
+            <button type="button" class="cce-tab" data-pane="display">Görünüm</button>
+        </aside>
+
+        <main class="cce-content">
+            <section class="cce-pane is-active" id="cce-pane-general">
+                <div class="cce-pane-title">Genel</div>
+                <div class="cce-pane-hint">Kolonun adı ve hangi varlığın listelerinde çıkacağı.</div>
+
+                <div class="cce-row">
+                    <label>Başlık</label>
+                    <input id="ccLabel" value="@(m?.Label)" placeholder="Açık Satış Siparişi" />
+                </div>
+                <div class="cce-row">
+                    <label>Varlık</label>
+                    <select id="ccEntity">
+                        <option value="Item" selected="@(m is null || m.EntityKind == "Item")">Malzeme</option>
+                        <option value="Contact" selected="@(m?.EntityKind == "Contact")">Cari</option>
+                        <option value="Document" selected="@(m?.EntityKind == "Document")">Belge</option>
+                    </select>
+                </div>
+                <div class="cce-help">Satırları bu varlık olan listelerde seçilebilir olur.</div>
+
+                <div class="cce-row">
+                    <label>Liste kısıtı</label>
+                    <input id="ccBoards" value="@(m?.BoardKeys)" placeholder="Boş = varlığın tüm listeleri" />
+                </div>
+                <div class="cce-help">Virgülle ayrılmış liste anahtarı. Boş bırakmak önerilir.</div>
+            </section>
+
+            <section class="cce-pane" id="cce-pane-source">
+                <div class="cce-pane-title">Kaynak</div>
+                <div class="cce-pane-hint">
+                    Sorgu view'ın içindedir; burada yalnız hangi view'ın hangi kolonu olduğu seçilir.
+                    Yeni bir kaynak gerekiyorsa önce SQL View Yönetimi'nden tanımlayın.
+                </div>
+
+                <div class="cce-row"><label>Kaynak view</label><select id="ccView"></select></div>
+                <div class="cce-row"><label>Anahtar kolon</label><select id="ccKey"></select></div>
+                <div class="cce-help">Satırı eşleştiren kimlik (ör. ItemId).</div>
+
+                <div class="cce-row"><label>Değer kolonu</label><select id="ccValue"></select></div>
+                <div class="cce-row"><label>Birim kolonu</label><select id="ccUnit"></select></div>
+                <div class="cce-help">Birim malzemeye göre değiştiği için satırdan okunur; boş bırakılırsa gösterilmez.</div>
+            </section>
+
+            <section class="cce-pane" id="cce-pane-display">
+                <div class="cce-pane-title">Görünüm</div>
+                <div class="cce-pane-hint">Değerin nasıl biçimleneceği. Sıralama her zaman ham değer üzerinden yapılır.</div>
+
+                <div class="cce-row">
+                    <label>Veri tipi</label>
+                    <select id="ccType">
+                        <option value="number" selected="@(m is null || m.DataType == "number")">Sayı</option>
+                        <option value="decimal" selected="@(m?.DataType == "decimal")">Ondalık</option>
+                        <option value="money" selected="@(m?.DataType == "money")">Para</option>
+                        <option value="date" selected="@(m?.DataType == "date")">Tarih</option>
+                        <option value="duration" selected="@(m?.DataType == "duration")">Süre (saniye)</option>
+                        <option value="text" selected="@(m?.DataType == "text")">Metin</option>
+                        <option value="bool" selected="@(m?.DataType == "bool")">Evet / Hayır</option>
+                    </select>
+                </div>
+                <div class="cce-row">
+                    <label>Değer yoksa</label>
+                    <select id="ccNull">
+                        <option value="dash" selected="@(m is null || m.NullDisplay == "dash")">— göster</option>
+                        <option value="zero" selected="@(m?.NullDisplay == "zero")">0 göster</option>
+                        <option value="empty" selected="@(m?.NullDisplay == "empty")">Boş bırak</option>
+                    </select>
+                </div>
+                <div class="cce-help">Sayıda genelde 0, tarihte tire anlamlıdır.</div>
+
+                <div class="cce-row">
+                    <label>Zaman aşımı (sn)</label>
+                    <input id="ccTimeout" type="number" min="1" max="30" value="@(m?.TimeoutSec ?? 3)" />
+                </div>
+                <div class="cce-help">Yavaş bir view liste ekranını kilitlemesin.</div>
+            </section>
+
+            <div class="cce-msg" id="ccMsg"></div>
+        </main>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var EDIT_ID  = @(m?.Id ?? 0);
+    var CUR_VIEW = '@(m?.ViewName)';
+    var CUR_KEY  = '@(m?.KeyColumn)';
+    var CUR_VAL  = '@(m?.ValueColumn)';
+    var CUR_UNIT = '@(m?.UnitColumn)';
+
+    var sources = [];
+
+    function el(id) { return document.getElementById(id); }
+    function token() {
+        var t = document.querySelector('input[name="__RequestVerificationToken"]');
+        return t ? t.value : '';
+    }
+    function msg(text, ok) {
+        var box = el('ccMsg');
+        box.textContent = text;
+        box.className = 'cce-msg ' + (ok ? 'cce-msg--ok' : 'cce-msg--err');
+        box.style.display = 'block';
+    }
+
+    // ── Sekme geçişi ────────────────────────────────────────────────
+    var tabs = document.querySelectorAll('.cce-tab');
+    var panes = document.querySelectorAll('.cce-pane');
+    tabs.forEach(function (t) {
+        t.addEventListener('click', function () {
+            tabs.forEach(function (x) { x.classList.toggle('is-active', x === t); });
+            panes.forEach(function (p) {
+                p.classList.toggle('is-active', p.id === 'cce-pane-' + t.getAttribute('data-pane'));
+            });
+        });
+    });
+
+    // ── Aktif switch ────────────────────────────────────────────────
+    var activeInput = el('ccActive');
+    activeInput.addEventListener('change', function () {
+        var on = activeInput.checked;
+        activeInput.closest('.cce-switch').querySelector('.cce-switch-track').classList.toggle('is-on', on);
+        var lbl = el('ccActiveLabel');
+        lbl.textContent = on ? 'Aktif' : 'Kapalı';
+        lbl.classList.toggle('is-active', on);
+    });
+
+    // ── Kaynak seçicileri ───────────────────────────────────────────
+    function fill(select, values, blank, selected) {
+        select.innerHTML = '';
+        if (blank) {
+            var b = document.createElement('option');
+            b.value = ''; b.textContent = '(yok)';
+            select.appendChild(b);
+        }
+        values.forEach(function (v) {
+            var o = document.createElement('option');
+            o.value = v.value; o.textContent = v.label;
+            if (selected && v.value === selected) o.selected = true;
+            select.appendChild(o);
+        });
+    }
+
+    // Kolonlar SEÇİLEN VIEW'dan gelir — elle yazılmaz. Sunucu ayrıca sys kataloğuna
+    // karşı doğrular; iki katman da geçmeyen bir ad sorguya hiç girmez.
+    function onViewChange(keepSelection) {
+        var name = el('ccView').value;
+        var src = sources.filter(function (s) { return s.viewName === name; })[0];
+        var cols = (src ? src.columns : []).map(function (c) {
+            return { value: c.name, label: c.name + '  ·  ' + c.sqlType };
+        });
+        fill(el('ccKey'), cols, false, keepSelection ? CUR_KEY : null);
+        fill(el('ccValue'), cols, false, keepSelection ? CUR_VAL : null);
+        fill(el('ccUnit'), cols, true, keepSelection ? CUR_UNIT : null);
+    }
+    el('ccView').addEventListener('change', function () { onViewChange(false); });
+
+    function payload() {
+        return {
+            id: EDIT_ID,
+            label: el('ccLabel').value,
+            entityKind: el('ccEntity').value,
+            viewName: el('ccView').value,
+            keyColumn: el('ccKey').value,
+            valueColumn: el('ccValue').value,
+            unitColumn: el('ccUnit').value || null,
+            dataType: el('ccType').value,
+            formatJson: null,
+            nullDisplay: el('ccNull').value,
+            boardKeys: el('ccBoards').value || null,
+            timeoutSec: parseInt(el('ccTimeout').value, 10) || 3,
+            sortOrder: 0,
+            isActive: activeInput.checked
+        };
+    }
+
+    function post(url, body) {
+        return fetch(url, {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+            body: body ? JSON.stringify(body) : null
+        }).then(function (r) { return r.json(); });
+    }
+
+    el('ccPreview').addEventListener('click', function () {
+        post('/ComputedColumn/api/preview', payload()).then(function (d) {
+            if (!d || !d.ok) { msg((d && d.error) || 'Önizleme başarısız.', false); return; }
+            var sample = (d.rows || []).map(function (r) {
+                return r.key + ' → ' + (r.value === null ? '(boş)' : r.value) + (r.unit ? ' ' + r.unit : '');
+            }).join('   ·   ');
+            msg(d.rows.length + ' örnek satır · ' + d.elapsedMs + ' ms' + (sample ? '   |   ' + sample : ''), true);
+        });
+    });
+
+    el('ccSave').addEventListener('click', function () {
+        if (!el('ccLabel').value.trim()) { msg('Başlık zorunludur.', false); return; }
+        post('/ComputedColumn/api/save', payload()).then(function (d) {
+            if (!d || !d.ok) { msg((d && d.error) || 'Kaydedilemedi.', false); return; }
+            EDIT_ID = d.id;
+            el('cceName').textContent = el('ccLabel').value;
+            msg('Kaydedildi.', true);
+            var bar = el('cceBar');
+            bar.classList.add('is-save-flash');
+            setTimeout(function () { bar.classList.remove('is-save-flash'); }, 1850);
+        });
+    });
+
+    fetch('/ComputedColumn/api/sources', { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            sources = (d && d.ok) ? (d.sources || []) : [];
+            fill(el('ccView'), sources.map(function (s) { return { value: s.viewName, label: s.viewName }; }), false, CUR_VIEW);
+            onViewChange(true);
+        });
+})();
+</script>
+}

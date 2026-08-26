@@ -1,11 +1,13 @@
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Common;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
 using CalibraHub.Web.Models.Logistics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 
 namespace CalibraHub.Web.Controllers;
 
@@ -32,15 +34,18 @@ public sealed class LocationController : Controller
     private readonly ILogisticsConfigurationService _logisticsConfigurationService;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _schema;
+    private readonly ILogger<LocationController> _logger;
 
     public LocationController(
         ILogisticsConfigurationService logisticsConfigurationService,
         SqlServerConnectionFactory connectionFactory,
-        CalibraDatabaseOptions dbOptions)
+        CalibraDatabaseOptions dbOptions,
+        ILogger<LocationController> logger)
     {
         _logisticsConfigurationService = logisticsConfigurationService;
         _connectionFactory = connectionFactory;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
+        _logger = logger;
     }
 
     [HttpGet]
@@ -164,23 +169,37 @@ public sealed class LocationController : Controller
         {
             return Json(new { success = false, message = ex.Message });
         }
-        catch (Exception ex) when (ex.GetType().Name == "SqlException")
+        catch (SqlException ex)
         {
+            // 2026-08-26: genel FK-ihlali guvenlik agi (CLAUDE.md "sessiz kirik" #1/#2).
+            // Onceki surum "REFERENCE constraint"/"FOREIGN KEY" durumunda ham SQL mesajini
+            // ex.Message ile birlikte istemciye donduruyordu — ic detay sizdirma yasagini
+            // ihlal ediyordu. Bilinen iki durum (makine/alt kirilim) icin ozel mesaj kalir;
+            // FK_Personnel_Location / FK_InventoryCount(Line)_Location gibi digerleri artik
+            // serviste proaktif guard'lanir (bkz. DeleteLocationAsync), buraya normal akista
+            // dusmemesi beklenir — yine de bir yenisi eklenirse jenerik-ama-anlasilir mesaj doner.
             var msg = ex.Message ?? "";
             string friendly;
             if (msg.Contains("FK_Machine_Location", StringComparison.OrdinalIgnoreCase))
                 friendly = "Bu lokasyon en az bir makine tarafindan kullaniliyor; once makineleri baska bir lokasyona tasiyin.";
             else if (msg.Contains("FK_Location_Parent", StringComparison.OrdinalIgnoreCase))
                 friendly = "Bu lokasyonun alt kirilimlari var; once alt lokasyonlari siliniz.";
-            else if (msg.Contains("REFERENCE constraint", StringComparison.OrdinalIgnoreCase) || msg.Contains("FOREIGN KEY", StringComparison.OrdinalIgnoreCase))
-                friendly = "Bu lokasyon baska bir kayit tarafindan referansli; once iliskili kayitlari kaldirin. (" + msg + ")";
+            else if (ex.IsForeignKeyViolation())
+            {
+                _logger.LogWarning(ex, "[LocationController.DeleteLocationJson] id={Id} FK ihlali: {SqlMessage}", id, msg);
+                friendly = SqlExceptionMessages.BuildUserMessage(ex);
+            }
             else
-                friendly = "Veritabani hatasi: " + msg;
+            {
+                _logger.LogError(ex, "[LocationController.DeleteLocationJson] id={Id} SQL hatasi.", id);
+                friendly = "Islem sirasinda bir hata olustu.";
+            }
             return Json(new { success = false, message = friendly });
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = "Lokasyon silinemedi: " + "İşlem sırasında bir hata oluştu." });
+            _logger.LogError(ex, "[LocationController.DeleteLocationJson] id={Id} silinemedi.", id);
+            return Json(new { success = false, message = "Lokasyon silinemedi. Islem sirasinda bir hata olustu." });
         }
     }
 

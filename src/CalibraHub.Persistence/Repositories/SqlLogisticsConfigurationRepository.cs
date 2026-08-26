@@ -2153,9 +2153,31 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             UPDATE [{_schema}].[Document]                  SET [LocationId]         = NULL                    WHERE [LocationId]         = @id;
             UPDATE [{_schema}].[DocumentLine]              SET [LocationId]         = NULL                    WHERE [LocationId]         = @id;
             UPDATE [{_schema}].[WorkOrder]                 SET [WarehouseLocationId] = NULL                   WHERE [WarehouseLocationId] = @id;
+            UPDATE [{_schema}].[InventoryCount]             SET [LocationId]         = NULL                    WHERE [LocationId]         = @id;
+            UPDATE [{_schema}].[InventoryCountLine]         SET [LocationId]         = NULL                    WHERE [LocationId]         = @id;
             """;
         cmd.Parameters.Add(new SqlParameter("@id", locationId));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<(int Count, IReadOnlyCollection<string> SampleNames)> GetPersonnelUsageByLocationIdAsync(int locationId, CancellationToken cancellationToken)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [FullName]
+            FROM [{_schema}].[Personnel]
+            WHERE [CompanyId] = @CompanyId AND [LocationId] = @LocationId
+            ORDER BY [FullName];
+            """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
+        cmd.Parameters.Add(new SqlParameter("@LocationId", locationId));
+        var names = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            names.Add(reader.IsDBNull(0) ? string.Empty : reader.GetString(0));
+        return (names.Count, names.Take(5).ToList());
     }
 
     public async Task NullifyLocationHistoricalFkRefsAsync(int locationId, CancellationToken cancellationToken)

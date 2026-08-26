@@ -1,5 +1,6 @@
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Common;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Web.Models.Logistics;
 using Microsoft.AspNetCore.Authorization;
@@ -29,10 +30,12 @@ namespace CalibraHub.Web.Controllers;
 public sealed class UnitController : Controller
 {
     private readonly ILogisticsConfigurationService _logisticsConfigurationService;
+    private readonly ILogger<UnitController> _logger;
 
-    public UnitController(ILogisticsConfigurationService logisticsConfigurationService)
+    public UnitController(ILogisticsConfigurationService logisticsConfigurationService, ILogger<UnitController> logger)
     {
         _logisticsConfigurationService = logisticsConfigurationService;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -194,6 +197,18 @@ public sealed class UnitController : Controller
         catch (ArgumentException ex)
         {
             return Json(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            // Genel FK-ihlali guvenlik agi (CLAUDE.md "sessiz kirik" #1) — servisteki
+            // proaktif guard yalnizca malzeme karti kullanimini kontrol eder; ItemUnits/
+            // ItemKitLine/OperationMachineTime/DocumentLine/InventoryCountLine/WorkOrder
+            // gibi diger baglantilar buradan yakalanir. Islenmemis 500'e dusmez.
+            if (SqlExceptionMessages.TryHandle(ex, _logger, $"UnitController.DeleteMeasureUnitJson id={id}", out var friendly))
+                return Json(new { success = false, message = friendly });
+
+            _logger.LogError(ex, "[UnitController.DeleteMeasureUnitJson] id={Id} silinemedi.", id);
+            return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
 

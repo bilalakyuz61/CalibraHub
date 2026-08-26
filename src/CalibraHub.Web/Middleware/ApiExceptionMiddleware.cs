@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Text.Json;
+using CalibraHub.Application.Common;
 using CalibraHub.Application.Contracts.Common;
 using CalibraHub.Domain.Common;
+using Microsoft.Data.SqlClient;
 
 namespace CalibraHub.Web.Middleware;
 
@@ -15,6 +17,9 @@ namespace CalibraHub.Web.Middleware;
 ///   DomainException     -> HTTP 400 + ApiError(message)        (kullanici invariant ihlali)
 ///   ValidationException -> HTTP 400 + ApiError + Errors dict   (form validation)
 ///   NotFoundException   -> HTTP 404 + ApiError(message)
+///   SqlException (547)  -> HTTP 409 + ApiError(friendly msg)   (FK kisit ihlali — 2026-08-26
+///                          "sessiz kirik" genel guvenlik agi; SqlExceptionMessages ile ayni
+///                          mesaj uretimi; gercek kisit adi sadece log'a yazilir)
 ///   Generic Exception   -> HTTP 500 + ApiError(generic msg)    (detay log'a, asla cliente cikmaz)
 ///
 /// JSON path tespiti: Request.Path /api/ ile baslar VEYA Accept: application/json header'i var.
@@ -100,6 +105,15 @@ public sealed class ApiExceptionMiddleware
                 statusCode = StatusCodes.Status401Unauthorized;
                 error = new ApiError("Yetkisiz erisim.", traceId);
                 _log.LogWarning("[ApiException] Unauthorized: {Msg} (traceId={TraceId})", uex.Message, traceId);
+                break;
+
+            // 2026-08-26: genel FK-ihlali guvenlik agi (CLAUDE.md "sessiz kirik" #1).
+            // Silme/guncelleme akislarinin kendi catch'i olmayan yollarindan SqlException
+            // 547 buraya duser — kullaniciya anlamli mesaj, gercek kisit detayi sadece log'a.
+            case SqlException { Number: SqlExceptionMessages.ForeignKeyViolationErrorNumber } fkEx:
+                statusCode = StatusCodes.Status409Conflict;
+                error = new ApiError(SqlExceptionMessages.BuildUserMessage(fkEx), traceId);
+                _log.LogWarning(fkEx, "[ApiException] ForeignKeyViolation (traceId={TraceId}): {SqlMessage}", traceId, fkEx.Message);
                 break;
 
             default:

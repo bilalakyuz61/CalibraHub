@@ -79,7 +79,26 @@ public sealed class OperationService : IOperationService
         return t.Length > 50 ? t[..50] : t;
     }
 
-    public Task DeleteAsync(int id, CancellationToken ct) => _repo.DeleteAsync(id, ct);
+    public async Task DeleteAsync(int id, CancellationToken ct)
+    {
+        // 2026-08-26: FK_RoutingOperation_Operation / FK_WorkOrderOperation_Operation /
+        // FK_OpMachineTime_Operation eklendi — kullanimdaki operasyonu silmek artik SQL FK
+        // ihlaline dusuyordu (islenmemis "Islem sirasinda bir hata olustu."). Silmeden once
+        // kontrol edilir; kullanimdaysa nerede/kac adet oldugu soylenir (referans desen:
+        // LogisticsConfigurationService.DeleteLocationAsync makine guard'i).
+        var (routingCount, workOrderCount, machineTimeCount) = await _repo.GetUsageCountsAsync(id, ct);
+        if (routingCount > 0 || workOrderCount > 0 || machineTimeCount > 0)
+        {
+            var parts = new List<string>();
+            if (routingCount > 0) parts.Add($"{routingCount} rota operasyonunda");
+            if (workOrderCount > 0) parts.Add($"{workOrderCount} iş emri operasyonunda");
+            if (machineTimeCount > 0) parts.Add($"{machineTimeCount} makine/ürün süresinde");
+            throw new ArgumentException(
+                $"Bu operasyon {string.Join(", ", parts)} kullanılıyor; önce bağlı kayıtları kaldırın/güncelleyin.");
+        }
+
+        await _repo.DeleteAsync(id, ct);
+    }
 
     private static OperationDto Map(Operation e) =>
         new(e.Id, e.Code, e.Name, e.Description, e.StandardDuration, e.DurationUnit,
