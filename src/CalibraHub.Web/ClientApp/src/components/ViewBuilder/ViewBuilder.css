@@ -226,18 +226,20 @@ body.app-theme-dark .vb-root {
 .vb-tab-content { flex: 1; min-height: 0; overflow: auto; padding: 16px 20px 28px; }
 .vb-tab-content.vb-disabled { opacity: 0.5; pointer-events: none; }
 
-/* ── Section cards (base object / joins / columns) ─────────────────── */
+/* ── Section cards (base object / joins / columns) ───────────────────
+   PageComment Seq 1122 sadeleştirme: açıklama cümleleri (.vb-section-caption)
+   kaldırıldı, bilgi section-head'in title="" tooltip'ine taşındı (hover'da
+   erişilebilir) — dikey alan kazanmak için. Padding/margin sıkılaştırıldı. */
 .vb-section {
   background: var(--vb-surface); border: 1px solid var(--vb-border); border-radius: 10px;
-  padding: 14px 16px; margin-bottom: 8px; box-shadow: var(--vb-shadow);
+  padding: 10px 14px; margin-bottom: 6px; box-shadow: var(--vb-shadow);
 }
-.vb-section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.vb-section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: help; }
 .vb-section-title {
   font-size: 12.5px; font-weight: 700; color: var(--vb-text);
   display: flex; align-items: center; gap: 6px;
 }
 .vb-section-help { font-size: 11px; color: var(--vb-muted); margin-left: auto; }
-.vb-section-caption { font-size: 11px; color: var(--vb-muted); margin: 0 0 12px; line-height: 1.5; }
 
 /* Adım numarası rozeti — akışı (Temel Tablo → Join'ler → Kolonlar) görsel olarak numaralandırır */
 .vb-step-num {
@@ -248,26 +250,27 @@ body.app-theme-dark .vb-root {
 }
 .vb-step-connector {
   display: flex; align-items: center; justify-content: center;
-  color: var(--vb-muted-2); opacity: 0.8; margin: -2px 0 6px;
+  color: var(--vb-muted-2); opacity: 0.8; margin: -2px 0 2px;
 }
+.vb-step-connector svg { width: 14px; height: 14px; }
 
 /* Temel tablo seçilmeden önce Join'ler / Kolonlar bölümlerinin sade "kilitli" hali —
    ilk kullanımda tüm formu birden göstermek yerine akışı adım adım açar (sadeleştirme). */
 .vb-section-locked {
   display: flex; align-items: center; gap: 8px;
-  padding: 14px 12px; border-radius: 8px;
+  padding: 10px 12px; border-radius: 8px;
   border: 1px dashed var(--vb-border); background: var(--vb-surface-2);
   color: var(--vb-muted); font-size: 12px;
 }
 
-.vb-field-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
-.vb-field { display: flex; flex-direction: column; gap: 4px; min-width: 140px; flex: 1 1 160px; }
+.vb-field-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
+.vb-field { display: flex; flex-direction: column; gap: 3px; min-width: 140px; flex: 1 1 160px; }
 .vb-field label { font-size: 10.5px; font-weight: 700; color: var(--vb-muted); letter-spacing: 0.01em; }
 .vb-field-narrow { flex: 0 1 110px; min-width: 90px; }
 .vb-field-wide { flex: 2 1 260px; }
 
 .vb-input, .vb-select, .vb-textarea {
-  padding: 7px 9px; font-size: 12px; border-radius: 7px;
+  padding: 6px 8px; font-size: 12px; border-radius: 7px;
   border: 1px solid var(--vb-border); background: var(--vb-input-bg); color: var(--vb-text);
   width: 100%; font-family: inherit;
 }
@@ -358,13 +361,13 @@ body.app-theme-dark .vb-tsel-menu {
 
 /* ── Joins ──────────────────────────────────────────────────────────── */
 .vb-join-card {
-  border: 1px solid var(--vb-border); border-radius: 9px; padding: 12px; margin-bottom: 10px;
+  border: 1px solid var(--vb-border); border-radius: 9px; padding: 9px 10px; margin-bottom: 7px;
   background: var(--vb-surface-2);
 }
 .vb-join-card:last-child { margin-bottom: 0; }
-.vb-join-head { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
-.vb-on-list { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--vb-border); }
-.vb-on-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.vb-join-head { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.vb-on-list { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--vb-border); }
+.vb-on-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .vb-on-row:last-child { margin-bottom: 0; }
 .vb-on-eq { padding-bottom: 8px; color: var(--vb-muted); font-weight: 700; }
 .vb-on-warning {
@@ -379,7 +382,7 @@ body.app-theme-dark .vb-tsel-menu {
 .vb-on-side {
   display: flex; align-items: center; gap: 4px; flex: 1 1 190px; min-width: 170px;
   background: var(--vb-surface); border: 1px solid var(--vb-border); border-radius: 7px;
-  padding: 5px 8px;
+  padding: 4px 7px;
 }
 .vb-on-side-label {
   font-size: 10px; font-weight: 700; color: var(--vb-muted); flex-shrink: 0;
@@ -403,7 +406,7 @@ body.app-theme-dark .vb-tsel-menu {
 /* ── Columns ────────────────────────────────────────────────────────── */
 .vb-column-row {
   display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap;
-  padding: 10px 0; border-bottom: 1px solid var(--vb-border-soft);
+  padding: 7px 0; border-bottom: 1px solid var(--vb-border-soft);
 }
 .vb-column-row:last-child { border-bottom: none; }
 .vb-column-kind-badge { flex: 0 0 auto; padding-bottom: 8px; }
@@ -411,13 +414,13 @@ body.app-theme-dark .vb-tsel-menu {
 /* ── Remove / add row buttons ──────────────────────────────────────── */
 .vb-remove-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px; border-radius: 7px;
+  width: 28px; height: 28px; border-radius: 7px;
   border: 1px solid var(--vb-border); background: var(--vb-surface); color: var(--vb-muted);
   cursor: pointer; flex-shrink: 0;
 }
 .vb-remove-btn:hover { background: var(--vb-rose-soft); color: var(--vb-rose); border-color: var(--vb-rose-border); }
 .vb-add-row {
-  width: 100%; margin-top: 4px; padding: 9px; border-radius: 8px;
+  width: 100%; margin-top: 4px; padding: 7px; border-radius: 8px;
   border: 1.5px dashed var(--vb-indigo); background: transparent; color: var(--vb-indigo);
   font-size: 12px; font-weight: 600; cursor: pointer;
   display: flex; align-items: center; justify-content: center; gap: 6px;

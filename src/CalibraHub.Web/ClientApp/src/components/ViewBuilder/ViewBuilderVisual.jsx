@@ -150,10 +150,9 @@ export default function ViewBuilderVisual({ definition, onChange, schemaTables, 
     <div>
       {/* ── 1. Temel Tablo / View ──────────────────────────────────── */}
       <div className="vb-section">
-        <div className="vb-section-head">
+        <div className="vb-section-head" title="Sorgunun başlayacağı ana tablo ya da view'ı seçin.">
           <div className="vb-section-title"><span className="vb-step-num">1</span><Table2 size={14} /> Temel Tablo / View</div>
         </div>
-        <div className="vb-section-caption">Sorgunun başlayacağı ana tablo ya da view'ı seçin.</div>
         <div className="vb-field-row">
           <div className="vb-field vb-field-wide">
             <label>Kaynak</label>
@@ -185,11 +184,10 @@ export default function ViewBuilderVisual({ definition, onChange, schemaTables, 
 
       {/* ── 2. Join'ler ────────────────────────────────────────────── */}
       <div className="vb-section">
-        <div className="vb-section-head">
+        <div className="vb-section-head" title="İhtiyaç varsa başka tablo/view'larla ilişkilendirin (opsiyonel).">
           <div className="vb-section-title"><span className="vb-step-num">2</span><GitMerge size={14} /> Join'ler</div>
-          {!joinsLocked && <div className="vb-section-help">{joins.length} join</div>}
+          {!joinsLocked && <div className="vb-section-help">{joins.length} join · opsiyonel</div>}
         </div>
-        <div className="vb-section-caption">İhtiyaç varsa başka tablo/view'larla ilişkilendirin (opsiyonel).</div>
 
         {joinsLocked ? (
           <div className="vb-section-locked"><Lock size={14} /> Önce yukarıdan bir temel tablo/view seçin.</div>
@@ -311,11 +309,10 @@ export default function ViewBuilderVisual({ definition, onChange, schemaTables, 
 
       {/* ── 3. Kolonlar ────────────────────────────────────────────── */}
       <div className="vb-section">
-        <div className="vb-section-head">
+        <div className="vb-section-head" title="Sonuç view'ında görünecek alanları seçin ya da hesaplanan alan tanımlayın.">
           <div className="vb-section-title"><span className="vb-step-num">3</span><Columns3 size={14} /> Kolonlar</div>
           {!columnsLocked && <div className="vb-section-help">{columns.length} kolon</div>}
         </div>
-        <div className="vb-section-caption">Sonuç view'ında görünecek alanları seçin ya da hesaplanan alan tanımlayın.</div>
 
         {columnsLocked ? (
           <div className="vb-section-locked"><Lock size={14} /> Önce yukarıdan bir temel tablo/view seçin.</div>
@@ -398,9 +395,9 @@ export default function ViewBuilderVisual({ definition, onChange, schemaTables, 
             {columns.length === 0 && (
               <div className="vb-help-text"><Info size={13} /> En az bir kolon eklemelisiniz.</div>
             )}
-            <div className="vb-help-text">
+            <div className="vb-help-text" title="Geçersiz bir alias/kolon referansı önizlemede hata olarak görünür.">
               <Info size={13} />
-              Hesaplanan alan ifadelerinde tanımlı takma adları kullanın (örn. <code>base.Miktar * j1.BirimFiyat</code>). Geçersiz bir alias/kolon referansı önizlemede hata olarak görünür.
+              İfadede takma adları kullanın, örn. <code>base.Miktar * j1.BirimFiyat</code>.
             </div>
           </>
         )}
