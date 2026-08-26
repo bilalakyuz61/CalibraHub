@@ -220,6 +220,7 @@ body.app-theme-dark .di-root {
 .di-btn--primary:hover { filter: brightness(1.06); background: var(--di-primary); }
 .di-btn--ok { background: var(--di-ok); color: #fff; border-color: var(--di-ok); }
 .di-btn--ok:hover { filter: brightness(1.06); }
+.di-btn--sm { padding: 5px 10px; font-size: 12px; }
 
 /* ── Özet / istatistik ────────────────────────────────────────────────── */
 /* Önizleme üst şeridi — sayaçlar, arama ve aksiyonlar TEK satırda (2026-08-22).
@@ -288,6 +289,7 @@ body.app-theme-dark .di-root {
 .di-alert--ok  { background: rgba(5,150,105,.12); color: var(--di-ok); border-color: rgba(5,150,105,.25); flex: 0 0 auto; }
 body.app-theme-dark .di-alert--ok { background: rgba(52,211,153,.14); border-color: rgba(52,211,153,.28); }
 .di-alert__text { flex: 0 1 auto; }
+.di-alert--ok .di-spacer { flex: 1 1 auto; }
 
 /* ── Onay modalı (silme standardı) ────────────────────────────────────── */
 .di-modal-backdrop {
