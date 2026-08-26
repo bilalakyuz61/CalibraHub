@@ -80,5 +80,8 @@ public static class FunctionalTestScenarioRegistry
         new PermissionPrecedenceScenario(),
         new PermissionGroupDormantScenario(),
         new DataVisibilityScenario(),
+
+        // 2026-08-25 — bu oturumda eklenen içe aktarım şablonlarının uçtan uca sınaması.
+        new ImportFeatureScenario(),
     };
 }

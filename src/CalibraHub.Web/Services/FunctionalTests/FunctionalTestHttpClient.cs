@@ -229,6 +229,51 @@ public sealed class FunctionalTestHttpClient : IDisposable
         return ToApiResult(httpOk, json, err);
     }
 
+    /// <summary>
+    /// Dosya yükleyen uçlar için multipart POST (içe aktarım önizleme/kaydetme).
+    /// İçerik CSV olarak gönderilir: gerçek ekran Excel de kabul eder ama testin
+    /// sınadığı şey ayrıştırma değil, HANDLER davranışıdır — CSV bunu ikili bir Excel
+    /// üretme yüküne girmeden aynı yoldan geçirir.
+    /// </summary>
+    public async Task<FunctionalTestApiResult> PostFileAsync(
+        string path, string fileName, string fileContent,
+        IReadOnlyDictionary<string, string> fields, CancellationToken ct)
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, _baseUrl + path);
+            req.Headers.TryAddWithoutValidation("RequestVerificationToken", _csrfToken);
+
+            using var form = new MultipartFormDataContent();
+            // UTF-8 BOM: Türkçe başlıkların ("Özellik Adı") sunucuda doğru çözülmesi için —
+            // BOM'suz CSV bazı okuyucularda ANSI sayılıp başlık eşleşmesini bozar.
+            var bytes = new byte[] { 0xEF, 0xBB, 0xBF }.Concat(Encoding.UTF8.GetBytes(fileContent)).ToArray();
+            var fileContentPart = new ByteArrayContent(bytes);
+            fileContentPart.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/csv");
+            form.Add(fileContentPart, "file", fileName);
+            foreach (var kv in fields) form.Add(new StringContent(kv.Value, Encoding.UTF8), kv.Key);
+
+            req.Content = form;
+            using var resp = await _client.SendAsync(req, ct);
+            var text = await resp.Content.ReadAsStringAsync(ct);
+            if (!resp.IsSuccessStatusCode)
+                return new FunctionalTestApiResult(false, default, $"HTTP {(int)resp.StatusCode}: {Truncate(text)}");
+            try
+            {
+                var json = JsonDocument.Parse(text).RootElement.Clone();
+                return ToApiResult(true, json, null);
+            }
+            catch
+            {
+                return new FunctionalTestApiResult(false, default, "Yanıt JSON değil: " + Truncate(text));
+            }
+        }
+        catch (Exception ex)
+        {
+            return new FunctionalTestApiResult(false, default, ex.Message);
+        }
+    }
+
     private static FunctionalTestApiResult ToApiResult(bool httpOk, JsonElement json, string? err)
     {
         if (!httpOk || err != null)

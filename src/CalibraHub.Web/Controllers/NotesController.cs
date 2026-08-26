@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Security;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
@@ -74,6 +74,21 @@ public sealed class NotesController : Controller
             });
         }
         return list;
+    }
+
+
+    /// <summary>
+    /// Not içeriğini kaydetmeden ÖNCE temizler (2026-08-24 güvenlik denetimi, Y1 ikinci katman).
+    /// Render tarafındaki temizlik zaten var; kayıt tarafı, içeriğin ileride başka bir
+    /// yerde (rapor, e-posta, mobil) ham basılması ihtimaline karşı ikinci savunmadır.
+    ///
+    /// <para><b>Şifreli notlara DOKUNULMAZ:</b> tam şifreli notta içerik HTML değil
+    /// şifreli metindir; temizlemeye sokmak kaydı geri dönüşsüz bozardı.</para>
+    /// </summary>
+    private static string SanitizeNoteContent(string? content, bool isFullyEncrypted)
+    {
+        if (isFullyEncrypted) return content ?? string.Empty;
+        return CalibraHub.Application.Services.Security.NoteHtmlSanitizer.Sanitize(content);
     }
 
     private async Task<(Guid AttachmentId, string FileName, string? ContentType, byte[]? Content)?> GetNoteAttachmentBinaryAsync(Guid attachmentId, CancellationToken ct)
@@ -163,7 +178,7 @@ public sealed class NotesController : Controller
                 return RedirectToAction(nameof(Index));
 
             existing.Title = string.IsNullOrWhiteSpace(input.Title) ? "Adsız Not" : input.Title.Trim();
-            existing.Content = input.Content ?? string.Empty;
+            existing.Content = SanitizeNoteContent(input.Content, existing.IsFullyEncrypted);
             existing.FolderId = input.FolderId;
             existing.UpdatedAt = DateTime.Now;
             note = existing;
@@ -176,7 +191,7 @@ public sealed class NotesController : Controller
                 UserId = userId,
                 FolderId = input.FolderId,
                 Title = string.IsNullOrWhiteSpace(input.Title) ? "Adsız Not" : input.Title.Trim(),
-                Content = input.Content ?? string.Empty
+                Content = SanitizeNoteContent(input.Content, isFullyEncrypted: false)
             };
         }
 
@@ -627,7 +642,7 @@ public sealed class NotesController : Controller
                 return Json(new { success = false, message = "Not bulunamadi." });
 
             existing.Title = string.IsNullOrWhiteSpace(input.Title) ? "Adsız Not" : input.Title.Trim();
-            existing.Content = input.Content ?? string.Empty;
+            existing.Content = SanitizeNoteContent(input.Content, input.IsFullyEncrypted ?? existing.IsFullyEncrypted);
             existing.FolderId = input.FolderId;
             existing.UpdatedAt = DateTime.Now;
             existing.IsFullyEncrypted = input.IsFullyEncrypted ?? existing.IsFullyEncrypted;
@@ -647,7 +662,7 @@ public sealed class NotesController : Controller
                 UserId = userId,
                 FolderId = input.FolderId,
                 Title = string.IsNullOrWhiteSpace(input.Title) ? "Adsız Not" : input.Title.Trim(),
-                Content = input.Content ?? string.Empty,
+                Content = SanitizeNoteContent(input.Content, input.IsFullyEncrypted ?? false),
                 IsFullyEncrypted = input.IsFullyEncrypted ?? false,
                 EncryptionHint   = input.EncryptionHint,
                 Tags = input.Tags,
@@ -1068,7 +1083,7 @@ public sealed class NotesController : Controller
                     UserId     = userId,
                     FolderId   = folder.Id,
                     Title      = string.IsNullOrWhiteSpace(enexNote.Title) ? "Adsız Not" : enexNote.Title.Trim(),
-                    Content    = enexNote.HtmlContent,
+                    Content    = SanitizeNoteContent(enexNote.HtmlContent, isFullyEncrypted: false),
                     CreatedAt  = enexNote.Created ?? DateTime.Now,
                     UpdatedAt  = enexNote.Updated ?? enexNote.Created ?? DateTime.Now,
                     Tags       = enexNote.Tags.Count > 0

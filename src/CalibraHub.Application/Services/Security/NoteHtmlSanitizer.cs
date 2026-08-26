@@ -45,12 +45,31 @@ public static class NoteHtmlSanitizer
                                      "data-type", "data-checked", "data-align" })
             s.AllowedAttributes.Add(attr);
 
-        // Bağlantılar: yalnız güvenli şemalar (javascript:/data: DIŞARIDA).
+        // Bağlantılar: yalnız güvenli şemalar (javascript: DIŞARIDA).
         s.AllowedSchemes.Clear();
         s.AllowedSchemes.Add("http");
         s.AllowedSchemes.Add("https");
         s.AllowedSchemes.Add("mailto");
         s.AllowedSchemes.Add("tel");
+        // data: — YALNIZ gömülü GÖRSEL için (2026-08-24). Notlara pano üzerinden
+        // yapıştırılan görseller data:image/... base64 olarak içerikte durur; şemayı
+        // tamamen yasaklamak temizleme sırasında bu görselleri SİLER (veri kaybı).
+        // Tehlikeli olan data:text/html'dir; aşağıdaki FilterUrl yalnız image/* geçirir.
+        s.AllowedSchemes.Add("data");
+        s.FilterUrl += (_, e) =>
+        {
+            var url = e.OriginalUrl ?? string.Empty;
+            if (!url.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return;
+            var isSafeImage =
+                url.StartsWith("data:image/png;base64,",  StringComparison.OrdinalIgnoreCase) ||
+                url.StartsWith("data:image/jpeg;base64,", StringComparison.OrdinalIgnoreCase) ||
+                url.StartsWith("data:image/jpg;base64,",  StringComparison.OrdinalIgnoreCase) ||
+                url.StartsWith("data:image/gif;base64,",  StringComparison.OrdinalIgnoreCase) ||
+                url.StartsWith("data:image/webp;base64,", StringComparison.OrdinalIgnoreCase) ||
+                url.StartsWith("data:image/bmp;base64,",  StringComparison.OrdinalIgnoreCase);
+            // image/svg+xml BİLİNÇLİ olarak dışarıda: SVG script taşıyabilir.
+            if (!isSafeImage) e.SanitizedUrl = null;
+        };
 
         // Gömülü içerik ve stil tamamen kapalı — CSS ifadeleri de bir XSS taşıyıcısıdır.
         s.AllowedTags.Remove("style");
