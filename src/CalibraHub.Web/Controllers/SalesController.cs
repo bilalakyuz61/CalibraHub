@@ -44,6 +44,7 @@ public sealed class SalesController : Controller
     private readonly IStockReservationRepository _stockReservationRepo;
     private readonly ILogger<SalesController> _logger;
     private readonly IUserSettingRepository _userSettings;
+    private readonly IUserProfileRepository _userProfiles;
     private readonly IFormFieldBehaviorRepository? _formBehaviorRepo;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _schema;
@@ -84,6 +85,7 @@ public sealed class SalesController : Controller
         SqlServerConnectionFactory connectionFactory,
         CalibraDatabaseOptions dbOptions,
         IUserSettingRepository userSettings,
+        IUserProfileRepository userProfiles,
         // Form Davranış Katmanı (2026-08-05) — opsiyonel: kayıt yoksa fail-open.
         IFormFieldBehaviorRepository? formBehaviorRepo = null)
     {
@@ -109,6 +111,7 @@ public sealed class SalesController : Controller
         _logger = logger;
         _connectionFactory = connectionFactory;
         _userSettings = userSettings;
+        _userProfiles = userProfiles;
         _formBehaviorRepo = formBehaviorRepo;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
@@ -172,7 +175,55 @@ public sealed class SalesController : Controller
         if (doc?.DocumentTypeId is int typeId)
             typeCode = (await _documentTypeRepo.GetByIdAsync(typeId, ct))?.Code;
         var formCode = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(typeCode).Parent;
-        return await HasFormPermissionAsync(formCode, actionCodes, ct);
+        if (!await HasFormPermissionAsync(formCode, actionCodes, ct)) return false;
+
+        // Kayıt-seviyesi kapsam (2026-08-24 güvenlik denetimi, ORTA).
+        // Form izni "bu ekranda düzenleyebilir" der; HANGİ kaydı düzenleyebileceğini
+        // söylemez. EDIT_OWN / DELETE_OWN verilmiş bir kullanıcı, izin adı "kendi
+        // kaydı" dediği hâlde başkasının belgesini değiştirebiliyordu (kapsam hiç
+        // uygulanmıyordu). Artık kayıt sahibi karşılaştırılır.
+        if (doc is null) return true;    // kayıt yok → aşağıdaki akış zaten "bulunamadı" der
+        var operation = ResolveScopeOperation(actionCodes);
+        return await HasRecordScopeAsync(formCode, operation, doc.CreatedById, ct);
+    }
+
+    /// <summary>İstenen izin kodlarından kayıt-kapsamı operasyonunu çıkarır.</summary>
+    private static string ResolveScopeOperation(string[] actionCodes)
+    {
+        if (actionCodes.Any(a => a.StartsWith("DELETE", StringComparison.OrdinalIgnoreCase))) return "DELETE";
+        if (actionCodes.Any(a => a.StartsWith("EDIT", StringComparison.OrdinalIgnoreCase)
+                              || a.Equals("CREATE", StringComparison.OrdinalIgnoreCase))) return "EDIT";
+        return "VIEW";
+    }
+
+    /// <summary>
+    /// Kullanıcının bu kayıt üzerinde <paramref name="operation"/> yetkisi olup olmadığını
+    /// kapsamıyla (All / Department / Own) birlikte değerlendirir.
+    /// Kaydın sahibi bilinmiyorsa (eski kayıtlarda <c>CreatedById</c> NULL) engellenmez —
+    /// aksi hâlde geçmiş veri erişilemez hâle gelirdi; bu bilinçli bir fail-open.
+    /// </summary>
+    private async Task<bool> HasRecordScopeAsync(string formCode, string operation, int? recordCreatorId, CancellationToken ct)
+    {
+        if (recordCreatorId is null or <= 0) return true;
+
+        UserAuthorizationCatalog.TryParseRole(User.FindFirstValue(ClaimTypes.Role) ?? string.Empty, out var role);
+        int? deptId = int.TryParse(User.FindFirstValue("department_id"), out var d) && d > 0 ? d : null;
+        var userId = GetUserId();
+
+        var scope = await _permService.GetAccessScopeAsync(userId, role, deptId, formCode, operation, ct);
+        switch (scope)
+        {
+            case AccessScope.All:
+                return true;
+            case AccessScope.Own:
+                return recordCreatorId.Value == userId;
+            case AccessScope.Department:
+                if (!deptId.HasValue) return false;
+                var owner = await _userProfiles.GetByIdAsync(recordCreatorId.Value, ct);
+                return owner?.DepartmentId == deptId.Value;
+            default:
+                return false;
+        }
     }
 
     /// <summary>
@@ -1878,6 +1929,16 @@ public sealed class SalesController : Controller
             if (!await _permService.CheckAnyAsync(GetUserId(), _sRole, _sDept, _sPfc,
                     new[] { "CREATE", "EDIT_OWN", "EDIT_ALL" }, ct))
                 return Json(new { success = false, message = "Bu belge için yetkiniz bulunmuyor." });
+
+            // Kayıt-seviyesi kapsam: MEVCUT belgeyi güncellerken EDIT_OWN/EDIT_DEPT
+            // sahibi kullanıcı başkasının belgesini değiştiremez (yeni kayıtta sahip
+            // zaten kullanıcının kendisi olur, kontrol gereksiz).
+            if (_sIsUpdate)
+            {
+                var _sExisting = await _quoteService.GetQuoteByIdAsync(request.Id!.Value, ct);
+                if (!await HasRecordScopeAsync(_sPfc, "EDIT", _sExisting?.CreatedById, ct))
+                    return Json(new { success = false, message = "Bu belge başka bir kullanıcıya ait; düzenleme yetkiniz bulunmuyor." });
+            }
         }
 
         // ── Form Davranış Katmanı: header zorunlulukları (2026-08-05) ──

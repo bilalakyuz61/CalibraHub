@@ -27,6 +27,10 @@ var parser = new Parser({
     power: true, remainder: true, subtract: true,
     logical: true, comparison: true,
     'in': false, assignment: false,
+    // member: false — expr-eval prototype pollution (GHSA-8gw3-rxh4-v6jx) yolu
+    // uye erisimidir (a.constructor.prototype...). Kural ifadeleri duz alan
+    // adlariyla calisir; nokta operatorune ihtiyac yok (2026-08-24 denetim).
+    member: false,
   },
 })
 

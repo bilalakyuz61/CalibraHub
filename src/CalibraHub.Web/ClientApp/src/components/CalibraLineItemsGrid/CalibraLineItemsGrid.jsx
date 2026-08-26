@@ -24,7 +24,7 @@ import {
   MoreHorizontal, ExternalLink, Layers,
   LayoutGrid, Table2, ChevronDown, ChevronRight,
 } from 'lucide-react'
-import { Parser as ExprParser } from 'expr-eval'
+import { parseSafe as exprParseSafe } from '../../services/safeExpr'   // sertlestirilmis expr-eval kapisi
 import { navigateInWorkspace } from '../../utils/workspaceNav'
 import LineGridCell, { CombinationLookupCell, SerialEntryModal, LotBreakdownModal, SerialBreakdownModal, TraceEntryCell } from './LineGridCell'
 import CostViewerModal from './CostViewerModal'
@@ -65,7 +65,7 @@ function behaviorRowScope(row) {
 
 function evalRowRule(expr, row) {
   if (!expr) return null
-  try { return ExprParser.parse(expr).evaluate(behaviorRowScope(row)) === true }
+  try { return exprParseSafe(expr).evaluate(behaviorRowScope(row)) === true }
   catch (e) { return null }
 }
 

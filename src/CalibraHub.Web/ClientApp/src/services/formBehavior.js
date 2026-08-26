@@ -22,7 +22,7 @@
  *   }).then(function(api) { ... })
  *   Kaydet öncesi: window.CalibraHub.formBehaviorValidate() → { ok, missing:[...] }
  */
-import { Parser } from 'expr-eval'
+import { parseSafe } from './safeExpr'   // sertlestirilmis expr-eval kapisi (member erisimi kapali)
 
 var state = null // { fields, byKey, opts }
 
@@ -54,7 +54,7 @@ function buildScope() {
 function evalBool(exprText, scope, fallback) {
   if (!exprText) return fallback
   try {
-    var result = Parser.parse(exprText).evaluate(scope)
+    var result = parseSafe(exprText).evaluate(scope)
     return result === true
   } catch (e) {
     try { console.warn('[FormBehavior] kural değerlendirilemedi (fail-open):', exprText, e && e.message) } catch (_) {}

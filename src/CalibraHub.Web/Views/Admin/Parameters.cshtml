@@ -631,6 +631,50 @@ body.app-theme-dark .ap-tab.is-active::before {
             @* ── Satış İrsaliyesi ───────────────────────── *@
             <section class="ap-pane" id="ap-pane-salesdelivery">
                 <h2>Satış İrsaliyesi</h2>
+                <div class="ap-group-title">İrsaliye / Sipariş Bağlama</div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Satış İrsaliyesi FIFO Sipariş Bağlama</div>
+                        <div class="ap-row-desc">
+                            Doğrudan girilen irsaliye satırları carinin açık siparişlerine eskiden-yeniye
+                            otomatik bağlanır.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" class="ap-neg-switch" id="ap-sales-fifo"
+                                   data-on="Açık" data-off="Kapalı" @(salesDeliveryFifoBind ? "checked" : null) />
+                            <span class="ap-switch-track @(salesDeliveryFifoBind ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(salesDeliveryFifoBind ? "is-active" : "")"
+                                  id="ap-sales-fifo-label">@(salesDeliveryFifoBind ? "Açık" : "Kapalı")</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Satış İrsaliyesinde Sipariş Serisi Değiştirilebilir</div>
+                        <div class="ap-row-desc">
+                            Kapalıyken, siparişe rezerve edilmiş seriler irsaliyede değiştirilemez; farklı seri
+                            seçimi reddedilir.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" class="ap-neg-switch" id="ap-sales-serial-override"
+                                   data-on="Açık" data-off="Kapalı" @(salesDeliverySerialOverride ? "checked" : null) />
+                            <span class="ap-switch-track @(salesDeliverySerialOverride ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(salesDeliverySerialOverride ? "is-active" : "")"
+                                  id="ap-sales-serial-override-label">@(salesDeliverySerialOverride ? "Açık" : "Kapalı")</span>
+                        </label>
+                    </div>
+                </div>
+
                 @{ var tlSd = tlState("satis_irsaliyesi"); }
                 @if (tlSd is not null) { @await Html.PartialAsync("_TlPriceEditRow", tlSd) }
             </section>
@@ -649,6 +693,28 @@ body.app-theme-dark .ap-tab.is-active::before {
                 <h2>Satın Alma Siparişi</h2>
                 <div class="ap-group-title">Onay</div>
                 @await Html.PartialAsync("_ApprovalParamRows", approvalState("PurchaseOrder"))
+                <div class="ap-group-title">İrsaliye / Sipariş Bağlama</div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Alış: Sipariş Bağlantısız Teslimat Yasak</div>
+                        <div class="ap-row-desc">
+                            Açıkken, açık siparişe bağlanamayan satır içeren irsaliye kaydedilmez.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" class="ap-neg-switch" id="ap-purchase-require-order"
+                                   data-on="Açık" data-off="Kapalı" @(purchaseDeliveryRequireOrder ? "checked" : null) />
+                            <span class="ap-switch-track @(purchaseDeliveryRequireOrder ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(purchaseDeliveryRequireOrder ? "is-active" : "")"
+                                  id="ap-purchase-require-order-label">@(purchaseDeliveryRequireOrder ? "Açık" : "Kapalı")</span>
+                        </label>
+                    </div>
+                </div>
+
                 @{ var tlPo = tlState("alis_siparisi"); }
                 @if (tlPo is not null) { @await Html.PartialAsync("_TlPriceEditRow", tlPo) }
             </section>
@@ -656,6 +722,29 @@ body.app-theme-dark .ap-tab.is-active::before {
             @* ── Alış İrsaliyesi ────────────────────────── *@
             <section class="ap-pane" id="ap-pane-purchasedelivery">
                 <h2>Alış İrsaliyesi</h2>
+                <div class="ap-group-title">İrsaliye / Sipariş Bağlama</div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Alış İrsaliyesi FIFO Sipariş Bağlama</div>
+                        <div class="ap-row-desc">
+                            Doğrudan girilen irsaliye satırları carinin açık siparişlerine eskiden-yeniye
+                            otomatik bağlanır.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" class="ap-neg-switch" id="ap-purchase-fifo"
+                                   data-on="Açık" data-off="Kapalı" @(purchaseDeliveryFifoBind ? "checked" : null) />
+                            <span class="ap-switch-track @(purchaseDeliveryFifoBind ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(purchaseDeliveryFifoBind ? "is-active" : "")"
+                                  id="ap-purchase-fifo-label">@(purchaseDeliveryFifoBind ? "Açık" : "Kapalı")</span>
+                        </label>
+                    </div>
+                </div>
+
                 @{ var tlPd = tlState("alis_irsaliyesi"); }
                 @if (tlPd is not null) { @await Html.PartialAsync("_TlPriceEditRow", tlPd) }
             </section>
@@ -780,6 +869,11 @@ body.app-theme-dark .ap-tab.is-active::before {
                             Açıkken, stok bakiyesini negatife düşürecek çıkış / transfer / üretim sarfı
                             hareketleri engellenir (tarih bazlı, ileriye dönük). Kapalıyken kontrol yapılmaz.
                         </div>
+                        <div class="ap-row-desc" style="margin-top:.35rem;">
+                            Depo bazında eksi bakiye izni <strong>Lokasyon Tanımlamaları</strong> ekranından,
+                            ilgili deponun <em>Eksi Bakiye İzni</em> switch'i ile verilir. Kendi ayarı olmayan
+                            depolarda varsayılan davranış <strong>engelle</strong>'dir.
+                        </div>
                     </div>
                     <div class="ap-row-control">
                         <label class="ap-switch">
@@ -790,117 +884,6 @@ body.app-theme-dark .ap-tab.is-active::before {
                             </span>
                             <span class="ap-switch-label @(negControl ? "is-active" : "")"
                                   id="ap-neg-control-label">@(negControl ? "Açık" : "Kapalı")</span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="ap-hint" style="margin-top:.75rem;">
-                    Depo bazında eksi bakiye izni <strong>Lokasyon Tanımlamaları</strong> ekranından,
-                    ilgili deponun <em>Eksi Bakiye İzni</em> switch'i ile verilir. Kendi ayarı olmayan
-                    depolarda varsayılan davranış <strong>engelle</strong>'dir.
-                </div>
-
-                <div class="ap-group-title">İrsaliye / Sipariş Bağlama</div>
-
-                <div class="ap-row">
-                    <div class="ap-row-main">
-                        <div class="ap-row-title">Alış İrsaliyesi FIFO Sipariş Bağlama</div>
-                        <div class="ap-row-desc">
-                            Doğrudan girilen irsaliye satırları carinin açık siparişlerine eskiden-yeniye
-                            otomatik bağlanır.
-                        </div>
-                    </div>
-                    <div class="ap-row-control">
-                        <label class="ap-switch">
-                            <input type="checkbox" class="ap-neg-switch" id="ap-purchase-fifo"
-                                   data-on="Açık" data-off="Kapalı" @(purchaseDeliveryFifoBind ? "checked" : null) />
-                            <span class="ap-switch-track @(purchaseDeliveryFifoBind ? "is-on" : "")">
-                                <span class="ap-switch-thumb"></span>
-                            </span>
-                            <span class="ap-switch-label @(purchaseDeliveryFifoBind ? "is-active" : "")"
-                                  id="ap-purchase-fifo-label">@(purchaseDeliveryFifoBind ? "Açık" : "Kapalı")</span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="ap-row">
-                    <div class="ap-row-main">
-                        <div class="ap-row-title">Satış İrsaliyesi FIFO Sipariş Bağlama</div>
-                        <div class="ap-row-desc">
-                            Doğrudan girilen irsaliye satırları carinin açık siparişlerine eskiden-yeniye
-                            otomatik bağlanır.
-                        </div>
-                    </div>
-                    <div class="ap-row-control">
-                        <label class="ap-switch">
-                            <input type="checkbox" class="ap-neg-switch" id="ap-sales-fifo"
-                                   data-on="Açık" data-off="Kapalı" @(salesDeliveryFifoBind ? "checked" : null) />
-                            <span class="ap-switch-track @(salesDeliveryFifoBind ? "is-on" : "")">
-                                <span class="ap-switch-thumb"></span>
-                            </span>
-                            <span class="ap-switch-label @(salesDeliveryFifoBind ? "is-active" : "")"
-                                  id="ap-sales-fifo-label">@(salesDeliveryFifoBind ? "Açık" : "Kapalı")</span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="ap-row">
-                    <div class="ap-row-main">
-                        <div class="ap-row-title">Alış: Sipariş Bağlantısız Teslimat Yasak</div>
-                        <div class="ap-row-desc">
-                            Açıkken, açık siparişe bağlanamayan satır içeren irsaliye kaydedilmez.
-                        </div>
-                    </div>
-                    <div class="ap-row-control">
-                        <label class="ap-switch">
-                            <input type="checkbox" class="ap-neg-switch" id="ap-purchase-require-order"
-                                   data-on="Açık" data-off="Kapalı" @(purchaseDeliveryRequireOrder ? "checked" : null) />
-                            <span class="ap-switch-track @(purchaseDeliveryRequireOrder ? "is-on" : "")">
-                                <span class="ap-switch-thumb"></span>
-                            </span>
-                            <span class="ap-switch-label @(purchaseDeliveryRequireOrder ? "is-active" : "")"
-                                  id="ap-purchase-require-order-label">@(purchaseDeliveryRequireOrder ? "Açık" : "Kapalı")</span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="ap-row">
-                    <div class="ap-row-main">
-                        <div class="ap-row-title">Satış: Sipariş Bağlantısız Teslimat Yasak</div>
-                        <div class="ap-row-desc">
-                            Açıkken, açık siparişe bağlanamayan satır içeren irsaliye kaydedilmez.
-                        </div>
-                    </div>
-                    <div class="ap-row-control">
-                        <label class="ap-switch">
-                            <input type="checkbox" class="ap-neg-switch" id="ap-sales-require-order"
-                                   data-on="Açık" data-off="Kapalı" @(salesDeliveryRequireOrder ? "checked" : null) />
-                            <span class="ap-switch-track @(salesDeliveryRequireOrder ? "is-on" : "")">
-                                <span class="ap-switch-thumb"></span>
-                            </span>
-                            <span class="ap-switch-label @(salesDeliveryRequireOrder ? "is-active" : "")"
-                                  id="ap-sales-require-order-label">@(salesDeliveryRequireOrder ? "Açık" : "Kapalı")</span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="ap-row">
-                    <div class="ap-row-main">
-                        <div class="ap-row-title">Satış İrsaliyesinde Sipariş Serisi Değiştirilebilir</div>
-                        <div class="ap-row-desc">
-                            Kapalıyken, siparişe rezerve edilmiş seriler irsaliyede değiştirilemez; farklı seri
-                            seçimi reddedilir.
-                        </div>
-                    </div>
-                    <div class="ap-row-control">
-                        <label class="ap-switch">
-                            <input type="checkbox" class="ap-neg-switch" id="ap-sales-serial-override"
-                                   data-on="Açık" data-off="Kapalı" @(salesDeliverySerialOverride ? "checked" : null) />
-                            <span class="ap-switch-track @(salesDeliverySerialOverride ? "is-on" : "")">
-                                <span class="ap-switch-thumb"></span>
-                            </span>
-                            <span class="ap-switch-label @(salesDeliverySerialOverride ? "is-active" : "")"
-                                  id="ap-sales-serial-override-label">@(salesDeliverySerialOverride ? "Açık" : "Kapalı")</span>
                         </label>
                     </div>
                 </div>
@@ -1092,6 +1075,28 @@ body.app-theme-dark .ap-tab.is-active::before {
 
                 @{ var tlSo = tlState("satis_siparisi"); }
                 @if (tlSo is not null) { @await Html.PartialAsync("_TlPriceEditRow", tlSo) }
+
+                <div class="ap-group-title">İrsaliye / Sipariş Bağlama</div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Satış: Sipariş Bağlantısız Teslimat Yasak</div>
+                        <div class="ap-row-desc">
+                            Açıkken, açık siparişe bağlanamayan satır içeren irsaliye kaydedilmez.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" class="ap-neg-switch" id="ap-sales-require-order"
+                                   data-on="Açık" data-off="Kapalı" @(salesDeliveryRequireOrder ? "checked" : null) />
+                            <span class="ap-switch-track @(salesDeliveryRequireOrder ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(salesDeliveryRequireOrder ? "is-active" : "")"
+                                  id="ap-sales-require-order-label">@(salesDeliveryRequireOrder ? "Açık" : "Kapalı")</span>
+                        </label>
+                    </div>
+                </div>
 
                 <div class="ap-group-title">Onay</div>
                 @await Html.PartialAsync("_ApprovalParamRows", approvalState("SalesOrder"))
@@ -1324,6 +1329,45 @@ body.app-theme-dark .ap-tab.is-active::before {
         });
     });
 
+    // ── Stok anahtarları (sekmeden BAĞIMSIZ) ───────────────────────────────
+    // 2026-08-25: bu altı anahtarın markup'ı ilgili belge sekmelerine dağıtıldı
+    // (FIFO bağlama → irsaliye sekmeleri, sipariş zorunluluğu → sipariş sekmeleri).
+    // Kaydetme eskiden YALNIZ Stok sekmesi aktifken çalışıyordu; markup taşınınca
+    // kullanıcı Alış İrsaliyesi sekmesinde anahtarı değiştirip Kaydet'e bastığında
+    // değişiklik SESSİZCE kaybolurdu — istek gider, o anahtar hiç gönderilmezdi.
+    //
+    // Hepsi TEK uçla (SaveStockParametersJson) yazıldığı ve değerler ekrandaki güncel
+    // durumdan okunduğu için her kaydetmede göndermek güvenli/idempotenttir: gizli
+    // sekmedeki anahtar da DOM'da durur (pane display:none, kaldırılmış değil).
+    async function saveStockSwitches() {
+        var negCtrlEl = document.getElementById('ap-neg-control');
+        if (!negCtrlEl) return { ok: true, error: null };   // ekran bu bölümü hiç basmadıysa
+        var pFifoEl  = document.getElementById('ap-purchase-fifo');
+        var sFifoEl  = document.getElementById('ap-sales-fifo');
+        var pReqEl   = document.getElementById('ap-purchase-require-order');
+        var sReqEl   = document.getElementById('ap-sales-require-order');
+        var sSerOvEl = document.getElementById('ap-sales-serial-override');
+        try {
+            var rs = await fetch('/Admin/SaveStockParametersJson', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                body: JSON.stringify({
+                    negControl: !!(negCtrlEl && negCtrlEl.checked),
+                    purchaseDeliveryFifoBind: !!(pFifoEl && pFifoEl.checked),
+                    salesDeliveryFifoBind: !!(sFifoEl && sFifoEl.checked),
+                    purchaseDeliveryRequireOrder: !!(pReqEl && pReqEl.checked),
+                    salesDeliveryRequireOrder: !!(sReqEl && sReqEl.checked),
+                    salesDeliverySerialOverride: !!(sSerOvEl && sSerOvEl.checked)
+                })
+            });
+            var d = await rs.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
+            return { ok: !!d.ok, error: d.error || null };
+        } catch (e) {
+            return { ok: false, error: 'Ag hatasi: ' + e.message };
+        }
+    }
+
     // ── Aktif sekmedeki ORTAK parametreler (onay + TL müdahale) ────────────
     // Bu iki grup artık birçok sekmede tekrar ettiği için sekme başına ayrı dal
     // yazılmaz; aktif pane'in içindekiler toplanıp kaydedilir.
@@ -1384,6 +1428,8 @@ body.app-theme-dark .ap-tab.is-active::before {
         try {
             // Onay + TL parametreleri sekmeye bakılmaksızın burada kaydedilir.
             var common = await saveCommonPaneParams(activePane);
+            // Stok anahtarları da sekmeden bağımsız (bkz. saveStockSwitches).
+            var stockRes = await saveStockSwitches();
             var hasBranch = PANES_WITH_BRANCH.indexOf(activePane) >= 0;
             var ok = false;
             if (activePane === 'general') {
@@ -1462,26 +1508,8 @@ body.app-theme-dark .ap-tab.is-active::before {
                 if (ok) { flash('Kaydedildi.', true); fcRenderWarning(null); }  // basarili kayitta gecersiz-id uyarisi artik gecersiz
                 else    flash((d1.error || d3.error || d4.error || 'Kaydetme basarisiz.'), false);
             } else if (activePane === 'stok') {
-                var negCtrlEl = document.getElementById('ap-neg-control');
-                var pFifoEl = document.getElementById('ap-purchase-fifo');
-                var sFifoEl = document.getElementById('ap-sales-fifo');
-                var pReqEl  = document.getElementById('ap-purchase-require-order');
-                var sReqEl  = document.getElementById('ap-sales-require-order');
-                var sSerOvEl = document.getElementById('ap-sales-serial-override');
-                var rs = await fetch('/Admin/SaveStockParametersJson', {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-                    body: JSON.stringify({
-                        negControl: !!(negCtrlEl && negCtrlEl.checked),
-                        purchaseDeliveryFifoBind: !!(pFifoEl && pFifoEl.checked),
-                        salesDeliveryFifoBind: !!(sFifoEl && sFifoEl.checked),
-                        purchaseDeliveryRequireOrder: !!(pReqEl && pReqEl.checked),
-                        salesDeliveryRequireOrder: !!(sReqEl && sReqEl.checked),
-                        salesDeliverySerialOverride: !!(sSerOvEl && sSerOvEl.checked)
-                    })
-                });
-                var datas = await rs.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
+                // Stok anahtarlarinin POST'u yukari tasindi (saveStockSwitches) — her
+                // sekmeden calisiyor; burada yalniz izlenebilirlik parametreleri kaldi.
                 // Seq 1100: Seri No Benzersizligi (izlenebilirlik) artik Stok sekmesinde —
                 // ayni parametre kodu/ucu (TRACEABILITY / SERIAL_UNIQUE_SCOPE), Stok kaydiyla birlikte gider.
                 var scEl = document.getElementById('ap-trace-serial-scope');
@@ -1502,9 +1530,9 @@ body.app-theme-dark .ap-tab.is-active::before {
                     body: JSON.stringify({ formCode: 'TRACEABILITY', paramKey: 'ENABLED', paramValue: (teEl && teEl.checked) ? 'true' : 'false', dataType: 3 })
                 });
                 var dte = await rte.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
-                ok = !!datas.ok && !!dtr.ok && !!dte.ok;
+                ok = stockRes.ok && !!dtr.ok && !!dte.ok;
                 if (ok) flash('Kaydedildi.', true);
-                else    flash(datas.error || dtr.error || dte.error || 'Kaydetme basarisiz.', false);
+                else    flash(stockRes.error || dtr.error || dte.error || 'Kaydetme basarisiz.', false);
             } else if (activePane === 'satissiparis') {
                 var soEl = document.getElementById('ap-so-affects');
                 var soOn = !!(soEl && soEl.checked);
@@ -1575,6 +1603,10 @@ body.app-theme-dark .ap-tab.is-active::before {
                 if (!common.ok) { ok = false; flash('Kaydetme basarisiz.', false); }
                 else if (!hasBranch) { ok = true; flash('Kaydedildi.', true); }
             }
+            // Stok anahtarları: hata varsa her sekmede bildirilir. Başarı mesajını yalnız
+            // başka kimsenin vermediği sekmede verir (çift mesaj olmasın).
+            if (!stockRes.ok) { ok = false; flash(stockRes.error || 'Kaydetme basarisiz.', false); }
+            else if (!hasBranch && !common.handled) { ok = true; flash('Kaydedildi.', true); }
             // Yeni sekmeler eklendiginde buraya else if blogu ile bagla
             if (ok) flashSuccess();
         } catch (e) {
