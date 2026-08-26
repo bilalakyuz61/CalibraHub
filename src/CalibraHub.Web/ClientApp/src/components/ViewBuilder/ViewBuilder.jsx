@@ -1,13 +1,15 @@
 /**
- * ViewBuilder — SQL View Yönetimi (Faz 2 React ekranı).
+ * ViewBuilder — SQL View Yönetimi kurucusu (Faz 2 React ekranı, tek-view modu).
  *
  * CLAUDE.md "SQL View Yönetimi — Kontrollü İstisna" (2026-07-17). Backend Faz 1
- * zaten canlı (SystemAdmin-only, api/view-builder/*); bu bileşen o kilitli
- * kontrata karşı yazılmış hibrit bir kurucu ekranıdır:
- *   - Sol panel: mevcut view listesi (sistem view'ları + önceden oluşturulmuş
- *     özel view'lar), override rozetleri, arama, "+ Yeni Özel View".
- *   - Sağ panel: Görsel Kurucu (taban nesne + join'ler + kolonlar) veya
- *     Gelişmiş SQL (üretilen/serbest SQL metni) sekmesi + Önizleme + Kaydet/Geri Al.
+ * zaten canlı (SystemAdmin-only, api/view-builder/*).
+ *
+ * PageComment Seq 1121 (2. yarı) — liste artık standart C-Grid ekranı (`/ViewBuilder`,
+ * SmartBoard). Bu bileşen yalnızca TEK bir view'ın kurucusunu render eder:
+ *   - `config.initialViewName` doluysa o view yüklenip kurucu açılır.
+ *   - `config.initialNew` true ise yeni Özel View akışı başlar.
+ *   - İkisi de yoksa boş durum + "Listeye Dön" gösterilir (sessiz boş ekran yok).
+ * Görsel Kurucu / Gelişmiş SQL / Önizleme / Kaydet / Geri Al akışları AYNEN korunur.
  *
  * Enum benzeri alanlar (Kind, join.type, on.op) backend'de zaten düz string
  * olarak tanımlı (bkz. ViewBuilderContracts.cs) — CLAUDE.md'nin enum normalize
@@ -15,11 +17,12 @@
  */
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import {
-  Layers, Search, Plus, RefreshCw, Loader2, Eye, Save, RotateCcw,
+  Layers, ArrowLeft, Loader2, Eye, Save, RotateCcw, RefreshCw,
   Code2, AlertTriangle, ChevronDown, ChevronRight, X, Sparkles, Info,
 } from 'lucide-react'
 import ViewBuilderVisual from './ViewBuilderVisual'
 import ViewBuilderPreview from './ViewBuilderPreview'
+import { navigateInWorkspace } from '../../utils/workspaceNav'
 
 const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/
 
@@ -91,17 +94,17 @@ function fmtDate(iso) {
 
 export default function ViewBuilder({ config }) {
   var apiBase = (config && config.apiBase) || '/api/view-builder'
+  var listUrl = (config && config.listUrl) || '/ViewBuilder'
+  var initialViewName = config && config.initialViewName
+  var initialNew = !!(config && config.initialNew)
   var get = useCallback(function (path) { return apiGet(apiBase, path) }, [apiBase])
   var post = useCallback(function (path, body) { return apiPost(apiBase, path, body) }, [apiBase])
 
-  // ── View listesi ─────────────────────────────────────────────────────
-  var [views, setViews] = useState([])
-  var [viewsLoading, setViewsLoading] = useState(true)
-  var [viewsError, setViewsError] = useState(null)
-  var [search, setSearch] = useState('')
+  function goToList() { navigateInWorkspace(listUrl) }
 
   // ── Şema yardımcıları (dropdown kaynakları) ─────────────────────────
   var [schemaTables, setSchemaTables] = useState([])
+  var [schemaLoading, setSchemaLoading] = useState(false)
   var [columnsCache, setColumnsCache] = useState({})
 
   // ── Seçili view / yeni view akışı ───────────────────────────────────
@@ -127,26 +130,13 @@ export default function ViewBuilder({ config }) {
   var [reverting, setReverting] = useState(false)
   var [seedingRaw, setSeedingRaw] = useState(false)
 
-  var loadViews = useCallback(function () {
-    setViewsLoading(true)
-    setViewsError(null)
-    get('/views')
-      .then(function (list) { setViews(list || []) })
-      .catch(function (e) { setViewsError(String(e.message || e)) })
-      .finally(function () { setViewsLoading(false) })
-  }, [get])
-
   var loadSchemaTables = useCallback(function () {
+    setSchemaLoading(true)
     return get('/schema/tables')
       .then(function (list) { setSchemaTables(list || []) })
       .catch(function () { /* sessiz — dropdown boş kalır, önizleme hatası zaten görünür */ })
+      .finally(function () { setSchemaLoading(false) })
   }, [get])
-
-  useEffect(function () {
-    loadViews()
-    loadSchemaTables()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   // ── Alias → tablo haritası (görsel kurucu dropdown'ları için) ───────
   var aliasMap = useMemo(function () {
@@ -256,13 +246,13 @@ export default function ViewBuilder({ config }) {
     setPreviewStale(false)
   }
 
-  function cancelNewView() {
-    setCreatingNew(false)
-    setNewViewName('')
-    setDefinition(emptyDefinition())
-    setRawSql('')
-    setPreview(null)
-  }
+  // ── Başlangıç modu — config'ten kurulur (liste artık ayrı sayfada) ───
+  useEffect(function () {
+    loadSchemaTables()
+    if (initialNew) startNewView()
+    else if (initialViewName) selectView(initialViewName)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── Definition/rawSql değişince önizleme "güncel değil" işaretlenir ──
   useEffect(function () {
@@ -338,6 +328,10 @@ export default function ViewBuilder({ config }) {
   }
 
   // ── Kaydet ───────────────────────────────────────────────────────────
+  // Not: başarılı kayıttan sonra kullanıcı kurucuda kalır (listeye zorla atılmaz).
+  // `selectView(vName)` yeni oluşturulan view'ı da "düzenleme modunda" tekrar
+  // yükler — creatingNew burada false'a döner, newViewName sıfırlanır; ikinci
+  // "Kaydet" artık mükerrer view oluşturmaya çalışmaz, mevcut override'ı günceller.
   function doApply() {
     var vName = currentViewNameForApi()
     setApplying(true)
@@ -353,7 +347,6 @@ export default function ViewBuilder({ config }) {
           ? 'Kaydedildi — kartezyen çarpım uyarısı sürüyor' + (result.cartesianFactor != null ? ' (' + result.cartesianFactor + '×).' : '.')
           : 'Kaydedildi.'
         toast(msg, result.cartesianWarning ? 'warn' : 'ok')
-        loadViews()
         loadSchemaTables()
         selectView(vName)
       } else {
@@ -398,7 +391,6 @@ export default function ViewBuilder({ config }) {
         .then(function (result) {
           if (result && result.success) {
             toast('Geri alındı.', 'ok')
-            loadViews()
             selectView(vName)
           } else {
             var msg = (result && result.errors && result.errors.length) ? result.errors.join(' ') : 'Geri alma başarısız.'
@@ -410,16 +402,9 @@ export default function ViewBuilder({ config }) {
     })
   }
 
-  // ── Sidebar filtre ───────────────────────────────────────────────────
-  var filteredViews = useMemo(function () {
-    var q = search.trim().toLowerCase()
-    if (!q) return views
-    return views.filter(function (v) { return (v.schema + '.' + v.name).toLowerCase().indexOf(q) !== -1 })
-  }, [views, search])
-
-  function displayName(viewName) {
-    var found = views.find(function (v) { return String(v.name).toLowerCase() === String(viewName).toLowerCase() })
-    return found ? (found.schema + '.' + found.name) : viewName
+  function refreshCurrent() {
+    loadSchemaTables()
+    if (!creatingNew && selectedViewName) selectView(selectedViewName)
   }
 
   function kindBadge(k) {
@@ -429,68 +414,40 @@ export default function ViewBuilder({ config }) {
 
   var showDetailPanel = creatingNew || !!selectedViewName
 
+  var headerSub = creatingNew
+    ? 'Yeni Özel View'
+    : (selectedViewName ? (detailLoading ? 'Yükleniyor…' : selectedViewName) : 'Görüntülenecek view seçilmedi')
+
   return (
     <div className="vb-root">
       {/* ── Üst başlık ────────────────────────────────────────────── */}
       <div className="vb-header">
+        <button type="button" className="vb-btn vb-btn-ghost" onClick={goToList}>
+          <ArrowLeft size={14} /> Listeye Dön
+        </button>
         <div className="vb-header-icon"><Layers size={19} /></div>
         <div className="vb-header-titles">
           <div className="vb-header-title">SQL View Yönetimi</div>
-          <div className="vb-header-sub">
-            {viewsLoading ? 'Yükleniyor…' : (views.length + ' view · ' + views.filter(function (v) { return v.hasOverride }).length + ' özelleştirilmiş')}
-          </div>
+          <div className="vb-header-sub">{headerSub}</div>
         </div>
         <div className="vb-header-actions">
-          <button type="button" className="vb-btn vb-btn-ghost vb-btn-icon" title="Listeyi yenile" onClick={function () { loadViews(); loadSchemaTables() }}>
-            {viewsLoading ? <Loader2 size={14} className="vb-spin" /> : <RefreshCw size={14} />}
+          <button type="button" className="vb-btn vb-btn-ghost vb-btn-icon" title="Yenile" onClick={refreshCurrent}>
+            {(schemaLoading || detailLoading) ? <Loader2 size={14} className="vb-spin" /> : <RefreshCw size={14} />}
           </button>
         </div>
       </div>
 
       <div className="vb-body">
-        {/* ── Sol panel — view listesi ────────────────────────────── */}
-        <div className="vb-sidebar">
-          <div className="vb-sidebar-search">
-            <Search size={13} />
-            <input placeholder="Şema.view ara…" value={search} onChange={function (e) { setSearch(e.target.value) }} />
-          </div>
-          <button type="button" className="vb-btn vb-btn-primary vb-sidebar-newbtn" onClick={startNewView}>
-            <Plus size={14} /> Yeni Özel View
-          </button>
-
-          <div className="vb-sidebar-list">
-            {viewsLoading && <div className="vb-sidebar-loading"><Loader2 size={14} className="vb-spin" /> Yükleniyor…</div>}
-            {!viewsLoading && viewsError && <div className="vb-sidebar-empty">{viewsError}</div>}
-            {!viewsLoading && !viewsError && filteredViews.length === 0 && (
-              <div className="vb-sidebar-empty">Eşleşen view bulunamadı.</div>
-            )}
-            {!viewsLoading && !viewsError && filteredViews.map(function (v) {
-              var isActive = !creatingNew && selectedViewName && String(selectedViewName).toLowerCase() === String(v.name).toLowerCase()
-              return (
-                <button key={v.schema + '.' + v.name} type="button"
-                        className={'vb-sidebar-item' + (isActive ? ' active' : '')}
-                        onClick={function () { selectView(v.name) }}>
-                  <div className="vb-sidebar-item-name">{v.schema}.{v.name}</div>
-                  <div className="vb-sidebar-item-badges">
-                    {v.hasOverride
-                      ? (v.overrideKind === 'Custom'
-                          ? <span className="vb-badge vb-badge-violet">Özel</span>
-                          : <span className="vb-badge vb-badge-indigo">Genişletildi</span>)
-                      : <span className="vb-badge vb-badge-slate">Sistem</span>}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* ── Sağ panel — kurucu ───────────────────────────────────── */}
+        {/* ── Kurucu (tek view) ────────────────────────────────────── */}
         <div className="vb-main">
           {!showDetailPanel && (
             <div className="vb-empty-state">
               <div className="vb-empty-state-inner">
                 <Layers size={40} color="var(--vb-border)" />
-                <p>Sol taraftan bir view seçin ya da <strong>Yeni Özel View</strong> oluşturun.</p>
+                <p>Görüntülenecek bir view bulunamadı.</p>
+                <button type="button" className="vb-btn vb-btn-primary" onClick={goToList} style={{ marginTop: 12 }}>
+                  <ArrowLeft size={14} /> View Listesine Dön
+                </button>
               </div>
             </div>
           )}
@@ -503,7 +460,10 @@ export default function ViewBuilder({ config }) {
             <div className="vb-empty-state">
               <div className="vb-empty-state-inner">
                 <AlertTriangle size={40} color="var(--vb-rose)" />
-                <p>View tanımı yüklenemedi. Sol taraftan tekrar seçmeyi deneyin.</p>
+                <p>View tanımı yüklenemedi.</p>
+                <button type="button" className="vb-btn vb-btn-primary" onClick={goToList} style={{ marginTop: 12 }}>
+                  <ArrowLeft size={14} /> View Listesine Dön
+                </button>
               </div>
             </div>
           )}
@@ -525,7 +485,7 @@ export default function ViewBuilder({ config }) {
                   ) : (
                     <>
                       <div className="vb-detail-title-row">
-                        <div className="vb-detail-title">{displayName(selectedViewName)}</div>
+                        <div className="vb-detail-title">{selectedViewName}</div>
                         {kindBadge(kind)}
                         {detail && !detail.existsInDb && <span className="vb-badge vb-badge-amber">DB'de Yok (taslak)</span>}
                       </div>
@@ -542,7 +502,7 @@ export default function ViewBuilder({ config }) {
 
                 <div className="vb-detail-actions">
                   {creatingNew && (
-                    <button type="button" className="vb-btn vb-btn-ghost" onClick={cancelNewView}><X size={14} /> Vazgeç</button>
+                    <button type="button" className="vb-btn vb-btn-ghost" onClick={goToList}><X size={14} /> Vazgeç</button>
                   )}
                   {!creatingNew && detail && detail.hasOverride && detail.override && (
                     <button type="button" className="vb-btn vb-btn-danger" disabled={reverting} onClick={runRevert}>

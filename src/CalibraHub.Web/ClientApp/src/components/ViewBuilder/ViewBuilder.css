@@ -128,44 +128,9 @@ body.app-theme-dark .vb-root {
 }
 .vb-btn-dashed:hover:not(:disabled) { background: var(--vb-indigo-soft); }
 
-/* ── Body layout (sidebar + main) ───────────────────────────────────── */
+/* ── Body layout (tek-view kurucu, sidebar yok — liste /ViewBuilder'a taşındı,
+   PageComment Seq 1121 2. yarı) ────────────────────────────────────────── */
 .vb-body { display: flex; flex: 1 1 auto; min-height: 0; }
-
-.vb-sidebar {
-  width: 300px; min-width: 240px; flex-shrink: 0;
-  border-right: 1px solid var(--vb-border);
-  display: flex; flex-direction: column;
-  background: var(--vb-surface);
-}
-.vb-sidebar-search {
-  display: flex; align-items: center; gap: 6px;
-  margin: 10px 12px 6px; padding: 6px 10px;
-  background: var(--vb-surface-2); border: 1px solid var(--vb-border); border-radius: 8px;
-  color: var(--vb-muted);
-}
-.vb-sidebar-search input {
-  border: none; outline: none; background: transparent; color: var(--vb-text);
-  font-size: 12px; width: 100%;
-}
-.vb-sidebar-newbtn { margin: 6px 12px 10px; }
-.vb-sidebar-list { flex: 1; overflow: auto; padding: 4px 0 12px; }
-.vb-sidebar-item {
-  display: flex; flex-direction: column; gap: 4px;
-  width: 100%; text-align: left; padding: 9px 14px;
-  border: none; border-left: 3px solid transparent; background: transparent;
-  color: var(--vb-text); cursor: pointer;
-}
-.vb-sidebar-item:hover { background: var(--vb-row-hover); }
-.vb-sidebar-item.active { border-left-color: var(--vb-indigo); background: var(--vb-indigo-soft); }
-.vb-sidebar-item-name {
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 12px; font-weight: 600;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.vb-sidebar-item-badges { display: flex; gap: 6px; flex-wrap: wrap; }
-.vb-sidebar-empty, .vb-sidebar-loading {
-  padding: 24px 16px; text-align: center; color: var(--vb-muted); font-size: 12px;
-}
 
 /* ── Badges ─────────────────────────────────────────────────────────── */
 .vb-badge {

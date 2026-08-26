@@ -2050,10 +2050,12 @@ function mountAuditTrail(element, config) {
 window.CalibraHub.mountAuditTrail = mountAuditTrail
 
 /**
- * ViewBuilder mount — SQL View Yönetimi ekranı (/ViewBuilder, SystemAdmin-only).
- * CLAUDE.md "SQL View Yönetimi — Kontrollü İstisna" (2026-07-17, Faz 2).
+ * ViewBuilder mount — SQL View Yönetimi tek-view kurucu ekranı
+ * (/ViewBuilder/Edit, SystemAdmin-only; liste ayrı sayfada /ViewBuilder — C-Grid).
+ * CLAUDE.md "SQL View Yönetimi — Kontrollü İstisna" (2026-07-17, Faz 2);
+ * PageComment Seq 1121 (2. yarı, kurucu/liste ayrımı).
  * @param {HTMLElement} element
- * @param {{ apiBase?: string }} config
+ * @param {{ apiBase?: string, listUrl?: string, initialViewName?: string|null, initialNew?: boolean }} config
  */
 function mountViewBuilder(element, config) {
   config = config || {}
@@ -2066,7 +2068,14 @@ function mountViewBuilder(element, config) {
   mountedRoots.set(element, root)
   root.render(
     React.createElement(ErrorBoundary, null,
-      React.createElement(ViewBuilder, { config: { apiBase: config.apiBase || '/api/view-builder' } })
+      React.createElement(ViewBuilder, {
+        config: {
+          apiBase: config.apiBase || '/api/view-builder',
+          listUrl: config.listUrl || '/ViewBuilder',
+          initialViewName: config.initialViewName || null,
+          initialNew: !!config.initialNew,
+        },
+      })
     )
   )
   return { unmount: function () { root.unmount(); mountedRoots.delete(element) } }
