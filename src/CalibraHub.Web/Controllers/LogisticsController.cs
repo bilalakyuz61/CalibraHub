@@ -1,4 +1,4 @@
-using CalibraHub.Application.Constants;
+﻿using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Ui;
@@ -25,6 +25,7 @@ public sealed class LogisticsController : Controller
     private readonly ICurrencyService _currencyService;
     private readonly Application.Abstractions.Persistence.ICardGroupRepository _cardGroupRepo;
     private readonly ICompanyParameterService _companyParameters;
+    private readonly CalibraHub.Application.Abstractions.Persistence.IComputedColumnRepository _computedColumns;
     private readonly ILogger<LogisticsController> _logger;
 
     public LogisticsController(
@@ -36,6 +37,7 @@ public sealed class LogisticsController : Controller
         ICurrencyService currencyService,
         Application.Abstractions.Persistence.ICardGroupRepository cardGroupRepo,
         ICompanyParameterService companyParameters,
+        CalibraHub.Application.Abstractions.Persistence.IComputedColumnRepository computedColumns,
         ILogger<LogisticsController> logger)
     {
         _logisticsConfigurationService = logisticsConfigurationService;
@@ -46,6 +48,7 @@ public sealed class LogisticsController : Controller
         _currencyService = currencyService;
         _cardGroupRepo = cardGroupRepo;
         _companyParameters = companyParameters;
+        _computedColumns = computedColumns;
         _logger = logger;
     }
 
@@ -127,6 +130,8 @@ public sealed class LogisticsController : Controller
         const string GRP_LBL   = "Gruplamalar";
         const string FEAT_GROUP = "ozellikler";
         const string FEAT_LBL   = "Özellikler ve Kombinasyonlar";
+        const string CALC_GROUP = "hesaplanan";
+        const string CALC_LBL   = "Hesaplanan";
 
         Dictionary<string, object?> MakeWidget(
             string id, string label, string dataType,
@@ -194,6 +199,13 @@ public sealed class LogisticsController : Controller
             masterWidgets.Add(MakeWidget($"w_feat_{feat.Id}", feat.Name, "options", FEAT_GROUP, FEAT_LBL, featOptions));
         }
 
+        // Hesaplanan kolonlar (2026-08-26): tanim SQL tasimaz, kaynak bir VIEW'dir.
+        // Burada yalniz BASLIK uretilir; degerler kart uretiminde okunur (bkz.
+        // BuildMaterialCardEntitiesAsync) — boylece sayfalama ucu da ayni degerleri alir.
+        foreach (var cc in await _computedColumns.GetForBoardAsync("Item", "logistics-material-cards", ct))
+            masterWidgets.Add(MakeWidget($"w_calc_{cc.Id}", cc.Label,
+                MapComputedDataType(cc.DataType), CALC_GROUP, CALC_LBL));
+
         var entities = await BuildMaterialCardEntitiesAsync(cards, handledColumns, activeFeatures, ct);
 
         return new
@@ -259,6 +271,80 @@ public sealed class LogisticsController : Controller
         {
             return Json(new { error = "Islem sirasinda bir hata olustu." });
         }
+    }
+
+    /// <summary>
+    /// Hesaplanan kolon tipini board'un anladigi veri tipine cevirir. Sıralama HAM deger
+    /// uzerinden yapildigi icin tip dogru olmali: sure "2 sa 15 dk" diye basilsa bile
+    /// numeric kalir, yoksa metin siralamasi "10 dk" ile "9 sa"yi yanlis dizer.
+    /// </summary>
+    private static string MapComputedDataType(string? dataType) => (dataType ?? "number").ToLowerInvariant() switch
+    {
+        "date"     => "date",
+        "text"     => "text",
+        "bool"     => "boolean",
+        _          => "numeric",   // number | decimal | money | duration
+    };
+
+    /// <summary>
+    /// Her tanim icin degerleri okur. Bir tanim bozuksa (view silinmis, kolon kaldirilmis)
+    /// SADECE o kolon bos kalir ve log'a dusulur — liste ekrani calismaya devam eder.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<int, IReadOnlyDictionary<int, CalibraHub.Application.Abstractions.Persistence.ComputedCellValue>>>
+        ReadComputedValuesAsync(
+            IReadOnlyList<CalibraHub.Application.Contracts.ComputedColumnDto> columns,
+            IReadOnlyCollection<int> keys, CancellationToken ct)
+    {
+        var result = new Dictionary<int, IReadOnlyDictionary<int, CalibraHub.Application.Abstractions.Persistence.ComputedCellValue>>();
+        foreach (var c in columns)
+        {
+            var (values, error) = await _computedColumns.ReadValuesAsync(c, keys, ct);
+            if (error is not null)
+                _logger.LogError("[HesaplananKolon] '{Label}' okunamadi (view={View}): {Error}", c.Label, c.ViewName, error);
+            result[c.Id] = values;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Ham degeri kullaniciya gosterilecek metne cevirir. Deger yoksa tanimdaki politika
+    /// uygulanir: sayida genelde 0, tarihte tire anlamlidir — bu yuzden tipe gore sabit
+    /// degil, tanimin parcasi.
+    /// </summary>
+    private static string FormatComputedValue(
+        CalibraHub.Application.Contracts.ComputedColumnDto column,
+        CalibraHub.Application.Abstractions.Persistence.ComputedCellValue? cell)
+    {
+        var raw = cell?.Value;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return (column.NullDisplay ?? "dash").ToLowerInvariant() switch
+            {
+                "zero"  => "0",
+                "empty" => string.Empty,
+                _       => "—",
+            };
+        }
+
+        var type = (column.DataType ?? "number").ToLowerInvariant();
+        if (type is "number" or "decimal" or "money" && decimal.TryParse(raw,
+                System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var dec))
+            return dec.ToString("N2", new System.Globalization.CultureInfo("tr-TR"));
+
+        if (type == "date" && DateTime.TryParse(raw, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var dt))
+            return dt.ToString("dd.MM.yyyy");
+
+        if (type == "duration" && decimal.TryParse(raw,
+                System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var secs))
+        {
+            var total = (int)secs;
+            var h = total / 3600;
+            var m = (total % 3600) / 60;
+            return h > 0 ? $"{h} sa {m} dk" : $"{m} dk";
+        }
+
+        return raw;
     }
 
     private async Task<List<object>> BuildItemsMasterWidgetsAsync(CancellationToken ct)
@@ -331,6 +417,12 @@ public sealed class LogisticsController : Controller
         IReadOnlyList<CalibraHub.Application.Contracts.ProductConfigurationFeatureDto> activeFeatures,
         CancellationToken ct)
     {
+        // Hesaplanan kolon degerleri: tanimlar ve degerler BU metotta okunur, cunku iki
+        // cagri yeri var (ilk yukleme + sayfalama ucu). Parametre olarak tasinsaydi birini
+        // guncellemeyi unutmak 2. sayfada kolonlarin sessizce bosalmasi demekti.
+        var computedColumns = await _computedColumns.GetForBoardAsync("Item", "logistics-material-cards", ct);
+        var computedValues = await ReadComputedValuesAsync(computedColumns, cards.Select(c => c.Id).ToArray(), ct);
+
         var recordIds = cards.Select(c => c.Id.ToString()).ToArray();
         var batchWidgets = recordIds.Length > 0
             ? await _widgetService.GetBatchRenderModelsAsync("MATERIAL_CARD_EDIT", recordIds, ct)
@@ -543,6 +635,23 @@ public sealed class LogisticsController : Controller
                 ["create_date"] = card.Created,
                 ["modify_date"] = card.Updated,
             };
+
+            foreach (var cc in computedColumns)
+            {
+                CalibraHub.Application.Abstractions.Persistence.ComputedCellValue? cell = null;
+                if (computedValues.TryGetValue(cc.Id, out var byKey) && byKey.TryGetValue(card.Id, out var found))
+                    cell = found;
+                cardWidgets.Add(new Dictionary<string, object?>
+                {
+                    ["id"]       = $"w_calc_{cc.Id}",
+                    ["type"]     = "data",
+                    ["dataType"] = MapComputedDataType(cc.DataType),
+                    ["label"]    = cc.Label,
+                    ["value"]    = FormatComputedValue(cc, cell),
+                    ["detail"]   = cell?.Unit,
+                    ["source"]   = "computed",
+                });
+            }
 
             entities.Add(new {
                 id = card.Id,
