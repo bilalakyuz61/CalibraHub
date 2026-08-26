@@ -22,6 +22,7 @@ public sealed class FinanceController : Controller
     private readonly IIntegrationRepository _integrationRepo;
     private readonly IPermissionDefRepository _permDefRepo;
     private readonly IPermissionService _permService;
+    private readonly ICompanyParameterService _companyParameters;
 
     private const int DefaultPageSize = 50;
 
@@ -33,7 +34,8 @@ public sealed class FinanceController : Controller
         ISalesRepresentativeService salesRepService,
         IIntegrationRepository integrationRepo,
         IPermissionDefRepository permDefRepo,
-        IPermissionService permService)
+        IPermissionService permService,
+        ICompanyParameterService companyParameters)
     {
         _financeService = financeService;
         _widgetService = widgetService;
@@ -43,6 +45,7 @@ public sealed class FinanceController : Controller
         _integrationRepo = integrationRepo;
         _permDefRepo = permDefRepo;
         _permService = permService;
+        _companyParameters = companyParameters;
     }
 
     // GET /Finance/GetContactQuotes?contactId=X — cariye ait verilen teklifler
@@ -345,6 +348,15 @@ public sealed class FinanceController : Controller
         IReadOnlyCollection<IntegrationManualButtonInfo> integrationButtons,
         CancellationToken ct)
     {
+        // Cari DÖF Açma — QUALITY/CONTACT_CAPA_ENABLED şirket parametresi (PageComment Seq 1119).
+        // Tanımsız → KAPALI (kullanıcı özelliği bu parametreye açıkça bağlamak istedi).
+        // Parametre kapalıyken aksiyon listede HİÇ render edilmez; gerçek kapı ise
+        // CapaService.SaveAsync'te (yalnız UI gizleme kapı değildir).
+        var contactCapaEnabled = await _companyParameters.GetBoolAsync(
+            CalibraHub.Application.Constants.QualityParameters.FormCode,
+            CalibraHub.Application.Constants.QualityParameters.ContactCapaEnabledKey, ct)
+            ?? CalibraHub.Application.Constants.QualityParameters.DefaultContactCapaEnabled;
+
         var recordIds = accounts.Select(a => a.Id.ToString()).ToArray();
         var batchWidgets = recordIds.Length > 0
             ? await _widgetService.GetBatchRenderModelsAsync("CONTACTS", recordIds, ct)
@@ -389,6 +401,17 @@ public sealed class FinanceController : Controller
             // (board'a hiç Manual entegrasyon tanımlanmamışsa veya kullanıcı yetkisizse)
             // integrationButtons boş gelir — BuildRowActions boş dizi döner, menüde ek öğe çıkmaz.
             var extraActions = new List<object> { BuildAuditLogAction("Contact", account.Id, FormCodes.Contacts) };
+            if (contactCapaEnabled)
+            {
+                extraActions.Add(new
+                {
+                    label = "DÖF Aç",
+                    icon = "AlertTriangle",
+                    color = "rose",
+                    url = $"/Quality/CapaEdit?sourceKind=Contact&sourceId={account.Id}",
+                    openInTab = new { title = "Yeni DÖF — " + (account.AccountTitle ?? account.AccountCode ?? "Cari"), asChild = true },
+                });
+            }
             extraActions.AddRange(BuildRowActions(integrationButtons, account.Id));
 
             entities.Add(new

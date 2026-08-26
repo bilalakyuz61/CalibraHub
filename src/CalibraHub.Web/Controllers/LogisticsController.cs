@@ -268,6 +268,12 @@ public sealed class LogisticsController : Controller
         }
         catch (Exception ex)
         {
+            // Exception BURADA YUTULUYORDU: istemci "error" alıyor, entities boş kalıyor ve
+            // liste sütunları kayboluyordu — ama sunucuda hiçbir iz yoktu, teşhis imkânsızdı.
+            // (CLAUDE.md "sessiz catch" kuralı.) Artık sebep loglanır; istemciye yine
+            // jenerik mesaj döner.
+            _logger.LogError(ex, "[MalzemeKartlari] Sayfa yüklenemedi. page={Page} pageSize={PageSize} search={Search}",
+                page, pageSize, search);
             return Json(new { error = "Islem sirasinda bir hata olustu." });
         }
     }

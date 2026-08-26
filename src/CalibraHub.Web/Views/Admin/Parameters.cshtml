@@ -22,6 +22,8 @@
     var effTracking = salesOrderAffects && orderSerialTracking;
     var effReservation = effTracking && orderSerialReservation;
     var sessionIdle = ViewData["SessionIdleMinutes"] as int? ?? 30;
+    // Kalite tab: Cari kartından DÖF açma desteklensin mi (PageComment Seq 1119). Tanımsız → KAPALI.
+    var contactCapaEnabled = ViewData["ContactCapaEnabled"] as bool? ?? false;
     var traceSerialScope = ViewData["TraceSerialScope"] as string ?? "Item";
     // Seq 1099: İzlenebilirlik ana anahtarı — kapalıyken Malzeme Kartı'nda lot/seri seçilemez.
     var traceabilityEnabled = (bool)(ViewData["TraceabilityEnabled"] ?? true);

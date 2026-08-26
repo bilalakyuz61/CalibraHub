@@ -196,6 +196,13 @@ public sealed class ParametersController : Controller
             CalibraHub.Application.Constants.AuditParameters.RetentionDaysKey, cancellationToken)
             ?? CalibraHub.Application.Constants.AuditParameters.DefaultRetentionDays;
 
+        // Kalite tab: Cari kartından DÖF açma desteklensin mi (PageComment Seq 1119).
+        // Tanımsız → KAPALI (kullanıcı özelliği açıkça bu parametreye bağlamak istedi).
+        ViewData["ContactCapaEnabled"] = await _companyParameters.GetBoolAsync(
+            CalibraHub.Application.Constants.QualityParameters.FormCode,
+            CalibraHub.Application.Constants.QualityParameters.ContactCapaEnabledKey, cancellationToken)
+            ?? CalibraHub.Application.Constants.QualityParameters.DefaultContactCapaEnabled;
+
         return View("~/Views/Admin/Parameters.cshtml");
     }
 

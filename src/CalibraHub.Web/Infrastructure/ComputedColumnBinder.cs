@@ -30,7 +30,21 @@ public sealed class ComputedColumnBinder
     public async Task<ComputedColumnBinding> LoadAsync(
         string entityKind, string boardKey, IReadOnlyCollection<int> keys, CancellationToken ct)
     {
-        var columns = await _repo.GetForBoardAsync(entityKind, boardKey, ct);
+        // Tanımları OKUMAK da patlayabilir (tablo henüz yok, izin yok, bağlantı düştü).
+        // Bu hiçbir zaman liste ekranını düşürmemeli: hesaplanan kolon bir EKLENTİDİR,
+        // listenin çekirdek verisi değil. Hata loglanır, board kolonsuz devam eder.
+        IReadOnlyList<ComputedColumnDto> columns;
+        try
+        {
+            columns = await _repo.GetForBoardAsync(entityKind, boardKey, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[HesaplananKolon] Tanımlar okunamadı (entity={Entity}, board={Board}) — " +
+                                 "liste hesaplanan kolon olmadan devam ediyor.", entityKind, boardKey);
+            return new ComputedColumnBinding(Array.Empty<ComputedColumnDto>(),
+                new Dictionary<int, IReadOnlyDictionary<int, ComputedCellValue>>());
+        }
         var values = new Dictionary<int, IReadOnlyDictionary<int, ComputedCellValue>>();
         foreach (var c in columns)
         {

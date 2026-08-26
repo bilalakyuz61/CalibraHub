@@ -13,15 +13,10 @@
     // Sadece yeni kayit modunda etkin (isEdit=false).
     var prefillCode = !isEdit ? (Context.Request.Query["code"].ToString() ?? "").Trim() : "";
 
-    // "DÖF Aç" — bu cari için müşteri şikayeti kaynaklı DÖF açar. Yalnız kayıtlı caride görünür.
-    // Standart action bar'ın ExtraButtonsHtml slotunda render edilir (referans: StockDocEdit "Muayene Oluştur").
-    var caExtraBtns = isEdit
-        ? "<button type=\"button\" class=\"pte-btn pte-btn--danger pte-btn--icon\" id=\"ca-dof-btn\" " +
-          "title=\"Bu cari için müşteri şikayeti DÖF'ü açar\" aria-label=\"DÖF Aç\" " +
-          "onclick=\"window.location.href='/Quality/CapaEdit?sourceKind=Contact&sourceId=" + existing!.Id + "'\">" +
-          "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z\"/><line x1=\"12\" x2=\"12\" y1=\"9\" y2=\"13\"/><line x1=\"12\" x2=\"12.01\" y1=\"17\" y2=\"17\"/></svg>" +
-          "<span class=\"pte-btn__label\">DÖF Aç</span></button>"
-        : "";
+    // "DÖF Aç" butonu bu ekrandan kaldırıldı (PageComment Seq 1119, 2026-08-26) — akış artık
+    // Cari LİSTE ekranının satır İşlemler menüsünden yürütülüyor (FinanceController.BuildEntitiesAsync,
+    // aksiyon QUALITY/CONTACT_CAPA_ENABLED parametresine bağlı). Hedef aynı kaldı:
+    // /Quality/CapaEdit?sourceKind=Contact&sourceId={id}.
 }
 
 @section Styles {
@@ -1084,7 +1079,6 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
         ["NewUrl"]      = "/Finance/ContactEdit",
         ["SaveBtnId"]   = "caSaveBtn",
         ["ShowDelete"]  = isEdit,
-        ["ExtraButtonsHtml"] = caExtraBtns,
     })
 
     <div class="ca-body">

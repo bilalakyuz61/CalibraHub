@@ -84,6 +84,28 @@ public sealed class CapaService : ICapaService
         if (request.RootCauseMethod.HasValue && !Enum.IsDefined(typeof(RootCauseMethod), request.RootCauseMethod.Value))
             return (false, "Geçersiz kök neden yöntemi.", 0);
 
+        // Cari kartından DÖF açma — şirket parametresine bağlı kapı (PageComment Seq 1119).
+        // Sunucu tarafı kontrol ZORUNLU: buton/liste aksiyonu kaldırılmış olsa da eski
+        // sekme/derin bağlantı/elle istek ile bu uç çağrılabilir; parametre kapalıyken
+        // yalnızca UI'da gizlemek "görünürde uygulanır, fiilen delik" bırakır. Yalnız YENİ
+        // DÖF açılışını (request.Id <= 0) kapsar — parametre sonradan kapatılsa bile daha
+        // önce cari kaynaklı açılmış mevcut DÖF kayıtlarının düzenlenmesi engellenmez.
+        if (request.Id <= 0 && string.Equals(request.SourceKind, "Contact", StringComparison.Ordinal))
+        {
+            var contactCapaEnabled = _companyParameters is null
+                ? QualityParameters.DefaultContactCapaEnabled
+                : await _companyParameters.GetBoolAsync(
+                    QualityParameters.FormCode, QualityParameters.ContactCapaEnabledKey, ct)
+                    ?? QualityParameters.DefaultContactCapaEnabled;
+            if (!contactCapaEnabled)
+            {
+                _logger.LogWarning(
+                    "Cari kaynaklı DÖF açma reddedildi (QUALITY/CONTACT_CAPA_ENABLED kapalı) — sourceId={SourceId}, userId={UserId}",
+                    request.SourceId, userId);
+                return (false, "Cari kartından DÖF açma özelliği kapalı. Admin → Parametreler → Kalite sekmesinden açabilirsiniz.", 0);
+            }
+        }
+
         var actions = (request.Actions ?? Array.Empty<SaveCapaActionRequest>())
             .Where(a => !string.IsNullOrWhiteSpace(a.Description)).ToList();
         var order = 0;
