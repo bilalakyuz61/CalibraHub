@@ -11,10 +11,19 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
+    <!-- Kiraci izolasyonu testi canli SQL Server ister. Ortam degiskeni yoksa test
+         SESSIZCE gecmez, ATLANIR: "yesil" gorunup hic calismamis olmasin. -->
+    <PackageReference Include="Xunit.SkippableFact" Version="1.4.13" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
     <!-- PermissionService testleri gercek MemoryCache ile calisir (mock degil) -->
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.*" />
+  </ItemGroup>
+
+  <!-- Kiraci izolasyonu testi sahte bir HttpContext kurar (oturumun company_id claim'i
+       suzgeci belirler); DefaultHttpContext bu framework referansindan gelir. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>
