@@ -40,7 +40,46 @@ public sealed class SqlServerConnectionFactory : IDbConnectionFactory
         var connectionString = EnsureMars(ResolveConnectionString());
         var connection = new SqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
+        await ApplyCompanyContextAsync(connection, cancellationToken);
         return connection;
+    }
+
+    /// <summary>
+    /// Satır Düzeyi Güvenlik'in (RLS) okuduğu oturum bağlamını yazar — kiracı ayrımının
+    /// TEK enjeksiyon noktası. Politika yüklemi bu değeri okur ve her sorguya
+    /// <c>CompanyId = &lt;bu değer&gt;</c> şartını kendisi ekler; sorguların hiçbirinde
+    /// elle süzgeç yazılmaz.
+    ///
+    /// <para><b>Bağlam yalnız kimlikli istekte yazılır.</b> Şirketi çözülemeyen yollar
+    /// (açılış/migration, arka plan işleri, kurulum sihirbazı) bağlamsız kalır ve yüklem
+    /// onları SÜZMEZ — bilinçli "fail-open" seçimi. Fail-closed yapmak teoride daha güvenli
+    /// olurdu ama uygulamanın kendi kurulumunu ve zamanlanmış işlerini sessizce boş veri
+    /// görmeye mahkûm ederdi; bu projede sessiz boş dönüş en pahalı hata sınıfı.
+    /// Bu yol bugünkü davranışa göre bir gerileme DEĞİL: bugün zaten hiçbir sorgu süzülmüyor.
+    /// Kimlikli kullanıcı trafiği — yani sızıntının gerçekten olabileceği yer — korunur.</para>
+    ///
+    /// <para><c>@read_only = 1</c>: değer yazıldıktan sonra aynı bağlantıda DEĞİŞTİRİLEMEZ.
+    /// Bir sorgu araya girip bağlamı başka şirkete çevirerek yüklemi atlatamaz. Havuzdan
+    /// yeniden kullanılan bağlantıda sp_reset_connection bağlamı temizler, çakışma olmaz.</para>
+    /// </summary>
+    private async Task ApplyCompanyContextAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var companyId = ResolveCurrentCompanyId();
+        if (companyId <= 0) return;
+
+        try
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = "EXEC sp_set_session_context @key = N'CompanyId', @value = @Cid, @read_only = 1;";
+            cmd.Parameters.Add(new SqlParameter("@Cid", companyId));
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // Bağlam yazılamazsa bağlantıyı ÇÖKERTME — istek çalışsın, ama sessiz kalma:
+            // bu durumda o bağlantı süzülmez ve bunun görünmesi gerekir.
+            Console.WriteLine($"[RLS] Sirket baglami yazilamadi (companyId={companyId}): {ex.Message}");
+        }
     }
 
     async Task<DbConnection> IDbConnectionFactory.OpenConnectionAsync(CancellationToken ct)

@@ -1280,6 +1280,84 @@ END;";
     };
 
     /// <summary>
+    /// Satır Düzeyi Güvenlik (RLS) — kiracı ayrımının ZORLAYICI katmanı.
+    ///
+    /// <para>Kolon eklemek tek başına hiçbir şeyi izole etmez; izolasyonu buradaki politika
+    /// sağlar. Yüklem, tabloya gelen HER sorguya (repository, view, rapor, elle yazılmış SQL)
+    /// <c>CompanyId = SESSION_CONTEXT('CompanyId')</c> şartını ekler. Alternatif — 1.400 sorguya
+    /// elle süzgeç yazmak — unutulan tek bir yerde sessiz sızıntı demekti; bu yolda unutulacak
+    /// yer yok.</para>
+    ///
+    /// <para><b>PİLOT (2026-08-27): yalnız Document.</b> Desen doğrulanınca kalan tablolara
+    /// yayılacak. Kapsamı <see cref="RlsPilotTables"/> belirler.</para>
+    ///
+    /// <para><b>Bağlam yoksa süzme YOK</b> (yüklemdeki NULL kontrolü). Açılış, migration ve
+    /// arka plan işleri bağlamsız çalışır; fail-closed yapmak onları sessizce boş veriye
+    /// mahkûm ederdi. Bkz. SqlServerConnectionFactory.ApplyCompanyContextAsync.</para>
+    ///
+    /// <para>Geri alma tek ifadedir: <c>ALTER SECURITY POLICY ... WITH (STATE = OFF)</c> tümünü,
+    /// <c>DROP FILTER PREDICATE ON &lt;tablo&gt;</c> tek tabloyu kapatır. Veriye dokunulmaz.</para>
+    /// </summary>
+    private async Task EnsureCompanyRlsAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        const string fn = "fn_CompanyRowFilter";
+        const string policy = "CompanyRowLevelSecurity";
+
+        try
+        {
+            // 1) Yuklem. SESSION_CONTEXT yazilmamissa (NULL) satir SUZULMEZ — fail-open.
+            await using (var cmd = connection.CreateCommand())
+            {
+                cmd.CommandText = $"""
+                    IF OBJECT_ID('[{_schema}].[{fn}]', 'IF') IS NULL
+                    EXEC('CREATE FUNCTION [{_schema}].[{fn}](@CompanyId INT)
+                          RETURNS TABLE WITH SCHEMABINDING
+                          AS RETURN SELECT 1 AS [visible]
+                             WHERE SESSION_CONTEXT(N''CompanyId'') IS NULL
+                                OR @CompanyId = CAST(SESSION_CONTEXT(N''CompanyId'') AS INT)');
+                    """;
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            // 2) Politika — yoksa kur, varsa eksik tabloyu ekle (idempotent).
+            foreach (var table in RlsPilotTables)
+            {
+                var t = table.Replace("]", "]]");
+                await using var cmd = connection.CreateCommand();
+                cmd.CommandText = $"""
+                    IF OBJECT_ID('[{_schema}].[{t}]', 'U') IS NOT NULL
+                       AND EXISTS (SELECT 1 FROM sys.columns
+                                   WHERE object_id = OBJECT_ID('[{_schema}].[{t}]') AND name = 'CompanyId')
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM sys.security_policies WHERE name = '{policy}')
+                            EXEC('CREATE SECURITY POLICY [{_schema}].[{policy}]
+                                  ADD FILTER PREDICATE [{_schema}].[{fn}]([CompanyId]) ON [{_schema}].[{t}]
+                                  WITH (STATE = ON)');
+                        ELSE IF NOT EXISTS (
+                            SELECT 1 FROM sys.security_predicates p
+                            JOIN sys.security_policies sp ON sp.object_id = p.object_id
+                            WHERE sp.name = '{policy}' AND p.target_object_id = OBJECT_ID('[{_schema}].[{t}]'))
+                            EXEC('ALTER SECURITY POLICY [{_schema}].[{policy}]
+                                  ADD FILTER PREDICATE [{_schema}].[{fn}]([CompanyId]) ON [{_schema}].[{t}]');
+                    END
+                    """;
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            // RLS kurulamazsa acilis DEVAM eder — ama bu sessiz gecilemez: izolasyon yok demektir.
+            Console.WriteLine($"[DB INIT WARN] RLS politikasi kurulamadi: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// RLS'nin uygulandığı tablolar. Pilot aşamada tek tablo; desen doğrulanınca
+    /// <see cref="CompanyScopeExemptTables"/> dışındaki tüm tablolara açılacak.
+    /// </summary>
+    private static readonly string[] RlsPilotTables = { "Document" };
+
+    /// <summary>
     /// Kiraci (şirket) ayrımı için GLOBAL olmayan her tabloya <c>CompanyId</c> ekler.
     ///
     /// <para><b>Kapsam ters kurgulanmıştır:</b> "hangi tablolar kolon alacak" listesi tutulmaz;
