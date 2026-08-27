@@ -203,8 +203,15 @@
         --ftr-chip-bg: #eef1f8;
         background: var(--ftr-bg);
         color: var(--ftr-text);
-        min-height: 100%;
         padding: 20px 22px 48px;
+        /* Sayfa workspace iframe'inde açılır: .app-content-area--workspace-frame
+           height:100dvh + overflow:hidden'dır, yani kaydırmayı İÇERİK kendi yapmalı.
+           min-height:100% yeterli değil — taşan içerik kırpılır ve sayfa aşağı
+           kaydırılamaz. Kendi flex satırımızı kurup dikey kaydırmayı burada açıyoruz. */
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
     }
     body.app-theme-dark .ftr-root {
         color-scheme: dark;
@@ -316,7 +323,9 @@
     /* ── Yazdırma ───────────────────────────────────── */
     @@media print {
         .ftr-toolbar { display: none !important; }
-        .ftr-root { background: #fff; color: #000; padding: 0; }
+        /* Ekranda kaydırılabilir kutu olan kök, yazdırmada tüm içeriği aksın
+           diye taşmayı serbest bırakır — yoksa yalnız ilk ekran basılır. */
+        .ftr-root { background: #fff; color: #000; padding: 0; overflow: visible; height: auto; }
         .ftr-hero { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .ftr-card { break-inside: avoid; box-shadow: none; }
         .ftr-group { break-inside: avoid-page; }
