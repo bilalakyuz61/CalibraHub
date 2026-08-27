@@ -800,20 +800,26 @@ public sealed class HealthCheckController : Controller
     /// </summary>
     [HttpPost("/Admin/HealthCheck/StreamTestCompany")]
     [ValidateAntiForgeryToken]
-    public async Task StreamTestCompany(CancellationToken ct = default)
+    public async Task StreamTestCompany([FromQuery] bool createNewDb = false, CancellationToken ct = default)
     {
-        // Fonksiyon testleri gercek belge/stok hareketi YAZAR — izolasyon pazarlik konusu
-        // degildir, bu yuzden her kosuda yeni veritabani kurulur (2026-08-27 kullanici karari).
-        // Eski "Yeni veritabani olustur" anahtari kaldirildi: kapali birakilmasi testlerin
-        // mevcut sirketin verisine yazmasi demekti.
-        const bool createNewDb = true;
+        // Varsayilan KAPALI (2026-08-27 kullanici karari): test sirketi mevcut veritabaninda
+        // acilir, ayri DB kurulmaz. Acik birakilirsa her kosuda bir DB birikiyordu.
+        //
+        // DIKKAT — kapaliyken Fonksiyon Testleri CALISMAZ: StreamFunctionalTests'teki guvenlik
+        // kilidi, test sirketi canli bir sirketle ayni veritabanini paylasiyorsa reddeder
+        // (testler gercek belge/stok hareketi yazar). Kilit dogru; kalkmasi icin once
+        // sorgulara CompanyId suzgeci girmeli. O tamamlanana kadar fonksiyon testi
+        // calistiracaksaniz anahtari ACIN.
         Response.ContentType = "application/x-ndjson; charset=utf-8";
         Response.Headers.CacheControl = "no-cache";
         Response.Headers["X-Accel-Buffering"] = "no";
         Response.StatusCode = 200;
 
-        // Test şirketi adı: TEST_DDMMYYHHII (UTC)
-        var now = DateTime.UtcNow;
+        // Test sirketi adi: TEST_ddMMyyHHmm — YEREL saat.
+        // Projede saklanan tarihler UTC'dir, ama bu bir AD; kullanicinin saatine uymali.
+        // UtcNow ile uretilince Turkiye'de (UTC+3) adlar 3 saat geride cikiyordu ve
+        // "az once olusturdugum sirket hangisi" sorusu cevapsiz kaliyordu.
+        var now = DateTime.Now;
         var testCompanyName = $"TEST_{now:ddMMyy}{now:HHmm}";
         var testEmail       = $"test.hc.{now:ddMMyyHHmm}@calibra.test";
         var testPassword    = $"Hc!{Guid.NewGuid().ToString("N")[..8]}";

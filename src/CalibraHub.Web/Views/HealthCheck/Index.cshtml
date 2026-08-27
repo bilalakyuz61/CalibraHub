@@ -406,6 +406,13 @@
         </p>
 
         <div class="hc-toolbar hc-fn-toolbar">
+            <label class="hc-switch-label" title="Kapalı: test şirketi mevcut veritabanında açılır (hızlı, DB birikmez). Açık: ayrı bir test veritabanı kurulur (izole, ~20-60 sn). Güvenlik kilidi gereği fonksiyon testleri şu an yalnız AÇIK konumda çalışabilir.">
+                <span class="hc-switch-track">
+                    <input type="checkbox" id="hcNewDb" class="hc-switch-input" checked>
+                    <span class="hc-switch-thumb"></span>
+                </span>
+                <span class="hc-switch-text">Ayrı test veritabanı kur</span>
+            </label>
             <button id="hcFnRunBtn" class="hc-btn" type="button">
                 <span id="hcFnRunIcon">▶</span>
                 <span id="hcFnRunLabel">Testleri Çalıştır</span>
@@ -1123,7 +1130,8 @@
                 if (window.hcActivateTab) window.hcActivateTab('setup');
                 initStepList();
                 createStep('setup', 'Test Ortamı Hazırlama', 'pending');
-                const prep = await fetch('/Admin/HealthCheck/StreamTestCompany', {
+                const newDb = document.getElementById('hcNewDb')?.checked ? 'true' : 'false';
+                const prep = await fetch('/Admin/HealthCheck/StreamTestCompany?createNewDb=' + newDb, {
                     method: 'POST', credentials: 'same-origin',
                     headers: { 'RequestVerificationToken': getCsrf() } });
                 if (!prep.ok || !prep.body) throw new Error('Hazırlık HTTP ' + prep.status);
