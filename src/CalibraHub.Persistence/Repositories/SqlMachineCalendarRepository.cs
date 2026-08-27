@@ -308,8 +308,13 @@ public sealed class SqlMachineCalendarRepository : IMachineCalendarRepository
         {
             chk.CommandText = $"""
                 SELECT 1 FROM {T("CompanyHoliday")}
-                WHERE [HolidayDate] = @Date AND [IsActive] = 1 AND [Id] <> @SelfId;
+                WHERE [HolidayDate] = @Date AND [IsActive] = 1 AND [Id] <> @SelfId
+                  AND [CompanyId] = @CompanyId;
                 """;
+            // Index (CompanyId, HolidayDate) oldu; on-kontrol de sirket kapsamli olmali.
+            // Olmazsa index izin verse bile uygulama BASKA sirketin ayni tarihli tatili
+            // yuzunden reddeder — kullanici icin sebepsiz gorunen bir engel.
+            chk.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
             chk.Parameters.AddWithValue("@Date", date.Date);
             chk.Parameters.AddWithValue("@SelfId", request.Id);
             var dup = await chk.ExecuteScalarAsync(ct);
@@ -423,7 +428,11 @@ public sealed class SqlMachineCalendarRepository : IMachineCalendarRepository
                 // unique ile uyumlu; kendisi zaten güncelleniyorsa aşağıdaki UPDATE tekrar 1 yapar).
                 await using var clear = conn.CreateCommand();
                 clear.Transaction = tx;
-                clear.CommandText = $"UPDATE {T("ShiftScenario")} SET [IsDefault] = 0 WHERE [IsDefault] = 1;";
+                // SIRKET SUZGECI ZORUNLU: susuz hali TUM sirketlerin varsayilan senaryosunu
+                // sifirliyordu — bir sirketin admini kendi varsayilanini secince digerlerinin
+                // varsayilani sessizce kayboluyordu. Cok-sirketli tek DB'de gercek veri kaybi.
+                clear.CommandText = $"UPDATE {T("ShiftScenario")} SET [IsDefault] = 0 WHERE [IsDefault] = 1 AND [CompanyId] = @CompanyId;";
+                clear.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
                 await clear.ExecuteNonQueryAsync(ct);
             }
 
