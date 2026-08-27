@@ -897,6 +897,7 @@ END;";
             // hem cocuk hem ebeveyn tablonun kurulu oldugu tek nokta. Oksuz satir varsa kisit
             // KURULMAZ, uyari loglanir ve acilis NORMAL devam eder (bkz. metod ozeti).
             await EnsureInferredForeignKeysAsync(connection, cancellationToken);
+            await EnsureConstraintsTrustedAsync(connection, cancellationToken);
             // 2026-08-27: Kiraci ayrimi kolonu. FK'lerden SONRA calisir — kolon eklemek
             // kisit kurmayi etkilemez ama sira sabit kalsin diye zincirin sonuna konuldu.
             await EnsureCompanyIdColumnsAsync(connection, cancellationToken);
@@ -2173,6 +2174,79 @@ END;";
                     $"[DB INIT WARN] [{db}] {fk} kurulamadi, atlandi: {ex.Message}");
             }
         }
+    }
+
+    /// <summary>
+    /// GUVENILMEZ (<c>is_not_trusted = 1</c>) kisitlari, veri elveriyorsa GUVENILIR hale getirir.
+    ///
+    /// <para><b>Sorun:</b> bu dosyadaki bazi kisitlar bilincli olarak <c>WITH NOCHECK</c> ile
+    /// kurulur — kurulum aninda eski musteri verisi kisiti ihlal ediyor olabilir ve acilisi
+    /// cokertmek istemeyiz. Ama NOCHECK kalici bir yan etki birakir: SQL Server kisiti
+    /// "dogrulanmamis" isaretler. Bu YALNIZCA kozmetik degildir — guvenilmez kisit sorgu
+    /// planlayici tarafindan KULLANILMAZ ve "veri butunlugu garanti" sanilan sey aslinda yalnizca
+    /// yeni satirlar icin gecerlidir; kurulumdan onceki bozuk satirlar sessizce yasar.</para>
+    ///
+    /// <para><b>Cozum:</b> her acilista guvenilmez kisitlari tara ve WITH CHECK CHECK ile
+    /// dogrulamayi dene. Veri temizse kisit guvenilir olur; hala ihlal varsa SQL Server hata verir,
+    /// biz onu YAKALAR, hangi kisitin neden dogrulanamadigini LOGLAR ve acilisa devam ederiz.
+    /// Tek seferlik elle mudahale gerekmez: musteri veriyi duzelttigi anda bir sonraki acilis
+    /// kisiti kendiliginden guvenilir hale getirir (EnsureInferredForeignKeysAsync ile ayni
+    /// felsefe: veri elvermezse ZORLAMA, sessiz de kalma).</para>
+    /// </summary>
+    private async Task EnsureConstraintsTrustedAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var db = connection.Database;
+        var targets = new List<(string Schema, string Table, string Name, string Kind)>();
+
+        try
+        {
+            await using var list = connection.CreateCommand();
+            list.CommandText =
+                "SELECT SCHEMA_NAME(t.schema_id), t.name, fk.name, 'FK' " +
+                "  FROM sys.foreign_keys fk " +
+                "  JOIN sys.tables t ON t.object_id = fk.parent_object_id " +
+                " WHERE fk.is_not_trusted = 1 AND fk.is_disabled = 0 " +
+                "UNION ALL " +
+                "SELECT SCHEMA_NAME(t.schema_id), t.name, cc.name, 'CHECK' " +
+                "  FROM sys.check_constraints cc " +
+                "  JOIN sys.tables t ON t.object_id = cc.parent_object_id " +
+                " WHERE cc.is_not_trusted = 1 AND cc.is_disabled = 0;";
+            await using var reader = await list.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                targets.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3)));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[DB INIT WARN] [{db}] Guvenilmez kisit listesi alinamadi: {ex.Message}");
+            return;
+        }
+
+        if (targets.Count == 0) return;
+
+        var repaired = 0;
+        foreach (var (schema, table, name, kind) in targets)
+        {
+            var sc = schema.Replace("]", "]]");
+            var tb = table.Replace("]", "]]");
+            var nm = name.Replace("]", "]]");
+            try
+            {
+                await using var cmd = connection.CreateCommand();
+                cmd.CommandText = $"ALTER TABLE [{sc}].[{tb}] WITH CHECK CHECK CONSTRAINT [{nm}];";
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
+                repaired++;
+            }
+            catch (Exception ex)
+            {
+                // Ihlal eden satir VAR. Kisit guvenilmez kalir (yeni satirlar yine engellenir).
+                Console.Error.WriteLine(
+                    $"[DB INIT WARN] [{db}] {kind} {name} dogrulanamadi ({schema}.{table}) — " +
+                    $"ihlal eden mevcut satirlar var, kisit GUVENILMEZ kaldi: {ex.Message}");
+            }
+        }
+
+        if (repaired > 0)
+            Console.WriteLine($"[DB INIT] {repaired}/{targets.Count} guvenilmez kisit dogrulandi (artik guvenilir).");
     }
 
     /// <summary>
