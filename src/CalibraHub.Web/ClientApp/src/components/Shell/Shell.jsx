@@ -33,6 +33,9 @@ import SessionIdleGuard from './SessionIdleGuard'
 import Dashboard from '../Dashboard/Dashboard'
 // 2026-07-16 — Header hızlı-erişim (kısayol) çubuğu kalıcılık katmanı.
 import { loadShellShortcuts, saveShellShortcuts } from '../../services/shellShortcutsService'
+// PageComment Seq 1123 (2026-08-27) — açık sekmeler şirket+kullanıcı bazında sunucuda
+// (UiConfigController) kalıcı; localStorage yalnızca hızlı ilk boyama + offline aynadır.
+import { fetchWorkspaceTabs, saveWorkspaceTabs } from '../../services/workspaceTabsService'
 import {
   // Shell internals
   Sparkles, ChevronLeft, ChevronRight, CircleDot, Bell, BellRing, Moon, Sun, Search,
@@ -545,65 +548,92 @@ export default function Shell(props) {
     })
   }
 
-  /* ── Tab state (localStorage) ──────────────────
-     Eski site.js ile ayni key formatini korur — backwards compat.
+  /* ── Tab state (sunucu + localStorage ayna) ──────────────────
+     PageComment Seq 1123 (2026-08-27): açık sekmeler artık ŞİRKET+KULLANICI
+     bazında sunucuda (UiConfigController) kalıcıdır — kullanıcı aynı şirkete
+     tekrar girdiğinde veya şirket değiştirdiğinde açık ekranlarını aynen
+     bulur. localStorage KALDIRILMADI: ilk boyamayı hızlandırmak (sunucu
+     yanıtı beklemeden) ve sunucuya erişilemediğinde çalışmaya devam etmek
+     icin yerel ayna olarak kalır — kaynak-of-truth sunucudur.
 
-     Onemli: localStorage'da "hic kayit yok" (ilk ziyaret) ile "kayit var
-     ama bos array" (kullanici tum tab'lari kapatti) durumlarini AYIRT
-     ederiz. Birincisinde initialUrl icin varsayilan tab acariz; ikincisinde
-     kullanicinin kapatma niyetine saygi gosterip bos state (EmptyState)
-     gosteririz. Aksi halde Ctrl+F5 sonrasi hayalet bir tab tekrar
-     uretilir ve kullanici "neden bos bir tab acildi?" der. */
-  var tabsStorageKey = 'calibra.workspace.tabs.' + encodeURIComponent(user.userKey || user.email || 'anon')
+     Onemli: "hic kayit yok" (ilk ziyaret) ile "kayit var ama bos array"
+     (kullanici tum tab'lari kapatti) durumlarini AYIRT ederiz. Birincisinde
+     initialUrl icin varsayilan tab acariz; ikincisinde kullanicinin kapatma
+     niyetine saygi gosterip bos state (EmptyState) gosteririz. Aksi halde
+     Ctrl+F5 sonrasi hayalet bir tab tekrar uretilir ve kullanici "neden bos
+     bir tab acildi?" der. Bu ayrım hem localStorage hem sunucu (saved:false
+     vs saved:true+tabs:[]) katmanında korunur. */
+
+  // Menu'den URL'ye karsilik gelen label'i bul; yoksa URL path'inden kisa isim uret
+  function resolveInitialTabTitle(url) {
+    var fromMenu = findLabelByUrl(menu, url)
+    if (fromMenu) return fromMenu
+    // URL path'inden son segment al, / veya ? ile kes
+    var path = url ? url.split('?')[0] : '/'
+    if (path === '/' || path === '/Home' || path === '/Home/Index') return 'Ana Sayfa'
+    var segs = path.split('/').filter(Boolean)
+    return segs.length > 0 ? segs[segs.length - 1] : 'Sayfa'
+  }
+
+  function isHomePageUrl(url) {
+    var p = url ? url.split('?')[0] : '/'
+    return p === '/' || p === '/Home' || p === '/Home/Index'
+  }
+
+  /* Depolanmis (localStorage veya sunucu) sekme listesini gecerli initialUrl
+     ile uzlastirir — "hic kayit yok" / "kayit var ama bos" ayrimini koruyarak.
+     Hem yerel ilk-yukleme hem sunucu senkronu AYNI mantigi kullanir (tek
+     kaynak — iki yerde kopyalanmiş kod hata üretirdi). */
+  function reconcileStoredTabs(stored, url) {
+    if (!Array.isArray(stored)) return []
+    if (stored.length === 0) {
+      if (!isHomePageUrl(url)) {
+        return [{ key: 'init-' + Date.now(), url: url, title: resolveInitialTabTitle(url) }]
+      }
+      return []
+    }
+    // Kayitli tab'lar var; aralarinda mevcut URL var mi? Ana sayfa ise ekleme
+    if (!isHomePageUrl(url)) {
+      var hasInitial = stored.some(function(t) { return t.url === url })
+      if (!hasInitial) {
+        return stored.concat([{ key: 'init-' + Date.now(), url: url, title: resolveInitialTabTitle(url) }])
+      }
+    }
+    return stored
+  }
+
+  /* Sunucudan gelen ham sekme nesnesini savunmali normalize eder — sunucu
+     yalnizca belirli alanlari saklayabilir, eksik alana dayanikli olunur. */
+  function normalizeServerTab(t) {
+    if (!t || typeof t !== 'object' || !t.url) return null
+    return {
+      key: t.key ? String(t.key) : ('tab-' + Date.now() + '-' + Math.floor(Math.random() * 100000)),
+      url: String(t.url),
+      title: t.title ? String(t.title) : resolveInitialTabTitle(String(t.url)),
+      parentKey: t.parentKey ? String(t.parentKey) : null,
+    }
+  }
+
+  // Sirket + kullanici kapsamli yerel anahtar — sirket degisince FARKLI bir
+  // kovaya yazilir, aksi halde bir sirketin sekmeleri digerinde gorunurdu.
+  var tabsStorageKey = 'calibra.workspace.tabs.' +
+    encodeURIComponent(String((system && system.companyId) || 'anon')) + '.' +
+    encodeURIComponent(user.userKey || user.email || 'anon')
+
   var [tabs, setTabs] = useState(function() {
     var rawStored = null
     try { rawStored = localStorage.getItem(tabsStorageKey) } catch (e) { /* quota/private */ }
 
-    // Menu'den URL'ye karsilik gelen label'i bul; yoksa URL path'inden kisa isim uret
-    var resolveInitialTitle = function(url) {
-      var fromMenu = findLabelByUrl(menu, url)
-      if (fromMenu) return fromMenu
-      // URL path'inden son segment al, / veya ? ile kes
-      var path = url ? url.split('?')[0] : '/'
-      if (path === '/' || path === '/Home' || path === '/Home/Index') return 'Ana Sayfa'
-      var segs = path.split('/').filter(Boolean)
-      return segs.length > 0 ? segs[segs.length - 1] : 'Sayfa'
-    }
-
-    var isHomePage = function(url) {
-      var p = url ? url.split('?')[0] : '/'
-      return p === '/' || p === '/Home' || p === '/Home/Index'
-    }
-
     // Hic kayit yok → ilk ziyaret → ana sayfa ise bos baslat, diger sayfa ise tab ac
     if (rawStored === null) {
-      if (isHomePage(initialUrl)) return []
-      return [{ key: 'init-' + Date.now(), url: initialUrl, title: resolveInitialTitle(initialUrl) }]
+      if (isHomePageUrl(initialUrl)) return []
+      return [{ key: 'init-' + Date.now(), url: initialUrl, title: resolveInitialTabTitle(initialUrl) }]
     }
 
     // Kayit var ama parse edilemiyor → guvenli fallback: bos
     var stored
     try { stored = JSON.parse(rawStored) } catch (e) { stored = [] }
-    if (!Array.isArray(stored)) return []
-
-    // Kullanici tum tab'lari kapatmis → kapali kalsin (EmptyState)
-    // ANCAK: direkt URL navigasyonu (bookmark, refresh, adres çubuğu) varsa o sayfayı aç.
-    // Örn. /Admin/ViewSettings'teyken tüm tabları kap → refresh → Dashboard değil ViewSettings görünmeli.
-    if (stored.length === 0) {
-      if (!isHomePage(initialUrl)) {
-        return [{ key: 'init-' + Date.now(), url: initialUrl, title: resolveInitialTitle(initialUrl) }]
-      }
-      return []
-    }
-
-    // Kayitli tab'lar var; aralarinda mevcut URL var mi? Ana sayfa ise ekleme
-    if (!isHomePage(initialUrl)) {
-      var hasInitial = stored.some(function(t) { return t.url === initialUrl })
-      if (!hasInitial) {
-        return stored.concat([{ key: 'init-' + Date.now(), url: initialUrl, title: resolveInitialTitle(initialUrl) }])
-      }
-    }
-    return stored
+    return reconcileStoredTabs(stored, initialUrl)
   })
   var [activeTabKey, setActiveTabKey] = useState(function() {
     if (tabs.length === 0) return null
@@ -611,10 +641,62 @@ export default function Shell(props) {
     return match ? match.key : (tabs[0] && tabs[0].key)
   })
 
-  /* Tabs her degistiginde localStorage'a yaz. */
+  /* Sunucudan ilk senkron denemesi tamamlanana kadar POST atilmasin — yoksa
+     henuz sunucudan gelmemis "eski" yerel state, sunucudaki gercek kaydin
+     onune gecebilir (ping-pong). Basarili/basarisiz fark etmeksizin bir kez
+     denendikten sonra true olur. */
+  var tabsReadyRef = useRef(false)
+  var tabsSaveTimerRef = useRef(null)
+
+  /* Mount'ta sunucudaki kayitli sekme durumunu oku ve uzlastir.
+     saved:false → hic kayit yok, yerel "ilk ziyaret" state zaten dogru, dokunma.
+     saved:true  → sunucu kazanir (bos dizi dahil — bilincli kapatma niyeti
+     baska bir cihaz/oturumda verilmis olabilir). Sunucuya erisilemezse yerel
+     kopya ile calismaya devam edilir (fail-open, veri kaybi yok). */
+  useEffect(function() {
+    var cancelled = false
+    fetchWorkspaceTabs()
+      .then(function(res) {
+        if (cancelled || !res.saved) return
+        var normalized = res.tabs.map(normalizeServerTab).filter(Boolean)
+        var reconciled = reconcileStoredTabs(normalized, initialUrl)
+        setTabs(reconciled)
+        setActiveTabKey(function(prevKey) {
+          if (reconciled.length === 0) return null
+          var stillThere = reconciled.some(function(t) { return t.key === prevKey })
+          if (stillThere) return prevKey
+          var match = reconciled.find(function(t) { return t.url === initialUrl })
+          return match ? match.key : reconciled[0].key
+        })
+      })
+      .catch(function(err) {
+        // Sunucudan okunamadi — yerel kopya zaten yuklendi, sessizce devam.
+        // Kullaniciyi rahatsiz eden bir uyari YOK (arka plan senkronu).
+        console.warn('[Shell] Açık sekmeler sunucudan okunamadı, yerel kopya kullanılıyor.', err)
+      })
+      .finally(function() { tabsReadyRef.current = true })
+    return function() { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /* Tabs her degistiginde localStorage'a hemen yaz (garanti + hizli yeniden
+     acilis), sunucuya debounce'li POST at (her ac/kapa/siralamada istek
+     atmak yazma firtinasi yaratir). */
   useEffect(function() {
     try { localStorage.setItem(tabsStorageKey, JSON.stringify(tabs)) }
     catch (e) { /* quota/private mode — sessiz gec */ }
+
+    if (!tabsReadyRef.current) return
+    if (tabsSaveTimerRef.current) clearTimeout(tabsSaveTimerRef.current)
+    tabsSaveTimerRef.current = setTimeout(function() {
+      saveWorkspaceTabs(tabs).catch(function(err) {
+        // Sunucu yazimi basarisiz — yerel kopya zaten guncel, veri kaybi
+        // YOK; bir sonraki degisiklikte tekrar denenir. Sessiz yutma degil,
+        // konsola anlamli uyari (kullaniciyi rahatsiz eden kutu YOK).
+        console.warn('[Shell] Açık sekmeler sunucuya kaydedilemedi, yerel kopya korunuyor.', err)
+      })
+    }, 1200)
+    return function() { if (tabsSaveTimerRef.current) clearTimeout(tabsSaveTimerRef.current) }
   }, [tabs, tabsStorageKey])
 
   /* Aktif tab degistikce tarayicinin outer URL'sini replaceState ile guncelle.
