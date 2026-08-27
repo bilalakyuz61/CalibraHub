@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Approval.EntityTypes;
 using CalibraHub.Application.Auditing;
@@ -645,6 +645,16 @@ public sealed class DocumentService : IDocumentService
         return result;
     }
 
+    /// <summary>Durum kilidi mesajinda kullanilan Turkce durum etiketi.</summary>
+    private static string DocumentStatusText(DocumentStatus status) => status switch
+    {
+        DocumentStatus.Approved  => "onaylanmis",
+        DocumentStatus.Converted => "donusturulmus",
+        DocumentStatus.Cancelled => "iptal edilmis",
+        DocumentStatus.Revised   => "revize edilmis",
+        _                        => status.ToString(),
+    };
+
     public async Task<(bool Success, string? Error, DocumentDto? Quote, bool ApprovalStarted)> SaveQuoteAsync(
         SaveDocumentRequest request, int? createdById, string? startedByUser, CancellationToken ct,
         IReadOnlyCollection<PendingFulfillmentEntry>? fulfillmentEntries = null)
@@ -971,6 +981,19 @@ public sealed class DocumentService : IDocumentService
         {
             var existing = await _repo.GetByIdAsync(request.Id!.Value, ct)
                     ?? throw new InvalidOperationException("Teklif bulunamadi.");
+
+            // ── Durum kilidi (2026-08-27) ────────────────────────────────────
+            // Document.IsEditable() kurali domain'de yaziliydi ama HICBIR yerden
+            // cagrilmiyordu (olu kod): Approved / Converted / Cancelled / Revised bir
+            // belge bu yoldan yeniden kaydedilip ezilebiliyordu. Kural burada zorlanir
+            // — teslimat/rezervasyon/uretim akislari SaveQuoteAsync'ten GECMEZ (dogrudan
+            // repository'ye yazarlar), dolayisiyla onlar etkilenmez.
+            // Bypass yok: ice aktarim mevcut belgeyi zaten guncellemiyor (atliyor),
+            // AI araclari ve diger cagiranlar da bu kurala tabidir.
+            if (!existing.IsEditable())
+                return (false,
+                    $"Bu belge {DocumentStatusText(existing.Status)} durumunda oldugu icin duzenlenemez.",
+                    null, false);
 
             // GetByIdAsync zaten line_count'u tek sorguda getiriyor — tekrar lines cekmeye gerek yok.
             if (existing.LineCount > 0 && existing.ContactId != request.ContactId)

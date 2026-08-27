@@ -331,6 +331,8 @@ builder.Services.AddSignalR(options =>
     options.MaximumReceiveMessageSize = 64 * 1024;
 });
 builder.Services.AddSingleton<CollaborationRuntimeStore>();
+// Kilidin sunucu tarafinda zorlanmasi (kaydetme uclari cagirir) — bkz. CollaborationLockGuard.
+builder.Services.AddSingleton<CalibraHub.Web.Infrastructure.Collaboration.CollaborationLockGuard>();
 builder.Services.AddHostedService<CollaborationStartupLoadService>();
 builder.Services.AddHostedService<CollaborationCleanupService>();
 

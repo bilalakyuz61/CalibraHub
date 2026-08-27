@@ -43,6 +43,7 @@ public sealed class SalesController : Controller
     private readonly IPriceListService _priceListService;
     private readonly IStockReservationRepository _stockReservationRepo;
     private readonly ILogger<SalesController> _logger;
+    private readonly CalibraHub.Web.Infrastructure.Collaboration.CollaborationLockGuard? _lockGuard;
     private readonly IUserSettingRepository _userSettings;
     private readonly IUserProfileRepository _userProfiles;
     private readonly IFormFieldBehaviorRepository? _formBehaviorRepo;
@@ -87,8 +88,11 @@ public sealed class SalesController : Controller
         IUserSettingRepository userSettings,
         IUserProfileRepository userProfiles,
         // Form Davranış Katmanı (2026-08-05) — opsiyonel: kayıt yoksa fail-open.
-        IFormFieldBehaviorRepository? formBehaviorRepo = null)
+        IFormFieldBehaviorRepository? formBehaviorRepo = null,
+        // Eşzamanlı düzenleme kilidi guard'ı (2026-08-27) — opsiyonel: yoksa kontrol atlanır.
+        CalibraHub.Web.Infrastructure.Collaboration.CollaborationLockGuard? lockGuard = null)
     {
+        _lockGuard = lockGuard;
         _quoteService = quoteService;
         _financeService = financeService;
         _logisticsService = logisticsService;
@@ -1944,6 +1948,17 @@ public sealed class SalesController : Controller
                 var _sExisting = await _quoteService.GetQuoteByIdAsync(request.Id!.Value, ct);
                 if (!await HasRecordScopeAsync(_sPfc, "EDIT", _sExisting?.CreatedById, ct))
                     return Json(new { success = false, message = "Bu belge başka bir kullanıcıya ait; düzenleme yetkiniz bulunmuyor." });
+
+                // ── Eşzamanlı düzenleme kilidi (2026-08-27) ──────────────────
+                // Kilit şimdiye kadar yalnız arayüzde uygulanıyordu (alanlar disabled);
+                // doğrudan POST atan istemci kilitli belgeye yazabiliyordu. Kayıt tipi,
+                // ekranın kilidi aldığı kodun aynısı olmalı: DocumentEdit view'ı
+                // data-collaboration-record-type="@Model.HeaderFormCode" veriyor.
+                var _sLockMsg = _lockGuard?.CheckWrite(
+                    CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(_sDocType?.Code).Header,
+                    request.Id!.Value, GetUserId());
+                if (_sLockMsg is not null)
+                    return Json(new { success = false, message = _sLockMsg });
             }
         }
 

@@ -1,4 +1,4 @@
-using CalibraHub.Application.Contracts;
+﻿using CalibraHub.Application.Contracts;
 
 namespace CalibraHub.Application.Abstractions.Services;
 
@@ -53,6 +53,12 @@ public interface IDocumentService
     /// <see cref="PendingFulfillmentEntry"/> listesini kaydetmeden ÖNCE hazırlar (RefDocId
     /// henüz bilinmediği için taşımaz — repo, kendi ürettiği belge Id'sini kullanır).
     /// </summary>
+    /// <remarks>
+    /// Durum kilidi: onaylanmis / donusturulmus / iptal / revize bir belge bu yoldan
+    /// yeniden kaydedilemez (<see cref="CalibraHub.Domain.Entities.Document.IsEditable"/>).
+    /// Teslimat, rezervasyon ve uretim akislari bu metottan GECMEZ (dogrudan repository'ye
+    /// yazarlar), dolayisiyla kilitten etkilenmezler.
+    /// </remarks>
     Task<(bool Success, string? Error, DocumentDto? Quote, bool ApprovalStarted)> SaveQuoteAsync(
         SaveDocumentRequest request, int? createdById, string? startedByUser, CancellationToken ct,
         IReadOnlyCollection<PendingFulfillmentEntry>? fulfillmentEntries = null);
