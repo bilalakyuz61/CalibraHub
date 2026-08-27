@@ -23,7 +23,11 @@
 [CmdletBinding()]
 param(
     [string]$Table,
-    [switch]$Detail
+    [switch]$Detail,
+    # Yalniz YAZMA yollarini goster (UPDATE/DELETE/INSERT). Oncelik burasidir:
+    # okuma sizintisi can sikicidir, yazma sizintisi GERI DONUSSUZDUR — baska
+    # sirketin kaydi ezilir ya da silinir.
+    [switch]$MutationsOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,7 +42,18 @@ $globalTables = @(
     'Country','City','District','Neighborhood','Village','PostalLocality',
     'GlobalLock','LicenseConfig','GateCredential','AiProvider','IntegrationProvider',
     'UiLabelTranslation','PageComment','PageCommentActivity','PageCommentImage',
-    'PageCommentRevision','PLT_SISTEM_LOG','whatsapp_safety_rules'
+    'PageCommentRevision','PLT_SISTEM_LOG','whatsapp_safety_rules',
+    # MASTER DB'de duran, bilincli olarak sirketler arasi ortak tablolar. Kodda belgeli:
+    # "cross-company ... per-company DB mimarisine GIRMEZ (CompanyId YOK)". Toplu migration
+    # ilk surumde bunlara da kolon eklemisti; kolonlar dusuruldu, muafiyet burada da kayitli.
+    'Attachment','DocumentCategory',
+    # Kimlik/parola akisi sirketten BAGIMSIZ: ForgotPassword/ResetPassword anonimdir ve
+    # e-posta ile TUM sirketlerdeki kullaniciyi arar. Suzgec koymak ilk sirket disindaki
+    # herkesin parola sifirlamasini sessizce kirardi.
+    'Users',
+    # Dis sistemin (e-fatura entegratoru) ALL_CAPS semasi — CalibraHub olusturmuyor, bu
+    # sunucuda hicbir veritabaninda YOKLAR. PLT_SISTEM_LOG ile ayni sinif.
+    'CBT_EBELGEMAS','CBT_EBELGEMASTAX','CBT_EBELGEKALEM','CBT_EBELGEKALEMTAX'
 )
 
 $findings = New-Object System.Collections.Generic.List[object]
@@ -67,6 +82,9 @@ foreach ($dir in $srcDirs) {
             if ($globalTables -contains $tbl) { continue }
             if ($Table -and $tbl -ne $Table) { continue }
             if ($tbl -like '#*' -or $tbl -like 'sys*' -or $tbl -like 'INFORMATION_SCHEMA*') { continue }
+            $verb = $m.Groups[1].Value.ToUpperInvariant() -replace '\s+',' '
+            $isMutation = $verb -match 'UPDATE|DELETE|INSERT'
+            if ($MutationsOnly -and -not $isMutation) { continue }
 
             $tail = $text.Substring($m.Index, [Math]::Min(1500, $text.Length - $m.Index))
             $stop = $tail.IndexOf(';')
@@ -105,6 +123,7 @@ foreach ($dir in $srcDirs) {
                 File   = $file.FullName.Substring($root.Length + 1)
                 Line   = ($text.Substring(0, $m.Index) -split "`n").Count
                 Table  = $tbl
+                Verb   = $verb
                 Reason = $reason
                 Snip   = ($tail -split "`n" | Select-Object -First 1).Trim()
             })
@@ -126,7 +145,7 @@ $findings | Group-Object Table | Sort-Object Count -Descending | ForEach-Object 
     Write-Host ("{0,-28} {1,4} ifade  (WHERE'i hic olmayan: {2})" -f $_.Name, $_.Count, $noWhere) -ForegroundColor Yellow
     if ($Detail) {
         $_.Group | Sort-Object File, Line | ForEach-Object {
-            Write-Host ("      {0}:{1}  [{2}]" -f $_.File, $_.Line, $_.Reason) -ForegroundColor DarkGray
+            Write-Host ("      {0}:{1}  [{2}] {3}" -f $_.File, $_.Line, $_.Verb, $_.Reason) -ForegroundColor DarkGray
             Write-Host ("        {0}" -f $_.Snip) -ForegroundColor DarkGray
         }
     }
@@ -135,6 +154,8 @@ $findings | Group-Object Table | Sort-Object Count -Descending | ForEach-Object 
 Write-Host ("-" * 76)
 $tblCount = @($findings | Select-Object -ExpandProperty Table -Unique).Count
 Write-Host ("TOPLAM {0} ifade CompanyId sartindan yoksun ({1} farkli tablo)." -f $findings.Count, $tblCount) -ForegroundColor Yellow
+$mut = @($findings | Where-Object { $_.Verb -match 'UPDATE|DELETE|INSERT' }).Count
+Write-Host ("Bunlarin {0} tanesi YAZMA yolu (UPDATE/DELETE/INSERT) — oncelik orada." -f $mut) -ForegroundColor Yellow
 Write-Host "Her satir bir bug DEGIL: 'WHERE Id = @Id' ile tek kayit okuyanlar zaten guvenli"
-Write-Host "sayilabilir (PK benzersiz). Oncelik: WHERE'i hic olmayanlar."
+Write-Host "sayilabilir (PK benzersiz)."
 exit 1
