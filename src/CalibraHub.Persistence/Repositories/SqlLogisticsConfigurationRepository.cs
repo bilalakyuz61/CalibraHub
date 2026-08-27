@@ -1372,6 +1372,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     public async Task<IReadOnlyCollection<Location>> GetLocationsAsync(CancellationToken cancellationToken)
     {
         var locations = new List<Location>();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -1391,8 +1392,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                    ISNULL([IsCountReference], 0),
                    ISNULL([IsSingleChildType], 0)
             FROM {_warehouseLocationsTableName}
+            WHERE [CompanyId] = @CompanyId
             ORDER BY [SortOrder], [LocationTypeCode], [LocationCode];
             """;
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -1822,16 +1825,18 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     public async Task<IReadOnlyCollection<ItemUnit>> GetItemUnitsAsync(int itemId, CancellationToken cancellationToken)
     {
         var results = new List<ItemUnit>();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await EnsureItemUnitsTableAsync(connection, cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
             SELECT [Id],[ItemId],[LineNo],[UnitId],[Multiplier]
             FROM {_itemUnitsTableName}
-            WHERE [ItemId] = @ItemId
+            WHERE [ItemId] = @ItemId AND [CompanyId] = @CompanyId
             ORDER BY [LineNo];
             """;
         cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {

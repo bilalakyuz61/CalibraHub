@@ -435,6 +435,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         // Material/Unit/Combination/Location display alanlari JOIN ile okunur — tabloda tutulmuyor.
+        // Kiraci suzgeci: documentId istemciden gelir; baska sirketin belgesine ait
+        // satirlarin okunmasini engellemek icin ana belgeye INNER JOIN + CompanyId sarti.
         cmd.CommandText = $"""
             SELECT l.[Id],l.[DocumentId],l.[LineNo],l.[ItemId],l.[UnitId],
                    l.[Quantity],l.[UnitPrice],l.[DiscountRate],l.[LineTotal],
@@ -448,6 +450,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    pc.[RecordCode] AS [combination_code],
                    loc.[LocationCode] AS [location_code], loc.[LocationName] AS [location_name]
             FROM {_lineTable} l
+            INNER JOIN {_quoteTable} qd ON qd.[Id] = l.[DocumentId] AND qd.[CompanyId] = @CompanyId
             LEFT JOIN [{_schema}].[Items] i ON i.[Id] = l.[ItemId]
             LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = l.[UnitId]
             LEFT JOIN [{_schema}].[ItemConfiguration] pc ON pc.[Id] = l.[CombinationId]
@@ -456,6 +459,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             ORDER BY l.[LineNo];
             """;
         cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) list.Add(MapLine(r));
         return list;
@@ -841,8 +845,11 @@ public sealed class SqlDocumentRepository : IDocumentRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT [DocumentId] FROM {_lineTable} WHERE [Id] = @Id;";
+        // Kiraci suzgeci: lineId istemciden gelir; baska sirketin satirinin
+        // dogrulanmadan yetkilendirme icin kullanilmasini engeller.
+        cmd.CommandText = $"SELECT [DocumentId] FROM {_lineTable} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Id", lineId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is null || result is DBNull ? null : Convert.ToInt32(result);
     }
@@ -869,8 +876,11 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             await using (var selCmd = conn.CreateCommand())
             {
                 selCmd.Transaction = tx;
-                selCmd.CommandText = $"SELECT [DocumentId], [Notes] FROM {_lineTable} WHERE [Id] = @Id;";
+                // Kiraci suzgeci: parentLineId istemciden gelir; suzgec olmadan baska
+                // sirketin satiri kopyalanip yeni satir olarak eklenebilirdi.
+                selCmd.CommandText = $"SELECT [DocumentId], [Notes] FROM {_lineTable} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
                 selCmd.Parameters.Add(new SqlParameter("@Id", parentLineId));
+                selCmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
                 await using var r = await selCmd.ExecuteReaderAsync(ct);
                 if (!await r.ReadAsync(ct))
                 {
@@ -1306,6 +1316,9 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             paramNames.Add(p);
             cmd.Parameters.Add(new SqlParameter(p, id));
         }
+        // Kiraci suzgeci: lineIds istemciden gelir; d.[CompanyId] sarti olmadan
+        // baska sirketin ihtiyac satiri kapatilabilirdi.
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         cmd.CommandText = $"""
             UPDATE l
@@ -1314,7 +1327,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
              INNER JOIN [{_schema}].[Document]     d  ON d.[Id]  = l.[DocumentId]
              INNER JOIN [{_schema}].[DocumentType] dt ON dt.[Id] = d.[DocumentTypeId]
              WHERE l.[Id] IN ({string.Join(",", paramNames)})
-               AND dt.[Code] = 'alis_talebi';
+               AND dt.[Code] = 'alis_talebi'
+               AND d.[CompanyId] = @CompanyId;
             """;
         return await cmd.ExecuteNonQueryAsync(ct);
     }
