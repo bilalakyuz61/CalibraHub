@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.filled.Warehouse
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.HorizontalDivider
@@ -89,6 +90,9 @@ object AppRoutes {
 
     const val PRODUCTION_WORK_ORDERS = "production_work_orders"
 
+    /** Onay Bekleyenler — bana atanmis onaylar (bkz. PendingApprovalScreen). */
+    const val APPROVALS = "approvals"
+
     // İş emri detayı (Faz 2c EK) — drawer'da YOK, yalnız WorkOrderListScreen'den navigate edilir.
     // AYNI KISS gerekçesiyle PURCHASE/SALES_OPEN_ORDER_DETAIL ile AYNI desen: literal route +
     // AppNavHost'ta hoisted `pendingWorkOrderId` Int state (navigation-compose Multiplatform
@@ -137,6 +141,7 @@ object MenuFormCodes {
     const val PURCHASE_DELIVERY = "PURCHASE_DELIVERY"
     const val WORK_ORDERS = "WORK_ORDERS"
     const val SHOP_FLOOR = "SHOP_FLOOR"
+    const val APPROVAL_PENDING = "APPROVAL_PENDING"
 }
 
 /**
@@ -185,6 +190,12 @@ sealed class DrawerEntry {
  */
 val drawerEntries: List<DrawerEntry> = listOf(
     DrawerEntry.Single(DrawerLeaf(AppRoutes.HOME, "Ana Sayfa", Icons.Default.Home)),
+    DrawerEntry.Single(
+        DrawerLeaf(
+            AppRoutes.APPROVALS, "Onay Bekleyenler", Icons.Default.TaskAlt,
+            listOf(MenuFormCodes.APPROVAL_PENDING),
+        ),
+    ),
     DrawerEntry.Expandable(
         DrawerGroup(
             key = "depo",

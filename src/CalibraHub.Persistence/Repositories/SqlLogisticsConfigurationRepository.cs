@@ -2537,6 +2537,13 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                     [SortOrder] INT           NOT NULL CONSTRAINT [DF_LocationType_SortOrder] DEFAULT(0),
                     [IsActive]  BIT           NOT NULL CONSTRAINT [DF_LocationType_IsActive] DEFAULT(1)
                 );
+                -- 2026-08-27 KIRACI AYRIMI: burada [CompanyId] REFERANS EDILEMEZ — kolon bu
+                -- CREATE TABLE'da yok, acilista CalibraDatabaseInitializer.EnsureCompanyIdColumnsAsync
+                -- tarafindan ALTER ile ekleniyor. Bu blok yalnizca "tablo hic yoksa" calisir
+                -- (IF OBJECT_ID ... IS NULL), yani MEVCUT bir DB'de sirket kapsamli hale
+                -- getirilmis index'i GERI ALMAZ. Index'i (CompanyId, Code) yapan tek yer
+                -- CalibraDatabaseInitializer.EnsureCompanyScopedUniqueIndexesAsync'tir; oraya
+                -- [UX_LocationType_Code] hedef olarak eklidir ve her acilista uygulanir.
                 CREATE UNIQUE INDEX [UX_LocationType_Code]
                     ON [{s}].[LocationType]([Code]);
 

@@ -1,6 +1,8 @@
 package com.calibrahub.mobile.session
 
 import com.calibrahub.mobile.data.ApiResult
+import com.calibrahub.mobile.data.ApprovalApi
+import com.calibrahub.mobile.data.ApprovalRepository
 import com.calibrahub.mobile.data.AuthApi
 import com.calibrahub.mobile.data.CompanyDto
 import com.calibrahub.mobile.data.LoginCompaniesRequest
@@ -102,6 +104,7 @@ class SessionManager(private val storage: SecureStorage) {
 
     val warehouseRepository: WarehouseRepository by lazy { WarehouseRepository(this) }
     val productionRepository: ProductionRepository by lazy { ProductionRepository(this) }
+    val approvalRepository: ApprovalRepository by lazy { ApprovalRepository(this) }
 
     private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
 
@@ -274,6 +277,7 @@ class SessionManager(private val storage: SecureStorage) {
     suspend fun authApi(): AuthApi = AuthApi(baseUrl = currentBaseUrl(), client = httpClient)
     suspend fun warehouseApi(): WarehouseApi = WarehouseApi(baseUrl = currentBaseUrl(), client = httpClient)
     suspend fun productionApi(): ProductionApi = ProductionApi(baseUrl = currentBaseUrl(), client = httpClient)
+    suspend fun approvalApi(): ApprovalApi = ApprovalApi(baseUrl = currentBaseUrl(), client = httpClient)
 
     // ─────────────────────────────────────────────────────────────────
     // Auth akislari

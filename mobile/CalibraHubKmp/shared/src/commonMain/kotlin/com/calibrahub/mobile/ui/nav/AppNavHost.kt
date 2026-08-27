@@ -30,6 +30,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.calibrahub.mobile.session.SessionManager
 import com.calibrahub.mobile.session.SessionProbeResult
+import com.calibrahub.mobile.ui.approval.PendingApprovalScreen
 import com.calibrahub.mobile.ui.common.CalibrationIndicator
 import com.calibrahub.mobile.ui.common.PlaceholderScreen
 import com.calibrahub.mobile.ui.home.HomeScreen
@@ -275,6 +276,12 @@ fun AppNavHost(session: SessionManager) {
             }
             composable(AppRoutes.WAREHOUSE_DRAFT_COUNTS) {
                 DraftCountsScreen(session = session, onBack = { navController.popBackStack() })
+            }
+            composable(AppRoutes.APPROVALS) {
+                PendingApprovalScreen(
+                    session = session,
+                    onBack = { navController.popBackStack() },
+                )
             }
             composable(AppRoutes.PRODUCTION_WORK_ORDERS) {
                 WorkOrderListScreen(

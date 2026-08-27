@@ -899,6 +899,10 @@ END;";
             // 2026-08-27: Kiraci ayrimi kolonu. FK'lerden SONRA calisir — kolon eklemek
             // kisit kurmayi etkilemez ama sira sabit kalsin diye zincirin sonuna konuldu.
             await EnsureCompanyIdColumnsAsync(connection, cancellationToken);
+            // 2026-08-27: Kiraci ayrimi - tekillik kisitlarini sirket kapsamli yap. CompanyId
+            // kolonlari EKLENDIKTEN SONRA calismali (kolon yoksa donusum atlanir, sonraki
+            // acilista yapilir). Idempotent: lider kolon zaten CompanyId ise dokunulmaz.
+            await EnsureCompanyScopedUniqueIndexesAsync(connection, cancellationToken);
             // RLS — su an UYKUDA (RlsPilotTables bos). Cagri burada duruyor ki mekanizma
             // gerektiginde tek satirlik bir liste degisikligiyle devreye girsin. Zincirin
             // SONUNDA: RLS korudugu tabloda sp_rename'i engelliyor, dolayisiyla rename
@@ -1071,6 +1075,12 @@ END;";
     /// barkodlu malzeme yanlislikla "cift" sayilirdi). Barcode kolonu CI_AS collation'da
     /// oldugundan buyuk/kucuk harf farki cift sayilir — servisteki OrdinalIgnoreCase ile tutarli.
     ///
+    /// 2026-08-27 KIRACI AYRIMI: index artik ([CompanyId], [Barcode]) — barkod SIRKET BASINA
+    /// tekildir. Cift tespiti de GROUP BY [CompanyId], [Barcode] ile ayni kapsamda yapilir;
+    /// yoksa iki farkli sirketteki ayni barkod "cift" sayilip index'in hic kurulmamasina
+    /// yol acardi. Eski GLOBAL surum kaldiysa asagidaki self-heal blogu onu dusurup yenisini
+    /// kurar (idempotent: bir kez sirket kapsamli olduktan sonra kosul bir daha saglanmaz).
+    ///
     /// Bu metod hicbir kosulda acilisi cokertmez: veri SILMEZ/DEGISTIRMEZ, tum SQL try/catch
     /// icindedir, hata loglanip gecilir (bir sirkette cift olmasi digerlerini etkilemez).
     /// Kolon/index adlari canli semada dogrulandi (INFORMATION_SCHEMA + sys.indexes, 2026-08-24).
@@ -1103,7 +1113,7 @@ END;";
                     SELECT TOP (5) [Barcode], COUNT(*) AS [Cnt]
                       FROM [{s}].[Items]
                      WHERE [Barcode] IS NOT NULL AND [Barcode] <> N''
-                     GROUP BY [Barcode]
+                     GROUP BY [CompanyId], [Barcode]
                     HAVING COUNT(*) > 1
                      ORDER BY COUNT(*) DESC, [Barcode];
                     """;
@@ -1119,10 +1129,10 @@ END;";
                 await using var cntCmd = connection.CreateCommand();
                 cntCmd.CommandText = $"""
                     SELECT COUNT(*) FROM (
-                        SELECT [Barcode]
+                        SELECT [CompanyId], [Barcode]
                           FROM [{s}].[Items]
                          WHERE [Barcode] IS NOT NULL AND [Barcode] <> N''
-                         GROUP BY [Barcode]
+                         GROUP BY [CompanyId], [Barcode]
                         HAVING COUNT(*) > 1) d;
                     """;
                 duplicateGroups = Convert.ToInt32(await cntCmd.ExecuteScalarAsync(cancellationToken) ?? 0);
@@ -1179,13 +1189,29 @@ END;";
                         DROP INDEX [UX_Items_Barcode] ON [{s}].[Items];
                     END;
 
+                    -- 2026-08-27 KIRACI AYRIMI: eski GLOBAL surum (lider kolon [Barcode]) kaldiysa
+                    -- dusur ki asagidaki blok sirket kapsamli halini kursun. Idempotent: bir kez
+                    -- (CompanyId, Barcode) kuruldugunda bu kosul bir daha saglanmaz.
+                    IF EXISTS (
+                        SELECT 1 FROM sys.indexes i
+                         WHERE i.[object_id] = OBJECT_ID(N'[{s}].[Items]')
+                           AND i.[name] = N'UX_Items_Barcode'
+                           AND NOT EXISTS (
+                               SELECT 1 FROM sys.index_columns ic
+                                JOIN sys.columns c ON c.[object_id] = ic.[object_id] AND c.[column_id] = ic.[column_id]
+                                WHERE ic.[object_id] = i.[object_id] AND ic.[index_id] = i.[index_id]
+                                  AND ic.[key_ordinal] = 1 AND c.[name] = N'CompanyId'))
+                    BEGIN
+                        DROP INDEX [UX_Items_Barcode] ON [{s}].[Items];
+                    END;
+
                     IF NOT EXISTS (
                         SELECT 1 FROM sys.indexes
                          WHERE [object_id] = OBJECT_ID(N'[{s}].[Items]')
                            AND [name] = N'UX_Items_Barcode')
                     BEGIN
                         CREATE UNIQUE INDEX [UX_Items_Barcode]
-                            ON [{s}].[Items]([Barcode])
+                            ON [{s}].[Items]([CompanyId], [Barcode])
                             WHERE [Barcode] IS NOT NULL AND [Barcode] <> N'';
                     END;
 
@@ -1509,6 +1535,265 @@ END;";
         // sessizce kırardı. Users.CompanyId kolonu VAR ve kalır (kullanıcının ait olduğu şirket),
         // ama kiracı süzgeci bu tabloya UYGULANMAZ — ayrı bir tasarım kararı gerektirir.
         "Users",
+    };
+
+    /// <summary>
+    /// 2026-08-27 - KIRACI AYRIMI: sirketten BAGIMSIZ tekillik kisitlarini SIRKET KAPSAMLI hale
+    /// getirir. Ayni veritabaninda birden fazla gercek sirket calisacaginda, global bir UNIQUE
+    /// kisit ikinci sirketin ayni kodu/adi kullanmasini engeller - yani ikinci sirket sisteme
+    /// veri GIREMEZ. En yikici ornek [Document]: belge numarasi [Numerator] tarafindan
+    /// (CompanyId, EntityType) bazinda uretilirken tekillik global denetleniyordu; ikinci sirket
+    /// ILK belgesini kaydedemiyordu.
+    ///
+    /// <para><b>Veri temizligi GEREKMEZ.</b> (X) -&gt; (CompanyId, X) donusumu kisiti GEVSETIR:
+    /// bugun global kisiti gecen her satir, sirket kapsamli kisiti da tanim geregi gecer.
+    /// Bu metod veri SILMEZ / DEGISTIRMEZ; yalnizca index/kisit tanimini yeniden kurar.</para>
+    ///
+    /// <para><b>Idempotent.</b> Her index icin once mevcut tanim okunur; LIDER kolon zaten
+    /// [CompanyId] ise DOKUNULMAZ. Dolayisiyla ikinci acilis tam no-op'tur. Index bulunamazsa
+    /// (bu DB'de hic yok / baska adla var) sessizce atlanir.</para>
+    ///
+    /// <para><b>Atomik.</b> Her donusum tek batch icinde SET XACT_ABORT ON + BEGIN TRANSACTION ile
+    /// yapilir: DROP basarili olup CREATE patlarsa islem geri alinir ve tablo kisitsiz KALMAZ.
+    /// UNIQUE CONSTRAINT olanlar (sp_rename cozmez) ALTER TABLE DROP CONSTRAINT ile dusurulup
+    /// AYNI ADLA unique index olarak yeniden kurulur - ad korunur, boylece kodda/DDL'de ada
+    /// bakan "varsa ekleme" guard'lari (or. uq_material_groups_cat_code) calismaya devam eder.</para>
+    ///
+    /// <para><b>Sira sarti:</b> <see cref="EnsureCompanyIdColumnsAsync"/>'ten SONRA cagrilmalidir -
+    /// kolon henuz yoksa donusum atlanir ve bir sonraki acilista yapilir.</para>
+    ///
+    /// <para><b>Onemli sinir:</b> [CompanyId] NULLABLE'dir ve SQL Server unique index'te NULL'lari
+    /// ESIT sayar. Yazma yollari CompanyId doldurmadigi surece bu index'ler pratikte eskisi gibi
+    /// davranir; bu metod ONKOSULU kurar, tek basina izolasyon SAGLAMAZ.</para>
+    ///
+    /// Kapsam disi birakilanlar (bilincli, GLOBAL kalmali): [Company] (ayni DB'de iki sirket ayni
+    /// VKN'ye sahip olmamali), [Users] (parola sifirlama anonim + sirketler arasi),
+    /// [ApprovalActionToken] ve [Note].share_token (rastgele token - global tekillik dogru),
+    /// [RptView].SqlObjectName + [ViewDefinition].ViewName (gercek SQL nesne adi; ayni DB'de
+    /// iki kez var olamaz), [Attachment] / [DocumentCategory] (MASTER DB, muaf listede).
+    /// Ust kayda FK ile bagli olanlara (or. (RoutingId, Sequence)) DOKUNULMAZ - ebeveyn zaten
+    /// sirket kapsamli oldugu icin dolayli guvendedirler.
+    /// </summary>
+    private async Task EnsureCompanyScopedUniqueIndexesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var db = connection.Database;
+        var fixedCount = 0;
+
+        foreach (var (table, index) in CompanyScopedUniqueIndexTargets)
+        {
+            try
+            {
+                var t = table.Replace("]", "]]");
+
+                // 1) Tablo + CompanyId kolonu hazir mi?
+                await using (var probe = connection.CreateCommand())
+                {
+                    probe.CommandText = $"""
+                        SELECT CASE
+                            WHEN OBJECT_ID(N'[{s}].[{t}]', N'U') IS NOT NULL
+                             AND COL_LENGTH(N'[{s}].[{t}]', N'CompanyId') IS NOT NULL
+                            THEN 1 ELSE 0 END;
+                        """;
+                    if (Convert.ToInt32(await probe.ExecuteScalarAsync(cancellationToken) ?? 0) != 1)
+                        continue;
+                }
+
+                // 2) Mevcut tanimi OKU (gercek ad, kisit mi index mi, anahtar kolonlar, filtre).
+                string? realName = null, keyCols = null, filter = null, firstKey = null;
+                var isConstraint = false;
+                await using (var meta = connection.CreateCommand())
+                {
+                    meta.CommandText = $"""
+                        SELECT TOP (1)
+                               i.[name],
+                               CAST(i.[is_unique_constraint] AS INT),
+                               ISNULL(i.[filter_definition], N''),
+                               STUFF((SELECT N', ' + QUOTENAME(c2.[name])
+                                        FROM sys.index_columns ic2
+                                        JOIN sys.columns c2 ON c2.[object_id] = ic2.[object_id]
+                                                           AND c2.[column_id] = ic2.[column_id]
+                                       WHERE ic2.[object_id] = i.[object_id]
+                                         AND ic2.[index_id]  = i.[index_id]
+                                         AND ic2.[is_included_column] = 0
+                                       ORDER BY ic2.[key_ordinal]
+                                         FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, N''),
+                               (SELECT TOP (1) c3.[name]
+                                  FROM sys.index_columns ic3
+                                  JOIN sys.columns c3 ON c3.[object_id] = ic3.[object_id]
+                                                     AND c3.[column_id] = ic3.[column_id]
+                                 WHERE ic3.[object_id] = i.[object_id]
+                                   AND ic3.[index_id]  = i.[index_id]
+                                   AND ic3.[is_included_column] = 0
+                                   AND ic3.[key_ordinal] = 1)
+                          FROM sys.indexes i
+                         WHERE i.[object_id] = OBJECT_ID(N'[{s}].[{t}]')
+                           AND i.[name] = @IndexName
+                           AND i.[is_unique] = 1
+                           AND i.[is_primary_key] = 0;
+                        """;
+                    meta.Parameters.Add(new SqlParameter("@IndexName", index));
+                    await using var r = await meta.ExecuteReaderAsync(cancellationToken);
+                    if (await r.ReadAsync(cancellationToken))
+                    {
+                        realName     = r.GetString(0);
+                        isConstraint = r.GetInt32(1) == 1;
+                        filter       = r.GetString(2);
+                        keyCols      = r.IsDBNull(3) ? null : r.GetString(3);
+                        firstKey     = r.IsDBNull(4) ? null : r.GetString(4);
+                    }
+                }
+
+                // Index bu DB'de yok (ya da baska adla kurulmus) -> sessizce atla.
+                if (realName is null || string.IsNullOrWhiteSpace(keyCols) || firstKey is null) continue;
+
+                // 3) IDEMPOTENS: lider kolon zaten CompanyId ise dokunma (ikinci acilis = no-op).
+                if (string.Equals(firstKey, "CompanyId", StringComparison.OrdinalIgnoreCase)) continue;
+
+                // 4) Atomik donusum: DROP + CREATE ayni transaction'da. CREATE patlarsa DROP da
+                //    geri alinir; tablo bir an bile kisitsiz kalmaz.
+                var n = realName.Replace("]", "]]");
+                var dropSql = isConstraint
+                    ? $"ALTER TABLE [{s}].[{t}] DROP CONSTRAINT [{n}];"
+                    : $"DROP INDEX [{n}] ON [{s}].[{t}];";
+                var whereSql = string.IsNullOrWhiteSpace(filter) ? string.Empty : $" WHERE {filter}";
+
+                await using (var rebuild = connection.CreateCommand())
+                {
+                    // NOT: filtreli index CREATE'i QUOTED_IDENTIFIER ON gerektirir; SqlClient
+                    // baglantilarinda varsayilan ON'dur (sqlcmd'de degildir — elle test ederken -I).
+                    rebuild.CommandText = $"""
+                        SET XACT_ABORT ON;
+                        BEGIN TRANSACTION;
+                            {dropSql}
+                            CREATE UNIQUE INDEX [{n}] ON [{s}].[{t}]([CompanyId], {keyCols}){whereSql};
+                        COMMIT TRANSACTION;
+                        """;
+                    await rebuild.ExecuteNonQueryAsync(cancellationToken);
+                }
+
+                fixedCount++;
+                Console.WriteLine($"[DB INIT] [{db}] {table}.{realName} sirket kapsamli yapildi: ([CompanyId], {keyCols}).");
+            }
+            catch (Exception ex)
+            {
+                // Tek index basarisiz olursa acilisi COKERTME - kalanlar donusur, sebep loglanir.
+                Console.Error.WriteLine($"[DB INIT WARN] [{db}] {table}.{index} sirket kapsamli yapilamadi: {ex.Message}");
+            }
+        }
+
+        // 5) MUKERRER / OLU index temizligi. Her biri yalnizca yerini tutan index dogrulandiktan
+        //    SONRA dusurulur - tekillik bir an bile bosa dusmez. Ikinci acilista IF EXISTS
+        //    saglanmadigi icin no-op.
+        foreach (var (table, dropName, keeper, reason) in RedundantUniqueIndexDrops)
+        {
+            try
+            {
+                var t = table.Replace("]", "]]");
+                var d = dropName.Replace("]", "]]");
+                await using var cmd = connection.CreateCommand();
+                cmd.CommandText = $"""
+                    IF OBJECT_ID(N'[{s}].[{t}]', N'U') IS NOT NULL
+                       AND EXISTS (SELECT 1 FROM sys.indexes
+                                    WHERE [object_id] = OBJECT_ID(N'[{s}].[{t}]') AND [name] = @Drop)
+                       AND EXISTS (SELECT 1 FROM sys.indexes
+                                    WHERE [object_id] = OBJECT_ID(N'[{s}].[{t}]') AND [name] = @Keeper)
+                    BEGIN
+                        DROP INDEX [{d}] ON [{s}].[{t}];
+                        SELECT 1;
+                    END
+                    ELSE SELECT 0;
+                    """;
+                cmd.Parameters.Add(new SqlParameter("@Drop", dropName));
+                cmd.Parameters.Add(new SqlParameter("@Keeper", keeper));
+                if (Convert.ToInt32(await cmd.ExecuteScalarAsync(cancellationToken) ?? 0) == 1)
+                    Console.WriteLine($"[DB INIT] [{db}] {table}.{dropName} dusuruldu ({reason}; yerini {keeper} tutuyor).");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[DB INIT WARN] [{db}] {table}.{dropName} dusurulemedi: {ex.Message}");
+            }
+        }
+
+        if (fixedCount > 0)
+            Console.WriteLine($"[DB INIT] [{db}] {fixedCount} tekillik kisiti sirket kapsamli hale getirildi.");
+    }
+
+    /// <summary>
+    /// Sirket kapsamli yapilacak tekillik kisitlari - (Tablo, Index/Constraint adi).
+    /// Liste canli semaya karsi (sys.indexes + sys.index_columns) TEK TEK dogrulandi (2026-08-27):
+    /// hepsi UNIQUE, hicbiri CompanyId icermiyor, hicbirinde DESC/INCLUDE kolon yok ve hicbiri bir
+    /// FK tarafindan referans EDILMIYOR (FK referansi olsaydi DROP mumkun olmazdi).
+    ///
+    /// <para>Ayni tablo icin iki ad gorulebilir (or. [Currency]): eski DB'lerde snake_case legacy
+    /// ad, sifirdan kurulan DB'lerde PascalCase ad kullanilir. Hangisi varsa o donusturulur,
+    /// digeri sessizce atlanir. Ad KORUNUR (yeniden adlandirma YAPILMAZ).</para>
+    ///
+    /// <para>Listeye ALINMAYANLAR (ust kayda FK ile dolayli guvende olanlar, or. (RoutingId,
+    /// Sequence) / (WorkOrderId, Sequence) / (ContactId, ItemId)) bilincli disaridadir: ebeveyn
+    /// satir zaten bir sirkete aittir, dolayisiyla cocuk tekilligi de sirket kapsamlidir.</para>
+    /// </summary>
+    private static readonly (string Table, string Index)[] CompanyScopedUniqueIndexTargets =
+    {
+        ("ActivityReason",           "UX_ActivityReason_TypeCode"),
+        ("ApprovalSqlQuery",         "UX_ApprovalSqlQuery_Name"),                 // UNIQUE CONSTRAINT
+        ("BpmFormDefinition",        "UX_BpmFormDefinition_Code"),
+        ("CompanyHoliday",           "UX_CompanyHoliday_Date"),                   // filtreli: tek 1 Ocak
+        ("Contact",                  "uq_contact_accounts_code"),                 // UNIQUE CONSTRAINT
+        ("ContactPersonTitle",       "UX_ContactPersonTitle_Name"),
+        ("Currency",                 "UX_Currency_Code"),
+        ("Currency",                 "ux_currencies_code"),                       // legacy ad
+        ("DataImportJob",            "UX_DataImportJob_Name"),
+        ("DocLayout",                "ux_DocLayout_Code"),
+        ("DocLayoutRule",            "ux_DocLayoutRule_Combo"),
+        ("Document",                 "UX_Document_Number"),                       // EN KRITIK (belge no)
+        ("DocumentType",             "UX_DocumentType_Code"),
+        ("DocumentType",             "ux_document_types_code"),                   // legacy ad
+        ("ErpConnectionSetting",     "UX_ErpConnectionSetting_Provider_Company_Business_Branch"),
+        ("ExternalDbConnection",     "UX_ExternalDbConnection_Name"),
+        ("FldSet",                   "ux_FldSet_FormField"),                      // FormId -> Forms GLOBAL
+        ("FormFieldBehavior",        "UX_FormFieldBehavior_Form_Field"),
+        ("ImportTemplate",           "UX_ImportTemplate_Name"),
+        ("IncomingDocument",         "UX_IncomingDocument_EnvelopeId"),
+        ("IncomingDocument",         "UX_IncomingDocument_Kind_DocumentNumber_RecipientTaxNumber"),
+        ("IntegrationLookupFunction","UX_IntegrationLookupFunction_Code"),
+        ("ItemConfiguration",        "ux_ProductConfiguration_Config_Material_RecordCode"),
+        ("ItemConfiguration",        "ux_ProductConfiguration_Feature_RecordCode"),
+        ("Items",                    "UX_Items_Barcode"),
+        ("LineCardLayout",           "UX_LineCardLayout_FormCode"),
+        ("Location",                 "ux_Locations_LocationCode"),
+        ("LocationSection",          "UX_LocationSection_Name"),
+        ("LocationType",             "UX_LocationType_Code"),
+        ("MaterialCardFieldOption",  "UX_MaterialCardFieldOption_FieldDefinition_OptionKey"), // Field GLOBAL
+        ("MaterialGroups",           "uq_material_groups_cat_code"),              // UNIQUE CONSTRAINT
+        ("ProjectTaskTemplate",      "UX_ProjectTaskTemplate_Name"),
+        ("QualityDefectCode",        "UX_QualityDefectCode_Name"),
+        ("ReportSource",             "UX_ReportSource_Name"),
+        ("RptDef",                   "ux_RptDef_Code"),
+        ("RptView",                  "ux_RptView_Code"),
+        ("SalesRepresentative",      "UX_SalesRepresentative_RepName"),
+        ("SalesRepresentative",      "ux_sales_representatives_name"),            // legacy ad
+        ("ScreenLayoutDefinition",   "UX_ScreenLayoutDefinition_ScreenCode"),
+        ("Shift",                    "UX_Shift_Code"),
+        ("ShiftScenario",            "UX_ShiftScenario_Default"),                 // filtreli: tek varsayilan
+        ("Unit",                     "UX_Unit_Code"),
+        ("WaContact",                "UX_WaContact_PrimaryPhone"),
+        ("WaContactJid",             "UX_WaContactJid_Jid"),                      // UNIQUE CONSTRAINT
+        ("WaGroup",                  "UX_WaGroup_Jid"),                           // UNIQUE CONSTRAINT (kolon-ici)
+        ("WaInbox",                  "UX_WaInbox_BridgeMsgId"),
+        ("WorkflowDefinition",       "UX_WorkflowDefinition_Name_Active"),
+    };
+
+    /// <summary>
+    /// Mukerrer / olu tekillik index'leri - sirket kapsamli yapilmaz, DUSURULUR. Keeper alani
+    /// tekilligi devralan index'tir; DROP yalnizca o dogrulandiktan sonra yapilir.
+    /// </summary>
+    private static readonly (string Table, string Drop, string Keeper, string Reason)[] RedundantUniqueIndexDrops =
+    {
+        // Ayni kolonun ikinci kopyasi; kodda [UX_notes_share_token] adina hicbir referans yok.
+        ("Note",        "UX_notes_share_token", "UX_Note_share_token",           "legacy artik, ayni kolonun kopyasi"),
+        // Global ad tekilligi; sirket kapsamli surumu zaten kurulu.
+        ("SmtpProfile", "UX_SmtpProfile_Name",  "UX_SmtpProfile_CompanyId_Name", "global ad tekilligi"),
     };
 
     private async Task EnsureInferredForeignKeysAsync(SqlConnection connection, CancellationToken cancellationToken)
@@ -2594,8 +2879,10 @@ END;";
                     [Updated] DATETIME NULL
                 );
 
+                -- 2026-08-27 KIRACI AYRIMI: buradaki [Company] ERP tarafinin FIRMA KODU'dur (string),
+                -- kiraci degil. Kiraci ayrimi icin [CompanyId] LIDER kolon olarak eklendi.
                 CREATE UNIQUE INDEX [UX_ErpConnectionSetting_Provider_Company_Business_Branch]
-                    ON [{schemaForSql}].[ErpConnectionSetting]([Provider], [Company], [Business], [Branch]);
+                    ON [{schemaForSql}].[ErpConnectionSetting]([CompanyId], [Provider], [Company], [Business], [Branch]);
             END;
 
             IF OBJECT_ID(N'[{schemaForSql}].[IncomingDocument]', N'U') IS NULL
@@ -5051,7 +5338,7 @@ END;";
             BEGIN
                 EXEC(N'
                     CREATE UNIQUE INDEX [UX_ErpConnectionSetting_Provider_Company_Business_Branch]
-                    ON [{schemaForSql}].[ErpConnectionSetting]([Provider], [Company], [Business], [Branch]);
+                    ON [{schemaForSql}].[ErpConnectionSetting]([CompanyId], [Provider], [Company], [Business], [Branch]);
                 ');
             END;
             """;
@@ -6814,7 +7101,8 @@ END;";
                     [SalesRepresentativeId] INT     NULL,
                     [ContactGroupId] INT            NULL,
                     [Created]        DATETIME      NOT NULL,
-                    CONSTRAINT [uq_contact_accounts_code] UNIQUE ([AccountCode])
+                    -- 2026-08-27 KIRACI AYRIMI: cari kodu SIRKET BASINA tekil (CompanyId lider kolon).
+                    CONSTRAINT [uq_contact_accounts_code] UNIQUE ([CompanyId], [AccountCode])
                 );
 
                 CREATE INDEX [ix_contact_accounts_type]
@@ -9006,7 +9294,10 @@ END;";
                     [Updated]           DATETIME     NULL,
                     [IsActive]          BIT              NOT NULL DEFAULT(1)
                 );
-                CREATE UNIQUE INDEX [UX_Document_Number] ON [{s}].[Document]([DocumentNumber]);
+                -- 2026-08-27 KIRACI AYRIMI: belge numarasi SIRKET BASINA tekildir. Numerator uretimi
+                -- zaten (CompanyId, EntityType) bazlidir; global tekillik ikinci sirketin ILK
+                -- belgesini kaydetmesini engelliyordu. CompanyId LIDER kolon.
+                CREATE UNIQUE INDEX [UX_Document_Number] ON [{s}].[Document]([CompanyId], [DocumentNumber]);
                 CREATE INDEX [IX_Document_Status] ON [{s}].[Document]([Status]);
                 CREATE INDEX [IX_Document_Contact] ON [{s}].[Document]([ContactId]);
                 CREATE INDEX [IX_Document_Company] ON [{s}].[Document]([CompanyId]);
