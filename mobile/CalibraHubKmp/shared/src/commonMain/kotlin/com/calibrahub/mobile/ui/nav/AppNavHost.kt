@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
@@ -24,12 +23,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.calibrahub.mobile.session.SessionManager
 import com.calibrahub.mobile.session.SessionProbeResult
+import com.calibrahub.mobile.ui.common.CalibrationIndicator
 import com.calibrahub.mobile.ui.common.PlaceholderScreen
 import com.calibrahub.mobile.ui.home.HomeScreen
 import com.calibrahub.mobile.ui.login.LoginScreen
@@ -93,7 +94,15 @@ fun AppNavHost(session: SessionManager) {
         startRoute = if (!canAutoLogin) {
             "login"
         } else {
-            when (val probe = session.probeSession()) {
+            // ACILIS PROBE'U ICIN KISA TAVAN (3,5 sn): HttpClient'in genel zaman asimi
+            // 20 sn istek / 15 sn baglanti (bkz. HttpClientFactory) — normal ekranlarda
+            // dogru, ama ACILISTA sunucuya ulasilamiyorsa (yanlis IP, VPN, kapali sunucu)
+            // kullanici 15-20 sn "Kalibre ediliyor..." ekranina bakiyordu. Tavan asilirsa
+            // login'e dusulur; kalici cerez SILINMEZ (probe Error dalindaki ayni karar),
+            // yani gecici bir ag sorunu "beni hatirla" tercihini bozmaz.
+            val probe = withTimeoutOrNull(AUTO_LOGIN_PROBE_TIMEOUT_MS) { session.probeSession() }
+                ?: SessionProbeResult.Error("zaman asimi")
+            when (probe) {
                 is SessionProbeResult.Success -> {
                     val dto = probe.dto
                     session.persistSessionDisplay(
@@ -123,10 +132,10 @@ fun AppNavHost(session: SessionManager) {
     if (startRoute == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator()
-                Spacer(modifier = Modifier.height(12.dp))
+                CalibrationIndicator()
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "Kontrol ediliyor…",
+                    text = "Kalibre ediliyor…",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -370,3 +379,11 @@ fun AppNavHost(session: SessionManager) {
         }
     }
 }
+
+/**
+ * Acilis oturum probe'u icin tavan sure. HttpClient'in genel zaman asimlarindan (20 sn istek /
+ * 15 sn baglanti) BILINCLI olarak cok daha kisa: acilista amac "oturum hala gecerli mi" sorusuna
+ * HIZLI yanit almak; ulasilamayan sunucu icin dogru davranis uzun beklemek degil, login ekranina
+ * dusup kullaniciya kontrol vermektir (sunucu adresini oradan duzeltebilir).
+ */
+private const val AUTO_LOGIN_PROBE_TIMEOUT_MS = 3_500L
