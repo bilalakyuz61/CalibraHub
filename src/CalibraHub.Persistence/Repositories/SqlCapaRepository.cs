@@ -39,7 +39,7 @@ public sealed class SqlCapaRepository : ICapaRepository
 
     public async Task<IReadOnlyCollection<CapaListItemDto>> ListAsync(string? search, byte? status, CancellationToken ct)
     {
-        var where = "d.[IsActive] = 1";
+        var where = "d.[IsActive] = 1 AND c.[CompanyId] = @Company";
         if (status.HasValue) where += " AND c.[Status] = @Status";
         if (!string.IsNullOrWhiteSpace(search)) where += " AND (d.[DocumentNumber] LIKE @S OR c.[Title] LIKE @S)";
         var sql = $"""
@@ -56,6 +56,7 @@ public sealed class SqlCapaRepository : ICapaRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
+        cmd.Parameters.Add(new SqlParameter("@Company", _connectionFactory.ResolveEffectiveCompanyId()));
         if (status.HasValue) cmd.Parameters.Add(new SqlParameter("@Status", status.Value));
         if (!string.IsNullOrWhiteSpace(search)) cmd.Parameters.Add(new SqlParameter("@S", $"%{search.Trim()}%"));
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -93,12 +94,13 @@ public sealed class SqlCapaRepository : ICapaRepository
                    c.[CreatedById],c.[Created],c.[UpdatedById],c.[Updated]
             FROM {_capaTable} c
             INNER JOIN {_docTable} d ON d.[id] = c.[DocumentId]
-            WHERE c.[DocumentId]=@Doc AND d.[IsActive]=1;
+            WHERE c.[DocumentId]=@Doc AND c.[CompanyId]=@Company AND d.[IsActive]=1;
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@Doc", documentId));
+        cmd.Parameters.Add(new SqlParameter("@Company", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct)) return null;
         return new Capa
@@ -143,22 +145,23 @@ public sealed class SqlCapaRepository : ICapaRepository
             LEFT JOIN {_defectTable} dc ON dc.[Id] = c.[DefectCodeId]
             LEFT JOIN {_personnelTable} rp ON rp.[Id] = c.[ResponsiblePersonnelId]
             LEFT JOIN {_personnelTable} vp ON vp.[Id] = c.[VerifiedByPersonnelId]
-            WHERE c.[DocumentId] = @Doc AND d.[IsActive] = 1;
+            WHERE c.[DocumentId] = @Doc AND c.[CompanyId] = @Company AND d.[IsActive] = 1;
             SELECT a.[Id], a.[ActionType], a.[Description], a.[ResponsiblePersonnelId], ap.[FullName] AS ResponsibleName,
                    a.[DueDate], a.[Status], a.[CompletedAt], a.[OrderNo]
             FROM {_actionTable} a
             LEFT JOIN {_personnelTable} ap ON ap.[Id] = a.[ResponsiblePersonnelId]
-            WHERE a.[CapaId] = (SELECT [Id] FROM {_capaTable} WHERE [DocumentId] = @Doc)
+            WHERE a.[CapaId] = (SELECT [Id] FROM {_capaTable} WHERE [DocumentId] = @Doc AND [CompanyId] = @Company)
             ORDER BY a.[OrderNo], a.[Id];
             SELECT rc.[Id], rc.[Method], rc.[Category], rc.[Sequence], rc.[Text]
             FROM {_rootCauseTable} rc
-            WHERE rc.[CapaId] = (SELECT [Id] FROM {_capaTable} WHERE [DocumentId] = @Doc)
+            WHERE rc.[CapaId] = (SELECT [Id] FROM {_capaTable} WHERE [DocumentId] = @Doc AND [CompanyId] = @Company)
             ORDER BY rc.[Method], rc.[Category], rc.[Sequence], rc.[Id];
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@Doc", documentId));
+        cmd.Parameters.Add(new SqlParameter("@Company", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct)) return null;
         var capaType = r.GetByte(2);
@@ -354,7 +357,8 @@ public sealed class SqlCapaRepository : ICapaRepository
         var list = new List<CapaPersonnelOption>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT [Id],[FullName] FROM {_personnelTable} WHERE [IsActive] = 1 ORDER BY [FullName];";
+        cmd.CommandText = $"SELECT [Id],[FullName] FROM {_personnelTable} WHERE [IsActive] = 1 AND [CompanyId] = @Company ORDER BY [FullName];";
+        cmd.Parameters.Add(new SqlParameter("@Company", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
             list.Add(new CapaPersonnelOption(r.GetInt32(0), r.GetString(1)));
@@ -384,40 +388,40 @@ public sealed class SqlCapaRepository : ICapaRepository
                 SUM(CASE WHEN c.[Status] = 4 AND c.[ClosedAt] >= @MonthStart THEN 1 ELSE 0 END) AS ClosedThisMonth
             FROM {_capaTable} c
             INNER JOIN {_docTable} d ON d.[id] = c.[DocumentId]
-            WHERE d.[IsActive] = 1;
+            WHERE d.[IsActive] = 1 AND c.[CompanyId] = @Company;
 
             SELECT AVG(CAST(DATEDIFF(day, c.[Created], c.[ClosedAt]) AS FLOAT)) AS AvgClosureDays
             FROM {_capaTable} c
             INNER JOIN {_docTable} d ON d.[id] = c.[DocumentId]
-            WHERE d.[IsActive] = 1 AND c.[Status] = 4 AND c.[ClosedAt] IS NOT NULL;
+            WHERE d.[IsActive] = 1 AND c.[CompanyId] = @Company AND c.[Status] = 4 AND c.[ClosedAt] IS NOT NULL;
 
             SELECT c.[Status] AS Bucket, COUNT(*) AS Cnt
             FROM {_capaTable} c INNER JOIN {_docTable} d ON d.[id] = c.[DocumentId]
-            WHERE d.[IsActive] = 1 GROUP BY c.[Status];
+            WHERE d.[IsActive] = 1 AND c.[CompanyId] = @Company GROUP BY c.[Status];
 
             SELECT c.[CapaType] AS Bucket, COUNT(*) AS Cnt
             FROM {_capaTable} c INNER JOIN {_docTable} d ON d.[id] = c.[DocumentId]
-            WHERE d.[IsActive] = 1 GROUP BY c.[CapaType];
+            WHERE d.[IsActive] = 1 AND c.[CompanyId] = @Company GROUP BY c.[CapaType];
 
             SELECT c.[Severity] AS Bucket, COUNT(*) AS Cnt
             FROM {_capaTable} c INNER JOIN {_docTable} d ON d.[id] = c.[DocumentId]
-            WHERE d.[IsActive] = 1 GROUP BY c.[Severity];
+            WHERE d.[IsActive] = 1 AND c.[CompanyId] = @Company GROUP BY c.[Severity];
 
             SELECT YEAR(c.[Created]) AS Yr, MONTH(c.[Created]) AS Mo, COUNT(*) AS Cnt
             FROM {_capaTable} c INNER JOIN {_docTable} d ON d.[id] = c.[DocumentId]
-            WHERE d.[IsActive] = 1 AND c.[Created] >= @TrendStart
+            WHERE d.[IsActive] = 1 AND c.[CompanyId] = @Company AND c.[Created] >= @TrendStart
             GROUP BY YEAR(c.[Created]), MONTH(c.[Created]);
 
             SELECT YEAR(c.[ClosedAt]) AS Yr, MONTH(c.[ClosedAt]) AS Mo, COUNT(*) AS Cnt
             FROM {_capaTable} c INNER JOIN {_docTable} d ON d.[id] = c.[DocumentId]
-            WHERE d.[IsActive] = 1 AND c.[Status] = 4 AND c.[ClosedAt] >= @TrendStart
+            WHERE d.[IsActive] = 1 AND c.[CompanyId] = @Company AND c.[Status] = 4 AND c.[ClosedAt] >= @TrendStart
             GROUP BY YEAR(c.[ClosedAt]), MONTH(c.[ClosedAt]);
 
             SELECT TOP 8 c.[ResponsiblePersonnelId] AS PersonnelId, p.[FullName] AS Name, COUNT(*) AS Cnt
             FROM {_capaTable} c
             INNER JOIN {_docTable} d ON d.[id] = c.[DocumentId]
             INNER JOIN {_personnelTable} p ON p.[Id] = c.[ResponsiblePersonnelId]
-            WHERE d.[IsActive] = 1 AND c.[ResponsiblePersonnelId] IS NOT NULL AND c.[Status] NOT IN (4,5)
+            WHERE d.[IsActive] = 1 AND c.[CompanyId] = @Company AND c.[ResponsiblePersonnelId] IS NOT NULL AND c.[Status] NOT IN (4,5)
             GROUP BY c.[ResponsiblePersonnelId], p.[FullName]
             ORDER BY COUNT(*) DESC;
             """;
@@ -428,6 +432,7 @@ public sealed class SqlCapaRepository : ICapaRepository
         cmd.Parameters.Add(new SqlParameter("@Today", today));
         cmd.Parameters.Add(new SqlParameter("@MonthStart", monthStart));
         cmd.Parameters.Add(new SqlParameter("@TrendStart", trendStart));
+        cmd.Parameters.Add(new SqlParameter("@Company", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await using var r = await cmd.ExecuteReaderAsync(ct);
 

@@ -689,14 +689,17 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     public async Task<IReadOnlyCollection<FeatureValue>> GetPropertyValuesAsync(CancellationToken cancellationToken)
     {
         var values = new List<FeatureValue>();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             SELECT [Id], [FeatureId], [Code], [Description], [Value], [SortOrder], [IsActive], [Created]
             FROM {_propertyValuesTableName}
+            WHERE [CompanyId] = @CompanyId
             ORDER BY [FeatureId], [SortOrder], [Code];
             """;
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -726,6 +729,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     public async Task<IReadOnlyCollection<ItemFeatureMapping>> GetStockPropertyMappingsAsync(CancellationToken cancellationToken)
     {
         var mappings = new List<ItemFeatureMapping>();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -734,8 +738,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             SELECT [Id], [ItemId], [FeatureId], [FeatureValueId], [IsActive], [Created],
                    ISNULL([PrintDescriptionInDesign], 1) AS [PrintDescriptionInDesign]
             FROM {_itemFeatureMappingsTableName}
+            WHERE [CompanyId] = @CompanyId
             ORDER BY [Created] DESC;
             """;
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -765,6 +771,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         CancellationToken cancellationToken)
     {
         var records = new List<ItemConfiguration>();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -772,8 +779,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.CommandText = $"""
             SELECT [Id], [ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [Created], [VisibleInDesign]
             FROM {_itemConfigurationTableName}
+            WHERE [CompanyId] = @CompanyId
             ORDER BY [RecordType], [ParentId], [RecordCode], [Id];
             """;
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -800,6 +809,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         CancellationToken cancellationToken)
     {
         var definitions = new List<Unit>();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -808,8 +818,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.CommandText = $"""
             SELECT [Id], [Code], [Name], [SortOrder], [IsActive], [IntlCode]
             FROM {_measureUnitDefinitionsTableName}
+            WHERE [CompanyId] = @CompanyId
             ORDER BY [SortOrder], [Code];
             """;
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         SqlDataReader reader;
         try
@@ -824,8 +836,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             cmd2.CommandText = $"""
                 SELECT [Id], [Code], [Name], [SortOrder], [IsActive]
                 FROM {_measureUnitDefinitionsTableName}
+                WHERE [CompanyId] = @CompanyId
                 ORDER BY [SortOrder], [Code];
                 """;
+            cmd2.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             reader = await cmd2.ExecuteReaderAsync(cancellationToken);
         }
 
