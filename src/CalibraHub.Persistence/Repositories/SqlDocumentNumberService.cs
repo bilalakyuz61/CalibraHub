@@ -73,6 +73,7 @@ public sealed class SqlDocumentNumberService : IDocumentNumberService
                    [ResetPeriod],[TotalLength],[Weight],[IsActive]
             FROM {_ruleTable}
             WHERE [IsActive] = 1
+              AND [CompanyId] = @CompanyId
               AND [DocumentTypeId] = @DocumentTypeId
               AND ([ContactId]      IS NULL OR [ContactId]      = @ContactId)
               AND ([ContactGroupId] IS NULL OR [ContactGroupId] = @ContactGroupId)
@@ -81,6 +82,12 @@ public sealed class SqlDocumentNumberService : IDocumentNumberService
               AND ([FromDate]       IS NULL OR [FromDate] <= @IssueDate)
               AND ([ToDate]         IS NULL OR [ToDate]   >= @IssueDate);
             """;
+        // Kiraci suzgeci: sayac (DocumentNumberCounter) kuralin COCUGU, RuleId ile bagli.
+        // Kural burada sirkete gore suzuldugu icin sayac da kendiliginden sirkete ozel olur —
+        // sayac sorgularina ayrica CompanyId eklemeye gerek yok. Bu suzgec olmadan iki sirket
+        // ayni kurali ve dolayisiyla AYNI SAYACI paylasiyordu: birinin urettigi belge
+        // numarasi digerinin numaralarini atlatiyordu.
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@DocumentTypeId", ctx.DocumentTypeId));
         cmd.Parameters.Add(new SqlParameter("@ContactId",      (object?)ctx.ContactId      ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@ContactGroupId", (object?)ctx.ContactGroupId ?? DBNull.Value));
@@ -146,6 +153,10 @@ public sealed class SqlDocumentNumberService : IDocumentNumberService
         {
             // 1) Lock + select (UPDLOCK + HOLDLOCK = serializable for this row)
             long current;
+            // tenant-ok: sayac (DocumentNumberCounter) kuralin COCUGU. Kural
+            // LoadCandidateRulesAsync'te CompanyId ile suzuluyor, dolayisiyla buradaki
+            // RuleId zaten bu sirkete ait. Sayaca ayrica CompanyId eklemek gereksiz
+            // tekrar olurdu.
             await using (var sel = conn.CreateCommand())
             {
                 sel.Transaction = tx;
@@ -164,6 +175,7 @@ public sealed class SqlDocumentNumberService : IDocumentNumberService
                     var existingMax = await ReadMaxExistingCounterAsync(conn, tx, rule, date, ct);
                     current = Math.Max((long)(rule.CounterStart - 1), existingMax);
 
+                    // tenant-ok: rule.Id yukarida CompanyId ile suzulmus kuraldan gelir.
                     await using var ins = conn.CreateCommand();
                     ins.Transaction = tx;
                     ins.CommandText = $"""
@@ -186,6 +198,10 @@ public sealed class SqlDocumentNumberService : IDocumentNumberService
             while (await DocumentNumberExistsAsync(conn, tx, rule, date, next, ct))
                 next++;
 
+            // tenant-ok: sayac (DocumentNumberCounter) kuralin COCUGU. Kural
+            // LoadCandidateRulesAsync'te CompanyId ile suzuluyor, dolayisiyla buradaki
+            // RuleId zaten bu sirkete ait. Sayaca ayrica CompanyId eklemek gereksiz
+            // tekrar olurdu.
             await using (var upd = conn.CreateCommand())
             {
                 upd.Transaction = tx;

@@ -38,8 +38,10 @@ public sealed class SqlDocumentNumberRuleRepository : IDocumentNumberRuleReposit
                    [ResetPeriod],[TotalLength],[Weight],[IsActive],
                    [CreatedById],[Created],[UpdatedById],[Updated]
             FROM {_table}
+            WHERE [CompanyId] = @CompanyId
             ORDER BY [Weight] DESC, [Name];
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct)) list.Add(Map(reader));
         return list;
@@ -55,9 +57,10 @@ public sealed class SqlDocumentNumberRuleRepository : IDocumentNumberRuleReposit
                    [Prefix],[YearFormat],[MonthFormat],[CounterLength],[CounterStart],
                    [ResetPeriod],[TotalLength],[Weight],[IsActive],
                    [CreatedById],[Created],[UpdatedById],[Updated]
-            FROM {_table} WHERE [Id] = @Id;
+            FROM {_table} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? Map(reader) : null;
     }
@@ -81,7 +84,7 @@ public sealed class SqlDocumentNumberRuleRepository : IDocumentNumberRuleReposit
                   [ResetPeriod]=@ResetPeriod,[TotalLength]=@TotalLength,
                   [Weight]=@Weight,[IsActive]=@IsActive,
                   [UpdatedById]=@UpdatedById,[Updated]=SYSUTCDATETIME()
-                WHERE [Id]=@Id;
+                WHERE [Id]=@Id AND [CompanyId]=@CompanyId;
                 SELECT @Id;
                 """;
             cmd.Parameters.Add(new SqlParameter("@Id", rule.Id));
@@ -93,15 +96,16 @@ public sealed class SqlDocumentNumberRuleRepository : IDocumentNumberRuleReposit
                   ([Name],[DocumentTypeId],
                    [ContactId],[ContactGroupId],[UserId],[BranchId],[FromDate],[ToDate],
                    [Prefix],[YearFormat],[MonthFormat],[CounterLength],[CounterStart],
-                   [ResetPeriod],[TotalLength],[Weight],[IsActive],[CreatedById])
+                   [ResetPeriod],[TotalLength],[Weight],[IsActive],[CreatedById],[CompanyId])
                 OUTPUT INSERTED.[Id]
                 VALUES
                   (@Name,@DocumentTypeId,
                    @ContactId,@ContactGroupId,@UserId,@BranchId,@FromDate,@ToDate,
                    @Prefix,@YearFormat,@MonthFormat,@CounterLength,@CounterStart,
-                   @ResetPeriod,@TotalLength,@Weight,@IsActive,@CreatedById);
+                   @ResetPeriod,@TotalLength,@Weight,@IsActive,@CreatedById,@CompanyId);
                 """;
         }
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         AddParams(cmd, rule);
         var result = await cmd.ExecuteScalarAsync(ct);
         return Convert.ToInt32(result);
@@ -111,8 +115,9 @@ public sealed class SqlDocumentNumberRuleRepository : IDocumentNumberRuleReposit
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id]=@Id;";  // counters CASCADE düşer
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";  // counters CASCADE düşer
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -121,12 +126,16 @@ public sealed class SqlDocumentNumberRuleRepository : IDocumentNumberRuleReposit
         var list = new List<DocumentNumberCounter>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // tenant-ok: sayac kurala INNER JOIN ile bagli, kural CompanyId ile suzuluyor.
         cmd.CommandText = $"""
-            SELECT [Id],[RuleId],[ResetKey],[CurrentValue],[LastUpdated]
-            FROM {_counterTable} WHERE [RuleId]=@RuleId
-            ORDER BY [ResetKey] DESC;
+            SELECT c.[Id],c.[RuleId],c.[ResetKey],c.[CurrentValue],c.[LastUpdated]
+            FROM {_counterTable} c
+            INNER JOIN {_table} r ON r.[Id] = c.[RuleId] AND r.[CompanyId] = @CompanyId
+            WHERE c.[RuleId]=@RuleId
+            ORDER BY c.[ResetKey] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@RuleId", ruleId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
@@ -149,8 +158,12 @@ public sealed class SqlDocumentNumberRuleRepository : IDocumentNumberRuleReposit
         cmd.CommandText = $"""
             UPDATE {_counterTable}
             SET [CurrentValue]=0, [LastUpdated]=SYSUTCDATETIME()
-            WHERE [RuleId]=@RuleId AND [ResetKey]=@ResetKey;
+            WHERE [RuleId]=@RuleId AND [ResetKey]=@ResetKey
+              AND EXISTS (SELECT 1 FROM {_table} r
+                          WHERE r.[Id] = [RuleId] AND r.[CompanyId] = @CompanyId);
             """;
+        // ruleId ISTEMCIDEN gelir: EXISTS olmadan baska sirketin sayaci sifirlanabilirdi.
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@RuleId", ruleId));
         cmd.Parameters.Add(new SqlParameter("@ResetKey", resetKey ?? string.Empty));
         await cmd.ExecuteNonQueryAsync(ct);

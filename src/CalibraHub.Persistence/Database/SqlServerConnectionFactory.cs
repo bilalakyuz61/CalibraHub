@@ -114,8 +114,58 @@ public sealed class SqlServerConnectionFactory : IDbConnectionFactory
     }
 
     /// <summary>
-    /// Mevcut request'in company_id claim degerini dondurur. Authenticated degilse 0 doner —
-    /// SQL filtrelerinde "WHERE CompanyId = @CompanyId" calisir, 0 ile eslesen kayit yoksa bos liste doner.
+    /// Kiracı süzgeçlerinde (<c>WHERE CompanyId = @CompanyId</c>) kullanılacak değer.
+    ///
+    /// <para>Kimlikli istekte oturumun şirketi; kimliksiz yollarda (açılış, migration, arka plan
+    /// işleri, kurulum sihirbazı) <b>veritabanının sahibi şirket</b>. Sıfır dönmek fail-closed
+    /// olurdu ve arka plan işleri sessizce boş veri görürdü — bu projede en pahalı hata sınıfı
+    /// (2026-08-27 kullanıcı kararı: "CompanyId = 1").</para>
+    ///
+    /// <para>Sahip şirket sabit <c>1</c> DEĞİL, sorgulanır: her veritabanında sahip farklı bir
+    /// id taşıyabilir; sabitlemek başka bir şirketin verisine yazmak demekti. Bugünkü kurulumda
+    /// sonuç zaten 1'dir. Bağlantı dizesi başına bir kez çözülür ve önbelleğe alınır.</para>
+    /// </summary>
+    public int ResolveEffectiveCompanyId()
+    {
+        var current = ResolveCurrentCompanyId();
+        if (current > 0) return current;
+
+        var key = ResolveConnectionString();
+        if (OwnerCompanyCache.TryGetValue(key, out var cached)) return cached;
+
+        var owner = 0;
+        try
+        {
+            using var conn = new SqlConnection(EnsureMars(key));
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            // TEST_ sirketleri ELENIR: bir test sirketi canli sirketle ayni DB'ye dustugunde
+            // (DatabaseName bos birakilinca oluyor) gecmis veriyi ona devretmek olurdu.
+            cmd.CommandText = """
+                IF OBJECT_ID('dbo.Company', 'U') IS NULL SELECT CAST(NULL AS INT);
+                ELSE SELECT TOP (1) [Id] FROM dbo.[Company]
+                     WHERE [name] IS NULL OR [name] NOT LIKE 'TEST!_%' ESCAPE '!'
+                     ORDER BY [Id];
+                """;
+            var v = cmd.ExecuteScalar();
+            if (v is not null && v != DBNull.Value) owner = Convert.ToInt32(v);
+        }
+        catch (Exception ex)
+        {
+            // Cozulemezse 0 doner ve suzgec hicbir sey getirmez. Sessiz kalma: sebebi yaz.
+            Console.WriteLine($"[Tenant] Sahip sirket cozulemedi, suzgec bos donecek: {ex.Message}");
+        }
+
+        OwnerCompanyCache[key] = owner;
+        return owner;
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> OwnerCompanyCache = new();
+
+    /// <summary>
+    /// Mevcut request'in company_id claim degerini dondurur. Authenticated degilse 0 doner.
+    /// Kiraci suzgeci icin <see cref="ResolveEffectiveCompanyId"/> kullanin — bu metod
+    /// ham claim degerini verir, geri donus degeri YOKTUR.
     /// </summary>
     public int ResolveCurrentCompanyId()
     {
