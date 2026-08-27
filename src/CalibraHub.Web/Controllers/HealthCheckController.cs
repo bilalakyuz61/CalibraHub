@@ -136,6 +136,12 @@ public sealed class HealthCheckController : Controller
         var total = checks.Count + infraSpecs.Count;
         var results = new List<CheckResult>(total);
 
+        // Hazırlık konsolu (2026-08-27 kullanıcı isteği): form kontrolleri MEVCUT şirkette
+        // koşar — test şirketi açılmaz. Buradaki adımlar bir şey KURMAZ, koşulacak ortamı
+        // tespit edip gösterir; kullanıcı "hangi veritabanına bakıyorum" sorusunu ekranı
+        // terk etmeden yanıtlayabilsin diye açık açık yazılır.
+        await StreamCurrentEnvironmentAsync(checks.Count, infraSpecs.Count, ct);
+
         // items: arayüz kontrol edilecek TÜM satırları baştan "bekliyor" olarak çizsin diye
         // gönderilir; sonuçlar geldikçe satırlar yerinde renk değiştirir (2026-08-24 kullanıcı isteği).
         await WriteFrameAsync(new
@@ -583,6 +589,84 @@ public sealed class HealthCheckController : Controller
         };
     }
 
+    /// <summary>
+    /// Form kontrollerinden ÖNCE çalışan hazırlık konsolu: koşulacak ortamı tespit edip
+    /// adım adım yayınlar. Hiçbir şey KURMAZ — mevcut şirkette çalışıldığı için kurulacak
+    /// bir şey yoktur; amaç "hangi şirket, hangi veritabanı, kaç ekran" sorularını
+    /// kullanıcının ekranı terk etmeden yanıtlayabilmesi.
+    ///
+    /// Her adım kendi bulgusunu (<c>detail</c>) taşır; boş bir ilerleme çubuğu yerine
+    /// gerçekten keşfedilen bilgi gösterilir.
+    /// </summary>
+    private async Task StreamCurrentEnvironmentAsync(int screenCount, int infraCount, CancellationToken ct)
+    {
+        var labels = new[]
+        {
+            "Oturum doğrulanıyor",
+            "Şirket çözümleniyor",
+            "Veritabanı bağlantısı açılıyor",
+            "Denetlenecek ekranlar toplanıyor",
+        };
+        await WriteFrameAsync(new { type = "setup_start", total = labels.Length, labels, mode = "current" }, ct);
+
+        // 1) Oturum
+        var userEmail = User.Identity?.Name ?? "(bilinmiyor)";
+        var roleName  = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "(rol yok)";
+        await WriteFrameAsync(new
+        {
+            type = "setup_step", step = 1, total = labels.Length, message = labels[0],
+            detail = $"{userEmail} · rol: {roleName}",
+        }, ct);
+
+        // 2) Şirket
+        int.TryParse(User.FindFirst("company_id")?.Value, out var companyId);
+        var company = companyId > 0 ? await _companyRepository.GetByIdAsync(companyId, ct) : null;
+        var companyName = company?.Name ?? (companyId > 0 ? $"#{companyId}" : "(şirket claim'i yok)");
+        await WriteFrameAsync(new
+        {
+            type = "setup_step", step = 2, total = labels.Length, message = labels[1],
+            detail = companyId > 0 ? $"{companyName} (#{companyId})" : companyName,
+        }, ct);
+
+        // 3) Veritabanı — ad + sunucu + gerçekten açılabildi mi (süresiyle)
+        var sw = Stopwatch.StartNew();
+        string dbDetail;
+        var dbOk = false;
+        await using (var probe = await TryOpenAsync(ct))
+        {
+            sw.Stop();
+            if (probe is null)
+            {
+                dbDetail = "Bağlantı AÇILAMADI — altyapı kontrolleri boş dönebilir";
+            }
+            else
+            {
+                dbOk = true;
+                dbDetail = $"{probe.Database} @ {probe.DataSource} · şema {_schema} · {sw.ElapsedMilliseconds} ms";
+            }
+        }
+        await WriteFrameAsync(new
+        {
+            type = "setup_step", step = 3, total = labels.Length, message = labels[2],
+            detail = dbDetail, warn = !dbOk,
+        }, ct);
+
+        // 4) Kapsam
+        await WriteFrameAsync(new
+        {
+            type = "setup_step", step = 4, total = labels.Length, message = labels[3],
+            detail = $"{screenCount} menü ekranı + {infraCount} altyapı kontrolü = {screenCount + infraCount} kontrol",
+        }, ct);
+
+        await WriteFrameAsync(new
+        {
+            type = "setup_done", mode = "current",
+            companyName, userEmail,
+            databaseName = dbOk ? dbDetail : null,
+            testCompanyId = (int?)null,
+        }, ct);
+    }
+
     private async Task<SqlConnection?> TryOpenAsync(CancellationToken ct)
     {
         try { return await _connectionFactory.OpenConnectionAsync(ct); }
@@ -716,8 +800,13 @@ public sealed class HealthCheckController : Controller
     /// </summary>
     [HttpPost("/Admin/HealthCheck/StreamTestCompany")]
     [ValidateAntiForgeryToken]
-    public async Task StreamTestCompany([FromQuery] bool createNewDb = false, CancellationToken ct = default)
+    public async Task StreamTestCompany(CancellationToken ct = default)
     {
+        // Fonksiyon testleri gercek belge/stok hareketi YAZAR — izolasyon pazarlik konusu
+        // degildir, bu yuzden her kosuda yeni veritabani kurulur (2026-08-27 kullanici karari).
+        // Eski "Yeni veritabani olustur" anahtari kaldirildi: kapali birakilmasi testlerin
+        // mevcut sirketin verisine yazmasi demekti.
+        const bool createNewDb = true;
         Response.ContentType = "application/x-ndjson; charset=utf-8";
         Response.Headers.CacheControl = "no-cache";
         Response.Headers["X-Accel-Buffering"] = "no";
@@ -735,7 +824,7 @@ public sealed class HealthCheckController : Controller
             ? new[] { "Veritabanı oluşturuluyor", "Test şirketi oluşturuluyor", "Test kullanıcısı oluşturuluyor", "Test oturumu başlatılıyor" }
             : new[] { "Test şirketi oluşturuluyor", "Test kullanıcısı oluşturuluyor", "Test oturumu başlatılıyor" };
 
-        await WriteFrameAsync(new { type = "setup_start", total = stepTotal, labels = stepLabels }, ct);
+        await WriteFrameAsync(new { type = "setup_start", total = stepTotal, labels = stepLabels, mode = "test" }, ct);
 
         // Mevcut şirketin DB bağlantısını al (template olarak kullanılır)
         int.TryParse(User.FindFirst("company_id")?.Value, out var currentCompanyId);
@@ -846,87 +935,13 @@ public sealed class HealthCheckController : Controller
                 return;
             }
 
-            await WriteFrameAsync(new { type = "setup_done", companyName = testCompanyName, userEmail = testEmail, testCompanyId }, ct);
+            await WriteFrameAsync(new { type = "setup_done", mode = "test", companyName = testCompanyName, userEmail = testEmail, testCompanyId }, ct);
 
-            // Form testleri — mevcut Stream() ile aynı mantık, test kullanıcısının cookie'si ile
-            var checks = BuildCheckList();
-            var infraSpecs = BuildInfraSpecs();
-            var total   = checks.Count + infraSpecs.Count;
-            var results = new List<CheckResult>(total);
-            var client  = _httpFactory.CreateClient("health-check");
-            client.Timeout = TimeSpan.FromSeconds(15);
-
-            // items: arayüz kontrol edilecek TÜM satırları baştan "bekliyor" olarak çizsin diye
-        // gönderilir; sonuçlar geldikçe satırlar yerinde renk değiştirir (2026-08-24 kullanıcı isteği).
-        await WriteFrameAsync(new
-        {
-            type = "start",
-            total,
-            items = checks.Select((c, i) => new { index = i + 1, label = c.Label, parentLabel = c.ParentLabel, path = c.Path })
-                .Concat(infraSpecs.Select((sp, i) => new { index = checks.Count + i + 1, label = sp.Label, parentLabel = (string?)sp.Group, path = (string?)null }))
-                .ToArray(),
-        }, ct);
-
-            for (var i = 0; i < checks.Count; i++)
-            {
-                var target = checks[i];
-                await WriteFrameAsync(new
-                {
-                    type        = "checking",
-                    index       = i + 1,
-                    total,
-                    label       = target.Label,
-                    parentLabel = target.ParentLabel,
-                    path        = target.Path,
-                }, ct);
-
-                var result = await RunSingleAsync(client, baseUrl, testCookieHeader, target, ct);
-                results.Add(result);
-
-                await WriteFrameAsync(new { type = "result", index = i + 1, total, result }, ct);
-            }
-
-            // Altyapı / Şema derinlik kontrolleri:
-            //  - createNewDb: yeni test DB'sinin (init edilmiş, kullanılabilir) conn string'i
-            //  - değilse: test şirketi mevcut DB'de → factory ile (şifre çözülmüş) aç
-            await using (var infraConn = createNewDb
-                ? await TryOpenConnStrAsync(connectionString, ct)
-                : await TryOpenAsync(ct))
-            {
-                for (var j = 0; j < infraSpecs.Count; j++)
-                {
-                    var spec = infraSpecs[j];
-                    await WriteFrameAsync(new
-                    {
-                        type        = "checking",
-                        index       = checks.Count + j + 1,
-                        total,
-                        label       = spec.Label,
-                        parentLabel = spec.Group,
-                        path        = "",
-                    }, ct);
-                    var result = await RunInfraAsync(spec, infraConn, ct);
-                    results.Add(result);
-                    await WriteFrameAsync(new { type = "result", index = checks.Count + j + 1, total, result }, ct);
-                }
-            }
-
-            await WriteFrameAsync(new
-            {
-                type    = "done",
-                summary = new
-                {
-                    total,
-                    ok         = results.Count(r => r.Status == "ok"),
-                    redirect   = results.Count(r => r.Status == "redirect"),
-                    warn       = results.Count(r => r.Status == "warn"),
-                    error      = results.Count(r => r.Status == "error"),
-                    exception  = results.Count(r => r.Status == "exception"),
-                    durationMs = results.Sum(r => r.DurationMs),
-                    testCompanyId,
-                    testCompanyName,
-                },
-            }, ct);
+            // Hazirlik BURADA biter (2026-08-27). Form kontrolleri artik MEVCUT sirkette
+            // kosuyor (/Admin/HealthCheck/Stream) — bu uc yalniz Fonksiyon Testleri icin
+            // izole sirket+veritabani kurar. Eskiden form kontrollerini de burada kosturmak,
+            // her calistirmada gereksiz bir test sirketi acilmasina yol aciyordu.
+            await WriteFrameAsync(new { type = "setup_ready", companyName = testCompanyName, testCompanyId }, ct);
         }
         catch (Exception ex)
         {
