@@ -155,6 +155,18 @@
 
     /* ── Kurulum alt adımları ─────────────────────────────────────────── */
     .hc-substep-list { padding: 12px 16px; display: flex; flex-direction: column; gap: 7px; }
+    /* Adimin BULDUGU bilgi — etiketin yaninda, ikincil tonda. */
+    .hc-setup-detail {
+        color: #64748b; font-size: 12px; margin-left: 6px;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+    body.app-theme-dark .hc-setup-detail { color: #94a3b8; }
+    /* Kompakt liste: 88 form satiri ekrana sigsin diye daraltilmis satir yuksekligi.
+       Yalniz FORM sonuclarina uygulanir; hazirlik adimlari genis kalir (az sayida,
+       okunmasi onemli). */
+    .hc-substep-list.is-compact { gap: 2px; padding: 8px 16px; }
+    .hc-substep-list.is-compact .hc-substep-row { font-size: 12px; line-height: 1.35; }
+    .hc-substep-list.is-compact .hc-substep-icon { flex: 0 0 16px; font-size: 12px; }
     .hc-substep-row  { display: flex; align-items: center; gap: 10px; font-size: 13px; }
     .hc-substep-icon { flex: 0 0 20px; text-align: center; font-size: 13px; }
     .hc-substep-row.pending { color: #94a3b8; }
@@ -363,8 +375,10 @@
         <div class="hc-panes">
     <div class="hc-block hc-pane is-active" data-hc-pane="setup">
         <p style="font-size: 13px; color: #64748b; margin: 0 0 16px;">
-            Kontroller izole bir test şirketi üzerinde çalışır. Bu sekme şirket/kullanıcı/oturum
-            hazırlığını gösterir; sonuçlar <strong>Form Kontrolleri</strong> sekmesine düşer.
+            Form kontrolleri <strong>mevcut şirketinizde</strong> çalışır — test şirketi açılmaz,
+            veri yazılmaz (yalnız sayfa açma denemesi). Bu sekme çalışılan ortamı gösterir;
+            sonuçlar <strong>Form Kontrolleri</strong> sekmesine düşer. Veri yazan
+            <strong>Fonksiyon Testleri</strong> ise kendi izole test şirketini kendisi kurar.
         </p>
 
         <div class="hc-toolbar">
@@ -372,13 +386,6 @@
                 <span id="hcRunIcon">▶</span>
                 <span id="hcRunLabel">Kontrolleri Çalıştır</span>
             </button>
-            <label class="hc-switch-label" title="Etkinleştirilirse mevcut sunucuda yeni bir test DB'si oluşturulur, içi sıfırdan doldurulur">
-                <span class="hc-switch-track">
-                    <input type="checkbox" id="hcNewDb" class="hc-switch-input">
-                    <span class="hc-switch-thumb"></span>
-                </span>
-                <span class="hc-switch-text">Yeni veritabanı oluştur</span>
-            </label>
             <div id="hcSummary" class="hc-summary"></div>
         </div>
 
@@ -647,7 +654,7 @@
         TUM satirlari gonderiyor; burada hepsi "bekliyor" olarak cizilir, sonuc geldikce
         satirin sinifi yerinde degisir. Satirlar belirip kaymaz — liste sabit kalir. */
     function pendingRowsHtml(items, idPrefix) {
-        let h = '<div class="hc-substep-list">';
+        let h = '<div class="hc-substep-list is-compact">';
         (items || []).forEach(function (it) {
             const meta = it.parentLabel ? ' <span style="opacity:.5">· ' + escapeHtml(it.parentLabel) + '</span>' : '';
             h += '<div class="hc-substep-row pending" id="' + idPrefix + it.index + '">'
@@ -656,6 +663,13 @@
                + '</div>';
         });
         return h + '</div>';
+    }
+
+    // Islenen satiri gorunur tut. `block:'nearest'` kullanilir: 'center' her adimda
+    // sayfayi ziplatiyor ve okumayi zorlastiriyor.
+    function scrollStepIntoView(id) {
+        const el = document.getElementById(id);
+        if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
     function markRow(idPrefix, index, cls, symOverride) {
@@ -748,6 +762,10 @@
     // ── Setup alt adımları HTML'i ────────────────────────────────────────
     const SETUP_LABELS = ['Test şirketi oluşturuluyor', 'Test kullanıcısı oluşturuluyor', 'Test oturumu başlatılıyor'];
 
+    // Adim basina BULGU metni (backend'in gonderdigi `detail`). Bos ilerleme cubugu
+    // yerine gercekten kesfedilen bilgi gosterilir: hangi sirket, hangi veritabani, kac ekran.
+    const setupDetails = {};
+
     function setupBodyHtml(currentStep, errorMsg, labels) {
         const list = labels || SETUP_LABELS;
         let h = '<div class="hc-substep-list">';
@@ -757,7 +775,13 @@
             if (errorMsg && n === currentStep) { cls = 'error';   sym = '✗'; }
             else if (n < currentStep)          { cls = 'ok';      sym = '✓'; }
             else if (n === currentStep)        { cls = 'running'; sym = '<span class="hc-spinner" style="width:11px;height:11px;border-width:2px;"></span>'; }
-            h += '<div class="hc-substep-row ' + cls + '"><span class="hc-substep-icon">' + sym + '</span>' + escapeHtml(lbl) + '</div>';
+            const d = setupDetails[n];
+            h += '<div class="hc-substep-row ' + cls + '" id="hcsetup-' + n + '">'
+               +   '<span class="hc-substep-icon">' + sym + '</span>'
+               +   '<span>' + escapeHtml(lbl)
+               +     (d ? ' <span class="hc-setup-detail">' + escapeHtml(d) + '</span>' : '')
+               +   '</span>'
+               + '</div>';
         });
         h += '</div>';
         if (errorMsg) h += '<div class="hc-substep-list" style="padding-top:0"><div class="hc-error-snippet">⚠ ' + escapeHtml(errorMsg) + '</div></div>';
@@ -778,6 +802,8 @@
         switch (frame.type) {
             case 'setup_start':
                 tst.setupStep = 1;
+                tst.setupMode = frame.mode || 'test';
+                Object.keys(setupDetails).forEach(function (k) { delete setupDetails[k]; });
                 tst.setupLabels = frame.labels || SETUP_LABELS;
                 stepStatus('setup', 'running', tst.setupLabels[0]);
                 stepExpand('setup', true);
@@ -785,12 +811,27 @@
                 break;
             case 'setup_step':
                 tst.setupStep = frame.step;
+                if (frame.detail) setupDetails[frame.step] = frame.detail;
                 stepStatus('setup', 'running', frame.message || ((tst.setupLabels || SETUP_LABELS)[frame.step - 1]) || ('Adım ' + frame.step));
                 stepBody('setup', setupBodyHtml(frame.step, null, tst.setupLabels));
+                // Islenen adim gorunur kalsin — liste uzadikca kullanici elle kaydirmasin.
+                scrollStepIntoView('hcsetup-' + frame.step);
                 break;
             case 'setup_done': {
                 tst.companyName = frame.companyName;
                 tst.companyId   = frame.testCompanyId;
+                // MEVCUT sirket modu: kurulacak/gecilecek bir sey yok. Eskiden bu dal
+                // kosulsuz olarak oturumu test sirketine geciriyordu; form kontrolleri
+                // artik mevcut sirkette kostugu icin o gecis YANLIS olurdu.
+                if ((frame.mode || tst.setupMode) === 'current') {
+                    stepStatus('setup', 'ok', frame.companyName);
+                    if (window.hcSetTabBadge) window.hcSetTabBadge('setup', { ok: 1 });
+                    stepBody('setup', setupBodyHtml((tst.setupLabels || SETUP_LABELS).length + 1, null, tst.setupLabels)
+                      + '<div class="hc-substep-info">✓ Hazır — kontroller <b>' + escapeHtml(frame.companyName)
+                      + '</b> şirketinde çalışacak. Veri yazılmaz.</div>');
+                    stepExpand('setup', true);
+                    break;
+                }
                 stepStatus('setup', 'ok', frame.companyName + ' · ' + frame.userEmail);
                 if (window.hcSetTabBadge) window.hcSetTabBadge('setup', { ok: 1 });
                 const baseInfo = setupBodyHtml((tst.setupLabels || SETUP_LABELS).length + 1, null, tst.setupLabels)
@@ -836,6 +877,7 @@
             case 'checking':
                 updateFormLive(frame.index, frame.total, frame.label, frame.parentLabel, frame.path);
                 markRow('hcfr-', frame.index, 'running');
+                scrollStepIntoView('hcfr-' + frame.index);
                 stepStatus('forms', 'running', (frame.index - 1) + ' / ' + frame.total + ' tamamlandı');
                 summaryEl.innerHTML = (tst.companyName ? '<span class="hc-pill" style="background:rgba(16,185,129,.15);color:#10b981;">' + escapeHtml(tst.companyName) + '</span> ' : '')
                     + '<span class="hc-pill">' + (frame.index - 1) + ' / ' + frame.total + ' kontrol edildi</span>';
@@ -856,7 +898,9 @@
                 const meta = s.total + ' form · ✓ ' + s.ok + (s.warn > 0 ? ' · ⚠ ' + s.warn : '') + (s.error > 0 ? ' · ✗ ' + s.error + ' HATA' : '') + (s.exception > 0 ? ' · ⚡ ' + s.exception : '') + ' · ' + s.durationMs + 'ms';
                 stepStatus('forms', cls, meta);
                 stepBody('forms', buildFormTable(tst.results));
-                stepExpand('forms', hasErr);
+                // Satirlar ACIK kalir. Eskiden hata yoksa kapaniyordu; kullanici
+                // "88 OK" ozetini gorup neyin denendigini goremiyordu (2026-08-27 istegi).
+                stepExpand('forms', true);
                 const extra = s.testCompanyName ? ' <span class="hc-pill" style="background:rgba(16,185,129,.15);color:#10b981;">Şirket: ' + escapeHtml(s.testCompanyName) + '</span>' : '';
                 summaryEl.innerHTML = summaryHtml(s, extra);
                 var formsSum = document.getElementById('hcFormsSummary');
@@ -875,12 +919,14 @@
         summaryEl.innerHTML = '';
         initStepList();
         // Tüm adımlar baştan görünür — durum güncellemeleri yerinde yapılır
-        createStep('setup', 'Test Ortamı Hazırlama', 'pending');
+        createStep('setup', 'Çalışma Ortamı', 'pending');
         createStep('forms', 'Form Kontrolleri', 'pending');
         tst.results = []; tst.setupStep = 0; tst.setupLabels = null;
-        const createNewDb = document.getElementById('hcNewDb')?.checked ? 'true' : 'false';
         try {
-            const resp = await fetch('/Admin/HealthCheck/StreamTestCompany?createNewDb=' + createNewDb, { method:'POST', credentials:'same-origin', headers:{ 'RequestVerificationToken': getCsrf() } });
+            // MEVCUT sirket ucu (/Stream). Eskiden /StreamTestCompany cagriliyor ve her
+            // calistirmada bir test sirketi aciliyordu; form kontrolleri veri YAZMADIGI
+            // icin buna gerek yok. Ayrica /Stream sema prob'unu da calistirir.
+            const resp = await fetch('/Admin/HealthCheck/Stream', { method:'POST', credentials:'same-origin', headers:{ 'RequestVerificationToken': getCsrf() } });
             if (!resp.ok || !resp.body) throw new Error('HTTP ' + resp.status);
             await readStream(resp.body, handleTestFrame);
         } catch (err) {
@@ -1070,6 +1116,20 @@
         fnSummaryEl.innerHTML = '';
         fnResultsEl.innerHTML = '<div style="padding:16px;color:#64748b;font-size:13px;">Başlatılıyor…</div>';
         try {
+            // Fonksiyon testleri gercek belge/stok hareketi YAZAR — once izole test
+            // sirketi kurulur ve oturum oraya gecirilir. Bu adim Calisma Ortami
+            // sekmesinde adim adim gorunur.
+            if (!(tst.companyName || '').startsWith('TEST_')) {
+                if (window.hcActivateTab) window.hcActivateTab('setup');
+                initStepList();
+                createStep('setup', 'Test Ortamı Hazırlama', 'pending');
+                const prep = await fetch('/Admin/HealthCheck/StreamTestCompany', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'RequestVerificationToken': getCsrf() } });
+                if (!prep.ok || !prep.body) throw new Error('Hazırlık HTTP ' + prep.status);
+                await readStream(prep.body, handleTestFrame);
+                if (window.hcActivateTab) window.hcActivateTab('fn');
+            }
             const resp = await fetch('/Admin/HealthCheck/StreamFunctionalTests?groups=' + encodeURIComponent(groups.join(',')), { method:'POST', credentials:'same-origin', headers:{ 'RequestVerificationToken': getCsrf() } });
             if (!resp.ok || !resp.body) throw new Error('HTTP ' + resp.status);
             await readStream(resp.body, handleFnFrame);
