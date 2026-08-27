@@ -1891,6 +1891,7 @@ public sealed class SalesController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Sales] ResolveOrCreateCombination başarısız.");
             return Json(new { success = false, message = "Sunucu hatası: " + "Islem sirasinda bir hata olustu." });
         }
     }
@@ -2129,6 +2130,7 @@ public sealed class SalesController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Sales] DeleteDocumentJson başarısız.");
             return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -2330,6 +2332,7 @@ public sealed class SalesController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Sales] ReviseLine başarısız.");
             return Json(new { success = false, message = "Revize hatasi: " + "Islem sirasinda bir hata olustu." });
         }
     }

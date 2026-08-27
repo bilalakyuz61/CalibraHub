@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
@@ -81,6 +81,7 @@ public sealed class AiAdminController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[AiAdmin] AiProvidersDelete başarısız.");
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }

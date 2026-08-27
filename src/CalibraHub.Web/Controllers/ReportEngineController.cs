@@ -65,6 +65,7 @@ public sealed class ReportEngineController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ReportEngine] SaveSource başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -83,6 +84,7 @@ public sealed class ReportEngineController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ReportEngine] DeleteSource başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -100,6 +102,7 @@ public sealed class ReportEngineController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ReportEngine] MaterializeSource başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -118,6 +121,7 @@ public sealed class ReportEngineController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ReportEngine] QuerySource başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }

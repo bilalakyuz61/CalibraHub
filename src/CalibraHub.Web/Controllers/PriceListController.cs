@@ -1,4 +1,4 @@
-using CalibraHub.Application.Constants;
+﻿using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Web.Helpers;
@@ -132,6 +132,7 @@ public sealed class PriceListController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[PriceList] GetPriceGroupsPage başarısız.");
             return Json(new { error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -750,6 +751,7 @@ public sealed class PriceListController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[PriceList] SaveBulkPriceEntries başarısız.");
             return Json(new { success = false, message = "Sunucu hatasi: " + "Islem sirasinda bir hata olustu.", inserted = 0, updated = 0 });
         }
     }
@@ -767,6 +769,7 @@ public sealed class PriceListController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[PriceList] UpdatePriceListJson başarısız.");
             // Eski silent-500: persist OLDU ama exception sonrasi UI "sunucu hatasi" diyordu.
             // Simdi exception'i yakaliyor + JSON donuyoruz; kayit yine de DB'de kayitli kalir.
             return Json(new { success = false, message = "Sunucu hatasi: " + "Islem sirasinda bir hata olustu." });

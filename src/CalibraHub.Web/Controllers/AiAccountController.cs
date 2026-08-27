@@ -67,6 +67,7 @@ public sealed class AiAccountController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[AiAccount] AiKeysDelete başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }

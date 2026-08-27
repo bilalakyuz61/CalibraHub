@@ -312,7 +312,8 @@ public sealed class ApprovalController : Controller
         }
         catch (Exception ex)
         {
-            return Content($"Fatura görseli oluşturulamadı: {"İşlem sırasında bir hata oluştu."}", "text/plain", Encoding.UTF8);
+            _logger.LogError(ex, "[Onay] Fatura görseli oluşturulamadı (id={Id}).", id);
+            return Content("Fatura görseli oluşturulamadı.", "text/plain", Encoding.UTF8);
         }
     }
 
@@ -390,7 +391,8 @@ public sealed class ApprovalController : Controller
         }
         catch (Exception ex)
         {
-            TempData["AdminError"] = $"Portal guncellemesi sirasinda hata: {"İşlem sırasında bir hata oluştu."}";
+            _logger.LogError(ex, "[Onay] Portal güncellemesi başarısız.");
+            TempData["AdminError"] = "Portal güncellemesi sırasında bir hata oluştu.";
         }
 
         var normalizedKind = NormalizeKind(kind);
@@ -653,6 +655,7 @@ public sealed class ApprovalController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Onay] İşlendi işareti değiştirilemedi (id={Id}).", id);
             return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -726,6 +729,7 @@ public sealed class ApprovalController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Onay] Onay örneği okunamadı (id={Id}).", id);
             return Json(new { found = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -748,6 +752,7 @@ public sealed class ApprovalController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Onay] Akış eşleştirme başarısız (kind={Kind}).", kind);
             return Json(new { matched = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -774,6 +779,7 @@ public sealed class ApprovalController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Onay] Akış listesi okunamadı (kind={Kind}) — boş liste dönülüyor.", kind);
             return Json(new object[] { });
         }
     }
@@ -797,6 +803,7 @@ public sealed class ApprovalController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Onay] Onay başlatılamadı (documentId={DocumentId}, flowId={FlowId}).", documentId, flowId);
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -902,6 +909,7 @@ public sealed class ApprovalController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Onay] Onay iptali başarısız (instanceId={InstanceId}).", instanceId);
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }

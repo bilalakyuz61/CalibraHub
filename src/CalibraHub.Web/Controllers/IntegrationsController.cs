@@ -112,6 +112,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] ListApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -129,6 +130,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] GetDetailApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -175,7 +177,8 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = $"Beklenmedik hata: {"İşlem sırasında bir hata oluştu."}" });
+            _logger.LogError(ex, "[Entegrasyon] SaveApi başarısız.");
+            return Json(new { success = false, error = "Beklenmedik hata: İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -195,6 +198,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] DeleteApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -211,6 +215,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] ToggleApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -227,6 +232,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] DuplicateApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -252,7 +258,8 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = $"Beklenmedik hata: {"İşlem sırasında bir hata oluştu."}" });
+            _logger.LogError(ex, "[Entegrasyon] TestApi başarısız.");
+            return Json(new { success = false, error = "Beklenmedik hata: İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -268,6 +275,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] FormsApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -303,6 +311,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] CascadeTargetsApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -321,6 +330,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] LookupFunctionsApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -340,6 +350,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] DbFunctionsApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -354,6 +365,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] FormFieldsApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -378,6 +390,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] ProfilesApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -412,6 +425,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] ProfileDetailApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -458,6 +472,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] SaveProfileApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -472,6 +487,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] DeleteProfileApi başarısız.");
             // FK violation muhtemel — bu profile'a bağlı endpoint varsa
             var msg = "İşlem sırasında bir hata oluştu." ?? "";
             string friendly = msg.Contains("FK_", StringComparison.OrdinalIgnoreCase) ||
@@ -496,6 +512,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] ToggleProfileApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -539,6 +556,7 @@ public sealed class IntegrationsController : Controller
             }
             catch (Exception authEx)
             {
+                _logger.LogError(authEx, "[Integrations] TestProfileApi başarısız.");
                 return Json(new
                 {
                     success = false,
@@ -549,6 +567,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] TestProfileApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -655,6 +674,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] EndpointsApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -726,6 +746,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] DeleteEndpointApi başarısız.");
             // FK violation muhtemel — bu endpoint'i kullanan Integration varsa silinemez
             var msg = "İşlem sırasında bir hata oluştu." ?? "";
             string friendly = msg.Contains("FK_Integration_Endpoint", StringComparison.OrdinalIgnoreCase)
@@ -750,6 +771,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] ToggleEndpointApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -800,6 +822,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] EndpointCatalogApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -829,6 +852,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] EndpointDetailApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -929,7 +953,11 @@ public sealed class IntegrationsController : Controller
             var items = await catalog.ListProvidersAsync(includeInactive, ct);
             return Json(new { success = true, items });
         }
-        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Entegrasyon] ListProvidersApi başarısız.");
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpPost("/Integrations/api/doc-catalog/providers/save")]
@@ -943,7 +971,11 @@ public sealed class IntegrationsController : Controller
             var id = await catalog.SaveProviderAsync(req, CurrentUserId(), ct);
             return Json(new { success = true, id });
         }
-        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Entegrasyon] SaveProviderApi başarısız.");
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpPost("/Integrations/api/doc-catalog/providers/delete/{id:int}")]
@@ -956,7 +988,11 @@ public sealed class IntegrationsController : Controller
             await catalog.DeleteProviderAsync(id, CurrentUserId(), ct);
             return Json(new { success = true });
         }
-        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Entegrasyon] DeleteProviderApi başarısız.");
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     /// <summary>
@@ -1015,7 +1051,11 @@ public sealed class IntegrationsController : Controller
 
             return Json(new { success = true, suggestions });
         }
-        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Entegrasyon] FieldPathSuggestionsApi başarısız.");
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     /// <summary>Recursive JSON traverse — leaf'lerde "a.b.c" ve dizi icin "a.b[].c" emit.</summary>
@@ -1070,7 +1110,11 @@ public sealed class IntegrationsController : Controller
             var items = await catalog.ListEnumsAsync(providerId, includeInactive, ct);
             return Json(new { success = true, items });
         }
-        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Entegrasyon] ListEnumsApi başarısız.");
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpGet("/Integrations/api/doc-catalog/enums/{id:int}")]
@@ -1084,7 +1128,11 @@ public sealed class IntegrationsController : Controller
             if (item is null) return Json(new { success = false, error = "Bulunamadi" });
             return Json(new { success = true, item });
         }
-        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Entegrasyon] GetEnumApi başarısız.");
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpPost("/Integrations/api/doc-catalog/enums/save")]
@@ -1098,7 +1146,11 @@ public sealed class IntegrationsController : Controller
             var id = await catalog.SaveEnumAsync(req, CurrentUserId(), ct);
             return Json(new { success = true, id });
         }
-        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Entegrasyon] SaveEnumApi başarısız.");
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpPost("/Integrations/api/doc-catalog/enums/delete/{id:int}")]
@@ -1111,7 +1163,11 @@ public sealed class IntegrationsController : Controller
             await catalog.DeleteEnumAsync(id, CurrentUserId(), ct);
             return Json(new { success = true });
         }
-        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Entegrasyon] DeleteEnumApi başarısız.");
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpGet("/Integrations/api/doc-catalog/field-docs")]
@@ -1127,7 +1183,11 @@ public sealed class IntegrationsController : Controller
             var items = await catalog.ListFieldDocsAsync(providerId, resource, includeInactive, ct);
             return Json(new { success = true, items });
         }
-        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Entegrasyon] ListFieldDocsApi başarısız.");
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpGet("/Integrations/api/doc-catalog/field-docs/{id:int}")]
@@ -1141,7 +1201,11 @@ public sealed class IntegrationsController : Controller
             if (item is null) return Json(new { success = false, error = "Bulunamadi" });
             return Json(new { success = true, item });
         }
-        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Entegrasyon] GetFieldDocApi başarısız.");
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpPost("/Integrations/api/doc-catalog/field-docs/save")]
@@ -1155,7 +1219,11 @@ public sealed class IntegrationsController : Controller
             var id = await catalog.SaveFieldDocAsync(req, CurrentUserId(), ct);
             return Json(new { success = true, id });
         }
-        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Entegrasyon] SaveFieldDocApi başarısız.");
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpPost("/Integrations/api/doc-catalog/field-docs/delete/{id:int}")]
@@ -1168,7 +1236,11 @@ public sealed class IntegrationsController : Controller
             await catalog.DeleteFieldDocAsync(id, CurrentUserId(), ct);
             return Json(new { success = true });
         }
-        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Entegrasyon] DeleteFieldDocApi başarısız.");
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     // ── JSON API — Form bazli aktif Manual entegrasyonlar ──────────────
@@ -1223,6 +1295,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] ByFormApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -1278,6 +1351,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] ListRunsApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -1316,6 +1390,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] RunDetailApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -1433,6 +1508,7 @@ public sealed class IntegrationsController : Controller
                 }
                 catch (Exception ex)
                 {
+                    _logger.LogError(ex, "[Entegrasyon] BulkImportEndpointsApi başarısız.");
                     errors++;
                     if (errorMessages.Count < 5) errorMessages.Add("İşlem sırasında bir hata oluştu.");
                 }
@@ -1451,6 +1527,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] BulkImportEndpointsApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -1573,6 +1650,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] ResolveBodySchemaApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -1598,6 +1676,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] ListBodyTemplatesApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -1617,6 +1696,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] UseBodyTemplateApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -1645,7 +1725,11 @@ public sealed class IntegrationsController : Controller
 
         // Body geçerli JSON mu kontrol et
         try { System.Text.Json.JsonDocument.Parse(req.BodyJson); }
-        catch (Exception ex) { return Json(new { success = false, error = "BodyJson gecerli JSON degil: " + "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Entegrasyon] CreateBodyTemplateApi başarısız.");
+            return Json(new { success = false, error = "BodyJson gecerli JSON degil: " + "İşlem sırasında bir hata oluştu." });
+        }
 
         try
         {
@@ -1669,6 +1753,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] CreateBodyTemplateApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -1690,6 +1775,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] DeleteBodyTemplateApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -1712,6 +1798,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] SampleApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -1737,6 +1824,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] QueueIntegrationsApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -1774,6 +1862,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] QueueListApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -1817,6 +1906,7 @@ public sealed class IntegrationsController : Controller
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "[Entegrasyon] QueueRunApi başarısız.");
                 fail++;
                 results.Add(new
                 {
@@ -1850,6 +1940,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] QueueSkipApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -1872,6 +1963,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] QueueRestoreApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -1927,6 +2019,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] ExportIntegrationApi başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -1952,6 +2045,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Entegrasyon] ImportIntegrationApi başarısız.");
             return Json(new { success = false, status = "Failed", error = "İşlem sırasında bir hata oluştu." });
         }
     }

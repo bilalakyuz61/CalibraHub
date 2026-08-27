@@ -908,6 +908,7 @@ public sealed class WarehouseController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Warehouse] SaveDocJson başarısız.");
             return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -1093,6 +1094,7 @@ public sealed class WarehouseController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Warehouse] DeleteDocJson başarısız.");
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }

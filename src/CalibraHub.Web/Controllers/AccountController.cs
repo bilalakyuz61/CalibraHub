@@ -1075,6 +1075,7 @@ public sealed class AccountController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Account] GetDbSettings başarısız.");
             return Json(new { success = false, message = "Islem sirasinda bir hata olustu.", server = string.Empty, database = string.Empty, user = string.Empty });
         }
     }
@@ -1117,6 +1118,7 @@ public sealed class AccountController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Account] TestDbSettings başarısız.");
             return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -1161,6 +1163,7 @@ public sealed class AccountController : Controller
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "[Account] SaveDbSettings başarısız.");
                 return Json(new { success = false, message = "Baglanti testi basarisiz: " + "Islem sirasinda bir hata olustu." + " Ayarlar kaydedilmedi." });
             }
 
@@ -1186,6 +1189,7 @@ public sealed class AccountController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Account] SaveDbSettings başarısız.");
             return Json(new { success = false, message = "Kayit hatasi: " + "Islem sirasinda bir hata olustu." });
         }
     }

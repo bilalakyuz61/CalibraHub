@@ -502,7 +502,8 @@ public sealed class MobileApiController : ControllerBase
         }
         catch (Exception ex)
         {
-            return Ok(new MobileSendResponse(false, null, $"Bridge hatasi: {"Islem sirasinda bir hata olustu."}"));
+            _logger.LogError(ex, "[MobileApi] SendMedia başarısız.");
+            return Ok(new MobileSendResponse(false, null, "Bridge hatasi: Islem sirasinda bir hata olustu."));
         }
     }
 

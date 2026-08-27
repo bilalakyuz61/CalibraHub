@@ -54,6 +54,7 @@ public sealed class GuidesController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Guides] ListViews başarısız.");
             return StatusCode(500, new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -79,6 +80,7 @@ public sealed class GuidesController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Guides] GetViewColumns başarısız.");
             return StatusCode(500, new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }

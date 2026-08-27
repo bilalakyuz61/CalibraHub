@@ -424,6 +424,7 @@ public sealed class ApprovalFlowController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ApprovalFlow] Save başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -443,6 +444,7 @@ public sealed class ApprovalFlowController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ApprovalFlow] Duplicate başarısız.");
             return Json(new { success = false, ok = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -459,6 +461,7 @@ public sealed class ApprovalFlowController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ApprovalFlow] Delete başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -548,6 +551,7 @@ public sealed class ApprovalFlowController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ApprovalFlow] StartByDocument başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -682,6 +686,7 @@ public sealed class ApprovalFlowController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ApprovalFlow] StartApproval başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -708,6 +713,7 @@ public sealed class ApprovalFlowController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ApprovalFlow] ApproveStep başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -727,6 +733,7 @@ public sealed class ApprovalFlowController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ApprovalFlow] RejectStep başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -744,6 +751,7 @@ public sealed class ApprovalFlowController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ApprovalFlow] CancelApproval başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }

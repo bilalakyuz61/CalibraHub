@@ -58,6 +58,7 @@ public sealed class ApiProfileController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ApiProfile] GetApiProfilesJson başarısız.");
             return Json(new { error = true, message = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -134,6 +135,7 @@ public sealed class ApiProfileController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ApiProfile] DeleteApiProfileJson başarısız.");
             return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }

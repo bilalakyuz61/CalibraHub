@@ -310,6 +310,7 @@ public sealed class DocLayoutRuleController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[DocLayoutRule] DeleteJson başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }

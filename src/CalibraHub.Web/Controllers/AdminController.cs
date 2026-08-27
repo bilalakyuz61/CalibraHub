@@ -913,7 +913,8 @@ public sealed class AdminController : Controller
         }
         catch (Exception ex)
         {
-            TempData["AdminError"] = $"Veri cekme islemi basarisiz: {"Islem sirasinda bir hata olustu."}";
+            _logger.LogError(ex, "[Admin] PullIntegratorData başarısız.");
+            TempData["AdminError"] = "Veri cekme islemi basarisiz: Islem sirasinda bir hata olustu.";
         }
 
         return RedirectToAction(nameof(IntegratorSettings), new { page, pageSize });
