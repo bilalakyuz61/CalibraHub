@@ -35,8 +35,9 @@ public sealed class SqlActivityReasonRepository : IActivityReasonRepository
             SELECT [Id],[ActivityType],[Code],[Name],[Description],[ColorHex],
                    [SortOrder],[IsActive],[Created],[Updated]
             FROM {_table}
-            WHERE 1=1 {typeFilter} {activeFilter}
+            WHERE [CompanyId] = @CompanyId {typeFilter} {activeFilter}
             ORDER BY [ActivityType], [SortOrder], [Name];";
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         if (activityType.HasValue)
             cmd.Parameters.AddWithValue("@Type", (byte)activityType.Value);
         var list = new List<ActivityReasonDto>();
@@ -53,8 +54,9 @@ public sealed class SqlActivityReasonRepository : IActivityReasonRepository
             SELECT [Id],[ActivityType],[Code],[Name],[Description],[ColorHex],
                    [SortOrder],[IsActive],[Created],[Updated]
             FROM {_table}
-            WHERE [Id] = @Id;";
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? Read(r) : null;
     }

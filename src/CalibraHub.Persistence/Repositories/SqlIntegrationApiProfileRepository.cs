@@ -39,9 +39,10 @@ public sealed class SqlIntegrationApiProfileRepository : IIntegrationApiProfileR
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT [Id],[CompanyId],[Name],[AuthType],[BaseUrl],[AuthConfigJson],[IsActive],[ProviderCode],[Created],[Updated]
-            FROM {_table} WHERE [Id] = @Id;
+            FROM {_table} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? Map(r) : null;
     }

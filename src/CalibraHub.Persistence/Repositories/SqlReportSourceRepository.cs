@@ -16,14 +16,16 @@ public sealed class SqlReportSourceRepository : IReportSourceRepository
 
     public async Task<IReadOnlyList<ReportSourceDto>> GetAllActiveAsync(CancellationToken ct)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = """
             SELECT Id, Name, Description, SqlQuery, CacheTtlMinutes, IsActive, Created, CreatedBy, Materialize, LastMaterialized, MaterializedRows, RefreshScheduleJson
             FROM dbo.ReportSource
-            WHERE IsActive = 1
+            WHERE IsActive = 1 AND CompanyId = @CompanyId
             ORDER BY Name;
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         var list = new List<ReportSourceDto>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
@@ -33,13 +35,15 @@ public sealed class SqlReportSourceRepository : IReportSourceRepository
 
     public async Task<ReportSourceDto?> GetByIdAsync(int id, CancellationToken ct)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = """
             SELECT Id, Name, Description, SqlQuery, CacheTtlMinutes, IsActive, Created, CreatedBy, Materialize, LastMaterialized, MaterializedRows, RefreshScheduleJson
-            FROM dbo.ReportSource WHERE Id = @Id;
+            FROM dbo.ReportSource WHERE Id = @Id AND CompanyId = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? Map(reader) : null;
     }

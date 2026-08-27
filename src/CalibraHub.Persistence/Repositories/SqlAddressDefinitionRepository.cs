@@ -609,7 +609,8 @@ public sealed class SqlAddressDefinitionRepository : IAddressDefinitionRepositor
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         // Currency legacy kolon adları küçük harf ([code],[name]) — rename migration kapsamı dışı.
-        cmd.CommandText = $"SELECT [Id], [code], [name] FROM {_currency} WHERE [IsActive] = 1 ORDER BY [code];";
+        cmd.CommandText = $"SELECT [Id], [code], [name] FROM {_currency} WHERE [IsActive] = 1 AND [CompanyId] = @CompanyId ORDER BY [code];";
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
         var list = new List<CurrencyLookupDto>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))

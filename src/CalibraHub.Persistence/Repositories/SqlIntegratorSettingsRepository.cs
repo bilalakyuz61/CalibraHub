@@ -28,11 +28,15 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
+        // Kiraci suzgeci: bu tablo API secret/parola tasir — suzgec olmadan baska
+        // sirketin entegrator kimlik bilgileri (Secret dahil) dondurulurdu.
         command.CommandText = $"""
             SELECT [Id], [CompanyId], [Provider], [Name], [BaseUrl], [CompanyTaxNumber], [Username], [Secret], [PollingIntervalSeconds], [MaxRecordsPerPull], [LogRetentionDays], [IncludeReceivedDocumentsInPull], [MarkDownloadedDocumentsAsReceived], [IncludeIssuedEInvoiceInPull], [IncludeIssuedEArchiveInPull], [IncludeIssuedEDispatchInPull], [IsActive], [Created], [AppStr], [Source], [AppVersion], [ScheduleEnabled], [TimeoutSeconds], [LookbackDays]
             FROM {_tableName}
+            WHERE [CompanyId] = @CompanyId
             ORDER BY [Name];
             """;
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -52,9 +56,10 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
         command.CommandText = $"""
             SELECT [Id], [CompanyId], [Provider], [Name], [BaseUrl], [CompanyTaxNumber], [Username], [Secret], [PollingIntervalSeconds], [MaxRecordsPerPull], [LogRetentionDays], [IncludeReceivedDocumentsInPull], [MarkDownloadedDocumentsAsReceived], [IncludeIssuedEInvoiceInPull], [IncludeIssuedEArchiveInPull], [IncludeIssuedEDispatchInPull], [IsActive], [Created], [AppStr], [Source], [AppVersion], [ScheduleEnabled], [TimeoutSeconds], [LookbackDays]
             FROM {_tableName}
-            WHERE [IsActive] = 1
+            WHERE [IsActive] = 1 AND [CompanyId] = @CompanyId
             ORDER BY [Name];
             """;
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -72,9 +77,10 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
         command.CommandText = $"""
             SELECT [Id], [CompanyId], [Provider], [Name], [BaseUrl], [CompanyTaxNumber], [Username], [Secret], [PollingIntervalSeconds], [MaxRecordsPerPull], [LogRetentionDays], [IncludeReceivedDocumentsInPull], [MarkDownloadedDocumentsAsReceived], [IncludeIssuedEInvoiceInPull], [IncludeIssuedEArchiveInPull], [IncludeIssuedEDispatchInPull], [IsActive], [Created], [AppStr], [Source], [AppVersion], [ScheduleEnabled], [TimeoutSeconds], [LookbackDays]
             FROM {_tableName}
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))

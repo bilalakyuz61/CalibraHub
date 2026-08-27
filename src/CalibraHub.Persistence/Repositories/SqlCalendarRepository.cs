@@ -29,12 +29,14 @@ public sealed class SqlCalendarRepository : ICalendarRepository
             FROM dbo.CalendarEvent
             WHERE UserId = @UserId
               AND IsActive = 1
+              AND CompanyId = @CompanyId
               AND CONVERT(date, StartDate) <= CONVERT(date, @End)
               AND CONVERT(date, ISNULL(EndDate, StartDate)) >= CONVERT(date, @Start)
             ORDER BY StartDate";
         cmd.Parameters.AddWithValue("@UserId", userId);
         cmd.Parameters.AddWithValue("@Start", start);
         cmd.Parameters.AddWithValue("@End", end);
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
 
         var list = new List<CalendarEventDto>();
         await using var r = await cmd.ExecuteReaderAsync(ct);

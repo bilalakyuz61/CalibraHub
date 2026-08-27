@@ -23,7 +23,8 @@ public sealed class SqlSalesRepresentativeRepository : ISalesRepresentativeRepos
         var list = new List<SalesRepresentative>();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT [Id],[RepName],[IsActive],[Created],[Updated] FROM {_table} ORDER BY [RepName];";
+        command.CommandText = $"SELECT [Id],[RepName],[IsActive],[Created],[Updated] FROM {_table} WHERE [CompanyId] = @CompanyId ORDER BY [RepName];";
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
             list.Add(Map(reader));
@@ -34,8 +35,9 @@ public sealed class SqlSalesRepresentativeRepository : ISalesRepresentativeRepos
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT [Id],[RepName],[IsActive],[Created],[Updated] FROM {_table} WHERE [Id] = @Id;";
+        command.CommandText = $"SELECT [Id],[RepName],[IsActive],[Created],[Updated] FROM {_table} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? Map(reader) : null;
     }

@@ -71,9 +71,10 @@ public sealed class SqlDepartmentRepository : IDepartmentRepository
             SELECT [Id], [CompanyId], [Name], [ParentDepartmentId], [IsActive],
                    [CreatedById], [Created], [UpdatedById], [Updated]
             FROM {_tableName}
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;

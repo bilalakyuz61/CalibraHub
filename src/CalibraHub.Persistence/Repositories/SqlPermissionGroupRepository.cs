@@ -32,13 +32,17 @@ public sealed class SqlPermissionGroupRepository : IPermissionGroupRepository
     {
         await using var conn = await _factory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // PermissionGroup global/paylasilan (CompanyId yok — muaf); ama uyelik
+        // (UserPermissionGroup) per-company anlam tasir — MemberCount kendi sirketimizle
+        // sinirlandirilir, aksi halde baska sirketin uye sayisi karisir.
         cmd.CommandText = $"""
             SELECT g.[Id], g.[Name], g.[Description], g.[IsActive],
-                   (SELECT COUNT(*) FROM {_memberTable} m WHERE m.[GroupId] = g.[Id]) AS MemberCount
+                   (SELECT COUNT(*) FROM {_memberTable} m WHERE m.[GroupId] = g.[Id] AND m.[CompanyId] = @CompanyId) AS MemberCount
             FROM {_groupTable} g
             {(includeInactive ? "" : "WHERE g.[IsActive] = 1")}
             ORDER BY g.[Name];
             """;
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
         var list = new List<PermissionGroupDto>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
@@ -122,14 +126,17 @@ public sealed class SqlPermissionGroupRepository : IPermissionGroupRepository
     {
         await using var conn = await _factory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // Kiraci suzgeci: uyelik satirlari per-company anlam tasir; suzgec olmadan
+        // baska sirketin kullanici adi/e-postasi bu grup uzerinden sizabilirdi.
         cmd.CommandText = $"""
             SELECT m.[UserId], u.[FullName], u.[Email]
             FROM {_memberTable} m
             INNER JOIN {_usersTable} u ON u.[Id] = m.[UserId]
-            WHERE m.[GroupId]=@G AND u.[IsActive]=1
+            WHERE m.[GroupId]=@G AND m.[CompanyId]=@CompanyId AND u.[IsActive]=1
             ORDER BY u.[FullName];
             """;
         cmd.Parameters.AddWithValue("@G", groupId);
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
         var list = new List<PermissionGroupMemberDto>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
@@ -189,13 +196,14 @@ public sealed class SqlPermissionGroupRepository : IPermissionGroupRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT g.[Id], g.[Name], g.[Description], g.[IsActive],
-                   (SELECT COUNT(*) FROM {_memberTable} m2 WHERE m2.[GroupId] = g.[Id]) AS MemberCount
+                   (SELECT COUNT(*) FROM {_memberTable} m2 WHERE m2.[GroupId] = g.[Id] AND m2.[CompanyId] = @CompanyId) AS MemberCount
             FROM {_memberTable} m
             INNER JOIN {_groupTable} g ON g.[Id] = m.[GroupId] AND g.[IsActive] = 1
-            WHERE m.[UserId]=@U
+            WHERE m.[UserId]=@U AND m.[CompanyId]=@CompanyId
             ORDER BY g.[Name];
             """;
         cmd.Parameters.AddWithValue("@U", userId);
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
         var list = new List<PermissionGroupDto>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))

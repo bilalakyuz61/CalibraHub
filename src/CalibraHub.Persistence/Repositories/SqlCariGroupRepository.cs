@@ -155,7 +155,7 @@ public sealed class SqlCariGroupRepository : ICariGroupRepository
             SELECT m.[ContactId], m.[SlotOrder], m.[GroupCode], g.[Name]
             FROM {_mappingTable} m
             LEFT JOIN {_table} g ON g.[Code] = m.[GroupCode] AND g.[GroupCategory] = m.[SlotOrder] AND g.[CompanyId] = @CompanyId
-            WHERE m.[ContactId] IN ({string.Join(",", paramNames)})
+            WHERE m.[ContactId] IN ({string.Join(",", paramNames)}) AND m.[CompanyId] = @CompanyId
             ORDER BY m.[ContactId], m.[SlotOrder];
             """;
 

@@ -26,8 +26,10 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
         command.CommandText = $"""
             SELECT [Id],[Code],[Name],[SqlViewName],[RequiredKeyColumn],[Description],[IsActive],[Created],[Updated]
             FROM {_table}
+            WHERE [CompanyId] = @CompanyId
             ORDER BY [Name];
             """;
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
             list.Add(Map(reader));
@@ -41,9 +43,10 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
         command.CommandText = $"""
             SELECT [Id],[Code],[Name],[SqlViewName],[RequiredKeyColumn],[Description],[IsActive],[Created],[Updated]
             FROM {_table}
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? Map(reader) : null;
     }
@@ -55,9 +58,10 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
         command.CommandText = $"""
             SELECT [Id],[Code],[Name],[SqlViewName],[RequiredKeyColumn],[Description],[IsActive],[Created],[Updated]
             FROM {_table}
-            WHERE [Code] = @Code;
+            WHERE [Code] = @Code AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@Code", code));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? Map(reader) : null;
     }

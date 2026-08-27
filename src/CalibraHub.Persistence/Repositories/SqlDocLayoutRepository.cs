@@ -31,10 +31,12 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
                    ISNULL([UseAsMailTemplate], 0) AS [UseAsMailTemplate]
             FROM {_layout}
             WHERE [IsActive] = 1
+              AND [CompanyId] = @CompanyId
               AND (@DocType IS NULL OR [DocType] = @DocType)
             ORDER BY [IsDefault] DESC, [Updated] DESC, [Name];";
         cmd.Parameters.Add(new SqlParameter("@DocType", System.Data.SqlDbType.NVarChar, 60)
             { Value = (object?)docType ?? DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         var list = new List<DocLayoutSummaryDto>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -69,8 +71,9 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
                    [DefaultSubject],[DefaultBody],
                    [DefaultsViewName],[DefaultsSubjectColumn],[DefaultsBodyColumn],[DefaultsWhere],
                    ISNULL([UseAsMailTemplate], 0) AS [UseAsMailTemplate]
-            FROM {_layout} WHERE [Id] = @Id AND [IsActive] = 1;";
+            FROM {_layout} WHERE [Id] = @Id AND [IsActive] = 1 AND [CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? MapLayout(reader) : null;
     }
@@ -79,10 +82,13 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // Kiraci suzgeci: layoutId istemciden gelir; DocLayoutDs kendi CompanyId
+        // kolonunu tasir (bkz. ReplaceDataSourcesAsync INSERT).
         cmd.CommandText = $@"
             SELECT [Id],[LayoutId],[Alias],[Role],[ViewId],[AdHocSql],[JoinOn],[ParentAlias],[Ordinal]
-            FROM {_ds} WHERE [LayoutId] = @LayoutId ORDER BY [Ordinal],[Id];";
+            FROM {_ds} WHERE [LayoutId] = @LayoutId AND [CompanyId] = @CompanyId ORDER BY [Ordinal],[Id];";
         cmd.Parameters.AddWithValue("@LayoutId", layoutId);
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var list = new List<DocLayoutDs>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
@@ -107,9 +113,14 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
+        // Kiraci suzgeci: MERGE ON kosuluna CompanyId eklendi (aksi halde baska sirketin
+        // ayni koda sahip layout'u yanlislikla eslesip guncellenebilirdi) + INSERT'e
+        // CompanyId yazilir + kapanis SELECT'i CompanyId ile sinirlanir.
         cmd.CommandText = $@"
             MERGE {_layout} AS T
-            USING (SELECT @Code AS Code) AS S ON T.[Code] = S.Code
+            USING (SELECT @Code AS Code, @CompanyId AS CompanyId) AS S
+                ON T.[Code] = S.Code AND T.[CompanyId] = S.CompanyId
             WHEN MATCHED THEN
                 UPDATE SET
                     [Name]           = @Name,
@@ -138,14 +149,15 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
                         [PageW],[PageH],[MarginTop],[MarginBot],[MarginLeft],[MarginRight],
                         [OwnerUserId],[IsDefault],[OutputFormat],[DefaultSubject],[DefaultBody],
                         [DefaultsViewName],[DefaultsSubjectColumn],[DefaultsBodyColumn],[DefaultsWhere],
-                        [UseAsMailTemplate])
+                        [UseAsMailTemplate],[CompanyId])
                 VALUES (@Code,@Name,@DocType,@DocumentTypeId,@Description,@LayoutJson,
                         @PageW,@PageH,@MarginTop,@MarginBot,@MarginLeft,@MarginRight,
                         @OwnerUserId,@IsDefault,@OutputFormat,@DefaultSubject,@DefaultBody,
                         @DefaultsViewName,@DefaultsSubjectColumn,@DefaultsBodyColumn,@DefaultsWhere,
-                        @UseAsMailTemplate);
-            SELECT [Id] FROM {_layout} WHERE [Code] = @Code;";
+                        @UseAsMailTemplate,@CompanyId);
+            SELECT [Id] FROM {_layout} WHERE [Code] = @Code AND [CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Code",        req.Code);
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         cmd.Parameters.AddWithValue("@Name",        req.Name);
         cmd.Parameters.Add(new SqlParameter("@DocType", System.Data.SqlDbType.NVarChar, 60)
             { Value = (object?)req.DocType ?? DBNull.Value });

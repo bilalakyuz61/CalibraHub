@@ -61,9 +61,10 @@ public sealed class SqlOrgChartRepository : IOrgChartRepository
         cmd.CommandText = $"""
             SELECT [Id], [CompanyId], [Name], [IsDefault], [Created], [Updated]
             FROM {_chartsTable}
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct)) return null;
@@ -151,14 +152,16 @@ public sealed class SqlOrgChartRepository : IOrgChartRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [Id], [ChartId], [UserId], [ParentUserId], [PositionTitle], [SortOrder],
-                   ISNULL([NodeType], 'User') AS [NodeType],
-                   [DepartmentId], [PersonnelId], [ParentNodeId]
-            FROM {_nodesTable}
-            WHERE [ChartId] = @ChartId
-            ORDER BY [SortOrder];
+            SELECT n.[Id], n.[ChartId], n.[UserId], n.[ParentUserId], n.[PositionTitle], n.[SortOrder],
+                   ISNULL(n.[NodeType], 'User') AS [NodeType],
+                   n.[DepartmentId], n.[PersonnelId], n.[ParentNodeId]
+            FROM {_nodesTable} n
+            WHERE n.[ChartId] = @ChartId
+              AND EXISTS (SELECT 1 FROM {_chartsTable} c WHERE c.[Id] = n.[ChartId] AND c.[CompanyId] = @CompanyId)
+            ORDER BY n.[SortOrder];
             """;
         cmd.Parameters.Add(new SqlParameter("@ChartId", chartId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))

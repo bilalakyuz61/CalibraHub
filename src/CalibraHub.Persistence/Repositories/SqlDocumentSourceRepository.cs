@@ -72,10 +72,12 @@ public sealed class SqlDocumentSourceRepository : IDocumentSourceRepository
     public async Task<IReadOnlyCollection<int>> GetSourceIdsAsync(int documentId, CancellationToken ct)
     {
         var list = new List<int>();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT [SourceDocumentId] FROM {_table} WHERE [DocumentId] = @Doc ORDER BY [Id];";
+        cmd.CommandText = $"SELECT [SourceDocumentId] FROM {_table} WHERE [DocumentId] = @Doc AND [CompanyId] = @CompanyId ORDER BY [Id];";
         cmd.Parameters.Add(new SqlParameter("@Doc", documentId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) list.Add(r.GetInt32(0));
         return list;
@@ -83,10 +85,12 @@ public sealed class SqlDocumentSourceRepository : IDocumentSourceRepository
 
     public async Task<bool> IsSourceConsumedAsync(int sourceDocumentId, CancellationToken ct)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT TOP 1 1 FROM {_table} WHERE [SourceDocumentId] = @Src;";
+        cmd.CommandText = $"SELECT TOP 1 1 FROM {_table} WHERE [SourceDocumentId] = @Src AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Src", sourceDocumentId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         var result = await cmd.ExecuteScalarAsync(ct);
         return result != null && result != DBNull.Value;
     }
@@ -96,6 +100,7 @@ public sealed class SqlDocumentSourceRepository : IDocumentSourceRepository
         // Tablo henuz olusturulmamissa bos liste don (EnsureSchema cagrisi yapilmadan erken cagrim).
         var checkSql = $"SELECT OBJECT_ID(N'{_table}', N'U');";
         var list = new List<int>();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using (var chkCmd = conn.CreateCommand())
         {
@@ -104,8 +109,9 @@ public sealed class SqlDocumentSourceRepository : IDocumentSourceRepository
             if (exists == null || exists == DBNull.Value) return list;
         }
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT [DocumentId] FROM {_table} WHERE [SourceDocumentId] = @Src ORDER BY [Id];";
+        cmd.CommandText = $"SELECT [DocumentId] FROM {_table} WHERE [SourceDocumentId] = @Src AND [CompanyId] = @CompanyId ORDER BY [Id];";
         cmd.Parameters.Add(new SqlParameter("@Src", sourceDocumentId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) list.Add(r.GetInt32(0));
         return list;

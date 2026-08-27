@@ -168,6 +168,8 @@ public sealed class SqlMailSendBatchRepository : IMailSendBatchRepository
         var items = new List<MailSendLogItem>();
         await using (var cmd2 = conn.CreateCommand())
         {
+            // tenant-ok: batch yukarida (@CompanyId = 0 OR [CompanyId] = @CompanyId) ile
+            // dogrulandi; bu satirlar zaten sadece dogrulanan batchId icin okunur.
             cmd2.CommandText = $"""
                 SELECT [Id],[BatchId],[ContactPersonId],[RecipientName],[RecipientEmail],
                        [TitleName],[ContactName],[Status],[ErrorMessage],[SentAt]

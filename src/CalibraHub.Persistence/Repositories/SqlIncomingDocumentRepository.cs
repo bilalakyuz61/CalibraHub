@@ -222,13 +222,16 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
             }
 
             await using var command = connection.CreateCommand();
+            // Kiraci suzgeci: IncomingDocument kendi CompanyId kolonunu tasir (bkz.
+            // InsertIncomingDocumentAsync INSERT) — listeleme sorgusu buna gore sinirlanir.
             command.CommandText = $"""
                 SELECT [Id], [IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [RecipientTaxNumber], CAST(SUBSTRING([PayloadRaw], 1, 1000) AS NVARCHAR(MAX)) AS [PayloadRaw], [ApprovalStatus], [ImportedAt], ISNULL([SenderName], N'') AS [SenderName], {isProcessedSelectSql}
                 FROM {_tableName}
-                WHERE [ApprovalStatus] = @ApprovalStatus {isProcessedFilterSql}
+                WHERE [ApprovalStatus] = @ApprovalStatus AND [CompanyId] = @CompanyId {isProcessedFilterSql}
                 ORDER BY [ImportedAt] DESC;
                 """;
             command.Parameters.Add(new SqlParameter("@ApprovalStatus", ApprovalStatus.Pending.ToString()));
+            command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
@@ -285,12 +288,15 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         var isProcessedSelectSql = hasProcessedColumn ? "[IsProcessed]" : "CAST(0 AS BIT) AS [IsProcessed]";
 
         await using var command = connection.CreateCommand();
+        // Kiraci suzgeci: id istemciden gelir; suzgec olmadan baska sirketin gelen
+        // belgesi (e-fatura icerigi dahil) okunabilirdi.
         command.CommandText = $"""
             SELECT [Id], [IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [RecipientTaxNumber], [PayloadRaw], [ApprovalStatus], [ImportedAt], ISNULL([SenderName], N'') AS [SenderName], {isProcessedSelectSql}
             FROM {_tableName}
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (await reader.ReadAsync(cancellationToken))
@@ -307,12 +313,15 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
+        // Kiraci suzgeci: dedup kontrolu kendi sirketimizle sinirlanir — aksi halde
+        // baska sirkette ayni EnvelopeId var diye kendi ice aktarimimiz atlanabilirdi.
         command.CommandText = $"""
             SELECT COUNT(1)
             FROM {_tableName}
-            WHERE [EnvelopeId] = @EnvelopeId;
+            WHERE [EnvelopeId] = @EnvelopeId AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@EnvelopeId", envelopeId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         var result = await command.ExecuteScalarAsync(cancellationToken);
         return Convert.ToInt32(result) > 0;
@@ -331,11 +340,13 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
             FROM {_tableName}
             WHERE [DocumentNumber] = @DocumentNumber
               AND [RecipientTaxNumber] = @RecipientTaxNumber
-              AND [Kind] = @Kind;
+              AND [Kind] = @Kind
+              AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(CreateParameter("@DocumentNumber", documentNumber));
         command.Parameters.Add(CreateParameter("@RecipientTaxNumber", recipientTaxNumber));
         command.Parameters.Add(CreateParameter("@Kind", kind.ToString()));
+        command.Parameters.Add(CreateParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         var result = await command.ExecuteScalarAsync(cancellationToken);
         return Convert.ToInt32(result) > 0;

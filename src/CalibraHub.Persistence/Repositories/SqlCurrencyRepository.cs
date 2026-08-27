@@ -23,7 +23,8 @@ public sealed class SqlCurrencyRepository : ICurrencyRepository
         var list = new List<Currency>();
         await using var conn = await _connectionFactory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT [Id],[Code],[Name],[Symbol],[IsActive],[Created],[Updated] FROM {_table} ORDER BY [Code];";
+        cmd.CommandText = $"SELECT [Id],[Code],[Name],[Symbol],[IsActive],[Created],[Updated] FROM {_table} WHERE [CompanyId] = @CompanyId ORDER BY [Code];";
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) list.Add(Map(r));
         return list;
@@ -33,8 +34,9 @@ public sealed class SqlCurrencyRepository : ICurrencyRepository
     {
         await using var conn = await _connectionFactory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT [Id],[Code],[Name],[Symbol],[IsActive],[Created],[Updated] FROM {_table} WHERE [Id] = @Id;";
+        cmd.CommandText = $"SELECT [Id],[Code],[Name],[Symbol],[IsActive],[Created],[Updated] FROM {_table} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? Map(r) : null;
     }

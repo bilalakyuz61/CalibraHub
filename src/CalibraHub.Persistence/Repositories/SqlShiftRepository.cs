@@ -276,8 +276,9 @@ public sealed class SqlShiftAssignmentRepository : IShiftAssignmentRepository
     {
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = BuildSelect("WHERE a.[PersonnelId] = @Id AND a.[IsActive] = 1 ORDER BY a.[DayOfWeek]");
+        cmd.CommandText = BuildSelect("WHERE a.[PersonnelId] = @Id AND a.[IsActive] = 1 AND a.[CompanyId] = @CompanyId ORDER BY a.[DayOfWeek]");
         cmd.Parameters.AddWithValue("@Id", personnelId);
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
         return await ReadList(cmd, ct);
     }
 
@@ -285,8 +286,9 @@ public sealed class SqlShiftAssignmentRepository : IShiftAssignmentRepository
     {
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = BuildSelect("WHERE a.[ShiftId] = @Id AND a.[IsActive] = 1 ORDER BY a.[DayOfWeek], p.[FullName]");
+        cmd.CommandText = BuildSelect("WHERE a.[ShiftId] = @Id AND a.[IsActive] = 1 AND a.[CompanyId] = @CompanyId ORDER BY a.[DayOfWeek], p.[FullName]");
         cmd.Parameters.AddWithValue("@Id", shiftId);
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
         return await ReadList(cmd, ct);
     }
 
@@ -294,8 +296,9 @@ public sealed class SqlShiftAssignmentRepository : IShiftAssignmentRepository
     {
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = BuildSelect("WHERE a.[Id] = @Id");
+        cmd.CommandText = BuildSelect("WHERE a.[Id] = @Id AND a.[CompanyId] = @CompanyId");
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
         var list = await ReadList(cmd, ct);
         return list.FirstOrDefault();
     }
@@ -366,11 +369,13 @@ public sealed class SqlShiftAssignmentRepository : IShiftAssignmentRepository
             WHERE a.[PersonnelId] = @Id
               AND a.[DayOfWeek]   = @Day
               AND a.[IsActive]    = 1
+              AND a.[CompanyId]   = @CompanyId
               AND (a.[EffectiveFrom] IS NULL OR a.[EffectiveFrom] <= @Date)
               AND (a.[EffectiveTo]   IS NULL OR a.[EffectiveTo]   >= @Date)");
         cmd.Parameters.AddWithValue("@Id",   personnelId);
         cmd.Parameters.AddWithValue("@Day",  (byte)date.DayOfWeek);
         cmd.Parameters.AddWithValue("@Date", date.ToDateTime(TimeOnly.MinValue));
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
         var list = await ReadList(cmd, ct);
         return list.FirstOrDefault();
     }

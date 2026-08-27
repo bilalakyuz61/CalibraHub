@@ -31,9 +31,11 @@ public sealed class SqlImportTemplateRepository : IImportTemplateRepository
             SELECT [Id],[Name],[TargetEntity],[SheetName],[HeaderRowIndex],[MatchKeyField],
                    [MappingJson],[IsActive],[Created],[Updated],[CreatedById],[UpdatedById]
             FROM {_table}
-            {(includeInactive ? "" : "WHERE [IsActive] = 1")}
+            WHERE [CompanyId] = @CompanyId
+            {(includeInactive ? "" : "AND [IsActive] = 1")}
             ORDER BY [Name];
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var list = new List<ImportTemplate>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) list.Add(Map(r));
@@ -48,9 +50,10 @@ public sealed class SqlImportTemplateRepository : IImportTemplateRepository
             SELECT [Id],[Name],[TargetEntity],[SheetName],[HeaderRowIndex],[MatchKeyField],
                    [MappingJson],[IsActive],[Created],[Updated],[CreatedById],[UpdatedById]
             FROM {_table}
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? Map(r) : null;
     }
@@ -65,10 +68,12 @@ public sealed class SqlImportTemplateRepository : IImportTemplateRepository
                 WHERE [IsActive] = 1
                   AND LOWER([Name]) = LOWER(@Name)
                   AND (@ExcludeId IS NULL OR [Id] <> @ExcludeId)
+                  AND [CompanyId] = @CompanyId
             ) THEN 1 ELSE 0 END;
             """;
         cmd.Parameters.Add(new SqlParameter("@Name", name));
         cmd.Parameters.Add(new SqlParameter("@ExcludeId", (object?)excludeId ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         return ((int)(await cmd.ExecuteScalarAsync(ct) ?? 0)) == 1;
     }
 

@@ -26,6 +26,7 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
 
     public async Task<IReadOnlyCollection<FormFieldBehavior>> GetByFormCodeAsync(string formCode, CancellationToken ct)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
@@ -36,10 +37,11 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                    -- bozulmasin diye araya DEGIL sona. Okuma indeksi 20.
                    [RowHeight],[CellWidthPx],[TargetTabKey],[TargetTab],[Align]
             FROM {_table}
-            WHERE [FormCode]=@FormCode AND [IsActive]=1
+            WHERE [FormCode]=@FormCode AND [IsActive]=1 AND [CompanyId]=@CompanyId
             ORDER BY [SortOrder],[FieldKey];
             """;
         cmd.Parameters.Add(new SqlParameter("@FormCode", formCode));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         var list = new List<FormFieldBehavior>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))

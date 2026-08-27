@@ -247,9 +247,10 @@ public sealed class SqlDataVisibilityFilter : IDataVisibilityFilter
         await using var cmd = conn.CreateCommand();
         foreach (var (n, v) in localParams) cmd.Parameters.AddWithValue(n, v);
         cmd.Parameters.AddWithValue("@w", widgetId);
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
         cmd.CommandText = $@"
             SELECT DISTINCT [RecordId] FROM {_widgetTraTable}
-            WHERE [WidgetId] = @w AND [ParentRecordId] IS NULL
+            WHERE [WidgetId] = @w AND [ParentRecordId] IS NULL AND [CompanyId] = @CompanyId
               AND ({valuePred});";
 
         await using var r = await cmd.ExecuteReaderAsync(ct);

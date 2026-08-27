@@ -27,9 +27,10 @@ public sealed class SqlScreenLayoutRepository : IScreenLayoutRepository
         command.CommandText = $"""
             SELECT TOP (1) [Id], [ScreenCode], [LayoutJson], [Created], [Updated]
             FROM {_tableName}
-            WHERE [ScreenCode] = @ScreenCode;
+            WHERE [ScreenCode] = @ScreenCode AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@ScreenCode", screenCode));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))

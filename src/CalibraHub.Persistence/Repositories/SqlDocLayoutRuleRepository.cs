@@ -177,12 +177,13 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
             SELECT {SelectRuleFields()}
             FROM {_ruleTable} r WITH (READUNCOMMITTED)
             INNER JOIN {_layoutTable} l WITH (READUNCOMMITTED) ON l.[Id] = r.[LayoutId]
-            WHERE r.[Id] = @Id;";
+            WHERE r.[Id] = @Id AND r.[CompanyId] = @CompanyId;";
 
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _factory.ResolveEffectiveCompanyId()));
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? MapRule(reader) : null;
@@ -268,12 +269,13 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
         var sql = $@"
             SELECT [Id], [LayoutId], [CustomerId], [UserId], [BranchId], [WarehouseId], [Updated], [ContactGroupId], [AccountType]
             FROM {_ruleTable} WITH (READUNCOMMITTED)
-            WHERE [IsActive] = 1 AND [DocType] = @DocType;";
+            WHERE [IsActive] = 1 AND [DocType] = @DocType AND [CompanyId] = @CompanyId;";
 
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@DocType", SqlDbType.NVarChar, 60) { Value = docType });
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _factory.ResolveEffectiveCompanyId()));
 
         var list = new List<DocLayoutRuleMatchRow>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);

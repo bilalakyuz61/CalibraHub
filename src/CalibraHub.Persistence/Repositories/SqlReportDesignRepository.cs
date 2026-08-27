@@ -74,9 +74,10 @@ public sealed class SqlReportDesignRepository : IReportDesignRepository
         cmd.CommandText = """
             SELECT Title, PanelsJson, GroupName, Description
             FROM dbo.ReportDesign
-            WHERE Id = @Id AND IsActive = 1;
+            WHERE Id = @Id AND IsActive = 1 AND CompanyId = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct)) return null;
         return (
@@ -94,9 +95,10 @@ public sealed class SqlReportDesignRepository : IReportDesignRepository
         cmd.CommandText = """
             SELECT Id, Title, Created, CreatedBy, GroupName
             FROM dbo.ReportDesign
-            WHERE IsActive = 1
+            WHERE IsActive = 1 AND CompanyId = @CompanyId
             ORDER BY GroupName, Title;
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var list = new List<ReportDesignSummaryDto>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))

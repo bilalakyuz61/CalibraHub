@@ -557,11 +557,13 @@ public sealed class DataVisibilityRuleController : Controller
     private async Task<List<object>> GetActiveGrantDepartmentsAsync(CancellationToken ct)
     {
         var list = new List<object>();
+        var companyId = _connFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
-            SELECT [Id], [Name] FROM [dbo].[Department] WHERE [IsActive] = 1
+            SELECT [Id], [Name] FROM [dbo].[Department] WHERE [IsActive] = 1 AND [CompanyId] = @CompanyId
             ORDER BY [Name];";
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
             list.Add(new { id = r.GetInt32(0), name = r.GetString(1) });

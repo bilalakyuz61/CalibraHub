@@ -45,9 +45,10 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
             LEFT JOIN [{_schema}].[ItemConfiguration] cfg ON cfg.[Id] = c.[ConfigId]
             LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = c.[UnitId]
             LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = c.[FromLocationId]
-            WHERE c.[WorkOrderId] = @WorkOrderId
+            WHERE c.[WorkOrderId] = @WorkOrderId AND c.[CompanyId] = @CompanyId
             ORDER BY c.[Id];";
         cmd.Parameters.AddWithValue("@WorkOrderId", workOrderId);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
 
         var list = new List<WorkOrderComponentDto>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -95,8 +96,9 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
             LEFT JOIN [{_schema}].[ItemConfiguration] cfg ON cfg.[Id] = c.[ConfigId]
             LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = c.[UnitId]
             LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = c.[FromLocationId]
-            WHERE c.[Id] = @Id;";
+            WHERE c.[Id] = @Id AND c.[CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
 
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct)) return null;
@@ -264,6 +266,7 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
             int itemId, documentId;
             int? configId, unitId, warehouseLocationId, componentFromLocationId;
             string tracking; string? itemCode;
+            var issueCompanyId = _connectionFactory.ResolveEffectiveCompanyId();
             await using (var selCmd = conn.CreateCommand())
             {
                 selCmd.Transaction = tx;
@@ -273,8 +276,9 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                     FROM {_table} c
                     INNER JOIN [{_schema}].[WorkOrder] w ON w.[Id] = c.[WorkOrderId]
                     LEFT JOIN [{_schema}].[Items] i ON i.[Id] = c.[ItemId]
-                    WHERE c.[Id] = @Id;";
+                    WHERE c.[Id] = @Id AND c.[CompanyId] = @CompanyId;";
                 selCmd.Parameters.AddWithValue("@Id", componentId);
+                selCmd.Parameters.AddWithValue("@CompanyId", issueCompanyId);
                 await using var r = await selCmd.ExecuteReaderAsync(ct);
                 if (!await r.ReadAsync(ct)) throw new InvalidOperationException("Bileşen bulunamadı.");
                 itemId = r.GetInt32(0);

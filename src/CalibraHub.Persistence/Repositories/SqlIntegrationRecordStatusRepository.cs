@@ -28,10 +28,12 @@ public sealed class SqlIntegrationRecordStatusRepository : IIntegrationRecordSta
                          [LastError],[AttemptCount],[SkippedBy],[SkippedAt],[SkipReason],
                          [IsActive],[CreatedById],[Created],[UpdatedById],[Updated]
             FROM {_table}
-            WHERE [IntegrationId] = @IntegrationId AND [RecordId] = @RecordId AND [IsActive] = 1;
+            WHERE [IntegrationId] = @IntegrationId AND [RecordId] = @RecordId AND [IsActive] = 1
+              AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@IntegrationId", integrationId));
         cmd.Parameters.Add(new SqlParameter("@RecordId", recordId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? Map(r) : null;
     }
@@ -151,7 +153,7 @@ public sealed class SqlIntegrationRecordStatusRepository : IIntegrationRecordSta
         var list = new List<IntegrationRecordStatus>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
-        var where = "[IntegrationId] = @IntegrationId AND [IsActive] = 1";
+        var where = "[IntegrationId] = @IntegrationId AND [IsActive] = 1 AND [CompanyId] = @CompanyId";
         if (status.HasValue) where += " AND [Status] = @Status";
         cmd.CommandText = $"""
             SELECT [Id],[IntegrationId],[RecordId],[Status],[LastRunId],[LastSentAt],
@@ -162,6 +164,7 @@ public sealed class SqlIntegrationRecordStatusRepository : IIntegrationRecordSta
             ORDER BY [Updated] DESC, [Created] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@IntegrationId", integrationId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         if (status.HasValue) cmd.Parameters.Add(new SqlParameter("@Status", status.Value.ToString()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) list.Add(Map(r));
@@ -176,10 +179,11 @@ public sealed class SqlIntegrationRecordStatusRepository : IIntegrationRecordSta
         cmd.CommandText = $"""
             SELECT [Status], COUNT(*) AS [Cnt]
             FROM {_table}
-            WHERE [IntegrationId] = @IntegrationId AND [IsActive] = 1
+            WHERE [IntegrationId] = @IntegrationId AND [IsActive] = 1 AND [CompanyId] = @CompanyId
             GROUP BY [Status];
             """;
         cmd.Parameters.Add(new SqlParameter("@IntegrationId", integrationId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         int p = 0, f = 0, s = 0, k = 0;
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))

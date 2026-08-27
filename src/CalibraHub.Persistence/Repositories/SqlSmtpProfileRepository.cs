@@ -30,8 +30,10 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
         command.CommandText = $"""
             SELECT [Id], [CompanyId], [Name], [FromEmail], [FromDisplayName], [Host], [Port], [Username], [Password], [AuthMethod], [OAuth2ClientId], [OAuth2ClientSecret], [OAuth2RefreshToken], [UseSsl], [IsActive], [Created]
             FROM {_tableName}
+            WHERE [CompanyId] = @CompanyId
             ORDER BY [Name];
             """;
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -49,9 +51,10 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
         command.CommandText = $"""
             SELECT [Id], [CompanyId], [Name], [FromEmail], [FromDisplayName], [Host], [Port], [Username], [Password], [AuthMethod], [OAuth2ClientId], [OAuth2ClientSecret], [OAuth2RefreshToken], [UseSsl], [IsActive], [Created]
             FROM {_tableName}
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))

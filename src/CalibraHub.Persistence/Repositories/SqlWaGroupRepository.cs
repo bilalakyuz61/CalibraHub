@@ -69,9 +69,10 @@ public sealed class SqlWaGroupRepository : IWaGroupRepository
     public async Task<IReadOnlyList<WaGroup>> GetAllAsync(CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-        var sql = $"SELECT [Id],[GroupJid],[Subject],[Description],[MemberCount],[IsActive],[Created],[Updated] FROM {_g} WHERE [IsActive]=1 ORDER BY [Subject]";
+        var sql = $"SELECT [Id],[GroupJid],[Subject],[Description],[MemberCount],[IsActive],[Created],[Updated] FROM {_g} WHERE [IsActive]=1 AND [CompanyId]=@CompanyId ORDER BY [Subject]";
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         await using var r = await cmd.ExecuteReaderAsync(ct);
         var list = new List<WaGroup>();
         while (await r.ReadAsync(ct)) list.Add(ReadGroup(r));
@@ -81,10 +82,11 @@ public sealed class SqlWaGroupRepository : IWaGroupRepository
     public async Task<WaGroup?> GetByJidAsync(string groupJid, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-        var sql = $"SELECT [Id],[GroupJid],[Subject],[Description],[MemberCount],[IsActive],[Created],[Updated] FROM {_g} WHERE [GroupJid]=@Jid";
+        var sql = $"SELECT [Id],[GroupJid],[Subject],[Description],[MemberCount],[IsActive],[Created],[Updated] FROM {_g} WHERE [GroupJid]=@Jid AND [CompanyId]=@CompanyId";
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.AddWithValue("@Jid", groupJid);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? ReadGroup(r) : null;
     }
@@ -151,12 +153,13 @@ public sealed class SqlWaGroupRepository : IWaGroupRepository
         var sql = $"""
             SELECT [Id],[GroupId],[ContactId],[Jid],[Name],[Role],[JoinedAt],[LeftAt]
               FROM {_gm}
-             WHERE [GroupId]=@G AND [LeftAt] IS NULL
+             WHERE [GroupId]=@G AND [LeftAt] IS NULL AND [CompanyId]=@CompanyId
              ORDER BY [Name],[Jid];
             """;
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.AddWithValue("@G", groupId);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         await using var r = await cmd.ExecuteReaderAsync(ct);
         var list = new List<WaGroupMember>();
         while (await r.ReadAsync(ct))
