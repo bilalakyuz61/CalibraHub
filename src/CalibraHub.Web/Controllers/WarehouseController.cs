@@ -44,6 +44,14 @@ public sealed class WarehouseController : Controller
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
     };
 
+    /// <summary>
+    /// OnSave entegrasyon tetikleyicisi. 2026-08-27'ye kadar depo belgeleri (Giris/Cikis/
+    /// Transfer/Sayim) OnSave entegrasyonlarini HIC tetiklemiyordu — ne web'den ne mobilden.
+    /// Ticari belgelerde (SalesController.SaveDocument) tetikleniyordu, depo tarafinda atlanmisti;
+    /// kullanici "kaydetmede aktar" kurdugunda sessizce hicbir sey olmuyordu.
+    /// </summary>
+    private readonly IIntegrationOnSaveDispatcher _onSaveDispatcher;
+
     public WarehouseController(
         IStockDocRepository stockDocRepo,
         IInventoryCountRepository inventoryCountRepo,
@@ -59,8 +67,10 @@ public sealed class WarehouseController : Controller
         IPermissionService permService,
         IUserSettingRepository userSettings,
         ILogger<WarehouseController> logger,
+        IIntegrationOnSaveDispatcher onSaveDispatcher,
         CalibraDatabaseOptions dbOptions)
     {
+        _onSaveDispatcher = onSaveDispatcher;
         _stockDocRepo = stockDocRepo;
         _inventoryCountRepo = inventoryCountRepo;
         _logisticsService = logisticsService;
@@ -581,6 +591,11 @@ public sealed class WarehouseController : Controller
             var (id, docNo) = await _stockDocRepo.SaveAsync(request, CurrentUserId(), ct);
 
             await LogStockDocSaveAsync(request, id, docNo, oldDoc, oldLines, ct);
+
+            // Sayim belgesi OnSave entegrasyonu. Bu metoda YALNIZ INVENTORY_COUNT girebilir
+            // (yukarida acikca dogrulaniyor), o yuzden kod sabit.
+            _onSaveDispatcher.FireOnSave(FormCodes.InventoryCount, id.ToString(), User?.Identity?.Name);
+
             return Json(new { success = true, id, docNo });
         }
         catch (InvalidOperationException ioex)
@@ -895,6 +910,18 @@ public sealed class WarehouseController : Controller
             var (id, docNo) = await _stockDocRepo.SaveAsync(request, CurrentUserId(), ct);
 
             await LogStockDocSaveAsync(request, id, docNo, oldDoc, oldLines, ct);
+
+            // Depo belgelerinde _EDIT/_NEW varyanti YOK (bkz. FormCodes: STOCK_IN/STOCK_OUT/
+            // TRANSFER + *_LINES) -> tek kod ile tetiklenir. Tip, yukarida whitelist'ten gecmis
+            // ve guncellemede DB'deki gercek belgeyle karsilastirilmis request.DocType'tir.
+            var _wOnSaveCode = request.DocType switch
+            {
+                "STOCK_OUT" => FormCodes.StockOut,
+                "TRANSFER"  => FormCodes.Transfer,
+                _           => FormCodes.StockIn,
+            };
+            _onSaveDispatcher.FireOnSave(_wOnSaveCode, id.ToString(), User?.Identity?.Name);
+
             return Json(new { success = true, id, docNo });
         }
         catch (CalibraHub.Domain.Exceptions.NegativeBalanceException nbex)

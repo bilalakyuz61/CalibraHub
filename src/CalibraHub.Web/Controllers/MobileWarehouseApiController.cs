@@ -693,6 +693,16 @@ public sealed class MobileWarehouseApiController : ControllerBase
             // (bkz. SaveExtraFieldsAsync yorumu). formCode STOCK_IN/STOCK_OUT için izin ve
             // widget FormCode'u AYNI değer (irsaliyeden farklı olarak _EDIT suffix'i yok).
             var extraFieldsError = await SaveExtraFieldsAsync(formCode, id, body.ExtraFields, ct);
+
+            // OnSave entegrasyon dispatch — origin: Mobile. Entegrasyonun "Mobil dahil"
+            // anahtari kapaliysa dispatcher gondermez, kayit Aktarim Kuyrugu'nda bekler.
+            // Depo belgelerinde _EDIT/_NEW varyanti YOK (bkz. FormCodes: STOCK_IN/OUT/TRANSFER/
+            // INVENTORY_COUNT + *_LINES), bu yuzden TEK kod ile tetiklenir.
+            _onSaveDispatcher.FireOnSave(
+                formCode,
+                id.ToString(),
+                User?.Identity?.Name,
+                CalibraHub.Application.Abstractions.Services.IntegrationSaveOrigin.Mobile);
             return Ok(new { ok = true, docId = id, docNumber = docNo, extraFieldsError });
         }
         catch (NegativeBalanceException nbex)
@@ -802,6 +812,16 @@ public sealed class MobileWarehouseApiController : ControllerBase
             await LogStockDocInsertAsync("TRANSFER", request, id, docNo, ct);
             // Ek saha (opsiyonel extraFields) — belge KAYDEDILDIKTEN SONRA, ayrı transaction.
             var extraFieldsError = await SaveExtraFieldsAsync(FormCodes.Transfer, id, body.ExtraFields, ct);
+
+            // OnSave entegrasyon dispatch — origin: Mobile. Entegrasyonun "Mobil dahil"
+            // anahtari kapaliysa dispatcher gondermez, kayit Aktarim Kuyrugu'nda bekler.
+            // Depo belgelerinde _EDIT/_NEW varyanti YOK (bkz. FormCodes: STOCK_IN/OUT/TRANSFER/
+            // INVENTORY_COUNT + *_LINES), bu yuzden TEK kod ile tetiklenir.
+            _onSaveDispatcher.FireOnSave(
+                FormCodes.Transfer,
+                id.ToString(),
+                User?.Identity?.Name,
+                CalibraHub.Application.Abstractions.Services.IntegrationSaveOrigin.Mobile);
             return Ok(new { ok = true, documentNumber = docNo, extraFieldsError });
         }
         catch (NegativeBalanceException nbex)
@@ -913,6 +933,16 @@ public sealed class MobileWarehouseApiController : ControllerBase
             var extraFieldsError = await SaveExtraFieldsAsync(FormCodes.InventoryCount, id, body.ExtraFields, ct);
             // Web SaveInventoryJson paritesi: kayit HER ZAMAN taslak kalir (yukaridaki yorum) → applied daima false.
             // id EKLENDI (additive) — mobil "Yansit" (/inventory-count/{id}/apply) belgeyi bununla hedefler.
+
+            // OnSave entegrasyon dispatch — origin: Mobile. Entegrasyonun "Mobil dahil"
+            // anahtari kapaliysa dispatcher gondermez, kayit Aktarim Kuyrugu'nda bekler.
+            // Depo belgelerinde _EDIT/_NEW varyanti YOK (bkz. FormCodes: STOCK_IN/OUT/TRANSFER/
+            // INVENTORY_COUNT + *_LINES), bu yuzden TEK kod ile tetiklenir.
+            _onSaveDispatcher.FireOnSave(
+                FormCodes.InventoryCount,
+                id.ToString(),
+                User?.Identity?.Name,
+                CalibraHub.Application.Abstractions.Services.IntegrationSaveOrigin.Mobile);
             return Ok(new { ok = true, id, documentNumber = docNo, applied = false, extraFieldsError });
         }
         catch (InvalidOperationException ioex)
