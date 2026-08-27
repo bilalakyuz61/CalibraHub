@@ -1,3 +1,4 @@
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment HostEnv
 @{
     ViewData["Title"] = "Öne Çıkan Özellikler";
     ViewData["BodyClass"] = "page-ftr";
@@ -170,6 +171,47 @@
 
     var totalFeatures = groups.Sum(g => g.Items.Length);
 
+    // ── Ekran görüntüleri ────────────────────────────────────────────────
+    // Dosya konumu: wwwroot/img/features/{grupSlug}/{ozellikSlug}.(png|jpg|jpeg|webp)
+    // Grup kapak görseli: wwwroot/img/features/{grupSlug}/_hero.(png|jpg|jpeg|webp)
+    // Dosya yoksa kart görselsiz çıkar; "Eksik görselleri göster" anahtarı
+    // beklenen dosya adını yerinde gösterir (görsel toplama kontrol listesi).
+    string Slug(string s)
+    {
+        var map = new Dictionary<char, char>
+        {
+            ['ı'] = 'i', ['İ'] = 'i', ['ş'] = 's', ['Ş'] = 's', ['ğ'] = 'g', ['Ğ'] = 'g',
+            ['ü'] = 'u', ['Ü'] = 'u', ['ö'] = 'o', ['Ö'] = 'o', ['ç'] = 'c', ['Ç'] = 'c',
+        };
+        var sb = new System.Text.StringBuilder(s.Length);
+        foreach (var ch in s)
+        {
+            var c = map.TryGetValue(ch, out var m) ? m : char.ToLowerInvariant(ch);
+            if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) sb.Append(c);
+            else if (sb.Length > 0 && sb[sb.Length - 1] != '-') sb.Append('-');
+        }
+        return sb.ToString().Trim('-');
+    }
+
+    var shotRoot = System.IO.Path.Combine(HostEnv.WebRootPath ?? "", "img", "features");
+    // Var olan görselleri tek seferde tara — kart başına ayrı dosya sistemi sorgusu yapma.
+    var shotFiles = System.IO.Directory.Exists(shotRoot)
+        ? System.IO.Directory.GetFiles(shotRoot, "*.*", System.IO.SearchOption.AllDirectories)
+        : Array.Empty<string>();
+
+    // relPath ("satis/kismi-teslimat") → bulunan dosyanın url'i (cache-bust damgalı) veya null
+    string? ShotUrl(string relPath)
+    {
+        foreach (var ext in new[] { ".png", ".jpg", ".jpeg", ".webp" })
+        {
+            var full = System.IO.Path.Combine(shotRoot, relPath.Replace('/', System.IO.Path.DirectorySeparatorChar) + ext);
+            var hit = shotFiles.FirstOrDefault(f => string.Equals(f, full, StringComparison.OrdinalIgnoreCase));
+            if (hit != null)
+                return $"/img/features/{relPath}{ext}?v={System.IO.File.GetLastWriteTimeUtc(hit).Ticks}";
+        }
+        return null;
+    }
+
     // İkonlar inline: sayfa dış bağımlılık olmadan (React bundle beklemeden) render olsun.
     var icons = new Dictionary<string, string>
     {
@@ -311,6 +353,66 @@
     .tone-rose    { --tone: #f43f5e; --tone-soft: rgba(244,63,94,.14); }
     .tone-blue    { --tone: #3b82f6; --tone-soft: rgba(59,130,246,.14); }
 
+    /* ── Ekran görüntüleri ──────────────────────────── */
+    .ftr-hero-shot { margin: 0 0 14px; }
+    .ftr-hero-shot img {
+        display: block; width: 100%; max-height: 460px; object-fit: contain;
+        object-position: top center;
+        border: 1px solid var(--ftr-border); border-radius: 12px;
+        background: var(--ftr-surface); cursor: zoom-in;
+    }
+    .ftr-hero-shot figcaption { font-size: 11.5px; color: var(--ftr-muted); margin-top: 6px; }
+
+    .ftr-card__shot {
+        display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover;
+        object-position: top left;
+        border: 1px solid var(--ftr-border); border-radius: 8px;
+        background: var(--ftr-bg); margin-bottom: 10px; cursor: zoom-in;
+    }
+
+    /* Eksik görsel yer tutucusu — varsayılan gizli, anahtar açınca görünür. */
+    .ftr-shot-missing { display: none; }
+    .ftr-root.show-missing .ftr-shot-missing {
+        display: block;
+        border: 1px dashed var(--ftr-border); border-radius: 8px;
+        padding: 10px 12px; margin-bottom: 10px;
+        font-size: 11px; color: var(--ftr-muted); text-align: center;
+    }
+    .ftr-root.show-missing .ftr-shot-missing--hero { margin-bottom: 14px; text-align: left; }
+    .ftr-shot-missing code {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 11px; color: var(--ftr-accent); word-break: break-all;
+    }
+
+    /* Büyütme katmanı */
+    .ftr-lightbox {
+        position: fixed; inset: 0; z-index: 2000; display: none;
+        align-items: center; justify-content: center; padding: 32px;
+        background: rgba(2, 6, 23, .82); backdrop-filter: blur(3px);
+        cursor: zoom-out;
+    }
+    .ftr-lightbox.is-open { display: flex; }
+    .ftr-lightbox img {
+        max-width: 100%; max-height: 100%;
+        border-radius: 10px; box-shadow: 0 24px 60px rgba(0,0,0,.5);
+    }
+
+    /* ── Anahtar (switch) ───────────────────────────── */
+    .ftr-switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+    .ftr-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .ftr-switch__track {
+        position: relative; width: 36px; height: 20px; flex: 0 0 auto;
+        border-radius: 10px; background: var(--ftr-border); transition: background .18s;
+    }
+    .ftr-switch__thumb {
+        position: absolute; top: 3px; left: 3px; width: 14px; height: 14px;
+        border-radius: 50%; background: #fff; transition: transform .18s;
+        box-shadow: 0 1px 3px rgba(0,0,0,.25);
+    }
+    .ftr-switch input:checked ~ .ftr-switch__track { background: var(--ftr-accent); }
+    .ftr-switch input:checked ~ .ftr-switch__track .ftr-switch__thumb { transform: translateX(16px); }
+    .ftr-switch__text { font-size: 13px; color: var(--ftr-muted); }
+
     .ftr-empty { display: none; text-align: center; padding: 46px 0; color: var(--ftr-muted); font-size: 14px; }
     .ftr-root.is-empty .ftr-empty { display: block; }
 
@@ -329,6 +431,10 @@
         .ftr-hero { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .ftr-card { break-inside: avoid; box-shadow: none; }
         .ftr-group { break-inside: avoid-page; }
+        /* Görseller PDF'e girer; eksik yer tutucuları ve büyütme katmanı girmez. */
+        .ftr-shot-missing, .ftr-lightbox { display: none !important; }
+        .ftr-hero-shot img { max-height: 300px; }
+        .ftr-hero-shot, .ftr-card__shot { break-inside: avoid; }
     }
 </style>
 }
@@ -357,6 +463,11 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             <input type="text" id="ftrSearch" placeholder="Özellik ara… (ör. seri takibi, onay, Gantt)" autocomplete="off" />
         </div>
+        <label class="ftr-switch" title="Henüz ekran görüntüsü eklenmemiş kartlarda beklenen dosya adını gösterir">
+            <input type="checkbox" id="ftrShowMissing" />
+            <span class="ftr-switch__track"><span class="ftr-switch__thumb"></span></span>
+            <span class="ftr-switch__text">Eksik görselleri göster</span>
+        </label>
         <button type="button" class="ftr-btn" id="ftrPrint">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
             Yazdır / PDF
@@ -366,6 +477,8 @@
     <div id="ftrList">
         @foreach (var g in groups)
         {
+            var gSlug   = Slug(g.Title);
+            var heroUrl = ShotUrl($"{gSlug}/_hero");
             <section class="ftr-group tone-@g.Tone" data-ftr-group>
                 <div class="ftr-group__head">
                     <div class="ftr-group__icon">
@@ -377,10 +490,37 @@
                     </div>
                     <span class="ftr-group__count">@g.Items.Length özellik</span>
                 </div>
+
+                @if (heroUrl != null)
+                {
+                    <figure class="ftr-hero-shot">
+                        <img src="@heroUrl" alt="@g.Title ekran görüntüsü" loading="lazy" data-ftr-zoom />
+                        <figcaption>@g.Title</figcaption>
+                    </figure>
+                }
+                else
+                {
+                    <div class="ftr-shot-missing ftr-shot-missing--hero" data-ftr-missing>
+                        Kapak görseli: <code>wwwroot/img/features/@gSlug/_hero.png</code>
+                    </div>
+                }
+
                 <div class="ftr-cards">
                     @foreach (var it in g.Items)
                     {
-                        <article class="ftr-card" data-ftr-card data-ftr-text="@($"{g.Title} {it.T} {it.D}")">
+                        var iSlug   = Slug(it.T);
+                        var shotUrl = ShotUrl($"{gSlug}/{iSlug}");
+                        <article class="ftr-card @(shotUrl != null ? "has-shot" : "")" data-ftr-card data-ftr-text="@($"{g.Title} {it.T} {it.D}")">
+                            @if (shotUrl != null)
+                            {
+                                <img class="ftr-card__shot" src="@shotUrl" alt="@it.T ekran görüntüsü" loading="lazy" data-ftr-zoom />
+                            }
+                            else
+                            {
+                                <div class="ftr-shot-missing" data-ftr-missing>
+                                    <code>@gSlug/@iSlug.png</code>
+                                </div>
+                            }
                             <h3>@it.T</h3>
                             <p>@it.D</p>
                         </article>
@@ -391,6 +531,8 @@
     </div>
 
     <div class="ftr-empty">Aramanızla eşleşen özellik bulunamadı.</div>
+
+    <div class="ftr-lightbox" id="ftrLightbox" aria-hidden="true"><img alt="" /></div>
 
     <div class="ftr-foot">
         Bu sayfa tanıtım ve bilgilendirme amaçlıdır. Modüllerin kullanıma açılması
@@ -436,6 +578,37 @@
 
     input.addEventListener('input', applyFilter);
     document.getElementById('ftrPrint').addEventListener('click', function () { window.print(); });
+
+    // Eksik görsel yer tutucuları — tercih kullanıcıda kalsın diye localStorage'da.
+    var missingBox = document.getElementById('ftrShowMissing');
+    missingBox.checked = localStorage.getItem('ftrShowMissing') === '1';
+    function applyMissing() {
+        root.classList.toggle('show-missing', missingBox.checked);
+        localStorage.setItem('ftrShowMissing', missingBox.checked ? '1' : '0');
+    }
+    missingBox.addEventListener('change', applyMissing);
+    applyMissing();
+
+    // Görsele tıklayınca tam ekran büyüt (Esc veya tıklama ile kapanır).
+    var lightbox = document.getElementById('ftrLightbox');
+    var lightImg = lightbox.querySelector('img');
+    document.addEventListener('click', function (e) {
+        var img = e.target.closest ? e.target.closest('[data-ftr-zoom]') : null;
+        if (img) {
+            lightImg.src = img.getAttribute('src');
+            lightImg.alt = img.getAttribute('alt') || '';
+            lightbox.classList.add('is-open');
+            lightbox.setAttribute('aria-hidden', 'false');
+        } else if (e.target === lightbox || lightbox.contains(e.target)) {
+            close();
+        }
+    });
+    function close() {
+        lightbox.classList.remove('is-open');
+        lightbox.setAttribute('aria-hidden', 'true');
+        lightImg.removeAttribute('src');
+    }
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
 })();
 </script>
 }
