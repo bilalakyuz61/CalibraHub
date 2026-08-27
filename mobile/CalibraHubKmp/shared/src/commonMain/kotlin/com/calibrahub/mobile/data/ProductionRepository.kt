@@ -26,6 +26,16 @@ class ProductionRepository(private val session: SessionManager) {
         resp.body<WorkOrderDetailDto>()
     }
 
+    /**
+     * Bagli personel + PIN gereksinimi. Hata durumunda "PIN gerekli" varsayilanina duser —
+     * ag hatasi yuzunden PIN atlanmamali (fail-safe yon guvenlik lehine).
+     */
+    suspend fun myOperator(): MyOperatorDto = runCatching {
+        val resp = session.productionApi().myOperator()
+        if (!resp.status.isSuccess()) error("HTTP ${resp.status.value}")
+        resp.body<MyOperatorDto>()
+    }.getOrElse { MyOperatorDto(linked = false, pinRequired = true) }
+
     /** Sicil No + PIN dogrulama — basarida operatorId+name doner, start/complete cagrilarinda kullanilir. */
     suspend fun authOperator(personnelCode: String, pin: String): Result<AuthOperatorResponse> = runCatching {
         val resp = session.productionApi().authOperator(AuthOperatorRequest(personnelCode = personnelCode, pin = pin))

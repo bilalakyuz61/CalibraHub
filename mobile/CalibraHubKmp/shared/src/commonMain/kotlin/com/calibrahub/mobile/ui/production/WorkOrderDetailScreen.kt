@@ -115,6 +115,17 @@ fun WorkOrderDetailScreen(session: SessionManager, workOrderId: Int, onBack: () 
     var completeNote by remember { mutableStateOf("") }
     var completeError by remember { mutableStateOf<String?>(null) }
 
+    // Kisisel telefon senaryosu: personel kartinda "Mobilde PIN Sor" KAPALI ve kullanici
+    // o personele bagliysa, operator kimligi acilista cozulur ve PIN ekrani HIC gosterilmez.
+    // Hata/bagsizlik durumunda pinRequired=true doner -> mevcut PIN akisi aynen isler.
+    LaunchedEffect(Unit) {
+        val me = repo.myOperator()
+        if (me.linked && !me.pinRequired && me.operatorId != null) {
+            operatorId = me.operatorId
+            operatorName = me.name
+        }
+    }
+
     LaunchedEffect(workOrderId, reloadTick) {
         errorMessage = null
         repo.workOrderDetail(workOrderId).fold(

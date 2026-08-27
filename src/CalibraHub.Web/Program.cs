@@ -226,6 +226,8 @@ builder.Services.AddScoped<IFinanceService, FinanceService>();
 builder.Services.AddScoped<IApprovalQueueService, ApprovalQueueService>();
 builder.Services.AddSingleton<CalibraHub.Application.Services.OrgChartDomainService>();
 builder.Services.AddSingleton<CalibraHub.Application.Services.ShopFloorLockoutTracker>();
+// Mobil uretim: PIN ile dogrulanmis (kullanici, operator) ciftleri — start/complete kimlik kaniti.
+builder.Services.AddSingleton<CalibraHub.Application.Services.ShopFloorOperatorSessionTracker>();
 builder.Services.AddSingleton<CalibraHub.Application.Services.LoginLockoutTracker>();
 
 // Rate limiting — yalnizca [EnableRateLimiting("...")] ile isaretli hassas endpoint'lerde calisir.

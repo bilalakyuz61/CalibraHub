@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Auditing;
 using CalibraHub.Application.Contracts;
@@ -55,6 +55,7 @@ public sealed class PersonnelService : IPersonnelService
             PinCode = string.IsNullOrWhiteSpace(req.PinCode) ? null : req.PinCode.Trim(),
             CardNo = string.IsNullOrWhiteSpace(req.CardNo) ? null : req.CardNo.Trim(),
             IsProductionOperator = req.IsProductionOperator,
+            IsMobilePinRequired = req.IsMobilePinRequired,
             IsActive = req.IsActive,
             UserId = req.UserId,
             LocationId = req.LocationId,

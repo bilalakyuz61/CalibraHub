@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 
 namespace CalibraHub.Domain.Entities;
 
@@ -35,6 +35,13 @@ public sealed class Personnel
 
     /// <summary>true ise shop-floor kuyruğunda görünür. false ise yalnızca yönetim/destek.</summary>
     public bool IsProductionOperator { get; init; }
+
+    /// <summary>
+    /// Mobil uretim ekraninda operasyon baslat/tamamla oncesi PIN sorulsun mu?
+    /// Varsayilan true (ortak tablet/kiosk guvenlik varsayimi). false ise kimlik,
+    /// giris yapmis kullanicinin bagli personel kaydindan cozulur (bkz. UserId).
+    /// </summary>
+    public bool IsMobilePinRequired { get; init; } = true;
 
     public bool IsActive { get; init; } = true;
 

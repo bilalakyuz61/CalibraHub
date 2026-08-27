@@ -34,6 +34,9 @@ class ProductionApi(
 
     suspend fun workOrderDetail(id: Int): HttpResponse = client.get("${base}production/work-orders/$id")
 
+    /** Giris yapmis kullaniciya bagli personel + mobilde PIN gerekip gerekmedigi. */
+    suspend fun myOperator(): HttpResponse = client.get("${base}production/me")
+
     /** Yanlis sicil no/PIN veya kilitli personel -> 400 {error}. */
     suspend fun authOperator(req: AuthOperatorRequest): HttpResponse =
         client.post("${base}production/auth-operator") {

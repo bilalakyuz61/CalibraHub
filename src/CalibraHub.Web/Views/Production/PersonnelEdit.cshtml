@@ -1,4 +1,4 @@
-@model CalibraHub.Application.Contracts.PersonnelDto
+﻿@model CalibraHub.Application.Contracts.PersonnelDto
 @{
     var isNew = Model is null;
     ViewData["Title"] = isNew ? "Yeni Personel" : $"Personel: {Model!.FullName}";
@@ -234,6 +234,25 @@
           </div>
         </div>
 
+        <div class="ux-row2">
+          <div class="ux-field ux-field--wide">
+            <label>Mobilde PIN Sor</label>
+            <div class="ux-switch-row">
+              <label class="ux-switch">
+                <input type="checkbox" id="pe-mobile-pin" @(Model is null || Model.IsMobilePinRequired ? "checked" : "") />
+                <span class="ux-switch-track"></span>
+              </label>
+              <span class="ux-switch-label" id="pe-mobile-pin-label">@(Model is null || Model.IsMobilePinRequired ? "Sorulsun" : "Sorulmasın")</span>
+            </div>
+            <div style="font-size:12px; color:var(--app-muted, #64748b); margin-top:6px; line-height:1.5;">
+              Ortak kullanılan tablet/kiosk için <strong>açık</strong> bırakın: her operasyon başlat/tamamla
+              adımında sicil no + PIN sorulur. Personel <strong>kendi telefonunu</strong> kullanıyorsa
+              kapatabilirsiniz — kimlik, giriş yapmış kullanıcının bu personel kaydına bağlanmasından
+              (yukarıdaki <em>Kullanıcı</em> alanı) çözülür. Kullanıcı bağlı değilse PIN yine sorulur.
+            </div>
+          </div>
+        </div>
+
         <div id="pe-err" style="display:none;" class="ux-err"></div>
       </div>
 
@@ -319,6 +338,7 @@
     }
     bindLabel('pe-active',   'pe-active-label',   'Aktif', 'Pasif');
     bindLabel('pe-operator', 'pe-operator-label', 'Evet',  'Hayır');
+    bindLabel('pe-mobile-pin', 'pe-mobile-pin-label', 'Sorulsun', 'Sorulmasın');
 
     // ── Departman dropdown ──
     (function loadDepartments() {
@@ -433,6 +453,7 @@
                 pinCode:              document.getElementById('pe-pin').value.trim() || null,
                 cardNo:               document.getElementById('pe-card').value.trim() || null,
                 isProductionOperator: document.getElementById('pe-operator').checked,
+                isMobilePinRequired: document.getElementById('pe-mobile-pin').checked,
                 isActive:             document.getElementById('pe-active').checked,
                 userId:               (function () { var v = document.getElementById('pe-user').value; return v ? parseInt(v, 10) : null; })(),
                 locationId:           (function () { var v = document.getElementById('pe-location').value; return v ? parseInt(v, 10) : null; })(),

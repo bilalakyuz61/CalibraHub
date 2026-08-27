@@ -867,6 +867,7 @@ END;";
             await MigrateDateTime2ToDateTimeAsync(connection, cancellationToken);
             await EnsureCalendarTablesAsync(connection, cancellationToken);
             await EnsurePersonnelBirthDateAsync(connection, cancellationToken);
+            await EnsurePersonnelMobilePinFlagAsync(connection, cancellationToken);
             await EnsureReportEngineTablesAsync(connection, cancellationToken);
             await EnsureFulfillmentLineExtrasViewAsync(connection, cancellationToken);
             await EnsureViewMetaTableAsync(connection, cancellationToken);
@@ -21392,6 +21393,27 @@ END;";
                AND COL_LENGTH(N'dbo.Personnel', N'BirthDate') IS NULL
             BEGIN
                 ALTER TABLE dbo.Personnel ADD [BirthDate] DATETIME NULL;
+            END
+            """, ct);
+    }
+
+    /// <summary>
+    /// Personnel.IsMobilePinRequired — mobil uretim ekraninda operasyon baslat/tamamla
+    /// oncesi PIN sorulsun mu?
+    ///
+    /// VARSAYILAN 1 (sorulsun): mevcut davranis korunur; ortak kullanilan tablet/kiosk icin
+    /// dogru olan budur. Kisisel telefon kullanan personelde bayrak kapatilir; o zaman kimlik,
+    /// giris yapmis kullanicinin BAGLI personel kaydindan (Personnel.UserId) cozulur.
+    /// </summary>
+    private static async Task EnsurePersonnelMobilePinFlagAsync(SqlConnection connection, CancellationToken ct)
+    {
+        await ExecAsync(connection, """
+            IF OBJECT_ID(N'dbo.Personnel', N'U') IS NOT NULL
+               AND COL_LENGTH(N'dbo.Personnel', N'IsMobilePinRequired') IS NULL
+            BEGIN
+                ALTER TABLE dbo.Personnel
+                    ADD [IsMobilePinRequired] BIT NOT NULL
+                        CONSTRAINT [DF_Personnel_IsMobilePinRequired] DEFAULT 1;
             END
             """, ct);
     }

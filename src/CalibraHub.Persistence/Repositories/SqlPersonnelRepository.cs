@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
@@ -43,7 +43,8 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
                    p.[PinCode], p.[CardNo], p.[IsProductionOperator], p.[IsActive],
                    p.[UserId], u.[FullName] AS UserFullName,
                    p.[Phone], p.[Email], p.[Notes], p.[BirthDate], p.[Created], p.[Updated],
-                   p.[LocationId], loc.[LocationName] AS PersonnelLocationName
+                   p.[LocationId], loc.[LocationName] AS PersonnelLocationName,
+                   p.[IsMobilePinRequired]
             FROM {_table} p
             LEFT JOIN [{_schema}].[Users] u ON u.[Id] = p.[UserId]
             LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = p.[LocationId]
@@ -68,7 +69,8 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
                    p.[PinCode], p.[CardNo], p.[IsProductionOperator], p.[IsActive],
                    p.[UserId], u.[FullName] AS UserFullName,
                    p.[Phone], p.[Email], p.[Notes], p.[BirthDate], p.[Created], p.[Updated],
-                   p.[LocationId], loc.[LocationName] AS PersonnelLocationName
+                   p.[LocationId], loc.[LocationName] AS PersonnelLocationName,
+                   p.[IsMobilePinRequired]
             FROM {_table} p
             LEFT JOIN [{_schema}].[Users] u ON u.[Id] = p.[UserId]
             LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = p.[LocationId]
@@ -89,11 +91,11 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
             cmd.CommandText = $@"
                 INSERT INTO {_table}
                     ([CompanyId],[Code],[FullName],[Title],[Department],
-                     [PinCode],[CardNo],[IsProductionOperator],[IsActive],
+                     [PinCode],[CardNo],[IsProductionOperator],[IsActive],[IsMobilePinRequired],
                      [UserId],[LocationId],[Phone],[Email],[Notes],[BirthDate],[Created])
                 VALUES
                     (@CompanyId,@Code,@FullName,@Title,@Department,
-                     @PinCode,@CardNo,@IsProductionOperator,@IsActive,
+                     @PinCode,@CardNo,@IsProductionOperator,@IsActive,@IsMobilePinRequired,
                      @UserId,@LocationId,@Phone,@Email,@Notes,@BirthDate,SYSUTCDATETIME());
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
         }
@@ -105,6 +107,7 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
                     [Title]=@Title, [Department]=@Department,
                     [PinCode]=@PinCode, [CardNo]=@CardNo,
                     [IsProductionOperator]=@IsProductionOperator, [IsActive]=@IsActive,
+                    [IsMobilePinRequired]=@IsMobilePinRequired,
                     [UserId]=@UserId, [LocationId]=@LocationId,
                     [Phone]=@Phone, [Email]=@Email, [Notes]=@Notes,
                     [BirthDate]=@BirthDate, [Updated]=SYSUTCDATETIME()
@@ -120,6 +123,7 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
         cmd.Parameters.AddWithValue("@PinCode", (object?)e.PinCode ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@CardNo", (object?)e.CardNo ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@IsProductionOperator", e.IsProductionOperator);
+        cmd.Parameters.AddWithValue("@IsMobilePinRequired", e.IsMobilePinRequired);
         cmd.Parameters.AddWithValue("@IsActive", e.IsActive);
         cmd.Parameters.AddWithValue("@UserId", (object?)e.UserId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@LocationId", (object?)e.LocationId ?? DBNull.Value);
@@ -183,7 +187,8 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
                    p.[PinCode], p.[CardNo], p.[IsProductionOperator], p.[IsActive],
                    p.[UserId], u.[FullName] AS UserFullName,
                    p.[Phone], p.[Email], p.[Notes], p.[BirthDate], p.[Created], p.[Updated],
-                   p.[LocationId], loc.[LocationName] AS PersonnelLocationName
+                   p.[LocationId], loc.[LocationName] AS PersonnelLocationName,
+                   p.[IsMobilePinRequired]
             FROM {_table} p
             LEFT JOIN [{_schema}].[Users] u ON u.[Id] = p.[UserId]
             LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = p.[LocationId]
@@ -250,7 +255,8 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
                    p.[PinCode], p.[CardNo], p.[IsProductionOperator], p.[IsActive],
                    p.[UserId], u.[FullName] AS UserFullName,
                    p.[Phone], p.[Email], p.[Notes], p.[BirthDate], p.[Created], p.[Updated],
-                   p.[LocationId], loc.[LocationName] AS PersonnelLocationName
+                   p.[LocationId], loc.[LocationName] AS PersonnelLocationName,
+                   p.[IsMobilePinRequired]
             FROM {_table} p
             LEFT JOIN [{_schema}].[Users] u ON u.[Id] = p.[UserId]
             LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = p.[LocationId]
@@ -287,7 +293,8 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
                 Created: r.GetDateTime(16),
                 Updated: r.IsDBNull(17) ? null : r.GetDateTime(17),
                 LocationId: r.IsDBNull(18) ? null : r.GetInt32(18),
-                LocationName: r.IsDBNull(19) ? null : r.GetString(19)));
+                LocationName: r.IsDBNull(19) ? null : r.GetString(19),
+                IsMobilePinRequired: r.IsDBNull(20) || r.GetBoolean(20)));
         }
         return list;
     }

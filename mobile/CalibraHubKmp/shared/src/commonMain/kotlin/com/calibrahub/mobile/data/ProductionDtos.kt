@@ -93,3 +93,17 @@ data class CompleteOperationRequest(
 data class OperationActionResponse(
     val ok: Boolean = true,
 )
+
+/**
+ * GET /api/mobile/production/me — giris yapmis kullaniciya bagli personel kaydi.
+ *
+ * [linked] false ise kullanicinin personel kaydi yok (ya da uretim operatoru degil) ->
+ * [pinRequired] her zaman true doner, istemci PIN yolunu kullanir (fail-safe).
+ */
+@Serializable
+data class MyOperatorDto(
+    val linked: Boolean = false,
+    val operatorId: Int? = null,
+    val name: String? = null,
+    val pinRequired: Boolean = true,
+)

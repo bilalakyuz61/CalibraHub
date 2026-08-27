@@ -1,4 +1,4 @@
-namespace CalibraHub.Application.Contracts;
+﻿namespace CalibraHub.Application.Contracts;
 
 public sealed record PersonnelDto(
     int Id,
@@ -20,7 +20,9 @@ public sealed record PersonnelDto(
     DateTime Created,
     DateTime? Updated,
     int? LocationId = null,
-    string? LocationName = null);
+    string? LocationName = null,
+    /// <summary>Mobilde operasyon oncesi PIN sorulsun mu? Varsayilan true (mevcut davranis).</summary>
+    bool IsMobilePinRequired = true);
 
 public sealed record SavePersonnelRequest(
     int Id,
@@ -37,4 +39,5 @@ public sealed record SavePersonnelRequest(
     string? Email,
     string? Notes,
     DateTime? BirthDate,
-    int? LocationId = null);
+    int? LocationId = null,
+    bool IsMobilePinRequired = true);

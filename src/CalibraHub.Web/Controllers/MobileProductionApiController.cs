@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
@@ -65,6 +65,7 @@ public sealed class MobileProductionApiController : ControllerBase
     private readonly IPersonnelRepository _personnelRepo;
     private readonly ICompanyParameterService _companyParameters;
     private readonly ShopFloorLockoutTracker _shopFloorLockout;
+    private readonly ShopFloorOperatorSessionTracker _operatorSessions;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly IPermissionService _permService;
     private readonly ILogger<MobileProductionApiController> _logger;
@@ -77,6 +78,7 @@ public sealed class MobileProductionApiController : ControllerBase
         IPersonnelRepository personnelRepo,
         ICompanyParameterService companyParameters,
         ShopFloorLockoutTracker shopFloorLockout,
+        ShopFloorOperatorSessionTracker operatorSessions,
         SqlServerConnectionFactory connectionFactory,
         IPermissionService permService,
         ILogger<MobileProductionApiController> logger)
@@ -88,6 +90,7 @@ public sealed class MobileProductionApiController : ControllerBase
         _personnelRepo = personnelRepo;
         _companyParameters = companyParameters;
         _shopFloorLockout = shopFloorLockout;
+        _operatorSessions = operatorSessions;
         _connectionFactory = connectionFactory;
         _permService = permService;
         _logger = logger;
@@ -367,6 +370,7 @@ public sealed class MobileProductionApiController : ControllerBase
             if (!string.IsNullOrWhiteSpace(op.Code))
                 _shopFloorLockout.Reset(ResolveCurrentCompanyIdSafe(), op.Code);
 
+            MarkOperatorVerified(op.Id);
             return Ok(new { operatorId = op.Id, name = op.FullName });
         }
 
@@ -376,6 +380,7 @@ public sealed class MobileProductionApiController : ControllerBase
         if (cardOp is null)
             return BadRequest(new { error = "Operatör bulunamadı, kart tanımlı değil (ya da operatör pasif)." });
 
+        MarkOperatorVerified(cardOp.Id);
         return Ok(new { operatorId = cardOp.Id, name = cardOp.FullName });
     }
 
@@ -391,7 +396,62 @@ public sealed class MobileProductionApiController : ControllerBase
         var op = await _personnel.GetAsync(operatorId, ct);
         if (op is null || !op.IsActive || !op.IsProductionOperator)
             return BadRequest(new { error = "Operatör bulunamadı, pasif veya üretim operatörü değil." });
-        return null;
+
+        // KIMLIK KANITI. Eskiden burada YALNIZ "aktif + uretim operatoru" kontrol ediliyordu:
+        // PIN dogrulamasi pratikte istemcide kaliyordu ve hazirlanmis bir istek herhangi bir
+        // operator adina is baslatip bitirebiliyordu. Artik iki yoldan biri sart:
+        //   (a) Bu oturumda auth-operator ile PIN/kart dogrulamasi yapilmis olmali, VEYA
+        //   (b) Operator, giris yapmis kullanicinin KENDI personel kaydi olmali ve o kayitta
+        //       "Mobilde PIN Sor" KAPALI olmali (kisisel telefon senaryosu).
+        var companyId = ResolveCurrentCompanyIdSafe();
+        var userId = CurrentUserIdOrZero();
+
+        if (_operatorSessions.IsVerified(companyId, userId, operatorId))
+            return null;
+
+        if (!op.IsMobilePinRequired && op.UserId is int linkedUser && linkedUser == userId && userId > 0)
+            return null;
+
+        return BadRequest(new { error = "Operatör doğrulaması gerekli. Sicil no ve PIN ile giriş yapın." });
+    }
+
+    /// <summary>auth-operator basarili oldugunda (kullanici, operator) ciftini dogrulanmis isaretler.</summary>
+    private void MarkOperatorVerified(int operatorId)
+        => _operatorSessions.MarkVerified(ResolveCurrentCompanyIdSafe(), CurrentUserIdOrZero(), operatorId);
+
+    private int CurrentUserIdOrZero()
+        => int.TryParse(User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier), out var id) ? id : 0;
+
+    /// <summary>
+    /// Giris yapmis kullaniciya BAGLI personel kaydi (Personnel.UserId) + mobilde PIN gerekip
+    /// gerekmedigi. Mobil istemci acilista bunu sorar: pinRequired=false ise operasyon
+    /// baslat/tamamla adiminda PIN ekrani HIC gosterilmez.
+    ///
+    /// Bagli personel yoksa linked=false doner — istemci PIN yolunu kullanir (fail-safe).
+    /// </summary>
+    [HttpGet("me")]
+    public async Task<IActionResult> MyOperator(CancellationToken ct)
+    {
+        if (await RequirePermissionAsync(ShopFloorFormCodes, ViewActions, ct) is { } denied)
+            return denied;
+
+        var userId = CurrentUserIdOrZero();
+        if (userId <= 0)
+            return Ok(new { linked = false, pinRequired = true });
+
+        // Servis zaten kullanici->personel cozumunu sunuyor (GetByUserIdAsync) — liste cekip
+        // elle filtrelemek gereksiz sorgu olurdu.
+        var me = await _personnel.GetByUserIdAsync(userId, ct);
+        if (me is null || !me.IsActive || !me.IsProductionOperator)
+            return Ok(new { linked = false, pinRequired = true });
+
+        return Ok(new
+        {
+            linked = true,
+            operatorId = me.Id,
+            name = me.FullName,
+            pinRequired = me.IsMobilePinRequired,
+        });
     }
 
     // ──────────────────────────────────────────────────────────────────────
