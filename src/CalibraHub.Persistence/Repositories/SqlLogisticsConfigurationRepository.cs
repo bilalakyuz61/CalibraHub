@@ -373,14 +373,17 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         CancellationToken cancellationToken)
     {
         var options = new List<MaterialCardFieldOption>();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             SELECT [id], [FieldDefinitionId], [OptionKey], [OptionLabel], [SortOrder], [IsActive], [Created], [Updated]
             FROM {_materialCardFieldOptionsTableName}
+            WHERE [CompanyId] = @CompanyId
             ORDER BY [FieldDefinitionId], [SortOrder], [OptionLabel];
             """;
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
