@@ -1455,36 +1455,35 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Malzeme kartını PASİFE ÇEKER — fiziksel silme YAPMAZ.
+    ///
+    /// Eskiden burada gerçek bir DELETE vardı (üstelik çağıran metodun adı
+    /// DeactivateItemAsync ve yorumu "soft-delete" idi). Sonuç: belge kalemlerinin
+    /// ItemId'si var olmayan bir kaydı gösteriyordu — DocumentLine.ItemId'de FK
+    /// olmadığı için veritabanı da engellemiyordu. Canlı veride 38 öksüz kalem /
+    /// 24 belge bu yolla oluştu; belge açılınca malzeme adı/birimi çözülemiyor.
+    ///
+    /// Pasife çekmek yeterli: hem sayfalı liste (WHERE i.[IsActive] = 1) hem de
+    /// rehber view'ları (cbv_Guide_Items*) zaten IsActive süzüyor — kullanıcı
+    /// açısından kayıt "silinmiş" görünür, geçmiş belgeler ise çözülmeye devam eder.
+    ///
+    /// Özellik eşleşmeleri de KORUNUR: kayıt duruyorsa eşleşmesi de durmalı.
+    /// </summary>
     public async Task DeleteItemAsync(int stockCardId, CancellationToken cancellationToken)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
-        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(cancellationToken);
-
-        await using (var deleteMappingsCommand = connection.CreateCommand())
-        {
-            deleteMappingsCommand.Transaction = transaction;
-            deleteMappingsCommand.CommandText = $"""
-                DELETE FROM {_itemFeatureMappingsTableName}
-                WHERE [ItemId] = @ItemId;
-                """;
-            deleteMappingsCommand.Parameters.Add(new SqlParameter("@ItemId", stockCardId));
-            await deleteMappingsCommand.ExecuteNonQueryAsync(cancellationToken);
-        }
-
-        await using (var deleteMaterialCardCommand = connection.CreateCommand())
-        {
-            deleteMaterialCardCommand.Transaction = transaction;
-            deleteMaterialCardCommand.CommandText = $"""
-                DELETE FROM {_stockCardsTableName}
-                WHERE [Id] = @ItemId AND [CompanyId] = @CompanyId;
-                """;
-            deleteMaterialCardCommand.Parameters.Add(new SqlParameter("@ItemId", stockCardId));
-            deleteMaterialCardCommand.Parameters.Add(new SqlParameter("@CompanyId", companyId));
-            await deleteMaterialCardCommand.ExecuteNonQueryAsync(cancellationToken);
-        }
-
-        await transaction.CommitAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            UPDATE {_stockCardsTableName}
+            SET [IsActive] = 0,
+                [Updated]  = SYSUTCDATETIME()
+            WHERE [Id] = @ItemId AND [CompanyId] = @CompanyId;
+            """;
+        command.Parameters.Add(new SqlParameter("@ItemId", stockCardId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task UpdateItemConfigurableStatusAsync(int stockCardId, bool isConfigurable, CancellationToken cancellationToken)
