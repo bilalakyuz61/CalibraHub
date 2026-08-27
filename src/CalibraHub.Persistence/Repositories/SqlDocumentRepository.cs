@@ -230,7 +230,10 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
 
-        var where = "WHERE [IsActive] = 1";
+        // Kiraci suzgeci: where dizesi asagida Replace("[", "q.[") ile alias aliyor,
+        // bu yuzden kosul KOSESIZ yazilir.
+        var where = "WHERE [IsActive] = 1 AND [CompanyId] = @CompanyId";
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         if (!string.IsNullOrWhiteSpace(status))
         {
             where += " AND [Status] = @Status";
@@ -280,7 +283,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
 
-        var where = "WHERE q.[IsActive] = 1 AND dt.[Code] = @TypeCode";
+        var where = "WHERE q.[IsActive] = 1 AND q.[CompanyId] = @CompanyId AND dt.[Code] = @TypeCode";
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@TypeCode", typeCode));
         if (!string.IsNullOrWhiteSpace(status))
         {
@@ -333,7 +337,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
 
-        var where = "WHERE q.[IsActive] = 1 AND q.[Status] = N'Approved' AND dt.[Code] = N'satis_teklifi'";
+        var where = "WHERE q.[IsActive] = 1 AND q.[CompanyId] = @CompanyId AND q.[Status] = N'Approved' AND dt.[Code] = N'satis_teklifi'";
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         // NOT EXISTS koprusu — daha onceden siparise donusturulen teklifler hariç.
         // document_source tablosu IDocumentSourceRepository.EnsureSchemaAsync ile garantilenir;
         // burada OBJECT_ID guard ile tabloya bagimliligi gevsetmek zorunda kalmadan,
@@ -415,9 +420,10 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             LEFT JOIN [{_schema}].[Currency] cur ON cur.[Id] = q.[CurrencyId]
             LEFT JOIN [{_schema}].[Personnel] p ON p.[Id] = q.[RequesterPersonnelId]
             LEFT JOIN [{_schema}].[Location] hloc ON hloc.[Id] = q.[LocationId]
-            WHERE q.[Id] = @Id{dv.Sql};
+            WHERE q.[Id] = @Id AND q.[CompanyId] = @CompanyId{dv.Sql};
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         foreach (var prm in dv.Parameters) cmd.Parameters.Add(new SqlParameter(prm.Name, prm.Value));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? MapQuote(r) : null;
@@ -481,10 +487,12 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                     [DeliveryAddress]=@DeliveryAddress, [Status]=@Status, [RevisionNo]=@RevisionNo,
                     [ParentDocumentId]=@ParentDocumentId,
                     [Notes]=@Notes, [Updated]=@UpdatedAt
-                WHERE [Id] = @Id;
+                WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
                 SELECT @Id;
                 """;
+            // Id ISTEMCIDEN gelir: sart olmadan baska sirketin belgesi ezilebilirdi.
             cmd.Parameters.Add(new SqlParameter("@Id", q.Id));
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         }
         else
         {
@@ -766,7 +774,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             await using (var cmd = conn.CreateCommand())
             {
                 cmd.Transaction = tx;
-                cmd.CommandText = $"UPDATE {_quoteTable} SET [IsActive] = 0, [Updated] = @Now WHERE [Id] = @Id;";
+                cmd.CommandText = $"UPDATE {_quoteTable} SET [IsActive] = 0, [Updated] = @Now WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
+                cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
                 cmd.Parameters.Add(new SqlParameter("@Id", id));
                 cmd.Parameters.Add(new SqlParameter("@Now", DateTime.Now));
                 await cmd.ExecuteNonQueryAsync(ct);
@@ -799,7 +808,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE {_quoteTable} SET [Status] = @Status, [Updated] = @Now WHERE [Id] = @Id;";
+        cmd.CommandText = $"UPDATE {_quoteTable} SET [Status] = @Status, [Updated] = @Now WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@Id", id));
         cmd.Parameters.Add(new SqlParameter("@Status", status));
         cmd.Parameters.Add(new SqlParameter("@Now", DateTime.Now));
