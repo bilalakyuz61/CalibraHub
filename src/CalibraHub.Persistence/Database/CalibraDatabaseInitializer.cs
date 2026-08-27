@@ -896,6 +896,9 @@ END;";
             // hem cocuk hem ebeveyn tablonun kurulu oldugu tek nokta. Oksuz satir varsa kisit
             // KURULMAZ, uyari loglanir ve acilis NORMAL devam eder (bkz. metod ozeti).
             await EnsureInferredForeignKeysAsync(connection, cancellationToken);
+            // 2026-08-27: Kiraci ayrimi kolonu. FK'lerden SONRA calisir — kolon eklemek
+            // kisit kurmayi etkilemez ama sira sabit kalsin diye zincirin sonuna konuldu.
+            await EnsureCompanyIdColumnsAsync(connection, cancellationToken);
             // Startup override pass (clobber savunması) — BİRİNCİL geçiş. Kod baseline'ı
             // yukarıdaki tüm program view'larını ensure ettikten SONRA aktif kullanıcı
             // override'larını uygular (kullanıcı sürümü kazanır). NOT: flat view'lar +
@@ -1274,6 +1277,129 @@ END;";
         ("FK_OrgChartNode_Personnel",       "OrgChartNode",         "PersonnelId",           "Personnel"),
         // ── Fiyat listesi ────────────────────────────────────────────────────
         ("FK_PriceList_Currency",           "PriceList",            "CurrencyId",            "Currency"),
+    };
+
+    /// <summary>
+    /// Kiraci (şirket) ayrımı için GLOBAL olmayan her tabloya <c>CompanyId</c> ekler.
+    ///
+    /// <para><b>Kapsam ters kurgulanmıştır:</b> "hangi tablolar kolon alacak" listesi tutulmaz;
+    /// <see cref="CompanyScopeExemptTables"/> dışındaki HER tablo alır. Beyaz liste tutulsaydı
+    /// yeni eklenen bir tablo sessizce kapsam dışında kalırdı — ve kapsam dışı kalan tek bir
+    /// tablo, ileride süzgeçler devreye girdiğinde şirketler arası veri sızıntısı demektir.
+    /// Bu yön, unutmanın cezasını "gereksiz kolon" gibi zararsız bir şeye indirir.</para>
+    ///
+    /// <para><b>Kolon NULLABLE'dır ve tek başına HİÇBİR ŞEY izole etmez.</b> İzolasyonu sorgulardaki
+    /// <c>WHERE CompanyId = @CompanyId</c> süzgeci sağlar; bu Faz 2'dir. Kolonu görüp "izolasyon
+    /// var" varsaymak, bugünkü durumdan daha tehlikelidir.</para>
+    ///
+    /// <para>Mevcut satırlar veritabanının sahibi şirkete atanır (bkz. ResolveOwnerCompanyIdAsync).
+    /// Idempotent: kolon varsa dokunulmaz, yalnız NULL kalan satırlar doldurulur.</para>
+    /// </summary>
+    private async Task EnsureCompanyIdColumnsAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var ownerId = await ResolveOwnerCompanyIdAsync(connection, cancellationToken);
+        if (ownerId is null)
+        {
+            // Sahip şirket çözülemedi (ör. sistem DB'si, henüz kurulum yok). Kolon eklemek
+            // yanlış değil ama geri doldurma yapılamaz; sessizce atlamak yerine logla.
+            Console.WriteLine("[DB INIT] CompanyId kolonlari atlandi: sahip sirket cozulemedi.");
+            return;
+        }
+
+        var tables = new List<string>();
+        await using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = """
+                SELECT t.name
+                FROM sys.tables t
+                WHERE SCHEMA_NAME(t.schema_id) = @Schema
+                  AND NOT EXISTS (SELECT 1 FROM sys.columns c
+                                  WHERE c.object_id = t.object_id AND c.name = 'CompanyId')
+                ORDER BY t.name;
+                """;
+            cmd.Parameters.Add(new SqlParameter("@Schema", _schema));
+            await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (await r.ReadAsync(cancellationToken)) tables.Add(r.GetString(0));
+        }
+
+        var added = 0;
+        foreach (var table in tables)
+        {
+            if (CompanyScopeExemptTables.Contains(table)) continue;
+            try
+            {
+                var t = table.Replace("]", "]]");
+                await using (var alter = connection.CreateCommand())
+                {
+                    alter.CommandText = $"ALTER TABLE [{_schema}].[{t}] ADD [CompanyId] INT NULL;";
+                    await alter.ExecuteNonQueryAsync(cancellationToken);
+                }
+                await using (var fill = connection.CreateCommand())
+                {
+                    fill.CommandText = $"UPDATE [{_schema}].[{t}] SET [CompanyId] = @Owner WHERE [CompanyId] IS NULL;";
+                    fill.Parameters.Add(new SqlParameter("@Owner", ownerId.Value));
+                    await fill.ExecuteNonQueryAsync(cancellationToken);
+                }
+                added++;
+            }
+            catch (Exception ex)
+            {
+                // Tek tablo basarisiz olursa acilisi COKERTME — kalanlar eklensin, sebep loglansin.
+                Console.WriteLine($"[DB INIT WARN] {table}.CompanyId eklenemedi: {ex.Message}");
+            }
+        }
+
+        if (added > 0)
+            Console.WriteLine($"[DB INIT] CompanyId kolonu {added} tabloya eklendi (sahip sirket #{ownerId}).");
+    }
+
+    /// <summary>
+    /// Bu veritabanının hangi şirkete ait olduğunu çözer — mevcut satırların geri doldurulacağı
+    /// değer. TEST_ önekli şirketler ELENİR: bir test şirketi canlı şirketle aynı DB'ye
+    /// düştüğünde (DatabaseName boş bırakılınca oluyor) veriyi test şirketine yazmak,
+    /// tüm geçmişi yanlış kiracıya devretmek olurdu.
+    /// </summary>
+    private static async Task<int?> ResolveOwnerCompanyIdAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = """
+                IF OBJECT_ID('dbo.Company', 'U') IS NULL SELECT CAST(NULL AS INT);
+                ELSE SELECT TOP (1) [Id] FROM dbo.[Company]
+                     WHERE [Name] IS NULL OR [Name] NOT LIKE 'TEST!_%' ESCAPE '!'
+                     ORDER BY [Id];
+                """;
+            var v = await cmd.ExecuteScalarAsync(cancellationToken);
+            return v is null || v == DBNull.Value ? null : Convert.ToInt32(v);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DB INIT WARN] Sahip sirket cozulemedi: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// <c>CompanyId</c> ALMAYACAK tablolar — gerçekten global olanlar. Buraya bir tablo eklemek,
+    /// onu kalıcı olarak şirketler arası ORTAK ilan etmektir; emin değilsen EKLEME (kapsam
+    /// dışı kalmasındansa gereksiz kolon taşıması yeğdir).
+    /// </summary>
+    private static readonly HashSet<string> CompanyScopeExemptTables = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Şirket kaydının kendisi + şema sürümü
+        "Company", "__SchemaVersion",
+        // Yetki keşfi kod-tanımlıdır: form/işlem kataloğu şirkete göre değişmez
+        "Forms", "PermissionDef", "PermissionGroup", "Field", "FieldGroup",
+        // Coğrafi referans
+        "Country", "City", "District", "Neighborhood", "Village", "PostalLocality",
+        // Sistem altyapısı
+        "GlobalLock", "LicenseConfig", "GateCredential", "AiProvider", "IntegrationProvider",
+        "UiLabelTranslation",
+        // Geliştirme aracı (müşteri verisi değil)
+        "PageComment", "PageCommentActivity", "PageCommentImage", "PageCommentRevision",
+        // Ölü / legacy — dokunulmaz
+        "PLT_SISTEM_LOG", "whatsapp_safety_rules",
     };
 
     private async Task EnsureInferredForeignKeysAsync(SqlConnection connection, CancellationToken cancellationToken)
