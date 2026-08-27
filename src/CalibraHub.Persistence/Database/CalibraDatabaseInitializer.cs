@@ -9606,6 +9606,16 @@ END;";
             IF COL_LENGTH(N'[{s}].[Document]', N'LocationId') IS NULL
                 ALTER TABLE [{s}].[Document] ADD [LocationId] INT NULL;
 
+            -- RowVer (2026-08-27) — iyimser eszamanlilik damgasi. Iki kullanici ayni belgeyi
+            -- acip kaydettiginde ikincisi birincinin degisikligini sessizce eziyordu ("son
+            -- kaydeden kazanir"); UPDATE artik bu damgayi WHERE'e alir ve eslesmezse cakisma
+            -- doner. [Updated] kolonu bu is icin YETMEZ: stok/irsaliye yollari
+            -- (SqlStockDocRepository) belgeyi guncellerken Updated'i tazelemiyor, ROWVERSION
+            -- ise motor tarafindan HER UPDATE'te otomatik artar. Additive kolon; mevcut
+            -- satirlar ilk okumada otomatik damga alir.
+            IF COL_LENGTH(N'[{s}].[Document]', N'RowVer') IS NULL
+                ALTER TABLE [{s}].[Document] ADD [RowVer] ROWVERSION;
+
             -- CompanyId FK kolonu — belgenin hangi sirkete ait oldugu.
             -- Mevcut kayitlar DefaultCompanyId (1) ile backfill edilir.
             IF COL_LENGTH(N'[{s}].[Document]', N'CompanyId') IS NULL

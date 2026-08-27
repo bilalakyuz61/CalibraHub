@@ -645,6 +645,13 @@ public sealed class DocumentService : IDocumentService
         return result;
     }
 
+    /// <summary>Istemciden gelen base64 ROWVERSION damgasini cozer; bozuksa null (kontrol atlanir).</summary>
+    private static byte[]? ParseRowVersion(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        try { return Convert.FromBase64String(value); } catch (FormatException) { return null; }
+    }
+
     /// <summary>Durum kilidi mesajinda kullanilan Turkce durum etiketi.</summary>
     private static string DocumentStatusText(DocumentStatus status) => status switch
     {
@@ -999,6 +1006,11 @@ public sealed class DocumentService : IDocumentService
             if (existing.LineCount > 0 && existing.ContactId != request.ContactId)
                 return (false, "Kalem girilmis belgenin cari kodu degistirilemez.", null, false);
 
+            // Iyimser eszamanlilik: KARSILASTIRILACAK damga ISTEMCIDEN gelen olmali.
+            // GetByIdAsync'in getirdigi (guncel) damga kullanilirsa kontrol her zaman
+            // kendisiyle eslesir ve hicbir cakismayi yakalamaz.
+            existing.RowVersion = ParseRowVersion(request.RowVersion);
+
             // İşlem logu: mutasyondan ÖNCE eski header + kalem snapshot'ı al
             if (_audit is not null)
             {
@@ -1043,6 +1055,14 @@ public sealed class DocumentService : IDocumentService
         }
 
         var savedId = await _repo.UpsertAsync(quote, ct);
+
+        // 0 = UPDATE hicbir satiri etkilemedi → damga tutmadi (belgeyi aradaki surede
+        // baska biri kaydetti). Yeni kayitta bu durum olusmaz (SCOPE_IDENTITY).
+        if (!isNew && savedId == 0)
+            return (false,
+                "Bu belgeyi siz açtıktan sonra başka bir kullanıcı kaydetmiş. "
+                + "Değişiklikleriniz kaybolmasın diye kayıt yapılmadı — sayfayı yenileyip tekrar deneyin.",
+                null, false);
 
         // Upsert sonrasi yeni Id'yi entity'ye ata (init-only oldugu icin yeni instance)
         if (isNew)
@@ -1473,7 +1493,8 @@ public sealed class DocumentService : IDocumentService
         q.RequesterPersonnelId, q.RequesterPersonnelName,
         q.LocationId, q.LocationName,
         q.ExchangeRate, q.IsVatIncluded, q.RateDate,
-        q.SourceDocumentNo);
+        q.SourceDocumentNo,
+        q.RowVersion is { Length: > 0 } rv ? Convert.ToBase64String(rv) : null);
 
     /// <summary>
     /// Satir revizyonu — repository katmanina delege eder. Widget degerlerinin

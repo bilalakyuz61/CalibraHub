@@ -1,4 +1,4 @@
-namespace CalibraHub.Application.Contracts;
+﻿namespace CalibraHub.Application.Contracts;
 
 public sealed record DocumentDto(
     int Id, string DocumentNumber, DateTime DocumentDate, DateTime? ValidUntil,
@@ -32,7 +32,10 @@ public sealed record DocumentDto(
     DateTime? RateDate = null,
     // PageComment Seq 1106 — dış sistemin (ERP) belge numarası. İçe aktarımda mükerrer koruması
     // için tutulur; CalibraHub'ın kendi DocumentNumber serisinin yerine GEÇMEZ.
-    string? SourceDocumentNo = null);
+    string? SourceDocumentNo = null,
+    // 2026-08-27 — iyimser eşzamanlılık damgası (ROWVERSION, base64). Ekran belgeyi
+    // açarken alır, kaydederken geri gönderir; arada başkası kaydettiyse çakışma döner.
+    string? RowVersion = null);
 
 /// <summary>
 /// Sipariş → İrsaliye kısmi teslimat modalı için açık (teslim edilmemiş) sipariş kalemi.
@@ -162,7 +165,11 @@ public sealed record SaveDocumentRequest(
     // PageComment Seq 1106 — dış sistemin (ERP) belge numarası. YALNIZ içe aktarım akışı doldurur
     // (kullanıcı ekranından gelmez); mükerrer belge açılmaması için kaynak eşlemesi olarak
     // saklanır. NULL bırakılırsa mevcut davranış birebir korunur.
-    string? SourceDocumentNo = null);
+    string? SourceDocumentNo = null,
+    // 2026-08-27 — belge açıldığında okunan ROWVERSION damgası (base64). Gönderilirse
+    // sunucu UPDATE'i bu damgayla şartlar: arada başkası kaydettiyse istek reddedilir.
+    // NULL bırakılırsa kontrol atlanır (mobil/entegrasyon çağıranları kırılmaz).
+    string? RowVersion = null);
 
 /// <summary>
 /// Client'tan gelen kayit istegi. ItemId zorunludur — malzeme kodu/adi tabloda tutulmaz,

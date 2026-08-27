@@ -113,6 +113,15 @@ public sealed class Document
     public DateTime CreatedAt { get; init; } = DateTime.Now;
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
+    /// <summary>
+    /// Iyimser eszamanlilik damgasi (SQL <c>ROWVERSION</c>, 2026-08-27). Okundugu andaki
+    /// deger kaydetmede geri gonderilir; UPDATE bu damgayi WHERE'e alir ve baska biri
+    /// aradaki surede kaydettiyse hicbir satir guncellenmez → cakisma hatasi doner.
+    /// NULL ise (istemci damga gondermediyse) kontrol atlanir — mobil/entegrasyon gibi
+    /// eski cagiranlar kirilmadan asamali gecis icin bilincli bypass.
+    /// </summary>
+    public byte[]? RowVersion { get; set; }
+
     [Description("Soft delete — listede gosterilir mi?")]
     public bool IsActive { get; set; } = true;
 

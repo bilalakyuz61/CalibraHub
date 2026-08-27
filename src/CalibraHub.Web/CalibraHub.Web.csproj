@@ -48,5 +48,13 @@
     <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.1" />
   </ItemGroup>
 
+  <!-- Yerel sir dosyasi (2026-08-27): appsettings.Local.json git'e girmez ama CALISMA
+       DIZININE kopyalanmalidir — yapilandirma taban yolu ContentRoot'tur ve bu projede
+       ContentRoot, bin/Debug/... klasorudur (kaynak klasoru DEGIL). Kopyalanmazsa
+       AddJsonFile dosyayi bulamaz ve anahtar sessizce devre disi kalir. -->
+  <ItemGroup Condition="Exists('appsettings.Local.json')">
+    <Content Include="appsettings.Local.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
 </Project>
 

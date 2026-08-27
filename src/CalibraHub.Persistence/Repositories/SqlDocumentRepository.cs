@@ -259,7 +259,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    q.[CurrencyId],cur.[Code] AS CurrencyCode,cur.[Symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
                    q.[ExchangeRate],q.[IsVatIncluded],q.[RateDate],q.[SourceDocumentNo],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[Status],q.[RevisionNo],q.[ParentDocumentId],
-                   q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
+                   q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[RowVer],q.[IsActive],q.[DocumentTypeId],
                    (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[Id]) AS [line_count]
             FROM {_quoteTable} q
             LEFT JOIN [{_schema}].[Contact] ca ON ca.[Id] = q.[ContactId]
@@ -308,7 +308,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    q.[CurrencyId],cur.[Code] AS CurrencyCode,cur.[Symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
                    q.[ExchangeRate],q.[IsVatIncluded],q.[RateDate],q.[SourceDocumentNo],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[Status],q.[RevisionNo],q.[ParentDocumentId],
-                   q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
+                   q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[RowVer],q.[IsActive],q.[DocumentTypeId],
                    (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[Id]) AS [line_count],
                    (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[Id] AND ISNULL(l.[FulfillmentStatus],0) = 0) AS [fulfill_pending],
                    (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[Id] AND ISNULL(l.[FulfillmentStatus],0) = 1) AS [fulfill_partial],
@@ -375,7 +375,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    q.[CurrencyId],cur.[Code] AS CurrencyCode,cur.[Symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
                    q.[ExchangeRate],q.[IsVatIncluded],q.[RateDate],q.[SourceDocumentNo],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[Status],q.[RevisionNo],q.[ParentDocumentId],
-                   q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
+                   q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[RowVer],q.[IsActive],q.[DocumentTypeId],
                    (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[Id]) AS [line_count]
             FROM {_quoteTable} q
             LEFT JOIN [{_schema}].[Contact] ca ON ca.[Id] = q.[ContactId]
@@ -413,7 +413,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    q.[CurrencyId],cur.[Code] AS CurrencyCode,cur.[Symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
                    q.[ExchangeRate],q.[IsVatIncluded],q.[RateDate],q.[SourceDocumentNo],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[Status],q.[RevisionNo],q.[ParentDocumentId],
-                   q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
+                   q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[RowVer],q.[IsActive],q.[DocumentTypeId],
                    ca.[AccountCode] AS customer_code
             FROM {_quoteTable} q
             LEFT JOIN [{_schema}].[Contact] ca ON ca.[Id] = q.[ContactId]
@@ -487,12 +487,22 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                     [DeliveryAddress]=@DeliveryAddress, [Status]=@Status, [RevisionNo]=@RevisionNo,
                     [ParentDocumentId]=@ParentDocumentId,
                     [Notes]=@Notes, [Updated]=@UpdatedAt
-                WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
-                SELECT @Id;
+                WHERE [Id] = @Id AND [CompanyId] = @CompanyId
+                      -- Iyimser eszamanlilik: istemci okudugu damgayi geri gonderdiyse
+                      -- (@RowVer) ve aradaki surede baskasi kaydettiyse ROWVERSION degismis
+                      -- olur → hicbir satir guncellenmez. Damga gonderilmediyse (NULL) eski
+                      -- davranis birebir korunur (mobil/entegrasyon cagiranlari kirilmaz).
+                      AND (@RowVer IS NULL OR [RowVer] = @RowVer);
+                -- Guncellenen satir yoksa 0 doner → cagiran cakisma olarak yorumlar.
+                SELECT CASE WHEN @@ROWCOUNT = 0 THEN 0 ELSE @Id END;
                 """;
             // Id ISTEMCIDEN gelir: sart olmadan baska sirketin belgesi ezilebilirdi.
             cmd.Parameters.Add(new SqlParameter("@Id", q.Id));
             cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
+            cmd.Parameters.Add(new SqlParameter("@RowVer", System.Data.SqlDbType.Timestamp)
+            {
+                Value = (object?)q.RowVersion ?? DBNull.Value,
+            });
         }
         else
         {
@@ -1075,6 +1085,10 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         CreatedById = TryGetOrdinal(r, "CreatedById") is int cbOrd && cbOrd >= 0 && !r.IsDBNull(cbOrd) ? r.GetInt32(cbOrd) : null,
         CreatedAt = r.GetDateTime(r.GetOrdinal("Created")),
         UpdatedAt = r.IsDBNull(r.GetOrdinal("Updated")) ? DateTime.MinValue : r.GetDateTime(r.GetOrdinal("Updated")),
+        // Iyimser eszamanlilik damgasi — kolon eski semada olmayabilir (TryGetOrdinal).
+        RowVersion = TryGetOrdinal(r, "RowVer") is int rvOrd && rvOrd >= 0 && !r.IsDBNull(rvOrd)
+            ? (byte[])r.GetValue(rvOrd)
+            : null,
         IsActive = r.GetBoolean(r.GetOrdinal("IsActive")),
         LineCount      = TryGetOrdinal(r, "line_count")      is int lcOrd  && lcOrd  >= 0 ? r.GetInt32(lcOrd)  : 0,
         FulfillPending = TryGetOrdinal(r, "fulfill_pending") is int fp0rd  && fp0rd  >= 0 ? r.GetInt32(fp0rd)  : 0,

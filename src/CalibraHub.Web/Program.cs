@@ -49,6 +49,11 @@ AppDomain.CurrentDomain.UnhandledException += (_, e) =>
 // ──────────────────────────────────────────────────────────────────────────
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Yerel sir dosyasi (2026-08-27): appsettings.Local.json git'e GIRMEZ (.gitignore).
+// Paylasilan gizli anahtarlar (WhatsApp:BridgeKey gibi) buraya yazilir; boylece sirlar
+// depoya ve GitHub'a tasinmaz. Dosya yoksa hicbir sey degismez (optional: true).
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 builder.Host.UseWindowsService(options =>
 {
     options.ServiceName = "CalibraHub Web";
