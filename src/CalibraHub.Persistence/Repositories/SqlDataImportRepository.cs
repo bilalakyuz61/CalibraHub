@@ -122,10 +122,10 @@ public sealed class SqlDataImportRepository : IDataImportRepository
         try
         {
             int id;
+            var companyId = _connectionFactory.ResolveEffectiveCompanyId();
             await using (var cmd = conn.CreateCommand())
             {
                 cmd.Transaction = tx;
-                var companyId = _connectionFactory.ResolveEffectiveCompanyId();
                 if (job.Id <= 0)
                 {
                     cmd.CommandText = $"""

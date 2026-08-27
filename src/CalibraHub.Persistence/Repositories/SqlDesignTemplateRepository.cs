@@ -94,7 +94,7 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
         command.CommandText = $"""
             MERGE {_table} AS target
             USING (SELECT @Id AS [Id]) AS source ON target.[Id] = source.[Id]
-            WHEN MATCHED THEN
+            WHEN MATCHED AND target.[CompanyId] = @CompanyId THEN
                 UPDATE SET
                     [Name]        = @Name,
                     [Type]        = @Type,
@@ -107,11 +107,12 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
                     [IsActive]    = @IsActive,
                     [Updated]     = @UpdatedAt
             WHEN NOT MATCHED THEN
-                INSERT ([Id], [Name], [Type], [SubType], [Description], [HtmlContent], [CssContent], [GjsData], [JsrContent], [IsActive], [Created], [Updated])
-                VALUES (@Id, @Name, @Type, @SubType, @Description, @HtmlContent, @CssContent, @GjsData, @JsrContent, @IsActive, @CreatedAt, @UpdatedAt);
+                INSERT ([Id], [Name], [Type], [SubType], [Description], [HtmlContent], [CssContent], [GjsData], [JsrContent], [IsActive], [Created], [Updated], [CompanyId])
+                VALUES (@Id, @Name, @Type, @SubType, @Description, @HtmlContent, @CssContent, @GjsData, @JsrContent, @IsActive, @CreatedAt, @UpdatedAt, @CompanyId);
             """;
 
         command.Parameters.Add(new SqlParameter("@Id", template.Id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         command.Parameters.Add(new SqlParameter("@Name", template.Name));
         command.Parameters.Add(new SqlParameter("@Type", template.Type));
         command.Parameters.Add(new SqlParameter("@SubType", (object?)template.SubType ?? DBNull.Value));
@@ -131,8 +132,9 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id;";
+        command.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

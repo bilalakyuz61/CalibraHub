@@ -78,6 +78,7 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
 
     public async Task ReplaceForFormAsync(string formCode, IReadOnlyCollection<FormFieldBehavior> rows, CancellationToken ct)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
@@ -85,8 +86,9 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
             await using (var del = conn.CreateCommand())
             {
                 del.Transaction = tx;
-                del.CommandText = $"DELETE FROM {_table} WHERE [FormCode]=@FormCode;";
+                del.CommandText = $"DELETE FROM {_table} WHERE [FormCode]=@FormCode AND [CompanyId]=@CompanyId;";
                 del.Parameters.Add(new SqlParameter("@FormCode", formCode));
+                del.Parameters.Add(new SqlParameter("@CompanyId", companyId));
                 await del.ExecuteNonQueryAsync(ct);
             }
 
@@ -98,13 +100,14 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                     INSERT INTO {_table}
                         ([FormCode],[FieldKey],[IsVisible],[IsRequired],[DefaultValue],
                          [LabelText],[LabelStyle],[RulesJSON],[SortOrder],[CardSection],[CardOrder],[CardWidth],[IsActive],
-                         [CreatedById],[CreatedBy],[RowHeight],[CellWidthPx],[TargetTabKey],[TargetTab],[Align])
+                         [CompanyId],[CreatedById],[CreatedBy],[RowHeight],[CellWidthPx],[TargetTabKey],[TargetTab],[Align])
                     VALUES
                         (@FormCode,@FieldKey,@IsVisible,@IsRequired,@DefaultValue,
                          @LabelText,@LabelStyle,@RulesJson,@SortOrder,@CardSection,@CardOrder,@CardWidth,1,
-                         @CreatedById,@CreatedBy,@RowHeight,@CellWidthPx,@TargetTabKey,@TargetTab,@Align);
+                         @CompanyId,@CreatedById,@CreatedBy,@RowHeight,@CellWidthPx,@TargetTabKey,@TargetTab,@Align);
                     """;
                 ins.Parameters.Add(new SqlParameter("@FormCode", formCode));
+                ins.Parameters.Add(new SqlParameter("@CompanyId", companyId));
                 ins.Parameters.Add(new SqlParameter("@FieldKey", row.FieldKey));
                 ins.Parameters.Add(new SqlParameter("@IsVisible", row.IsVisible));
                 ins.Parameters.Add(new SqlParameter("@IsRequired", row.IsRequired));

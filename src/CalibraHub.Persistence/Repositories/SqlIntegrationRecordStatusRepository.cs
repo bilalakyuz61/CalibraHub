@@ -134,11 +134,13 @@ public sealed class SqlIntegrationRecordStatusRepository : IIntegrationRecordSta
                  WHERE [IntegrationId] = @IntegrationId
                    AND [RecordId]      = @RecordId
                    AND [IsActive]      = 1
-                   AND [Status]        = 'Skipped';
+                   AND [Status]        = 'Skipped'
+                   AND [CompanyId]     = @CompanyId;
                 """;
             cmd.Parameters.Add(new SqlParameter("@IntegrationId", integrationId));
             cmd.Parameters.Add(new SqlParameter("@RecordId", id));
             cmd.Parameters.Add(new SqlParameter("@Actor", (object?)actor ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
             await cmd.ExecuteNonQueryAsync(ct);
         }
     }

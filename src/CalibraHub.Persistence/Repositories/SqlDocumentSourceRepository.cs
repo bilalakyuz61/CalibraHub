@@ -59,8 +59,9 @@ public sealed class SqlDocumentSourceRepository : IDocumentSourceRepository
             IF NOT EXISTS (SELECT 1 FROM {_table}
                            WHERE [DocumentId] = @Doc AND [SourceDocumentId] = @Src)
             BEGIN
-                INSERT INTO {_table} ([DocumentId], [SourceDocumentId])
-                VALUES (@Doc, @Src);
+                INSERT INTO {_table} ([DocumentId], [SourceDocumentId], [CompanyId])
+                VALUES (@Doc, @Src,
+                    (SELECT d.[CompanyId] FROM [{_schema}].[Document] d WHERE d.[Id] = @Doc));
             END;
             """;
         cmd.Parameters.Add(new SqlParameter("@Doc", documentId));

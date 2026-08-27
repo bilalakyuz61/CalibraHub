@@ -50,11 +50,12 @@ public sealed class SqlRptRunLogRepository : IRptRunLogRepository
             SET [DurationMs] = @DurationMs,
                 [RowCount]   = @RowCount,
                 [Error]      = @Error
-            WHERE [Id] = @Id;";
+            WHERE [Id] = @Id AND ([CompanyId] = @CompanyId OR [CompanyId] IS NULL);";
         cmd.Parameters.AddWithValue("@Id", id);
         cmd.Parameters.AddWithValue("@DurationMs", durationMs);
         cmd.Parameters.AddWithValue("@RowCount", rowCount);
         cmd.Parameters.AddWithValue("@Error", (object?)error ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

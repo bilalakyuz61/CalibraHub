@@ -1498,6 +1498,17 @@ END;";
         "PageComment", "PageCommentActivity", "PageCommentImage", "PageCommentRevision",
         // Ölü / legacy — dokunulmaz
         "PLT_SISTEM_LOG", "whatsapp_safety_rules",
+        // MASTER DB'de duran, BİLİNÇLİ olarak şirketler arası ortak tablolar. Toplu migration
+        // ilk sürümde bunları da kapsamıştı — belgelenmiş tasarımla çelişiyordu
+        // (bkz. EnsureAttachmentTableAsync / EnsureDocumentCategoryTableAsync özetleri:
+        // "cross-company … per-company DB mimarisine GİRMEZ (CompanyId YOK)").
+        "Attachment", "DocumentCategory",
+        // Kimlik/parola akışı şirketten BAĞIMSIZ: /Account/ForgotPassword ve ResetPassword
+        // anonimdir, e-posta ile TÜM şirketlerdeki kullanıcıyı arar ("şifre şirket bazlı değil").
+        // Users'a oturum-tabanlı süzgeç koymak ilk şirket dışındaki herkesin parola sıfırlamasını
+        // sessizce kırardı. Users.CompanyId kolonu VAR ve kalır (kullanıcının ait olduğu şirket),
+        // ama kiracı süzgeci bu tabloya UYGULANMAZ — ayrı bir tasarım kararı gerektirir.
+        "Users",
     };
 
     private async Task EnsureInferredForeignKeysAsync(SqlConnection connection, CancellationToken cancellationToken)

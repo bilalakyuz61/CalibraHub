@@ -89,8 +89,10 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         // Built-in tasklar Name uniqueness icin idempotent — ayni isimde 1 row tutar.
+        // Eslesme (Name, CompanyId) ciftine gore yapilir — NULL'lar ISNULL(-1) ile esit sayilir,
+        // boylece farkli sirketlerin ayni isimli gorevleri birbirini sessizce ezmez.
         cmd.CommandText = $"""
-            IF EXISTS (SELECT 1 FROM {_table} WHERE [Name] = @Name)
+            IF EXISTS (SELECT 1 FROM {_table} WHERE [Name] = @Name AND ISNULL([CompanyId],-1) = ISNULL(@CompanyId,-1))
             BEGIN
                 UPDATE {_table}
                    SET [Description] = @Description,
@@ -103,7 +105,7 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
                        [CompanyId] = @CompanyId,
                        [PrerequisiteTaskId] = @PrerequisiteTaskId,
                        [Updated] = GETUTCDATE()
-                 WHERE [Name] = @Name;
+                 WHERE [Name] = @Name AND ISNULL([CompanyId],-1) = ISNULL(@CompanyId,-1);
             END
             ELSE
             BEGIN
@@ -142,10 +144,11 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
                        [PrerequisiteTaskId] = @PrerequisiteTaskId,
                        [NextRunAt] = @NextRunAt,
                        [Updated] = GETUTCDATE()
-                 WHERE [Id] = @Id;
+                 WHERE [Id] = @Id AND ([CompanyId] = @SessionCompanyId OR [CompanyId] IS NULL);
                 SELECT @Id;
                 """;
             cmd.Parameters.Add(new SqlParameter("@Id", task.Id));
+            cmd.Parameters.Add(new SqlParameter("@SessionCompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         }
         else
         {
@@ -181,13 +184,14 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
                    [LastRunDurationMs] = @DurationMs,
                    [NextRunAt] = @NextRunAt,
                    [Updated] = GETUTCDATE()
-             WHERE [Id] = @Id;
+             WHERE [Id] = @Id AND ([CompanyId] = @SessionCompanyId OR [CompanyId] IS NULL);
             """;
         cmd.Parameters.Add(new SqlParameter("@Id",         taskId));
         cmd.Parameters.Add(new SqlParameter("@Status",     status));
         cmd.Parameters.Add(new SqlParameter("@Message",    (object?)message ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@DurationMs", (object?)durationMs ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@NextRunAt",  (object?)nextRunAt ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@SessionCompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -196,13 +200,16 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         // Atomic UPDATE — IsRunning'i 0→1'e cevirir yalnizca mevcut 0 ise; rowcount=1 ise acquired.
+        // CompanyId filtresi tolerantli: builtin/legacy gorevler (CompanyId NULL) her sirketten
+        // erisilebilir kalir — worker'in HttpContext'i yok, ResolveEffectiveCompanyId sahip sirkete duser.
         cmd.CommandText = $"""
             UPDATE {_table}
                SET [IsRunning] = 1, [Updated] = GETUTCDATE()
-             WHERE [Id] = @Id AND [IsRunning] = 0;
+             WHERE [Id] = @Id AND [IsRunning] = 0 AND ([CompanyId] = @SessionCompanyId OR [CompanyId] IS NULL);
             SELECT @@ROWCOUNT;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", taskId));
+        cmd.Parameters.Add(new SqlParameter("@SessionCompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var result = await cmd.ExecuteScalarAsync(cancellationToken);
         return Convert.ToInt32(result) == 1;
     }
@@ -211,8 +218,9 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"UPDATE {_table} SET [IsRunning] = 0, [Updated] = GETUTCDATE() WHERE [Id] = @Id;";
+        cmd.CommandText = $"UPDATE {_table} SET [IsRunning] = 0, [Updated] = GETUTCDATE() WHERE [Id] = @Id AND ([CompanyId] = @SessionCompanyId OR [CompanyId] IS NULL);";
         cmd.Parameters.Add(new SqlParameter("@Id", taskId));
+        cmd.Parameters.Add(new SqlParameter("@SessionCompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -222,6 +230,11 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
         // "kilit ne zamandir acik" icin YAKLASIK bir olcut. Esik, en uzun gorev suresinin
         // uzerinde tutulmali; aksi halde gercekten calisan uzun bir gorevin kilidi alinip
         // ikinci bir kopya baslatilabilir.
+        // elle bakılmalı: kasıtlı olarak CompanyId filtresi YOK. Worker (ScheduledTaskPollingWorker)
+        // HttpContext'siz calisir; ResolveEffectiveCompanyId() sahip sirkete duser ve bu bakim
+        // taramasini tek sirkete kilitler — DB'de birden fazla gercek sirket varsa diger sirketlerin
+        // asili kilitleri asla serbest kalmaz (sessiz, fark edilmesi zor bir regresyon). Dogru cozum
+        // Worker'in sirket listesini gezmesi (mimari degisiklik) — bu PR'in kapsami disinda.
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
@@ -239,9 +252,10 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"UPDATE {_table} SET [IsEnabled] = @Enabled, [Updated] = GETUTCDATE() WHERE [Id] = @Id;";
+        cmd.CommandText = $"UPDATE {_table} SET [IsEnabled] = @Enabled, [Updated] = GETUTCDATE() WHERE [Id] = @Id AND ([CompanyId] = @SessionCompanyId OR [CompanyId] IS NULL);";
         cmd.Parameters.Add(new SqlParameter("@Id",      taskId));
         cmd.Parameters.Add(new SqlParameter("@Enabled", enabled));
+        cmd.Parameters.Add(new SqlParameter("@SessionCompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -249,8 +263,9 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id;";
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id AND ([CompanyId] = @SessionCompanyId OR [CompanyId] IS NULL);";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@SessionCompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 

@@ -86,25 +86,31 @@ public sealed class SqlBodyTemplateRepository : IBodyTemplateRepository
 
     public async Task IncrementUsageAsync(int id, CancellationToken ct)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE {_table} SET [UsageCount] = [UsageCount] + 1 WHERE [Id] = @id;";
+        // Built-in (sistem) sablonlar tum sirketlere ortak seed edilir (CompanyId=sahip sirket) —
+        // kullanim sayaci onlar icin her sirketten artabilir. Kullanici-tanimli sablonlarda
+        // sadece kendi sirketinin kaydi guncellenebilir.
+        cmd.CommandText = $"UPDATE {_table} SET [UsageCount] = [UsageCount] + 1 WHERE [Id] = @id AND ([IsBuiltIn] = 1 OR [CompanyId] = @CompanyId);";
         cmd.Parameters.Add(new SqlParameter("@id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
     public async Task<int> AddAsync(BodyTemplate template, CancellationToken ct)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             INSERT INTO {_table}
                 ([Category],[Name],[DocType],[ProviderHint],[UrlPattern],[HttpMethod],
                  [BodyJson],[Description],[Tags],[UsageCount],[IsBuiltIn],[IsActive],
-                 [CreatedById])
+                 [CompanyId],[CreatedById])
             OUTPUT INSERTED.[Id]
             VALUES (@cat,@name,@doctype,@provider,@urlpattern,@httpmethod,
-                    @body,@desc,@tags,0,0,1,@createdById);
+                    @body,@desc,@tags,0,0,1,@companyId,@createdById);
             """;
         cmd.Parameters.Add(new SqlParameter("@cat", template.Category));
         cmd.Parameters.Add(new SqlParameter("@name", template.Name));
@@ -115,6 +121,7 @@ public sealed class SqlBodyTemplateRepository : IBodyTemplateRepository
         cmd.Parameters.Add(new SqlParameter("@body", template.BodyJson));
         cmd.Parameters.Add(new SqlParameter("@desc", (object?)template.Description ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@tags", (object?)template.Tags ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@companyId", companyId));
         cmd.Parameters.Add(new SqlParameter("@createdById", (object?)template.CreatedById ?? DBNull.Value));
         var idObj = await cmd.ExecuteScalarAsync(ct);
         return Convert.ToInt32(idObj);
@@ -127,10 +134,12 @@ public sealed class SqlBodyTemplateRepository : IBodyTemplateRepository
         if (t.IsBuiltIn)
             throw new InvalidOperationException("Sistem (built-in) sablonlari silinemez. Sadece kendi yarattiginiz sablonlari silebilirsiniz.");
 
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id] = @id AND [IsBuiltIn] = 0;";
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id] = @id AND [IsBuiltIn] = 0 AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

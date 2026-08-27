@@ -101,12 +101,13 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
                 [UseSsl] = @UseSsl,
                 [IsActive] = @IsActive,
                 [Updated] = @Updated
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
 
         AddCommonParameters(command, profile);
         command.Parameters.Add(new SqlParameter("@Id", profile.Id));
         command.Parameters.Add(new SqlParameter("@Updated", DateTime.Now));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

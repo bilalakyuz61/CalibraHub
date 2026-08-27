@@ -23,16 +23,18 @@ public sealed class SqlAiToolInvocationRepository : IAiToolInvocationRepository
 
     public async Task LogExecutedAsync(AiToolInvocationLogEntry entry, CancellationToken ct)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             INSERT INTO {_table}
               ([UserId],[ToolName],[ActionLabel],[ArgumentsJson],[Status],
-               [ResultSummary],[AffectedEntity],[ErrorMessage])
+               [ResultSummary],[AffectedEntity],[ErrorMessage],[CompanyId])
             VALUES
               (@UserId,@ToolName,@ActionLabel,@ArgumentsJson,@Status,
-               @ResultSummary,@AffectedEntity,@ErrorMessage);
+               @ResultSummary,@AffectedEntity,@ErrorMessage,@CompanyId);
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         cmd.Parameters.Add(new SqlParameter("@UserId", entry.UserId));
         cmd.Parameters.Add(new SqlParameter("@ToolName", entry.ToolName));
         cmd.Parameters.Add(new SqlParameter("@ActionLabel", (object?)entry.ActionLabel ?? DBNull.Value));

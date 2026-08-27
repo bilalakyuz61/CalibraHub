@@ -61,6 +61,7 @@ public sealed class SqlActivityReasonRepository : IActivityReasonRepository
 
     public async Task<int> SaveAsync(ActivityReason entity, CancellationToken ct)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         if (entity.Id <= 0)
@@ -68,10 +69,10 @@ public sealed class SqlActivityReasonRepository : IActivityReasonRepository
             cmd.CommandText = $@"
                 INSERT INTO {_table}
                     ([ActivityType],[Code],[Name],[Description],[ColorHex],
-                     [SortOrder],[IsActive],[CreatedById],[Created])
+                     [SortOrder],[IsActive],[CompanyId],[CreatedById],[Created])
                 VALUES
                     (@Type,@Code,@Name,@Description,@ColorHex,
-                     @SortOrder,@IsActive,@CreatedById,SYSUTCDATETIME());
+                     @SortOrder,@IsActive,@CompanyId,@CreatedById,SYSUTCDATETIME());
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
         }
         else
@@ -87,11 +88,12 @@ public sealed class SqlActivityReasonRepository : IActivityReasonRepository
                     [IsActive]     = @IsActive,
                     [UpdatedById]  = @UpdatedById,
                     [Updated]      = SYSUTCDATETIME()
-                WHERE [Id] = @Id;
+                WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
                 SELECT @Id;";
             cmd.Parameters.AddWithValue("@Id", entity.Id);
             cmd.Parameters.AddWithValue("@UpdatedById", (object?)entity.UpdatedById ?? DBNull.Value);
         }
+        cmd.Parameters.AddWithValue("@CompanyId",   companyId);
         cmd.Parameters.AddWithValue("@Type",        (byte)entity.ActivityType);
         cmd.Parameters.AddWithValue("@Code",        entity.Code.Trim());
         cmd.Parameters.AddWithValue("@Name",        entity.Name.Trim());
@@ -108,6 +110,7 @@ public sealed class SqlActivityReasonRepository : IActivityReasonRepository
     public async Task DeleteAsync(int id, int? userId, CancellationToken ct)
     {
         // Soft delete — Activity log'da referans olabilir, fiziksel silmek FK ihlali.
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
@@ -115,8 +118,9 @@ public sealed class SqlActivityReasonRepository : IActivityReasonRepository
             SET [IsActive] = 0,
                 [UpdatedById] = @UpdatedById,
                 [Updated]     = SYSUTCDATETIME()
-            WHERE [Id] = @Id;";
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
         cmd.Parameters.AddWithValue("@UpdatedById", (object?)userId ?? DBNull.Value);
         await cmd.ExecuteNonQueryAsync(ct);
     }

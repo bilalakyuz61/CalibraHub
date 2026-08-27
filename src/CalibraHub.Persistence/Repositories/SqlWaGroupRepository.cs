@@ -112,11 +112,12 @@ public sealed class SqlWaGroupRepository : IWaGroupRepository
             await cmd.ExecuteNonQueryAsync(ct);
         }
         // MemberCount güncelle
-        var upd = $"UPDATE {_g} SET [MemberCount]=@Cnt,[Updated]=SYSUTCDATETIME() WHERE [Id]=@Id";
+        var upd = $"UPDATE {_g} SET [MemberCount]=@Cnt,[Updated]=SYSUTCDATETIME() WHERE [Id]=@Id AND [CompanyId]=@CompanyId";
         await using var updCmd = conn.CreateCommand();
         updCmd.CommandText = upd;
         updCmd.Parameters.AddWithValue("@Cnt", members.Count);
         updCmd.Parameters.AddWithValue("@Id",  groupId);
+        updCmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         await updCmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -131,13 +132,15 @@ public sealed class SqlWaGroupRepository : IWaGroupRepository
     {
         if (jids.Count == 0) return;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         foreach (var jid in jids)
         {
-            var sql = $"UPDATE {_gm} SET [LeftAt]=SYSUTCDATETIME() WHERE [GroupId]=@G AND [Jid]=@J AND [LeftAt] IS NULL";
+            var sql = $"UPDATE {_gm} SET [LeftAt]=SYSUTCDATETIME() WHERE [GroupId]=@G AND [Jid]=@J AND [LeftAt] IS NULL AND [CompanyId]=@CompanyId";
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = sql;
             cmd.Parameters.AddWithValue("@G", groupId);
             cmd.Parameters.AddWithValue("@J", jid);
+            cmd.Parameters.AddWithValue("@CompanyId", companyId);
             await cmd.ExecuteNonQueryAsync(ct);
         }
     }

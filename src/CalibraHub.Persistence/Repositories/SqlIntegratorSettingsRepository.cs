@@ -154,12 +154,13 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
                 [AppVersion] = @AppVersion,
                 [TimeoutSeconds] = @TimeoutSeconds,
                 [LookbackDays] = @LookbackDays
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CurrentCompanyId;
             """;
 
         AddCommonParameters(command, settings);
         command.Parameters.Add(new SqlParameter("@Id", settings.Id));
         command.Parameters.Add(new SqlParameter("@UpdatedAt", DateTime.Now));
+        command.Parameters.Add(new SqlParameter("@CurrentCompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -170,10 +171,11 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             DELETE FROM {_tableName}
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
 
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

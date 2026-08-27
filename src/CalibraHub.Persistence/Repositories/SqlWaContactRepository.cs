@@ -59,16 +59,18 @@ public sealed class SqlWaContactRepository : IWaContactRepository
 
     public async Task<int> CreateAsync(WaContact contact, CancellationToken ct)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             INSERT INTO {_contactTable}
                 ([PrimaryPhone],[DisplayName],[ProfilePicUrl],[LastSeen],[PresenceStatus],
-                 [LinkedContactId],[IsBlocked],[IsActive],[CreatedById],[Created],[UpdatedById],[Updated])
+                 [LinkedContactId],[IsBlocked],[IsActive],[CompanyId],[CreatedById],[Created],[UpdatedById],[Updated])
             OUTPUT INSERTED.[Id]
             VALUES (@Phone,@DisplayName,@PicUrl,@LastSeen,@Presence,
-                    @LinkedId,@Blocked,@Active,@CreatedById,@Created,@UpdatedById,@Updated);
+                    @LinkedId,@Blocked,@Active,@CompanyId,@CreatedById,@Created,@UpdatedById,@Updated);
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId",  companyId));
         cmd.Parameters.Add(new SqlParameter("@Phone",      (object?)contact.PrimaryPhone   ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@DisplayName",(object?)contact.DisplayName    ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@PicUrl",     (object?)contact.ProfilePicUrl  ?? DBNull.Value));
@@ -87,6 +89,7 @@ public sealed class SqlWaContactRepository : IWaContactRepository
 
     public async Task UpdateAsync(WaContact contact, CancellationToken ct)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
@@ -101,9 +104,10 @@ public sealed class SqlWaContactRepository : IWaContactRepository
                    [IsActive]      = @Active,
                    [UpdatedById]   = @UpdatedById,
                    [Updated]       = @Updated
-             WHERE [Id] = @Id;
+             WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id",         contact.Id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId",  companyId));
         cmd.Parameters.Add(new SqlParameter("@Phone",      (object?)contact.PrimaryPhone   ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@DisplayName",(object?)contact.DisplayName    ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@PicUrl",     (object?)contact.ProfilePicUrl  ?? DBNull.Value));
@@ -121,12 +125,13 @@ public sealed class SqlWaContactRepository : IWaContactRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        // UNIQUE (Jid) — çakışmada sessizce atla
+        // UNIQUE (Jid) — çakışmada sessizce atla. CompanyId ebeveyn WaContact'tan turetilir.
         cmd.CommandText = $"""
             IF NOT EXISTS (SELECT 1 FROM {_jidTable} WHERE [Jid] = @Jid)
             BEGIN
-                INSERT INTO {_jidTable} ([ContactId],[Jid],[JidType],[IsPrimary],[Created])
-                VALUES (@ContactId,@Jid,@JidType,@IsPrimary,@Created);
+                INSERT INTO {_jidTable} ([ContactId],[Jid],[JidType],[IsPrimary],[CompanyId],[Created])
+                VALUES (@ContactId,@Jid,@JidType,@IsPrimary,
+                        (SELECT [CompanyId] FROM {_contactTable} WHERE [Id] = @ContactId), @Created);
             END;
             """;
         cmd.Parameters.Add(new SqlParameter("@ContactId",  jidEntry.ContactId));

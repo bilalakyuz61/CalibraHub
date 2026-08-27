@@ -184,11 +184,14 @@ public sealed class SqlCariGroupRepository : ICariGroupRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var transaction = conn.BeginTransaction();
 
+        var companyId = GetCurrentCompanyId();
+
         await using (var delCmd = conn.CreateCommand())
         {
             delCmd.Transaction = transaction;
-            delCmd.CommandText = $"DELETE FROM {_mappingTable} WHERE [ContactId]=@ContactId;";
+            delCmd.CommandText = $"DELETE FROM {_mappingTable} WHERE [ContactId]=@ContactId AND [CompanyId]=@CompanyId;";
             delCmd.Parameters.Add(new SqlParameter("@ContactId", contactId));
+            delCmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await delCmd.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -197,10 +200,11 @@ public sealed class SqlCariGroupRepository : ICariGroupRepository
             if (string.IsNullOrWhiteSpace(code)) continue;
             await using var insCmd = conn.CreateCommand();
             insCmd.Transaction = transaction;
-            insCmd.CommandText = $"INSERT INTO {_mappingTable} ([ContactId],[SlotOrder],[GroupCode]) VALUES (@ContactId,@Slot,@Code);";
+            insCmd.CommandText = $"INSERT INTO {_mappingTable} ([ContactId],[SlotOrder],[GroupCode],[CompanyId]) VALUES (@ContactId,@Slot,@Code,@CompanyId);";
             insCmd.Parameters.Add(new SqlParameter("@ContactId", contactId));
             insCmd.Parameters.Add(new SqlParameter("@Slot", slot));
             insCmd.Parameters.Add(new SqlParameter("@Code", code));
+            insCmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await insCmd.ExecuteNonQueryAsync(cancellationToken);
         }
 

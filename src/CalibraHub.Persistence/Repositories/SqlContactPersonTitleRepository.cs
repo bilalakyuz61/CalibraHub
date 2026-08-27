@@ -75,8 +75,8 @@ public sealed class SqlContactPersonTitleRepository : IContactPersonTitleReposit
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            INSERT INTO {_table} ([Name],[SortOrder],[IsSystem],[IsActive],[Created],[CreatedById])
-            VALUES (@Name,@SortOrder,@IsSystem,@IsActive,SYSUTCDATETIME(),@CreatedById);
+            INSERT INTO {_table} ([Name],[SortOrder],[IsSystem],[IsActive],[Created],[CreatedById],[CompanyId])
+            VALUES (@Name,@SortOrder,@IsSystem,@IsActive,SYSUTCDATETIME(),@CreatedById,@CompanyId);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         cmd.Parameters.Add(new SqlParameter("@Name",        entity.Name ?? string.Empty));
@@ -84,6 +84,7 @@ public sealed class SqlContactPersonTitleRepository : IContactPersonTitleReposit
         cmd.Parameters.Add(new SqlParameter("@IsSystem",    entity.IsSystem));
         cmd.Parameters.Add(new SqlParameter("@IsActive",    entity.IsActive));
         cmd.Parameters.Add(new SqlParameter("@CreatedById", (object?)entity.CreatedById ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId",   _connectionFactory.ResolveEffectiveCompanyId()));
         return (int)(await cmd.ExecuteScalarAsync(ct))!;
     }
 
@@ -96,10 +97,11 @@ public sealed class SqlContactPersonTitleRepository : IContactPersonTitleReposit
             SET [IsActive] = 0,
                 [Updated]    = SYSUTCDATETIME(),
                 [UpdatedById] = @UpdatedById
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id",          id));
         cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)updatedById ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId",   _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

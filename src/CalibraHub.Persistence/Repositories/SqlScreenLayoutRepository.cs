@@ -51,20 +51,20 @@ public sealed class SqlScreenLayoutRepository : IScreenLayoutRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            IF EXISTS (SELECT 1 FROM {_tableName} WHERE [ScreenCode] = @ScreenCode)
+            IF EXISTS (SELECT 1 FROM {_tableName} WHERE [ScreenCode] = @ScreenCode AND [CompanyId] = @CompanyId)
             BEGIN
                 UPDATE {_tableName}
                 SET
                     [LayoutJson] = @LayoutJson,
                     [Updated] = @UpdatedAt
-                WHERE [ScreenCode] = @ScreenCode;
+                WHERE [ScreenCode] = @ScreenCode AND [CompanyId] = @CompanyId;
             END
             ELSE
             BEGIN
                 INSERT INTO {_tableName}
-                    ([Id], [ScreenCode], [LayoutJson], [Created], [Updated])
+                    ([Id], [ScreenCode], [LayoutJson], [Created], [Updated], [CompanyId])
                 VALUES
-                    (@Id, @ScreenCode, @LayoutJson, @CreatedAt, @UpdatedAt);
+                    (@Id, @ScreenCode, @LayoutJson, @CreatedAt, @UpdatedAt, @CompanyId);
             END;
             """;
 
@@ -73,6 +73,7 @@ public sealed class SqlScreenLayoutRepository : IScreenLayoutRepository
         command.Parameters.Add(new SqlParameter("@LayoutJson", definition.LayoutJson));
         command.Parameters.Add(new SqlParameter("@CreatedAt", definition.Created));
         command.Parameters.Add(new SqlParameter("@UpdatedAt", DateTime.Now));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

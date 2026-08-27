@@ -8,7 +8,10 @@ namespace CalibraHub.Persistence.Repositories;
 
 /// <summary>
 /// SQL impl — LineCardLayout CRUD. Per-company DB (SqlServerConnectionFactory tenant
-/// routing); CompanyId kolonu yok — düzen ait olduğu şirket DB'sinde yaşar.
+/// routing). NOT (2026-08-27): CompanyId kolonu tenant izolasyonu icin sonradan eklendi —
+/// bu dosyadaki eski yorum ("kolon yok") artik dogru degil, DELETE bu kolona gore suzer.
+/// MERGE (UpsertAsync) suanlik ayni sirketten geldigini varsayiyor; grup1.txt kapsaminda
+/// yalniz DELETE flag'lendi.
 /// </summary>
 public sealed class SqlLineCardLayoutRepository : ILineCardLayoutRepository
 {
@@ -63,10 +66,12 @@ public sealed class SqlLineCardLayoutRepository : ILineCardLayoutRepository
 
     public async Task DeleteAsync(string formCode, CancellationToken ct)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [FormCode]=@FormCode;";
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [FormCode]=@FormCode AND [CompanyId]=@CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@FormCode", formCode));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

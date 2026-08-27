@@ -11,21 +11,25 @@ public sealed class SqlScheduledTaskRunRepository : IScheduledTaskRunRepository
 {
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _table;
+    private readonly string _taskTable;
 
     public SqlScheduledTaskRunRepository(SqlServerConnectionFactory connectionFactory, CalibraDatabaseOptions options)
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         _table = $"[{schema}].[ScheduledTaskRun]";
+        _taskTable = $"[{schema}].[ScheduledTask]";
     }
 
     public async Task<int> CreateAsync(ScheduledTaskRun run, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
+        // CompanyId ebeveyn ScheduledTask'tan turetilir (nullable — builtin/legacy gorevler icin).
         cmd.CommandText = $"""
-            INSERT INTO {_table} ([TaskId],[TaskCode],[StartedAt],[CompletedAt],[Status],[Message],[DurationMs],[Trigger],[ExecutedCommand])
-            VALUES (@TaskId,@TaskCode,@StartedAt,@CompletedAt,@Status,@Message,@DurationMs,@Trigger,@ExecutedCommand);
+            INSERT INTO {_table} ([TaskId],[TaskCode],[StartedAt],[CompletedAt],[Status],[Message],[DurationMs],[Trigger],[ExecutedCommand],[CompanyId])
+            VALUES (@TaskId,@TaskCode,@StartedAt,@CompletedAt,@Status,@Message,@DurationMs,@Trigger,@ExecutedCommand,
+                    (SELECT t.[CompanyId] FROM {_taskTable} t WHERE t.[Id] = @TaskId));
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         cmd.Parameters.Add(new SqlParameter("@TaskId",          run.TaskId));
@@ -54,13 +58,14 @@ public sealed class SqlScheduledTaskRunRepository : IScheduledTaskRunRepository
                    [Message] = @Message,
                    [DurationMs] = @DurationMs,
                    [ExecutedCommand] = COALESCE(@ExecutedCommand, [ExecutedCommand])
-             WHERE [Id] = @Id;
+             WHERE [Id] = @Id AND ([CompanyId] = @SessionCompanyId OR [CompanyId] IS NULL);
             """;
         cmd.Parameters.Add(new SqlParameter("@Id",              runId));
         cmd.Parameters.Add(new SqlParameter("@Status",          status));
         cmd.Parameters.Add(new SqlParameter("@Message",         (object?)message ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@DurationMs",      durationMs));
         cmd.Parameters.Add(new SqlParameter("@ExecutedCommand", (object?)executedCommand ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@SessionCompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -84,6 +89,10 @@ public sealed class SqlScheduledTaskRunRepository : IScheduledTaskRunRepository
         return list;
     }
 
+    // elle bakılmalı: kasıtlı olarak CompanyId filtresi YOK — bkz. SqlScheduledTaskRepository.
+    // ReleaseStuckLocksAsync'teki gerekçe (Worker HttpContext'siz, bulk bakım işi tüm şirketleri
+    // kapsamalı; filtre eklenirse ResolveEffectiveCompanyId() sahip şirkete düşer ve diğer
+    // şirketlerin eski run kayıtları asla temizlenmez / asılı kalmış run'ları asla kapanmaz).
     public async Task PurgeOlderThanAsync(DateTime cutoffUtc, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);

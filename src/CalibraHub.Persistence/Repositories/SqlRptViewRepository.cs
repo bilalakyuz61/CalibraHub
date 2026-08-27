@@ -170,7 +170,12 @@ public sealed class SqlRptViewRepository : IRptViewRepository
             await using (var delCmd = conn.CreateCommand())
             {
                 delCmd.Transaction = tx;
-                delCmd.CommandText = $"DELETE FROM {_rptViewCol} WHERE [ViewId] = @ViewId;";
+                // CompanyId ebeveyn RptView'dan turetilir (ViewId).
+                delCmd.CommandText = $"""
+                    DELETE FROM {_rptViewCol}
+                    WHERE [ViewId] = @ViewId
+                      AND [CompanyId] = (SELECT [CompanyId] FROM {_rptView} WHERE [Id] = @ViewId);
+                    """;
                 delCmd.Parameters.AddWithValue("@ViewId", viewId);
                 await delCmd.ExecuteNonQueryAsync(ct);
             }
@@ -182,10 +187,11 @@ public sealed class SqlRptViewRepository : IRptViewRepository
                 insCmd.CommandText = $@"
                     INSERT INTO {_rptViewCol}
                         ([ViewId],[ColName],[DisplayName],[DataType],[IsFilterable],[IsGroupable],
-                         [IsAggregatable],[DefaultAggregate],[Ordinal],[ContextBinding])
+                         [IsAggregatable],[DefaultAggregate],[Ordinal],[ContextBinding],[CompanyId])
                     VALUES
                         (@ViewId,@ColName,@DisplayName,@DataType,@IsFilterable,@IsGroupable,
-                         @IsAggregatable,@DefaultAggregate,@Ordinal,@ContextBinding);";
+                         @IsAggregatable,@DefaultAggregate,@Ordinal,@ContextBinding,
+                         (SELECT [CompanyId] FROM {_rptView} WHERE [Id] = @ViewId));";
                 insCmd.Parameters.AddWithValue("@ViewId", viewId);
                 insCmd.Parameters.AddWithValue("@ColName", col.ColName);
                 insCmd.Parameters.AddWithValue("@DisplayName", col.DisplayName);
@@ -218,7 +224,12 @@ public sealed class SqlRptViewRepository : IRptViewRepository
             await using (var delCmd = conn.CreateCommand())
             {
                 delCmd.Transaction = tx;
-                delCmd.CommandText = $"DELETE FROM {_rptViewRole} WHERE [ViewId] = @ViewId;";
+                // CompanyId ebeveyn RptView'dan turetilir (ViewId).
+                delCmd.CommandText = $"""
+                    DELETE FROM {_rptViewRole}
+                    WHERE [ViewId] = @ViewId
+                      AND [CompanyId] = (SELECT [CompanyId] FROM {_rptView} WHERE [Id] = @ViewId);
+                    """;
                 delCmd.Parameters.AddWithValue("@ViewId", viewId);
                 await delCmd.ExecuteNonQueryAsync(ct);
             }
@@ -228,8 +239,9 @@ public sealed class SqlRptViewRepository : IRptViewRepository
                 await using var insCmd = conn.CreateCommand();
                 insCmd.Transaction = tx;
                 insCmd.CommandText = $@"
-                    INSERT INTO {_rptViewRole} ([ViewId],[Role],[CanQuery],[CanDesign])
-                    VALUES (@ViewId,@Role,@CanQuery,@CanDesign);";
+                    INSERT INTO {_rptViewRole} ([ViewId],[Role],[CanQuery],[CanDesign],[CompanyId])
+                    VALUES (@ViewId,@Role,@CanQuery,@CanDesign,
+                        (SELECT [CompanyId] FROM {_rptView} WHERE [Id] = @ViewId));";
                 insCmd.Parameters.AddWithValue("@ViewId", viewId);
                 insCmd.Parameters.AddWithValue("@Role", (byte)role.Role);
                 insCmd.Parameters.AddWithValue("@CanQuery", role.CanQuery);

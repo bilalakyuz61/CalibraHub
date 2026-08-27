@@ -148,11 +148,16 @@ public sealed class SqlPermissionGroupRepository : IPermissionGroupRepository
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
         {
+            // PermissionGroup global/paylaşılan (CompanyId yok — muaf); ama üyelik (UserPermissionGroup)
+            // Users üzerinden per-company anlam taşır. Süzgeçsiz DELETE başka şirketin bu gruba
+            // atadığı kullanıcıları da silerdi — CompanyId ile kendi şirketimizinkiyle sınırlıyoruz.
+            var companyId = _factory.ResolveEffectiveCompanyId();
             await using (var delCmd = conn.CreateCommand())
             {
                 delCmd.Transaction = tx;
-                delCmd.CommandText = $"DELETE FROM {_memberTable} WHERE [GroupId]=@G;";
+                delCmd.CommandText = $"DELETE FROM {_memberTable} WHERE [GroupId]=@G AND [CompanyId]=@Company;";
                 delCmd.Parameters.AddWithValue("@G", groupId);
+                delCmd.Parameters.AddWithValue("@Company", companyId);
                 await delCmd.ExecuteNonQueryAsync(ct);
             }
             foreach (var uid in userIds.Distinct())
@@ -160,12 +165,13 @@ public sealed class SqlPermissionGroupRepository : IPermissionGroupRepository
                 await using var insCmd = conn.CreateCommand();
                 insCmd.Transaction = tx;
                 insCmd.CommandText = $"""
-                    INSERT INTO {_memberTable} ([UserId],[GroupId],[CreatedById])
-                    SELECT @U, @G, @C WHERE EXISTS (SELECT 1 FROM {_usersTable} WHERE [Id]=@U);
+                    INSERT INTO {_memberTable} ([UserId],[GroupId],[CreatedById],[CompanyId])
+                    SELECT @U, @G, @C, u.[CompanyId] FROM {_usersTable} u WHERE u.[Id]=@U AND u.[CompanyId]=@Company;
                     """;
                 insCmd.Parameters.AddWithValue("@U", uid);
                 insCmd.Parameters.AddWithValue("@G", groupId);
                 insCmd.Parameters.AddWithValue("@C", (object?)createdById ?? DBNull.Value);
+                insCmd.Parameters.AddWithValue("@Company", companyId);
                 await insCmd.ExecuteNonQueryAsync(ct);
             }
             await tx.CommitAsync(ct);

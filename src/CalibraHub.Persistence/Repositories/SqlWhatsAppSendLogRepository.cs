@@ -24,10 +24,11 @@ public sealed class SqlWhatsAppSendLogRepository : IWhatsAppSendLogRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             INSERT INTO {_table}
-                ([SentAt],[ToPhone],[MessageHash],[MessageId],[Success],[ErrorMessage],[BlockReason])
+                ([SentAt],[ToPhone],[MessageHash],[MessageId],[Success],[ErrorMessage],[BlockReason],[CompanyId])
             OUTPUT INSERTED.[Id]
-            VALUES (@SentAt,@ToPhone,@Hash,@MsgId,@Success,@Err,@Block);
+            VALUES (@SentAt,@ToPhone,@Hash,@MsgId,@Success,@Err,@Block,@CompanyId);
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@SentAt",  entry.SentAt));
         cmd.Parameters.Add(new SqlParameter("@ToPhone", (object?)entry.ToPhone      ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Hash",    (object?)entry.MessageHash  ?? DBNull.Value));

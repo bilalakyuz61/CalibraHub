@@ -126,13 +126,14 @@ public sealed class SqlDepartmentRepository : IDepartmentRepository
                 [IsActive] = @IsActive,
                 [UpdatedById] = @UpdatedById,
                 [Updated] = SYSUTCDATETIME()
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@Id", department.Id));
         command.Parameters.Add(new SqlParameter("@Name", department.Name));
         command.Parameters.Add(new SqlParameter("@ParentDepartmentId", (object?)department.ParentDepartmentId ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@IsActive", department.IsActive));
         command.Parameters.Add(new SqlParameter("@UpdatedById", (object?)department.UpdatedById ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -141,8 +142,9 @@ public sealed class SqlDepartmentRepository : IDepartmentRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"DELETE FROM {_tableName} WHERE [Id] = @Id;";
+        command.CommandText = $"DELETE FROM {_tableName} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 }

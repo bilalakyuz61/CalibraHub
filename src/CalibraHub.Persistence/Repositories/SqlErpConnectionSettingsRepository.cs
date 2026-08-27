@@ -94,11 +94,12 @@ public sealed class SqlErpConnectionSettingsRepository : IErpConnectionSettingsR
                 [Password] = @Password,
                 [IsActive] = @IsActive,
                 [Updated] = @Updated
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
 
         AddCommonParameters(command, settings);
         command.Parameters.Add(new SqlParameter("@Updated", DateTime.Now));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -109,10 +110,11 @@ public sealed class SqlErpConnectionSettingsRepository : IErpConnectionSettingsR
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             DELETE FROM {_tableName}
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
 
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
