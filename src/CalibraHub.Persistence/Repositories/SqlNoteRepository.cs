@@ -146,9 +146,10 @@ public sealed class SqlNoteRepository : INoteRepository
             if (!string.IsNullOrEmpty(snippetPlain))
             {
                 await using var update = connection.CreateCommand();
-                update.CommandText = $"UPDATE {_notesTable} SET [snippet] = @Snippet WHERE [Id] = @Id;";
+                update.CommandText = $"UPDATE {_notesTable} SET [snippet] = @Snippet WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
                 update.Parameters.Add(new SqlParameter("@Snippet", _encryption.Protect(snippetPlain)));
                 update.Parameters.Add(new SqlParameter("@Id", noteId));
+                update.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
                 await update.ExecuteNonQueryAsync(cancellationToken);
             }
         }
@@ -178,7 +179,7 @@ public sealed class SqlNoteRepository : INoteRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            IF EXISTS (SELECT 1 FROM {_notesTable} WHERE [Id] = @Id)
+            IF EXISTS (SELECT 1 FROM {_notesTable} WHERE [Id] = @Id AND [CompanyId] = @CompanyId)
                 UPDATE {_notesTable}
                 SET [Title] = @Title, [Content] = @Content, [FolderId] = @FolderId,
                     [Updated] = @UpdatedAt, [IsPinned] = @IsPinned,
@@ -187,7 +188,7 @@ public sealed class SqlNoteRepository : INoteRepository
                     [linked_entity_type] = @LinkedEntityType, [linked_entity_id] = @LinkedEntityId,
                     [linked_entity_label] = @LinkedEntityLabel, [visibility] = @Visibility,
                     [ocr_text] = @OcrText, [snippet] = @Snippet
-                WHERE [Id] = @Id;
+                WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             ELSE
                 INSERT INTO {_notesTable}
                     ([Id], [CompanyId], [UserId], [Title], [Content], [FolderId],
@@ -263,11 +264,12 @@ public sealed class SqlNoteRepository : INoteRepository
         command.CommandText = $"""
             UPDATE {_notesTable}
             SET [IsPinned] = CASE WHEN [IsPinned] = 1 THEN 0 ELSE 1 END
-            WHERE [Id] = @Id AND [UserId] = @UserId;
+            WHERE [Id] = @Id AND [UserId] = @UserId AND [CompanyId] = @CompanyId;
             SELECT [IsPinned] FROM {_notesTable} WHERE [Id] = @Id;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
         command.Parameters.Add(new SqlParameter("@UserId", userId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -275,9 +277,10 @@ public sealed class SqlNoteRepository : INoteRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"UPDATE {_notesTable} SET [IsDeleted] = 1, [Updated] = @Now WHERE [Id] = @Id;";
+        command.CommandText = $"UPDATE {_notesTable} SET [IsDeleted] = 1, [Updated] = @Now WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         command.Parameters.Add(new SqlParameter("@Id", id));
         command.Parameters.Add(new SqlParameter("@Now", DateTime.Now));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -370,6 +373,8 @@ public sealed class SqlNoteRepository : INoteRepository
         try
         {
             command.Transaction = tx;
+            // tenant-ok: NoteReminder tablosunda CompanyId kolonu yok; izolasyon NoteId FK'sıyla
+            // Note'tan miras alınır (reminder.NoteId çağıran controller'da zaten şirket bazlı okunan bir Note'a bağlıdır).
             command.CommandText = $"""
                 INSERT INTO {_remindersTable}
                     ([Id], [NoteId], [RemindAt], [IsSent], [SentAt], [recurrence_type], [recurrence_data],
@@ -389,6 +394,8 @@ public sealed class SqlNoteRepository : INoteRepository
             {
                 await using var tCmd = connection.CreateCommand();
                 tCmd.Transaction = tx;
+                // tenant-ok: NoteReminderTarget'ta CompanyId kolonu yok; izolasyon ReminderId FK'sıyla
+                // NoteReminder -> Note zincirinden miras alınır.
                 tCmd.CommandText = $"INSERT INTO {_reminderTargetsTable} ([Id],[ReminderId],[UserId]) VALUES (@Id,@Rid,@Uid);";
                 tCmd.Parameters.Add(new SqlParameter("@Id",  Guid.NewGuid()));
                 tCmd.Parameters.Add(new SqlParameter("@Rid", reminder.Id));
@@ -409,8 +416,13 @@ public sealed class SqlNoteRepository : INoteRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"DELETE FROM {_remindersTable} WHERE [Id] = @Id;";
+        command.CommandText = $"""
+            DELETE r FROM {_remindersTable} r
+            INNER JOIN {_notesTable} n ON r.[NoteId] = n.[Id]
+            WHERE r.[Id] = @Id AND n.[CompanyId] = @CompanyId;
+            """;
         command.Parameters.Add(new SqlParameter("@Id", reminderId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -507,9 +519,15 @@ public sealed class SqlNoteRepository : INoteRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"UPDATE {_sharesTable} SET [CanEdit] = @CanEdit WHERE [Id] = @Id;";
+        command.CommandText = $"""
+            UPDATE s SET [CanEdit] = @CanEdit
+            FROM {_sharesTable} s
+            INNER JOIN {_notesTable} n ON s.[NoteId] = n.[Id]
+            WHERE s.[Id] = @Id AND n.[CompanyId] = @CompanyId;
+            """;
         command.Parameters.Add(new SqlParameter("@Id", shareId));
         command.Parameters.Add(new SqlParameter("@CanEdit", canEdit));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -517,8 +535,13 @@ public sealed class SqlNoteRepository : INoteRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"DELETE FROM {_sharesTable} WHERE [Id] = @Id;";
+        command.CommandText = $"""
+            DELETE s FROM {_sharesTable} s
+            INNER JOIN {_notesTable} n ON s.[NoteId] = n.[Id]
+            WHERE s.[Id] = @Id AND n.[CompanyId] = @CompanyId;
+            """;
         command.Parameters.Add(new SqlParameter("@Id", shareId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -609,9 +632,15 @@ public sealed class SqlNoteRepository : INoteRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"UPDATE {_remindersTable} SET [IsSent] = 1, [SentAt] = @SentAt WHERE [Id] = @Id;";
+        command.CommandText = $"""
+            UPDATE r SET [IsSent] = 1, [SentAt] = @SentAt
+            FROM {_remindersTable} r
+            INNER JOIN {_notesTable} n ON r.[NoteId] = n.[Id]
+            WHERE r.[Id] = @Id AND n.[CompanyId] = @CompanyId;
+            """;
         command.Parameters.Add(new SqlParameter("@Id", reminderId));
         command.Parameters.Add(new SqlParameter("@SentAt", sentAt));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

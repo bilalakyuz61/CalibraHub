@@ -210,16 +210,17 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                [ErrorBehavior],[RetryCount],[IsActive],[VersionNo],[CreatedById],
                [PreProcedureName],[PreProcedureParamsJson],
                [PostProcedureName],[PostProcedureParamsJson],
-               [SourceFilterJson],[AllowAsCascadeTarget],[SourceCodeColumn])
+               [SourceFilterJson],[AllowAsCascadeTarget],[SourceCodeColumn],[CompanyId])
             OUTPUT INSERTED.[Id]
             VALUES
               (@Name,@Description,@SourceFormCode,@TargetEndpointId,
                @ErrorBehavior,@RetryCount,@IsActive,@VersionNo,@CreatedById,
                @PreProcedureName,@PreProcedureParamsJson,
                @PostProcedureName,@PostProcedureParamsJson,
-               @SourceFilterJson,@AllowAsCascadeTarget,@SourceCodeColumn);
+               @SourceFilterJson,@AllowAsCascadeTarget,@SourceCodeColumn,@CompanyId);
             """;
         AddIntegrationParameters(cmd, integration);
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var newId = (int)(await cmd.ExecuteScalarAsync(ct) ?? 0);
         return newId;
     }
@@ -247,10 +248,11 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                 [SourceCodeColumn] = @SourceCodeColumn,
                 [UpdatedById] = @UpdatedById,
                 [Updated] = SYSUTCDATETIME()
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", integration.Id));
         AddIntegrationParameters(cmd, integration);
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -260,8 +262,9 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         // IntegrationRun korunur (audit log).
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_integrationTable} WHERE [Id] = @Id;";
+        cmd.CommandText = $"DELETE FROM {_integrationTable} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -333,8 +336,9 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
             await using (var del = conn.CreateCommand())
             {
                 del.Transaction = tx;
-                del.CommandText = $"DELETE FROM {_mappingTable} WHERE [IntegrationId] = @Id;";
+                del.CommandText = $"DELETE FROM {_mappingTable} WHERE [IntegrationId] = @Id AND [CompanyId] = @CompanyId;";
                 del.Parameters.Add(new SqlParameter("@Id", integrationId));
+                del.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
                 await del.ExecuteNonQueryAsync(ct);
             }
 
@@ -347,12 +351,13 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                       ([IntegrationId],[TargetPath],[TargetDataType],[SourceType],[SourceValue],
                        [LookupSourceField],[DefaultValue],[FormatPattern],[IsRequired],[SortOrder],[GroupKey],
                        [SourceSection],[LookupFiltersJson],[LookupReturnColumn],[LookupParam],
-                       [CascadeToIntegrationId],[CascadeByValue])
+                       [CascadeToIntegrationId],[CascadeByValue],[CompanyId])
                     VALUES
                       (@IntegrationId,@TargetPath,@TargetDataType,@SourceType,@SourceValue,
                        @LookupSourceField,@DefaultValue,@FormatPattern,@IsRequired,@SortOrder,@GroupKey,
                        @SourceSection,@LookupFiltersJson,@LookupReturnColumn,@LookupParam,
-                       @CascadeToIntegrationId,@CascadeByValue);
+                       @CascadeToIntegrationId,@CascadeByValue,
+                       (SELECT p.[CompanyId] FROM {_integrationTable} p WHERE p.[Id] = @IntegrationId));
                     """;
                 ins.Parameters.Add(new SqlParameter("@IntegrationId", integrationId));
                 ins.Parameters.Add(new SqlParameter("@TargetPath", m.TargetPath));
@@ -415,8 +420,9 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
             await using (var del = conn.CreateCommand())
             {
                 del.Transaction = tx;
-                del.CommandText = $"DELETE FROM {_triggerTable} WHERE [IntegrationId] = @Id;";
+                del.CommandText = $"DELETE FROM {_triggerTable} WHERE [IntegrationId] = @Id AND [CompanyId] = @CompanyId;";
                 del.Parameters.Add(new SqlParameter("@Id", integrationId));
+                del.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
                 await del.ExecuteNonQueryAsync(ct);
             }
 
@@ -426,9 +432,10 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                 ins.Transaction = tx;
                 ins.CommandText = $"""
                     INSERT INTO {_triggerTable}
-                      ([IntegrationId],[TriggerType],[Config],[IsActive])
+                      ([IntegrationId],[TriggerType],[Config],[IsActive],[CompanyId])
                     VALUES
-                      (@IntegrationId,@TriggerType,@Config,@IsActive);
+                      (@IntegrationId,@TriggerType,@Config,@IsActive,
+                       (SELECT p.[CompanyId] FROM {_integrationTable} p WHERE p.[Id] = @IntegrationId));
                     """;
                 ins.Parameters.Add(new SqlParameter("@IntegrationId", integrationId));
                 ins.Parameters.Add(new SqlParameter("@TriggerType", t.TriggerType.ToString()));
@@ -507,13 +514,14 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         cmd.CommandText = $"""
             INSERT INTO {_endpointTable}
               ([ApiProfileId],[Name],[HttpMethod],[UrlTemplate],[BodySchema],
-               [Description],[IsActive],[CreatedById])
+               [Description],[IsActive],[CreatedById],[CompanyId])
             OUTPUT INSERTED.[Id]
             VALUES
               (@ApiProfileId,@Name,@HttpMethod,@UrlTemplate,@BodySchema,
-               @Description,@IsActive,@CreatedById);
+               @Description,@IsActive,@CreatedById,@CompanyId);
             """;
         AddEndpointParameters(cmd, endpoint);
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         return (int)(await cmd.ExecuteScalarAsync(ct) ?? 0);
     }
 
@@ -532,10 +540,11 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                 [IsActive] = @IsActive,
                 [UpdatedById] = @UpdatedById,
                 [Updated] = SYSUTCDATETIME()
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", endpoint.Id));
         AddEndpointParameters(cmd, endpoint);
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -543,8 +552,9 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_endpointTable} WHERE [Id] = @Id;";
+        cmd.CommandText = $"DELETE FROM {_endpointTable} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -558,12 +568,13 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
             INSERT INTO {_runTable}
               ([IntegrationId],[TriggerType],[SourceRecordId],[StartedAt],[FinishedAt],
                [DurationMs],[Status],[HttpStatusCode],[RequestBody],[ResponseBody],
-               [ErrorMessage],[RetryAttempt],[TriggeredBy],[ParentRunId])
+               [ErrorMessage],[RetryAttempt],[TriggeredBy],[ParentRunId],[CompanyId])
             OUTPUT INSERTED.[Id]
             VALUES
               (@IntegrationId,@TriggerType,@SourceRecordId,@StartedAt,@FinishedAt,
                @DurationMs,@Status,@HttpStatusCode,@RequestBody,@ResponseBody,
-               @ErrorMessage,@RetryAttempt,@TriggeredBy,@ParentRunId);
+               @ErrorMessage,@RetryAttempt,@TriggeredBy,@ParentRunId,
+               (SELECT p.[CompanyId] FROM {_integrationTable} p WHERE p.[Id] = @IntegrationId));
             """;
         AddRunParameters(cmd, run);
         return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct) ?? 0L);
@@ -583,10 +594,11 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                 [ResponseBody] = @ResponseBody,
                 [ErrorMessage] = @ErrorMessage,
                 [RetryAttempt] = @RetryAttempt
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", run.Id));
         AddRunParameters(cmd, run);
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -635,8 +647,9 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_runTable} WHERE [IntegrationId] = @Id;";
+        cmd.CommandText = $"DELETE FROM {_runTable} WHERE [IntegrationId] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Id", integrationId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         return await cmd.ExecuteNonQueryAsync(ct);
     }
 

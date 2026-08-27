@@ -126,22 +126,23 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
     public async Task UpsertCompanionAsync(ArgeProject p, CancellationToken ct)
     {
         var sql = $"""
-            IF EXISTS (SELECT 1 FROM {_argeTable} WHERE [DocumentId] = @Doc)
+            IF EXISTS (SELECT 1 FROM {_argeTable} WHERE [DocumentId] = @Doc AND [CompanyId] = @CompanyId)
                 UPDATE {_argeTable} SET
                     [Name]=@Name, [Status]=@Status, [ProjectType]=@Type, [OwnerPersonnelId]=@Owner,
                     [TargetDate]=@Target, [ProgressPercent]=@Progress, [Description]=@Desc,
                     [UpdatedById]=@Upd, [Updated]=SYSUTCDATETIME()
-                WHERE [DocumentId]=@Doc;
+                WHERE [DocumentId]=@Doc AND [CompanyId] = @CompanyId;
             ELSE
                 INSERT INTO {_argeTable}
-                    ([DocumentId],[Name],[Status],[ProjectType],[OwnerPersonnelId],[TargetDate],[ProgressPercent],[Description],[CreatedById],[Created])
+                    ([DocumentId],[Name],[Status],[ProjectType],[OwnerPersonnelId],[TargetDate],[ProgressPercent],[Description],[CreatedById],[Created],[CompanyId])
                 VALUES
-                    (@Doc,@Name,@Status,@Type,@Owner,@Target,@Progress,@Desc,@Cre,SYSUTCDATETIME());
+                    (@Doc,@Name,@Status,@Type,@Owner,@Target,@Progress,@Desc,@Cre,SYSUTCDATETIME(),@CompanyId);
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@Doc", p.DocumentId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@Name", p.Name));
         cmd.Parameters.Add(new SqlParameter("@Status", (byte)p.Status));
         cmd.Parameters.Add(new SqlParameter("@Type", (byte)p.ProjectType));
@@ -158,7 +159,7 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
     {
         var sql = $"""
             UPDATE {_argeTable} SET [Status]=@Status, [UpdatedById]=@Upd, [Updated]=SYSUTCDATETIME()
-            WHERE [DocumentId]=@Doc;
+            WHERE [DocumentId]=@Doc AND [CompanyId] = @CompanyId;
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
@@ -166,6 +167,7 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
         cmd.Parameters.Add(new SqlParameter("@Status", status));
         cmd.Parameters.Add(new SqlParameter("@Upd", (object?)updatedById ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Doc", documentId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var rows = await cmd.ExecuteNonQueryAsync(ct);
         return rows > 0;
     }
@@ -197,8 +199,9 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            INSERT INTO {_linkTable} ([ArgeProjectId],[ItemId],[Version],[CreatedById],[Created])
-            VALUES (@Doc,@Item,@Ver,@Cre,SYSUTCDATETIME());
+            INSERT INTO {_linkTable} ([ArgeProjectId],[ItemId],[Version],[CreatedById],[Created],[CompanyId])
+            VALUES (@Doc,@Item,@Ver,@Cre,SYSUTCDATETIME(),
+                (SELECT d.[CompanyId] FROM {_docTable} d WHERE d.[Id] = @Doc));
             """;
         cmd.Parameters.Add(new SqlParameter("@Doc", documentId));
         cmd.Parameters.Add(new SqlParameter("@Item", itemId));

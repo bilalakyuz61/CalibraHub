@@ -131,9 +131,10 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
         var sql = $"""
             INSERT INTO {_taskTable}
                 ([ProjectId],[Title],[Description],[OrderNo],[Status],[AssignedUserId],[TargetDate],
-                 [LinkedEntityKind],[LinkedEntityId],[TemplateLineId],[CreatedById],[Created])
+                 [LinkedEntityKind],[LinkedEntityId],[TemplateLineId],[CreatedById],[Created],[CompanyId])
             VALUES
-                (@P,@Title,@Desc,@Order,@Status,@Assigned,@Target,@LinkKind,@LinkId,@TplLine,@Cre,SYSUTCDATETIME());
+                (@P,@Title,@Desc,@Order,@Status,@Assigned,@Target,@LinkKind,@LinkId,@TplLine,@Cre,SYSUTCDATETIME(),
+                 (SELECT d.[CompanyId] FROM {_docTable} d WHERE d.[Id] = @P));
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
@@ -165,7 +166,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
             UPDATE {_taskTable} SET
                 [Title]=@Title, [Description]=@Desc, [OrderNo]=@Order, [AssignedUserId]=@Assigned,
                 [TargetDate]=@Target, [UpdatedById]=@Upd, [Updated]=SYSUTCDATETIME()
-            WHERE [Id]=@Id AND [IsActive]=1;
+            WHERE [Id]=@Id AND [IsActive]=1 AND [CompanyId]=@CompanyId;
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
@@ -177,6 +178,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
         cmd.Parameters.Add(new SqlParameter("@Assigned", (object?)task.AssignedUserId ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Target", (object?)task.TargetDate ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Upd", (object?)task.UpdatedById ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -184,13 +186,14 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
     {
         var sql = $"""
             UPDATE {_taskTable} SET [IsActive]=0, [UpdatedById]=@Upd, [Updated]=SYSUTCDATETIME()
-            WHERE [Id]=@Id;
+            WHERE [Id]=@Id AND [CompanyId]=@CompanyId;
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@Id", taskId));
         cmd.Parameters.Add(new SqlParameter("@Upd", (object?)updatedById ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -228,7 +231,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
                 [CompletedAt]      = CASE WHEN @Status = 0 THEN NULL ELSE [CompletedAt] END,
                 [CompletedByUserId]= CASE WHEN @Status = 0 THEN NULL ELSE [CompletedByUserId] END,
                 [UpdatedById]=@Upd, [Updated]=SYSUTCDATETIME()
-            WHERE [Id]=@Id AND [IsActive]=1;
+            WHERE [Id]=@Id AND [IsActive]=1 AND [CompanyId]=@CompanyId;
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
@@ -236,6 +239,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
         cmd.Parameters.Add(new SqlParameter("@Id", taskId));
         cmd.Parameters.Add(new SqlParameter("@Status", status));
         cmd.Parameters.Add(new SqlParameter("@Upd", (object?)updatedById ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -301,9 +305,10 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
             var sql = $"""
                 INSERT INTO {_taskTable}
                     ([ProjectId],[Title],[Description],[OrderNo],[Status],[AssignedUserId],[TargetDate],
-                     [LinkedEntityKind],[LinkedEntityId],[TemplateLineId],[CreatedById],[Created])
+                     [LinkedEntityKind],[LinkedEntityId],[TemplateLineId],[CreatedById],[Created],[CompanyId])
                 VALUES
-                    (@P,@Title,@Desc,@Order,@Status,@Assigned,@Target,@LinkKind,@LinkId,@TplLine,@Cre,SYSUTCDATETIME());
+                    (@P,@Title,@Desc,@Order,@Status,@Assigned,@Target,@LinkKind,@LinkId,@TplLine,@Cre,SYSUTCDATETIME(),
+                     (SELECT d.[CompanyId] FROM {_docTable} d WHERE d.[Id] = @P));
                 """;
             foreach (var task in tasks)
             {
@@ -400,7 +405,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
     {
         var sql = $"""
             UPDATE {_argeTable} SET [SequentialTasks]=@E, [UpdatedById]=@Upd, [Updated]=SYSUTCDATETIME()
-            WHERE [DocumentId]=@P;
+            WHERE [DocumentId]=@P AND [CompanyId]=@CompanyId;
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
@@ -408,6 +413,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
         cmd.Parameters.Add(new SqlParameter("@P", projectId));
         cmd.Parameters.Add(new SqlParameter("@E", enabled ? 1 : 0));
         cmd.Parameters.Add(new SqlParameter("@Upd", (object?)updatedById ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -426,7 +432,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
             BEGIN
                 DECLARE @pct DECIMAL(5,2) = ROUND(100.0 * @done / @denom, 2);
                 UPDATE {_argeTable} SET [ProgressPercent]=@pct, [UpdatedById]=@Upd, [Updated]=SYSUTCDATETIME()
-                WHERE [DocumentId]=@P;
+                WHERE [DocumentId]=@P AND [CompanyId]=@CompanyId;
                 SELECT @pct;
             END
             """;
@@ -435,6 +441,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@P", projectId));
         cmd.Parameters.Add(new SqlParameter("@Upd", (object?)updatedById ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is null || result == DBNull.Value ? null : Convert.ToDecimal(result);
     }

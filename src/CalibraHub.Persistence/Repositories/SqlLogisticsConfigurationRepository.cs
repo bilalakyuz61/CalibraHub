@@ -1680,10 +1680,12 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task DeleteMachineAsync(int machineId, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"DELETE FROM {_machinesTableName} WHERE [Id] = @Id;";
+        command.CommandText = $"DELETE FROM {_machinesTableName} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         command.Parameters.Add(new SqlParameter("@Id", machineId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

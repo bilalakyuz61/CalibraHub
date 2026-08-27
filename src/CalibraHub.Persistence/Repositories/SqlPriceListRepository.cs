@@ -406,15 +406,22 @@ public sealed class SqlPriceListRepository : IPriceListRepository
     {
         await using var conn = await _cf.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
+        // PriceList kendi CompanyId kolonuna sahip degil; kiraci sinirini ebeveyni
+        // PriceGroup uzerinden EXISTS ile dogrular (GroupId -> PriceGroup.CompanyId).
         cmd.CommandText = $"""
             UPDATE {_tblEntries} SET
                 [ItemId]=@ItemId,[ConfigId]=@ConfigId,[CurrencyId]=@CurrencyId,
                 [PriceType]=@PriceType,[Price]=@Price,
                 [ValidFrom]=@ValidFrom,[ValidTo]=@ValidTo,
                 [IsActive]=@Active,[Updated]=GETDATE()
-            WHERE [Id]=@Id;
+            WHERE [Id]=@Id
+              AND EXISTS (
+                  SELECT 1 FROM {_tblGroups} g
+                  WHERE g.[Id] = {_tblEntries}.[GroupId] AND g.[CompanyId] = @CompanyId
+              );
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", e.Id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
         AddEntryParams(cmd, e);
         await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -423,8 +430,17 @@ public sealed class SqlPriceListRepository : IPriceListRepository
     {
         await using var conn = await _cf.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_tblEntries} WHERE [Id]=@Id;";
+        // PriceList kendi CompanyId kolonuna sahip degil; ebeveyni PriceGroup uzerinden dogrulanir.
+        cmd.CommandText = $"""
+            DELETE FROM {_tblEntries}
+            WHERE [Id]=@Id
+              AND EXISTS (
+                  SELECT 1 FROM {_tblGroups} g
+                  WHERE g.[Id] = {_tblEntries}.[GroupId] AND g.[CompanyId] = @CompanyId
+              );
+            """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

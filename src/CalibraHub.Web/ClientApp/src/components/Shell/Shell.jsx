@@ -647,17 +647,26 @@ export default function Shell(props) {
      denendikten sonra true olur. */
   var tabsReadyRef = useRef(false)
   var tabsSaveTimerRef = useRef(null)
+  // Her render'da guncel tabs degerini tasir — GET senkronu asenkron tamamlandiginda
+  // "kullanici hic tab degistirmedi" durumunda dahi guncel local state'e erisim saglar.
+  var tabsRef = useRef(tabs)
+  tabsRef.current = tabs
 
   /* Mount'ta sunucudaki kayitli sekme durumunu oku ve uzlastir.
-     saved:false → hic kayit yok, yerel "ilk ziyaret" state zaten dogru, dokunma.
+     saved:false → hic kayit yok. Yerel "ilk ziyaret" state zaten dogru; ustelik
+     bu ilk state bir kez sunucuya yazdirilir ki kullanici hic tab degistirmese
+     bile bir sonraki giriste ayni sekme bulunsun (aksi halde tabs referansi
+     hic degismedigi icin asagidaki debounce-save effect'i tetiklenmeyecekti).
      saved:true  → sunucu kazanir (bos dizi dahil — bilincli kapatma niyeti
      baska bir cihaz/oturumda verilmis olabilir). Sunucuya erisilemezse yerel
      kopya ile calismaya devam edilir (fail-open, veri kaybi yok). */
   useEffect(function() {
     var cancelled = false
+    var neverSavedOnServer = false
     fetchWorkspaceTabs()
       .then(function(res) {
-        if (cancelled || !res.saved) return
+        if (cancelled) return
+        if (!res.saved) { neverSavedOnServer = true; return }
         var normalized = res.tabs.map(normalizeServerTab).filter(Boolean)
         var reconciled = reconcileStoredTabs(normalized, initialUrl)
         setTabs(reconciled)
@@ -674,7 +683,14 @@ export default function Shell(props) {
         // Kullaniciyi rahatsiz eden bir uyari YOK (arka plan senkronu).
         console.warn('[Shell] Açık sekmeler sunucudan okunamadı, yerel kopya kullanılıyor.', err)
       })
-      .finally(function() { tabsReadyRef.current = true })
+      .finally(function() {
+        tabsReadyRef.current = true
+        if (cancelled || !neverSavedOnServer) return
+        // Ilk-oturum durumunu tek seferlik sunucuya yaz (kullanici tab hic degistirmese bile).
+        saveWorkspaceTabs(tabsRef.current).catch(function(err) {
+          console.warn('[Shell] Açık sekmeler ilk senkronda sunucuya yazılamadı, yerel kopya korunuyor.', err)
+        })
+      })
     return function() { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
