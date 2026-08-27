@@ -71,15 +71,15 @@ data class ContactCardDto(
 /** Ince Result<T> sarmalayici — [ProductionRepository] ile ayni hata sozlesmesi. */
 class ContactCardRepository(private val session: SessionManager) {
 
-    suspend fun search(query: String, take: Int = 20): Result<List<ContactCardRowDto>> = runCatching {
+    suspend fun search(query: String, take: Int = 20): Result<List<ContactCardRowDto>> = runCatchingApi {
         val q = query.trim()
-        if (q.isEmpty()) return@runCatching emptyList()
+        if (q.isEmpty()) return@runCatchingApi emptyList()
         val resp = session.contactCardApi().search(q, take)
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
         resp.body<List<ContactCardRowDto>>()
     }
 
-    suspend fun detail(id: Int): Result<ContactCardDto> = runCatching {
+    suspend fun detail(id: Int): Result<ContactCardDto> = runCatchingApi {
         val resp = session.contactCardApi().detail(id)
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
         resp.body<ContactCardDto>()

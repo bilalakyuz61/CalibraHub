@@ -294,7 +294,7 @@ class SessionManager(private val storage: SecureStorage) {
      * cookie'siz, kisa timeout'lu (5 sn) bir HttpClient kurulur — Android `ping(rawBaseUrl)` ile
      * AYNI gerekce.
      */
-    suspend fun ping(rawBaseUrl: String): Result<PingResponse> = runCatching {
+    suspend fun ping(rawBaseUrl: String): Result<PingResponse> = com.calibrahub.mobile.data.runCatchingApi {
         val trimmed = rawBaseUrl.trim()
         require(trimmed.isNotEmpty()) { "Sunucu adresi boş" }
         val normalized = if (trimmed.endsWith("/")) trimmed else "$trimmed/"
@@ -384,7 +384,7 @@ class SessionManager(private val storage: SecureStorage) {
      * gecici bir sorun kullaniciyi bos menuyle kilitlememeli.
      */
     suspend fun refreshPermissions() {
-        runCatching {
+        com.calibrahub.mobile.data.runCatchingApi {
             val resp = authApi().session()
             if (resp.status == HttpStatusCode.OK) {
                 _permissions.value = resp.body<SessionDto>().permissions?.toSet()

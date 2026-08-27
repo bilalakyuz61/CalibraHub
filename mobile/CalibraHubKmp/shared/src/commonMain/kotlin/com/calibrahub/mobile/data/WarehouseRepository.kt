@@ -12,20 +12,20 @@ import io.ktor.http.isSuccess
  */
 class WarehouseRepository(private val session: SessionManager) {
 
-    suspend fun locations(): Result<List<WarehouseLocationDto>> = runCatching {
+    suspend fun locations(): Result<List<WarehouseLocationDto>> = runCatchingApi {
         val resp = session.warehouseApi().locations()
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
         resp.body<List<WarehouseLocationDto>>()
     }
 
-    suspend fun stock(itemCode: String): Result<StockQueryDto> = runCatching {
+    suspend fun stock(itemCode: String): Result<StockQueryDto> = runCatchingApi {
         val resp = session.warehouseApi().stock(itemCode)
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
         resp.body<StockQueryDto>()
     }
 
     /** Rehber (malzeme) arama — debounce'lu cagri (ekran tarafinda uygulanir). */
-    suspend fun searchItems(query: String, take: Int = 20): Result<List<ItemSearchDto>> = runCatching {
+    suspend fun searchItems(query: String, take: Int = 20): Result<List<ItemSearchDto>> = runCatchingApi {
         val resp = session.warehouseApi().searchItems(query, take)
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
         resp.body<List<ItemSearchDto>>()
@@ -37,7 +37,7 @@ class WarehouseRepository(private val session: SessionManager) {
         lines: List<StockDocLineRequest>,
         note: String?,
         extraFields: Map<String, String>? = null,
-    ): Result<StockDocResult> = runCatching {
+    ): Result<StockDocResult> = runCatchingApi {
         unwrapStockDoc(
             session.warehouseApi().stockIn(
                 StockDocRequest(locationId = locationId, lines = lines, note = note, extraFields = extraFields),
@@ -51,7 +51,7 @@ class WarehouseRepository(private val session: SessionManager) {
         lines: List<StockDocLineRequest>,
         note: String?,
         extraFields: Map<String, String>? = null,
-    ): Result<StockDocResult> = runCatching {
+    ): Result<StockDocResult> = runCatchingApi {
         unwrapStockDoc(
             session.warehouseApi().stockOut(
                 StockDocRequest(locationId = locationId, lines = lines, note = note, extraFields = extraFields),
@@ -69,7 +69,7 @@ class WarehouseRepository(private val session: SessionManager) {
         lines: List<StockDocLineRequest>,
         note: String?,
         extraFields: Map<String, String>? = null,
-    ): Result<TransferResult> = runCatching {
+    ): Result<TransferResult> = runCatchingApi {
         val resp = session.warehouseApi().transfer(
             TransferRequest(
                 fromLocationId = fromLocationId,
@@ -91,7 +91,7 @@ class WarehouseRepository(private val session: SessionManager) {
         lines: List<InventoryCountLineRequest>,
         note: String?,
         extraFields: Map<String, String>? = null,
-    ): Result<InventoryCountResult> = runCatching {
+    ): Result<InventoryCountResult> = runCatchingApi {
         val resp = session.warehouseApi().inventoryCount(
             InventoryCountRequest(locationId = locationId, lines = lines, note = note, extraFields = extraFields),
         )
@@ -107,7 +107,7 @@ class WarehouseRepository(private val session: SessionManager) {
     }
 
     /** Sayim Yansit — taslak (applied=false) kalmis sayim belgesini stoga uygular. Idempotent DEGIL. */
-    suspend fun applyInventoryCount(id: Int): Result<InventoryCountApplyResult> = runCatching {
+    suspend fun applyInventoryCount(id: Int): Result<InventoryCountApplyResult> = runCatchingApi {
         val resp = session.warehouseApi().applyInventoryCount(id)
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
         val body = resp.body<InventoryCountApplyResponse>()
@@ -116,7 +116,7 @@ class WarehouseRepository(private val session: SessionManager) {
     }
 
     /** Cari (contact) rehberi arama — searchItems ile ayni desen. */
-    suspend fun searchContacts(query: String, take: Int = 20): Result<List<ContactSearchDto>> = runCatching {
+    suspend fun searchContacts(query: String, take: Int = 20): Result<List<ContactSearchDto>> = runCatchingApi {
         val resp = session.warehouseApi().searchContacts(query, take)
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
         resp.body<List<ContactSearchDto>>()
@@ -134,7 +134,7 @@ class WarehouseRepository(private val session: SessionManager) {
         externalRefNumber: String? = null,
         preferredOrderId: Int? = null,
         extraFields: Map<String, String>? = null,
-    ): Result<DeliveryResult> = runCatching {
+    ): Result<DeliveryResult> = runCatchingApi {
         val resp = session.warehouseApi().delivery(
             DeliveryRequest(
                 docType = docType,
@@ -157,14 +157,14 @@ class WarehouseRepository(private val session: SessionManager) {
         itemId: Int,
         locationId: Int? = null,
         q: String? = null,
-    ): Result<List<ItemSerialDto>> = runCatching {
+    ): Result<List<ItemSerialDto>> = runCatchingApi {
         val resp = session.warehouseApi().itemSerials(itemId, locationId, q)
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
         resp.body<List<ItemSerialDto>>()
     }
 
     /** Musait lotlar (FEFO sirali). */
-    suspend fun availableLotsForItem(itemId: Int, locationId: Int? = null): Result<List<ItemLotDto>> = runCatching {
+    suspend fun availableLotsForItem(itemId: Int, locationId: Int? = null): Result<List<ItemLotDto>> = runCatchingApi {
         val resp = session.warehouseApi().itemLots(itemId, locationId)
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
         resp.body<List<ItemLotDto>>()
@@ -172,21 +172,21 @@ class WarehouseRepository(private val session: SessionManager) {
 
     /** Acik siparis listesi. */
     suspend fun openOrders(docType: String, q: String? = null, take: Int = 50): Result<List<OpenOrderSummaryDto>> =
-        runCatching {
+        runCatchingApi {
             val resp = session.warehouseApi().openOrders(docType, q, take)
             if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
             resp.body<List<OpenOrderSummaryDto>>()
         }
 
     /** Acik siparis detayi. */
-    suspend fun openOrderDetail(id: Int): Result<OpenOrderDetailDto> = runCatching {
+    suspend fun openOrderDetail(id: Int): Result<OpenOrderDetailDto> = runCatchingApi {
         val resp = session.warehouseApi().openOrderDetail(id)
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
         resp.body<OpenOrderDetailDto>()
     }
 
     /** Taslak (applied=false) sayim belgeleri — Yansit aksiyonu MEVCUT [applyInventoryCount]'u kullanir. */
-    suspend fun draftInventoryCounts(take: Int = 50): Result<List<DraftInventoryCountDto>> = runCatching {
+    suspend fun draftInventoryCounts(take: Int = 50): Result<List<DraftInventoryCountDto>> = runCatchingApi {
         val resp = session.warehouseApi().inventoryCounts(take)
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
         resp.body<List<DraftInventoryCountDto>>()
@@ -198,7 +198,7 @@ class WarehouseRepository(private val session: SessionManager) {
      * (2) 400/403/404 veya ag hatasi -> SESSIZCE bos listeye dusurulur — ek saha bolumu V1'de
      * opsiyonel/best-effort bir katman, asil belge kaydetme akisini ASLA bloklamamali.
      */
-    suspend fun getWidgetSchema(formCode: String): Result<List<WidgetFieldDto>> = runCatching {
+    suspend fun getWidgetSchema(formCode: String): Result<List<WidgetFieldDto>> = runCatchingApi {
         val resp = session.warehouseApi().getWidgetSchema(formCode)
         if (resp.status.isSuccess()) resp.body<List<WidgetFieldDto>>() else emptyList()
     }

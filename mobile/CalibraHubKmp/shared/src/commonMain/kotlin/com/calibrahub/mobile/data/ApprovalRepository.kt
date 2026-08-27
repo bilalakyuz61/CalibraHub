@@ -10,20 +10,20 @@ import io.ktor.http.isSuccess
  */
 class ApprovalRepository(private val session: SessionManager) {
 
-    suspend fun pending(): Result<List<PendingApprovalDto>> = runCatching {
+    suspend fun pending(): Result<List<PendingApprovalDto>> = runCatchingApi {
         val resp = session.approvalApi().list()
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
         resp.body<List<PendingApprovalDto>>()
     }
 
-    suspend fun approve(instanceId: Int, note: String?): Result<Unit> = runCatching {
+    suspend fun approve(instanceId: Int, note: String?): Result<Unit> = runCatchingApi {
         val resp = session.approvalApi().approve(instanceId, note?.trim()?.takeIf { it.isNotBlank() })
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
         Unit
     }
 
     /** [note] bos olamaz — sunucu da reddeder, burada erken yakalanir (bos ag turu atilmaz). */
-    suspend fun reject(instanceId: Int, note: String): Result<Unit> = runCatching {
+    suspend fun reject(instanceId: Int, note: String): Result<Unit> = runCatchingApi {
         val reason = note.trim()
         if (reason.isEmpty()) error("Reddetme gerekçesi zorunludur.")
         val resp = session.approvalApi().reject(instanceId, reason)

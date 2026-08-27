@@ -14,13 +14,13 @@ import io.ktor.http.isSuccess
  */
 class ProductionRepository(private val session: SessionManager) {
 
-    suspend fun workOrders(query: String? = null, take: Int = 50): Result<List<WorkOrderListItemDto>> = runCatching {
+    suspend fun workOrders(query: String? = null, take: Int = 50): Result<List<WorkOrderListItemDto>> = runCatchingApi {
         val resp = session.productionApi().workOrders(query?.trim()?.takeIf { it.isNotBlank() }, take)
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
         resp.body<List<WorkOrderListItemDto>>()
     }
 
-    suspend fun workOrderDetail(id: Int): Result<WorkOrderDetailDto> = runCatching {
+    suspend fun workOrderDetail(id: Int): Result<WorkOrderDetailDto> = runCatchingApi {
         val resp = session.productionApi().workOrderDetail(id)
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
         resp.body<WorkOrderDetailDto>()
@@ -30,20 +30,20 @@ class ProductionRepository(private val session: SessionManager) {
      * Bagli personel + PIN gereksinimi. Hata durumunda "PIN gerekli" varsayilanina duser —
      * ag hatasi yuzunden PIN atlanmamali (fail-safe yon guvenlik lehine).
      */
-    suspend fun myOperator(): MyOperatorDto = runCatching {
+    suspend fun myOperator(): MyOperatorDto = runCatchingApi {
         val resp = session.productionApi().myOperator()
         if (!resp.status.isSuccess()) error("HTTP ${resp.status.value}")
         resp.body<MyOperatorDto>()
     }.getOrElse { MyOperatorDto(linked = false, pinRequired = true) }
 
     /** Sicil No + PIN dogrulama — basarida operatorId+name doner, start/complete cagrilarinda kullanilir. */
-    suspend fun authOperator(personnelCode: String, pin: String): Result<AuthOperatorResponse> = runCatching {
+    suspend fun authOperator(personnelCode: String, pin: String): Result<AuthOperatorResponse> = runCatchingApi {
         val resp = session.productionApi().authOperator(AuthOperatorRequest(personnelCode = personnelCode, pin = pin))
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
         resp.body<AuthOperatorResponse>()
     }
 
-    suspend fun startOperation(operationId: Int, operatorId: Int): Result<Unit> = runCatching {
+    suspend fun startOperation(operationId: Int, operatorId: Int): Result<Unit> = runCatchingApi {
         val resp = session.productionApi().startOperation(StartOperationRequest(operationId, operatorId))
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
         Unit
@@ -56,7 +56,7 @@ class ProductionRepository(private val session: SessionManager) {
         goodQuantity: Double,
         scrapQuantity: Double,
         note: String?,
-    ): Result<Unit> = runCatching {
+    ): Result<Unit> = runCatchingApi {
         val resp = session.productionApi().completeOperation(
             CompleteOperationRequest(
                 operationId = operationId,
