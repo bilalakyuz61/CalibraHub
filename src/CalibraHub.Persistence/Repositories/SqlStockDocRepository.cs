@@ -1530,7 +1530,9 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                         link.Transaction = tx;
                         link.CommandText = $"""
                             IF NOT EXISTS (SELECT 1 FROM {T("DocumentLineSerial")} WHERE [DocumentLineId]=@Ln AND [SerialId]=@Sr)
-                                INSERT INTO {T("DocumentLineSerial")} ([DocumentLineId],[SerialId]) VALUES (@Ln,@Sr);
+                                INSERT INTO {T("DocumentLineSerial")} ([DocumentLineId],[SerialId],[CompanyId])
+                                SELECT @Ln, @Sr, dl.[CompanyId]
+                                  FROM {T("DocumentLine")} dl WHERE dl.[Id] = @Ln;
                             """;
                         link.Parameters.AddWithValue("@Ln", lineId);
                         link.Parameters.AddWithValue("@Sr", serialId);
@@ -2023,7 +2025,9 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     link.Transaction = tx;
                     link.CommandText = $"""
                         IF NOT EXISTS (SELECT 1 FROM {T("DocumentLineSerial")} WHERE [DocumentLineId]=@Ln AND [SerialId]=@Sr)
-                            INSERT INTO {T("DocumentLineSerial")} ([DocumentLineId],[SerialId]) VALUES (@Ln,@Sr);
+                            INSERT INTO {T("DocumentLineSerial")} ([DocumentLineId],[SerialId],[CompanyId])
+                                SELECT @Ln, @Sr, dl.[CompanyId]
+                                  FROM {T("DocumentLine")} dl WHERE dl.[Id] = @Ln;
                         """;
                     link.Parameters.AddWithValue("@Ln", irsLine);
                     link.Parameters.AddWithValue("@Sr", sid);
@@ -2279,7 +2283,9 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     link.Transaction = tx;
                     link.CommandText = $"""
                         IF NOT EXISTS (SELECT 1 FROM {T("DocumentLineSerial")} WHERE [DocumentLineId]=@Ln AND [SerialId]=@Sr)
-                            INSERT INTO {T("DocumentLineSerial")} ([DocumentLineId],[SerialId]) VALUES (@Ln,@Sr);
+                            INSERT INTO {T("DocumentLineSerial")} ([DocumentLineId],[SerialId],[CompanyId])
+                                SELECT @Ln, @Sr, dl.[CompanyId]
+                                  FROM {T("DocumentLine")} dl WHERE dl.[Id] = @Ln;
                         """;
                     link.Parameters.AddWithValue("@Ln", lineId);
                     link.Parameters.AddWithValue("@Sr", serialId);
@@ -2848,8 +2854,9 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     await using var ins = conn.CreateCommand();
                     ins.Transaction = tx;
                     ins.CommandText = $"""
-                        INSERT INTO {T("ItemSerial")} ([ItemId],[SerialNo],[LotId],[Status],[CurrentLocationId],[CreatedById])
-                        VALUES (@ItemId, @SerialNo, @LotId, 1, @CurrentLoc, @CreatedById);
+                        INSERT INTO {T("ItemSerial")} ([ItemId],[SerialNo],[LotId],[Status],[CurrentLocationId],[CreatedById],[CompanyId])
+                        SELECT @ItemId, @SerialNo, @LotId, 1, @CurrentLoc, @CreatedById, i.[CompanyId]
+                          FROM {T("Items")} i WHERE i.[Id] = @ItemId;
                         SELECT CAST(SCOPE_IDENTITY() AS INT);
                         """;
                     ins.Parameters.AddWithValue("@ItemId", itemId);
@@ -2932,7 +2939,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
 
             await using var link = conn.CreateCommand();
             link.Transaction = tx;
-            link.CommandText = $"INSERT INTO {T("DocumentLineSerial")} ([DocumentLineId],[SerialId]) VALUES (@LineId, @Sid);";
+            link.CommandText = $"INSERT INTO {T("DocumentLineSerial")} ([DocumentLineId],[SerialId],[CompanyId]) SELECT @LineId, @Sid, dl.[CompanyId] FROM {T("DocumentLine")} dl WHERE dl.[Id] = @LineId;";
             link.Parameters.AddWithValue("@LineId", lineId);
             link.Parameters.AddWithValue("@Sid", serialId);
             await link.ExecuteNonQueryAsync(ct);

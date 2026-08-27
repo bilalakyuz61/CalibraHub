@@ -612,8 +612,8 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
                     await using var ins = conn.CreateCommand();
                     ins.Transaction = tx;
                     ins.CommandText = $"""
-                        INSERT INTO {T("ItemSerial")} ([ItemId],[SerialNo],[Status],[CurrentLocationId])
-                        VALUES (@It,@Sn,1,@Loc);
+                        INSERT INTO {T("ItemSerial")} ([ItemId],[SerialNo],[Status],[CurrentLocationId],[CompanyId])
+                        SELECT @It,@Sn,1,@Loc, i.[CompanyId] FROM {T("Items")} i WHERE i.[Id] = @It;
                         SELECT CAST(SCOPE_IDENTITY() AS INT);
                         """;
                     ins.Parameters.AddWithValue("@It", itemId);
@@ -690,7 +690,8 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
         link.Transaction = tx;
         link.CommandText = $"""
             IF NOT EXISTS (SELECT 1 FROM {T("DocumentLineSerial")} WHERE [DocumentLineId]=@Ln AND [SerialId]=@Sr)
-                INSERT INTO {T("DocumentLineSerial")} ([DocumentLineId],[SerialId]) VALUES (@Ln,@Sr);
+                INSERT INTO {T("DocumentLineSerial")} ([DocumentLineId],[SerialId],[CompanyId])
+                SELECT @Ln, @Sr, dl.[CompanyId] FROM {T("DocumentLine")} dl WHERE dl.[Id] = @Ln;
             """;
         link.Parameters.AddWithValue("@Ln", lineId);
         link.Parameters.AddWithValue("@Sr", serialId);
