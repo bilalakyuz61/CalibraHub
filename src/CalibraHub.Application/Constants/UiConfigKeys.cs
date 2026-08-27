@@ -10,6 +10,15 @@ public static class UiConfigKeys
     /// <summary>Belge kalem listesi görünüm modu — değer "card" | "grid".</summary>
     public const string LineGridViewMode = "line_grid_view_mode";
 
+    /// <summary>
+    /// Açık workspace sekmeleri (PageComment Seq 1123, 2026-08-27) — JSON dizi,
+    /// Shell.jsx'teki `tabs` state'inin sunucu yansıması. UserId bazlı saklanır;
+    /// per-company DB + per-company kullanıcı kaydı olduğundan (aynı e-posta farklı
+    /// şirkette farklı userId üretir) bu zaten "kullanıcı ve şirket bazında" ayrımı
+    /// sağlar — ayrı bir CompanyId kolonuna gerek YOK.
+    /// </summary>
+    public const string WorkspaceTabs = "workspace_tabs";
+
     public const string ViewModeCard = "card";
     public const string ViewModeGrid = "grid";
 
