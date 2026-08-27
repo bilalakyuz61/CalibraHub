@@ -25,9 +25,10 @@ public sealed class SqlWaGroupRepository : IWaGroupRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         var sql = $"""
             MERGE {_g} AS t
-            USING (SELECT @Jid AS Jid, @Subject AS Subject) AS s ON t.[GroupJid] = s.Jid
+            USING (SELECT @Jid AS Jid, @Subject AS Subject) AS s
+                ON t.[GroupJid] = s.Jid AND t.[CompanyId] = @CompanyId
             WHEN NOT MATCHED THEN
-                INSERT ([GroupJid],[Subject]) VALUES (s.Jid, s.Subject)
+                INSERT ([CompanyId],[GroupJid],[Subject]) VALUES (@CompanyId, s.Jid, s.Subject)
             WHEN MATCHED AND t.[Subject] <> s.Subject THEN
                 UPDATE SET [Subject] = s.Subject, [Updated] = SYSUTCDATETIME()
             OUTPUT INSERTED.[Id], INSERTED.[GroupJid], INSERTED.[Subject],
@@ -36,6 +37,7 @@ public sealed class SqlWaGroupRepository : IWaGroupRepository
             """;
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         cmd.Parameters.AddWithValue("@Jid", groupJid);
         cmd.Parameters.AddWithValue("@Subject", subject);
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -99,9 +101,12 @@ public sealed class SqlWaGroupRepository : IWaGroupRepository
         {
             var sql = $"""
                 MERGE {_gm} AS t
+                -- tenant-ok: eslesme GroupId uzerinden ebeveyne (WaGroup) bagli, o zaten CompanyId ile suzuluyor
                 USING (SELECT @GroupId AS G, @Jid AS J) AS s ON t.[GroupId]=s.G AND t.[Jid]=s.J
                 WHEN NOT MATCHED THEN
-                    INSERT ([GroupId],[Jid],[Name],[Role]) VALUES (@GroupId,@Jid,@Name,@Role)
+                    INSERT ([CompanyId],[GroupId],[Jid],[Name],[Role])
+                    VALUES ((SELECT g.[CompanyId] FROM {_g} g WHERE g.[Id] = @GroupId),
+                            @GroupId,@Jid,@Name,@Role)
                 WHEN MATCHED THEN
                     UPDATE SET [Name]=@Name, [Role]=@Role, [LeftAt]=NULL;
                 """;

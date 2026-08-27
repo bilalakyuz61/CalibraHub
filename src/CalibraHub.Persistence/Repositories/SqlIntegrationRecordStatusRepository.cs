@@ -49,7 +49,8 @@ public sealed class SqlIntegrationRecordStatusRepository : IIntegrationRecordSta
         cmd.CommandText = $"""
             MERGE {_table} AS T
             USING (SELECT @IntegrationId AS IntegrationId, @RecordId AS RecordId) AS S
-            ON (T.[IntegrationId] = S.IntegrationId AND T.[RecordId] = S.RecordId AND T.[IsActive] = 1)
+            ON (T.[IntegrationId] = S.IntegrationId AND T.[RecordId] = S.RecordId AND T.[IsActive] = 1
+                    AND T.[CompanyId] = @CompanyId)
             WHEN MATCHED AND T.[Status] <> 'Skipped' THEN
                 UPDATE SET
                     [Status]       = @Status,
@@ -60,12 +61,13 @@ public sealed class SqlIntegrationRecordStatusRepository : IIntegrationRecordSta
                     [UpdatedById]  = @Actor,
                     [Updated]      = SYSUTCDATETIME()
             WHEN NOT MATCHED THEN
-                INSERT ([IntegrationId],[RecordId],[Status],[LastRunId],[LastSentAt],[LastError],
+                INSERT ([CompanyId],[IntegrationId],[RecordId],[Status],[LastRunId],[LastSentAt],[LastError],
                         [AttemptCount],[IsActive],[CreatedById],[Created])
-                VALUES (@IntegrationId,@RecordId,@Status,@LastRunId,
+                VALUES (@CompanyId,@IntegrationId,@RecordId,@Status,@LastRunId,
                         CASE WHEN @Status = 'Sent' THEN SYSUTCDATETIME() ELSE NULL END,
                         @LastError,1,1,@Actor,SYSUTCDATETIME());
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@IntegrationId", integrationId));
         cmd.Parameters.Add(new SqlParameter("@RecordId", recordId));
         cmd.Parameters.Add(new SqlParameter("@Status", status.ToString()));
@@ -90,7 +92,8 @@ public sealed class SqlIntegrationRecordStatusRepository : IIntegrationRecordSta
             cmd.CommandText = $"""
                 MERGE {_table} AS T
                 USING (SELECT @IntegrationId AS IntegrationId, @RecordId AS RecordId) AS S
-                ON (T.[IntegrationId] = S.IntegrationId AND T.[RecordId] = S.RecordId AND T.[IsActive] = 1)
+                ON (T.[IntegrationId] = S.IntegrationId AND T.[RecordId] = S.RecordId AND T.[IsActive] = 1
+                    AND T.[CompanyId] = @CompanyId)
                 WHEN MATCHED THEN
                     UPDATE SET
                         [Status]     = 'Skipped',
@@ -100,11 +103,12 @@ public sealed class SqlIntegrationRecordStatusRepository : IIntegrationRecordSta
                         [UpdatedById] = @Actor,
                         [Updated]    = SYSUTCDATETIME()
                 WHEN NOT MATCHED THEN
-                    INSERT ([IntegrationId],[RecordId],[Status],[SkippedBy],[SkippedAt],[SkipReason],
+                    INSERT ([CompanyId],[IntegrationId],[RecordId],[Status],[SkippedBy],[SkippedAt],[SkipReason],
                             [IsActive],[CreatedById],[Created])
-                    VALUES (@IntegrationId,@RecordId,'Skipped',@Actor,SYSUTCDATETIME(),@Reason,
+                    VALUES (@CompanyId,@IntegrationId,@RecordId,'Skipped',@Actor,SYSUTCDATETIME(),@Reason,
                             1,@Actor,SYSUTCDATETIME());
                 """;
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
             cmd.Parameters.Add(new SqlParameter("@IntegrationId", integrationId));
             cmd.Parameters.Add(new SqlParameter("@RecordId", id));
             cmd.Parameters.Add(new SqlParameter("@Actor", (object?)actor ?? DBNull.Value));

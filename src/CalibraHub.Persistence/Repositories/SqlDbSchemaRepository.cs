@@ -398,6 +398,8 @@ public sealed class SqlDbSchemaRepository : IDbSchemaRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = """
+            -- tenant-ok: ViewMeta fiziksel DB nesnelerini tarif eder (PK=ViewName);
+            -- ayni DB'yi paylasan sirketler ayni view'lari paylasir -> kapsam disi.
             MERGE dbo.[ViewMeta] AS target
             USING (SELECT @ViewName AS ViewName) AS source ON target.[ViewName] = source.ViewName
             WHEN MATCHED THEN

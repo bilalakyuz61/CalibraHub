@@ -62,7 +62,7 @@ $scanned = 0
 # Degisken -> tablo adi:  _docTable = $"[{s}].[Document]";
 $varDefRx = [regex]'(?m)(_\w+)\s*=\s*\$?"[^"]*\[(\w+)\]\s*"'
 # Tabloya dokunan ifade basi
-$refRx = [regex]'(?is)\b(FROM|JOIN|UPDATE|DELETE\s+FROM|INSERT\s+INTO)\s+(?:\{(_\w+)\}|(?:\[?dbo\]?\.)?\[(\w+)\]|(?:\[?dbo\]?\.)(\w+))'
+$refRx = [regex]'(?is)\b(FROM|JOIN|UPDATE|DELETE\s+FROM|INSERT\s+INTO|MERGE(?:\s+INTO)?)\s+(?:\{(_\w+)\}|(?:\[?dbo\]?\.)?\[(\w+)\]|(?:\[?dbo\]?\.)(\w+))'
 
 foreach ($dir in $srcDirs) {
     foreach ($file in Get-ChildItem $dir -Recurse -Filter *.cs -File) {
@@ -74,6 +74,11 @@ foreach ($dir in $srcDirs) {
         foreach ($d in $varDefRx.Matches($text)) { $varMap[$d.Groups[1].Value] = $d.Groups[2].Value }
 
         foreach ($m in $refRx.Matches($text)) {
+            # XML-doc yorumu (///) calistirilabilir SQL degil, anlatim metnidir.
+            # Ornek: ILogisticsConfigurationRepository 'Soft delete - UPDATE [BOM] SET...'
+            # Bunlari raporlamak kalici yanlis pozitif birakir.
+            $lineStart = $text.LastIndexOf("`n", $m.Index) + 1
+            if ($lineStart -gt 0 -and $text.Substring($lineStart, $m.Index - $lineStart).TrimStart().StartsWith('///')) { continue }
             $tbl = $null
             if     ($m.Groups[2].Success) { $tbl = $varMap[$m.Groups[2].Value] }
             elseif ($m.Groups[3].Success) { $tbl = $m.Groups[3].Value }
@@ -83,10 +88,14 @@ foreach ($dir in $srcDirs) {
             if ($Table -and $tbl -ne $Table) { continue }
             if ($tbl -like '#*' -or $tbl -like 'sys*' -or $tbl -like 'INFORMATION_SCHEMA*') { continue }
             $verb = $m.Groups[1].Value.ToUpperInvariant() -replace '\s+',' '
-            $isMutation = $verb -match 'UPDATE|DELETE|INSERT'
+            $isMutation = $verb -match 'UPDATE|DELETE|INSERT|MERGE'
             if ($MutationsOnly -and -not $isMutation) { continue }
 
-            $tail = $text.Substring($m.Index, [Math]::Min(1500, $text.Length - $m.Index))
+            # 8000: uzun SET listeli UPDATE'lerde WHERE bu pencerenin disinda kalabiliyordu
+            # (SqlAssetRepository.UpdateAssetAsync 25 kolon set ediyor) -> dogru yazilmis
+            # ifade 'WHERE yok' diye raporlaniyordu. Genisletmek guvenli: asagidaki
+            # IndexOf(';') ifadeyi zaten sonlandirir, komsu sorguya tasmaz.
+            $tail = $text.Substring($m.Index, [Math]::Min(8000, $text.Length - $m.Index))
             $stop = $tail.IndexOf(';')
             if ($stop -gt 0) { $tail = $tail.Substring(0, $stop) }
 
@@ -103,7 +112,23 @@ foreach ($dir in $srcDirs) {
             # INSERT'in WHERE'i OLMAZ; dogru soru "sahibi yaziliyor mu" — yani kolon
             # listesinde CompanyId var mi. Eskiden hepsi 'WHERE yok' diye isaretleniyor,
             # dogru yazilmis INSERT'ler de listeyi sisiriyordu.
-            if ($m.Groups[1].Value -match '(?i)INSERT') {
+            # MERGE hem okur hem yazar; dogru soru "ON kosulu sirkete gore mi esliyor".
+            # ON'da CompanyId yoksa BASKA sirketin ayni kodlu kaydiyla eslesip onu GUNCELLER.
+            # Tarayicinin ilk surumleri MERGE'i HIC gormuyordu (desende yoktu) — 21 yazma
+            # yolu gorunmezdi; bir ajan elle bulunca ortaya cikti.
+            if ($verb -match 'MERGE') {
+                $onIdx = [regex]::Match($tail, '(?i)ON')
+                $whenIdx = [regex]::Match($tail, '(?i)WHEN')
+                if ($onIdx.Success -and $whenIdx.Success -and $whenIdx.Index -gt $onIdx.Index) {
+                    $onClause = $tail.Substring($onIdx.Index, $whenIdx.Index - $onIdx.Index)
+                    if ($onClause -match 'CompanyId') { continue }
+                    $reason = 'MERGE, ON kosulunda CompanyId yok'
+                } else {
+                    if ($tail -match 'CompanyId') { continue }
+                    $reason = 'MERGE, CompanyId gecmiyor'
+                }
+            }
+            elseif ($m.Groups[1].Value -match '(?i)INSERT') {
                 if ($tail -match 'CompanyId') { continue }
                 $reason = 'INSERT, CompanyId yazilmiyor'
             }

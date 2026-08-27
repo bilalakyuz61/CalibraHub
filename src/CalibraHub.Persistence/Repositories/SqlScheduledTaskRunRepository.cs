@@ -98,6 +98,7 @@ public sealed class SqlScheduledTaskRunRepository : IScheduledTaskRunRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
+        // tenant-ok: bakim taramasi TUM sirketleri kapsamali (gerekce yukarida)
         cmd.CommandText = $"DELETE FROM {_table} WHERE [StartedAt] < @Cutoff;";
         cmd.Parameters.Add(new SqlParameter("@Cutoff", cutoffUtc));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
@@ -108,6 +109,7 @@ public sealed class SqlScheduledTaskRunRepository : IScheduledTaskRunRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
+            -- tenant-ok: bakim taramasi TUM sirketleri kapsamali (gerekce yukarida)
             UPDATE {_table}
                SET [Status] = 1,
                    [CompletedAt] = GETUTCDATE(),

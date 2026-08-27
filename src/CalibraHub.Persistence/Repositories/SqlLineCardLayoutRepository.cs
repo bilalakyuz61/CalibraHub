@@ -49,14 +49,15 @@ public sealed class SqlLineCardLayoutRepository : ILineCardLayoutRepository
         cmd.CommandText = $"""
             MERGE {_table} AS t
             USING (SELECT @FormCode AS FormCode) AS src
-                ON t.[FormCode]=src.FormCode AND t.[IsActive]=1
+                ON t.[FormCode]=src.FormCode AND t.[IsActive]=1 AND t.[CompanyId]=@CompanyId
             WHEN MATCHED THEN UPDATE SET
                 [LayoutJson]=@LayoutJson,
                 [UpdatedById]=@UserId, [UpdatedBy]=@UserName, [Updated]=SYSUTCDATETIME()
             WHEN NOT MATCHED THEN INSERT
-                ([FormCode],[LayoutJson],[IsActive],[CreatedById],[CreatedBy])
-                VALUES (@FormCode,@LayoutJson,1,@UserId,@UserName);
+                ([CompanyId],[FormCode],[LayoutJson],[IsActive],[CreatedById],[CreatedBy])
+                VALUES (@CompanyId,@FormCode,@LayoutJson,1,@UserId,@UserName);
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@FormCode", layout.FormCode));
         cmd.Parameters.Add(new SqlParameter("@LayoutJson", layout.LayoutJson));
         cmd.Parameters.Add(new SqlParameter("@UserId", (object?)(layout.UpdatedById ?? layout.CreatedById) ?? DBNull.Value));

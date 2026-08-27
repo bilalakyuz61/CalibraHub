@@ -145,7 +145,7 @@ public sealed class SqlRptViewRepository : IRptViewRepository
         cmd.CommandText = $@"
             MERGE {_rptView} AS T
             USING (SELECT @Code AS Code) AS S
-            ON T.[Code] = S.Code
+            ON T.[Code] = S.Code AND T.[CompanyId] = @CompanyId
             WHEN MATCHED THEN
                 UPDATE SET
                     [Name]          = @Name,
@@ -154,9 +154,10 @@ public sealed class SqlRptViewRepository : IRptViewRepository
                     [IsActive]      = @IsActive,
                     [Updated]       = SYSUTCDATETIME()
             WHEN NOT MATCHED THEN
-                INSERT ([Code],[Name],[SqlObjectName],[Description],[IsActive])
-                VALUES (@Code,@Name,@SqlObjectName,@Description,@IsActive);
-            SELECT [Id] FROM {_rptView} WHERE [Code] = @Code;";
+                INSERT ([CompanyId],[Code],[Name],[SqlObjectName],[Description],[IsActive])
+                VALUES (@CompanyId,@Code,@Name,@SqlObjectName,@Description,@IsActive);
+            SELECT [Id] FROM {_rptView} WHERE [Code] = @Code AND [CompanyId] = @CompanyId;";
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         cmd.Parameters.AddWithValue("@Code", req.Code);
         cmd.Parameters.AddWithValue("@Name", req.Name);
         cmd.Parameters.AddWithValue("@SqlObjectName", req.SqlObjectName);

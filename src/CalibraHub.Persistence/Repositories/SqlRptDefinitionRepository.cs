@@ -146,7 +146,7 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
         cmd.CommandText = $@"
             MERGE {_rptDef} AS T
             USING (SELECT @Code AS Code) AS S
-            ON T.[Code] = S.Code
+            ON T.[Code] = S.Code AND T.[CompanyId] = @CompanyId
             WHEN MATCHED THEN
                 UPDATE SET
                     [Name]        = @Name,
@@ -158,9 +158,10 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
                     [IsActive]    = @IsActive,
                     [Updated]     = SYSUTCDATETIME()
             WHEN NOT MATCHED THEN
-                INSERT ([Code],[Name],[ViewId],[Category],[ConfigJson],[OwnerUserId],[IsShared],[IsActive])
-                VALUES (@Code,@Name,@ViewId,@Category,@ConfigJson,@OwnerUserId,@IsShared,@IsActive);
-            SELECT [Id] FROM {_rptDef} WHERE [Code] = @Code;";
+                INSERT ([CompanyId],[Code],[Name],[ViewId],[Category],[ConfigJson],[OwnerUserId],[IsShared],[IsActive])
+                VALUES (@CompanyId,@Code,@Name,@ViewId,@Category,@ConfigJson,@OwnerUserId,@IsShared,@IsActive);
+            SELECT [Id] FROM {_rptDef} WHERE [Code] = @Code AND [CompanyId] = @CompanyId;";
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         cmd.Parameters.AddWithValue("@Code", req.Code);
         cmd.Parameters.AddWithValue("@Name", req.Name);
         cmd.Parameters.AddWithValue("@ViewId", req.ViewId);

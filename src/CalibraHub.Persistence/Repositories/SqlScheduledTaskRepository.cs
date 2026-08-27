@@ -243,6 +243,7 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
+            -- tenant-ok: asili kilit temizligi TUM sirketleri kapsamali (gerekce yukarida)
             UPDATE {_table}
                SET [IsRunning] = 0, [Updated] = GETUTCDATE()
              WHERE [IsRunning] = 1 AND [Updated] < @LockedBefore;

@@ -27,8 +27,9 @@ public sealed class SqlWhatsAppConfigRepository : IWhatsAppConfigRepository
                    [DisplayPhoneNumber],[WebhookVerifyToken],[WebQrBridgeUrl],[IsEnabled],
                    [LastSuccessfulSendAt],[LastError],[Created],[Updated],[app_secret_encrypted]
               FROM {_table}
-             WHERE [Id] = 1;
+             WHERE [CompanyId] = @CompanyId;
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
         if (!await r.ReadAsync(cancellationToken)) return null;
         return new WhatsAppConfig
@@ -55,7 +56,13 @@ public sealed class SqlWhatsAppConfigRepository : IWhatsAppConfigRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
-            IF EXISTS (SELECT 1 FROM {_table} WHERE [Id] = 1)
+            -- SIRKET BASINA TEK SATIR (2026-08-27): eskiden satir sabit [Id]=1 ile
+            -- anahtarlaniyordu, yani ayni veritabanindaki TUM sirketler ayni satiri
+            -- paylasiyordu — ikinci sirket birincinin WhatsApp erisim jetonunu okur ve
+            -- uzerine yazardi. Anahtar CompanyId'ye tasindi; Id (IDENTITY degil) sirketin
+            -- kendi kimligiyle doldurulur, boylece PK benzersizligi sema degisikligi
+            -- olmadan korunur.
+            IF EXISTS (SELECT 1 FROM {_table} WHERE [CompanyId] = @CompanyId)
             BEGIN
                 UPDATE {_table}
                    SET [Provider]                 = @Provider,
@@ -70,19 +77,20 @@ public sealed class SqlWhatsAppConfigRepository : IWhatsAppConfigRepository
                        [LastSuccessfulSendAt]     = @LastSuccessfulSendAt,
                        [LastError]               = @LastError,
                        [Updated]               = GETUTCDATE()
-                 WHERE [Id] = 1;
+                 WHERE [CompanyId] = @CompanyId;
             END
             ELSE
             BEGIN
                 INSERT INTO {_table}
-                    ([Id],[Provider],[AccessTokenEncrypted],[app_secret_encrypted],[PhoneNumberId],[BusinessAccountId],
+                    ([Id],[CompanyId],[Provider],[AccessTokenEncrypted],[app_secret_encrypted],[PhoneNumberId],[BusinessAccountId],
                      [DisplayPhoneNumber],[WebhookVerifyToken],[WebQrBridgeUrl],[IsEnabled],
                      [LastSuccessfulSendAt],[LastError],[Created],[Updated])
                 VALUES
-                    (1,@Provider,@Token,@AppSecret,@PhoneNumberId,@BusinessAccountId,@DisplayPhoneNumber,@WebhookToken,@BridgeUrl,@IsEnabled,
+                    (@CompanyId,@CompanyId,@Provider,@Token,@AppSecret,@PhoneNumberId,@BusinessAccountId,@DisplayPhoneNumber,@WebhookToken,@BridgeUrl,@IsEnabled,
                      @LastSuccessfulSendAt,@LastError,GETUTCDATE(),GETUTCDATE());
             END;
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@Provider",              (int)config.Provider));
         cmd.Parameters.Add(new SqlParameter("@Token",                 (object?)config.AccessTokenEncrypted ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@AppSecret",             (object?)config.AppSecretEncrypted   ?? DBNull.Value));

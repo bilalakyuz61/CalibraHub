@@ -28,8 +28,9 @@ public sealed class SqlWhatsAppSafetyRulesRepository : IWhatsAppSafetyRulesRepos
                    [MaxConsecutiveFailures],[FailureCooldownMinutes],
                    [WarmupDays],[WarmupMaxPerDay],[MaxIdenticalMessagesPerDay],
                    [Created],[Updated]
-              FROM {_table} WHERE [Id]=1;
+              FROM {_table} WHERE [CompanyId]=@CompanyId;
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
         if (!await r.ReadAsync(cancellationToken)) return null;
         return new WhatsAppSafetyRules
@@ -56,7 +57,13 @@ public sealed class SqlWhatsAppSafetyRulesRepository : IWhatsAppSafetyRulesRepos
         await using var conn = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            IF EXISTS (SELECT 1 FROM {_table} WHERE [Id]=1)
+            -- SIRKET BASINA TEK SATIR (2026-08-27): eskiden satir sabit [Id]=1 ile
+            -- anahtarlaniyordu, yani ayni veritabanindaki TUM sirketler ayni satiri
+            -- paylasiyordu — ikinci sirket birincinin WhatsApp erisim jetonunu okur ve
+            -- uzerine yazardi. Anahtar CompanyId'ye tasindi; Id (IDENTITY degil) sirketin
+            -- kendi kimligiyle doldurulur, boylece PK benzersizligi sema degisikligi
+            -- olmadan korunur.
+            IF EXISTS (SELECT 1 FROM {_table} WHERE [CompanyId]=@CompanyId)
                 UPDATE {_table} SET
                     [MaxPerMinute]=@MaxMin, [MaxPerHour]=@MaxHour, [MaxPerDay]=@MaxDay,
                     [MaxPerRecipientPerDay]=@MaxRcpDay,
@@ -65,17 +72,18 @@ public sealed class SqlWhatsAppSafetyRulesRepository : IWhatsAppSafetyRulesRepos
                     [WarmupDays]=@WarmDays, [WarmupMaxPerDay]=@WarmMax,
                     [MaxIdenticalMessagesPerDay]=@MaxIdent,
                     [Updated]=GETUTCDATE()
-                WHERE [Id]=1;
+                WHERE [CompanyId]=@CompanyId;
             ELSE
                 INSERT INTO {_table}
-                    ([Id],[MaxPerMinute],[MaxPerHour],[MaxPerDay],[MaxPerRecipientPerDay],
+                    ([Id],[CompanyId],[MaxPerMinute],[MaxPerHour],[MaxPerDay],[MaxPerRecipientPerDay],
                      [MinDelaySeconds],[MaxDelaySeconds],
                      [MaxConsecutiveFailures],[FailureCooldownMinutes],
                      [WarmupDays],[WarmupMaxPerDay],[MaxIdenticalMessagesPerDay],
                      [Created],[Updated])
-                VALUES (1,@MaxMin,@MaxHour,@MaxDay,@MaxRcpDay,@MinDelay,@MaxDelay,
+                VALUES (@CompanyId,@CompanyId,@MaxMin,@MaxHour,@MaxDay,@MaxRcpDay,@MinDelay,@MaxDelay,
                         @MaxFail,@CDMin,@WarmDays,@WarmMax,@MaxIdent,GETUTCDATE(),GETUTCDATE());
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@MaxMin",     rules.MaxPerMinute));
         cmd.Parameters.Add(new SqlParameter("@MaxHour",    rules.MaxPerHour));
         cmd.Parameters.Add(new SqlParameter("@MaxDay",     rules.MaxPerDay));

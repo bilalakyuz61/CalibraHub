@@ -1542,7 +1542,6 @@ END;";
         ("FK_Users_Department",                         "Users",                      "DepartmentId",           "Department"),
         ("FK_ViewDefinition_Company",                   "ViewDefinition",             "CompanyId",              "Company"),
         ("FK_ViewDefinitionRevision_Company",           "ViewDefinitionRevision",     "CompanyId",              "Company"),
-        ("FK_ViewMeta_Company",                         "ViewMeta",                   "CompanyId",              "Company"),
         ("FK_WaContact_Company",                        "WaContact",                  "CompanyId",              "Company"),
         ("FK_WaContactJid_Company",                     "WaContactJid",               "CompanyId",              "Company"),
         ("FK_WaGroup_Company",                          "WaGroup",                    "CompanyId",              "Company"),
@@ -1803,6 +1802,11 @@ END;";
         // (bkz. EnsureAttachmentTableAsync / EnsureDocumentCategoryTableAsync özetleri:
         // "cross-company … per-company DB mimarisine GİRMEZ (CompanyId YOK)").
         "Attachment", "DocumentCategory",
+        // ViewMeta FIZIKSEL DB nesnelerini (SQL view'lari) tarif eder: PK = ViewName.
+        // Ayni veritabanini paylasan sirketler ayni view'lari da paylasir, dolayisiyla bir
+        // view'in aciklama/etiketi sirkete gore degismez. Sirket kapsamina almak ayni view
+        // icin kopya satir uretirdi. Kolonu toplu migration eklemisti; CREATE TABLE'da yoktu.
+        "ViewMeta",
         // Kimlik/parola akışı şirketten BAĞIMSIZ: /Account/ForgotPassword ve ResetPassword
         // anonimdir, e-posta ile TÜM şirketlerdeki kullanıcıyı arar ("şifre şirket bazlı değil").
         // Users'a oturum-tabanlı süzgeç koymak ilk şirket dışındaki herkesin parola sıfırlamasını
@@ -2207,6 +2211,8 @@ END;";
         await using (var cmd = connection.CreateCommand())
         {
             cmd.CommandText = """
+                -- tenant-ok: ViewMeta fiziksel DB nesnelerini tarif eder (PK=ViewName),
+                -- ayni DB'yi paylasan sirketler ayni view'lari paylasir -> kapsam disi.
                 MERGE dbo.[ViewMeta] AS T
                 USING (VALUES
                     ('cbv_Guide_Items',       '["stock","material"]'),

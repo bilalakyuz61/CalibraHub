@@ -21,9 +21,8 @@ public sealed class SqlUserSettingRepository : IUserSettingRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        // tenant-ok: per-company DB fiziksel ayrimi zaten yeterli — bu DB'de yalnizca
-        // bu sirketin kullanicilarina ait UserSettings satirlari bulunur (Users de per-company).
-        command.CommandText = $"SELECT [SettingValue] FROM {_table} WHERE [UserId] = @UserId AND [SettingKey] = @Key;";
+        command.CommandText = $"SELECT [SettingValue] FROM {_table} WHERE [UserId] = @UserId AND [SettingKey] = @Key AND [CompanyId] = @CompanyId;";
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         command.Parameters.Add(new SqlParameter("@UserId", userId));
         command.Parameters.Add(new SqlParameter("@Key", settingKey));
         var result = await command.ExecuteScalarAsync(cancellationToken);
@@ -38,12 +37,14 @@ public sealed class SqlUserSettingRepository : IUserSettingRepository
             MERGE {_table} AS tgt
             USING (SELECT @UserId AS [UserId], @Key AS [SettingKey]) AS src
                 ON tgt.[UserId] = src.[UserId] AND tgt.[SettingKey] = src.[SettingKey]
+                   AND tgt.[CompanyId] = @CompanyId
             WHEN MATCHED THEN
                 UPDATE SET [SettingValue] = @Value, [Updated] = GETDATE()
             WHEN NOT MATCHED THEN
-                INSERT ([UserId], [SettingKey], [SettingValue], [Updated])
-                VALUES (@UserId, @Key, @Value, GETDATE());
+                INSERT ([CompanyId], [UserId], [SettingKey], [SettingValue], [Updated])
+                VALUES (@CompanyId, @UserId, @Key, @Value, GETDATE());
             """;
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         command.Parameters.Add(new SqlParameter("@UserId", userId));
         command.Parameters.Add(new SqlParameter("@Key", settingKey));
         command.Parameters.Add(new SqlParameter("@Value", (object?)value ?? DBNull.Value));
