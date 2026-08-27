@@ -61,6 +61,14 @@ data class SessionDto(
     val email: String? = null,
     val companyId: Int = 0,
     val companyName: String? = null,
+    /**
+     * Kullanicinin GOREBILECEGI mobil ekranlarin form kodlari (STOCK_IN, WORK_ORDERS...).
+     * Menu/ana ekran kartlarini suzmek icindir — gercek yetki kapisi her zaman ilgili
+     * endpoint'te (403). `null` = ESKI SUNUCU bu alani gondermiyor -> istemci hicbir seyi
+     * gizlemez (fail-open); bos liste = "hicbir ekrana yetkisi yok" demektir, bu ikisi
+     * BILINCLI olarak farkli anlamlar tasir.
+     */
+    val permissions: List<String>? = null,
 )
 
 /** Genel hata govdesi — 400/404 `{"error":"..."}` (Warehouse/Production repository'lerinin

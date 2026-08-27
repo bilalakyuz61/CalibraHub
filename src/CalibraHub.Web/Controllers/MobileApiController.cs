@@ -347,7 +347,7 @@ public sealed class MobileApiController : ControllerBase
 
             var roleStr = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
             if (!CalibraHub.Application.Security.UserAuthorizationCatalog.TryParseRole(roleStr, out var role))
-                role = UserRole.Operator;
+                role = CalibraHub.Domain.Enums.UserRole.Operator;
 
             int? departmentId = int.TryParse(User.FindFirstValue("department_id"), out var d) && d > 0 ? d : null;
 

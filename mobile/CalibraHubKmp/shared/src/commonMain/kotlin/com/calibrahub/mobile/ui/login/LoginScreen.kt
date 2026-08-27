@@ -147,6 +147,11 @@ fun LoginScreen(sessionManager: SessionManager, onLoggedIn: () -> Unit) {
                             companyName = company.name,
                         )
                     }
+                    // Menu suzgeci icin izinleri cek — /login yaniti izin tasimaz ve
+                    // otomatik-giris probe'u yalniz uygulama acilisinda calisir. Bu cagri
+                    // olmadan elle giris yapan kullanicinin menusu suzulmeden kalirdi.
+                    // Sessizce basarisiz olabilir (izinler null -> hicbir sey gizlenmez).
+                    session.refreshPermissions()
                     if (dialState != LockDialState.Solved) {
                         dialState = LockDialState.Solved
                         delay(1600)

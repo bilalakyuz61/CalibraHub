@@ -51,6 +51,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -121,12 +122,43 @@ object AppRoutes {
     const val SETTINGS = "settings"
 }
 
-/** Drawer'da dogrudan navigate edilebilir tek bir yaprak hedef. */
+/**
+ * Mobil menude kullanilan sunucu form kodlari — GET /api/mobile/session `permissions`
+ * listesindeki degerlerle BIREBIR ayni string'ler (bkz. MobileApiController.MobileMenuFormCodes).
+ * Sunucu tarafinda `FormCodes` sabitleridir; burada elle yazilir cunku KMP ortak kodu C#
+ * sabitlerini goremez — ikisi degisirse BIRLIKTE guncellenmeli.
+ */
+object MenuFormCodes {
+    const val STOCK_IN = "STOCK_IN"
+    const val STOCK_OUT = "STOCK_OUT"
+    const val TRANSFER = "TRANSFER"
+    const val INVENTORY_COUNT = "INVENTORY_COUNT"
+    const val SALES_DELIVERY = "SALES_DELIVERY"
+    const val PURCHASE_DELIVERY = "PURCHASE_DELIVERY"
+    const val WORK_ORDERS = "WORK_ORDERS"
+    const val SHOP_FLOOR = "SHOP_FLOOR"
+}
+
+/**
+ * Drawer'da dogrudan navigate edilebilir tek bir yaprak hedef.
+ *
+ * [formCodes]: bu ekrani gorebilmek icin gereken form kodlarindan HERHANGI biri yeterlidir
+ * (endpoint'lerdeki `RequirePermissionAsync(formCodes, ...)` ile ayni "any" semantigi).
+ * BOS birakilirsa ekran her zaman gorunur (Ana Sayfa gibi yetkiye bagli olmayan hedefler).
+ */
 data class DrawerLeaf(
     val route: String,
     val label: String,
     val icon: ImageVector,
+    val formCodes: List<String> = emptyList(),
 )
+
+/**
+ * Bu yaprak verilen izin kumesiyle gorunur mu? [permissions] `null` ise (sunucu izin gondermiyor
+ * ya da henuz sorulmadi) HER SEY gorunur — fail-open, bkz. SessionManager.permissions KDoc.
+ */
+fun DrawerLeaf.isVisibleFor(permissions: Set<String>?): Boolean =
+    permissions == null || formCodes.isEmpty() || formCodes.any { it in permissions }
 
 /**
  * Drawer'da akordeon gibi acilip kapanan bir modul basligi. KENDISI navigate ETMEZ — tiklaninca
@@ -159,12 +191,23 @@ val drawerEntries: List<DrawerEntry> = listOf(
             label = "Depo",
             icon = Icons.Default.Warehouse,
             leaves = listOf(
-                DrawerLeaf(AppRoutes.WAREHOUSE_STOCK_QUERY, "Stok Sorgu", Icons.Default.Inventory2),
-                DrawerLeaf(AppRoutes.WAREHOUSE_STOCK_IN, "Giriş", Icons.Default.MoveToInbox),
-                DrawerLeaf(AppRoutes.WAREHOUSE_STOCK_OUT, "Çıkış", Icons.Default.Outbox),
-                DrawerLeaf(AppRoutes.WAREHOUSE_TRANSFER, "Transfer", Icons.Default.SwapHoriz),
-                DrawerLeaf(AppRoutes.WAREHOUSE_COUNT, "Sayım", Icons.Default.Checklist),
-                DrawerLeaf(AppRoutes.WAREHOUSE_DRAFT_COUNTS, "Taslak Sayımlar", Icons.AutoMirrored.Filled.FactCheck),
+                DrawerLeaf(
+                    AppRoutes.WAREHOUSE_STOCK_QUERY, "Stok Sorgu", Icons.Default.Inventory2,
+                    // Sunucudaki StockQueryFormCodes ile ayni: dort depo ekranindan birine
+                    // yetkisi olan stok sorgulayabilir.
+                    listOf(
+                        MenuFormCodes.STOCK_IN, MenuFormCodes.STOCK_OUT,
+                        MenuFormCodes.TRANSFER, MenuFormCodes.INVENTORY_COUNT,
+                    ),
+                ),
+                DrawerLeaf(AppRoutes.WAREHOUSE_STOCK_IN, "Giriş", Icons.Default.MoveToInbox, listOf(MenuFormCodes.STOCK_IN)),
+                DrawerLeaf(AppRoutes.WAREHOUSE_STOCK_OUT, "Çıkış", Icons.Default.Outbox, listOf(MenuFormCodes.STOCK_OUT)),
+                DrawerLeaf(AppRoutes.WAREHOUSE_TRANSFER, "Transfer", Icons.Default.SwapHoriz, listOf(MenuFormCodes.TRANSFER)),
+                DrawerLeaf(AppRoutes.WAREHOUSE_COUNT, "Sayım", Icons.Default.Checklist, listOf(MenuFormCodes.INVENTORY_COUNT)),
+                DrawerLeaf(
+                    AppRoutes.WAREHOUSE_DRAFT_COUNTS, "Taslak Sayımlar",
+                    Icons.AutoMirrored.Filled.FactCheck, listOf(MenuFormCodes.INVENTORY_COUNT),
+                ),
             ),
         ),
     ),
@@ -174,7 +217,13 @@ val drawerEntries: List<DrawerEntry> = listOf(
             label = "Üretim",
             icon = Icons.Default.PrecisionManufacturing,
             leaves = listOf(
-                DrawerLeaf(AppRoutes.PRODUCTION_WORK_ORDERS, "İş Emirleri", Icons.AutoMirrored.Filled.Assignment),
+                DrawerLeaf(
+                    AppRoutes.PRODUCTION_WORK_ORDERS, "İş Emirleri",
+                    Icons.AutoMirrored.Filled.Assignment,
+                    // Liste WORK_ORDERS, operasyon basla/bitir SHOP_FLOOR gerektirir —
+                    // ikisinden biri yetiyorsa ekran anlamli.
+                    listOf(MenuFormCodes.WORK_ORDERS, MenuFormCodes.SHOP_FLOOR),
+                ),
             ),
         ),
     ),
@@ -184,8 +233,14 @@ val drawerEntries: List<DrawerEntry> = listOf(
             label = "Satın Alma",
             icon = Icons.Default.ShoppingCart,
             leaves = listOf(
-                DrawerLeaf(AppRoutes.PURCHASE_DELIVERY, "Alış İrsaliyesi", Icons.Default.LocalShipping),
-                DrawerLeaf(AppRoutes.PURCHASE_OPEN_ORDERS, "Açık Alış Siparişleri", Icons.AutoMirrored.Filled.Assignment),
+                DrawerLeaf(
+                    AppRoutes.PURCHASE_DELIVERY, "Alış İrsaliyesi", Icons.Default.LocalShipping,
+                    listOf(MenuFormCodes.PURCHASE_DELIVERY),
+                ),
+                DrawerLeaf(
+                    AppRoutes.PURCHASE_OPEN_ORDERS, "Açık Alış Siparişleri",
+                    Icons.AutoMirrored.Filled.Assignment, listOf(MenuFormCodes.PURCHASE_DELIVERY),
+                ),
             ),
         ),
     ),
@@ -195,8 +250,14 @@ val drawerEntries: List<DrawerEntry> = listOf(
             label = "Satış",
             icon = Icons.Default.Sell,
             leaves = listOf(
-                DrawerLeaf(AppRoutes.SALES_DELIVERY, "Satış İrsaliyesi", Icons.Default.ReceiptLong),
-                DrawerLeaf(AppRoutes.SALES_OPEN_ORDERS, "Açık Satış Siparişleri", Icons.Default.PendingActions),
+                DrawerLeaf(
+                    AppRoutes.SALES_DELIVERY, "Satış İrsaliyesi", Icons.Default.ReceiptLong,
+                    listOf(MenuFormCodes.SALES_DELIVERY),
+                ),
+                DrawerLeaf(
+                    AppRoutes.SALES_OPEN_ORDERS, "Açık Satış Siparişleri",
+                    Icons.Default.PendingActions, listOf(MenuFormCodes.SALES_DELIVERY),
+                ),
             ),
         ),
     ),
@@ -206,7 +267,10 @@ val drawerEntries: List<DrawerEntry> = listOf(
             label = "Sevkiyat",
             icon = Icons.Default.LocalShipping,
             leaves = listOf(
-                DrawerLeaf(AppRoutes.SHIPPING_OPEN_ORDERS, "Açık Satış Siparişleri (Teslim)", Icons.Default.PendingActions),
+                DrawerLeaf(
+                    AppRoutes.SHIPPING_OPEN_ORDERS, "Açık Satış Siparişleri (Teslim)",
+                    Icons.Default.PendingActions, listOf(MenuFormCodes.SALES_DELIVERY),
+                ),
             ),
         ),
     ),
@@ -236,6 +300,29 @@ val pinnableDrawerLeaves: List<DrawerLeaf> = drawerEntries.flatMap { entry ->
 
 /** Yaprak route'u → UST GRUP etiketi ("Çıkış" → "Depo") eslemesi — HomeScreen kisayol
  * kutucugunda ust satirda kucuk punto ile gosterilir. */
+/**
+ * [drawerEntries]'in izne gore suzulmus hali — yetkisi olmayan yapraklar cikarilir, hicbir
+ * yapragi kalmayan gruplar tamamen gizlenir. [permissions] `null` ise liste OLDUGU GIBI doner
+ * (fail-open; bkz. [DrawerLeaf.isVisibleFor]).
+ *
+ * Bu bir GORUNURLUK suzgecidir, guvenlik siniri DEGIL: gizlenen bir ekrana route ile yine de
+ * gidilse sunucu 403 doner. Amac "kapali kapiya goturen buton" gostermemek.
+ */
+fun visibleDrawerEntries(permissions: Set<String>?): List<DrawerEntry> {
+    if (permissions == null) return drawerEntries
+    return drawerEntries.mapNotNull { entry ->
+        when (entry) {
+            is DrawerEntry.Single ->
+                if (entry.leaf.isVisibleFor(permissions)) entry else null
+            is DrawerEntry.Expandable -> {
+                val leaves = entry.group.leaves.filter { it.isVisibleFor(permissions) }
+                if (leaves.isEmpty()) null
+                else DrawerEntry.Expandable(entry.group.copy(leaves = leaves))
+            }
+        }
+    }
+}
+
 val leafGroupLabels: Map<String, String> = drawerEntries.flatMap { entry ->
     when (entry) {
         is DrawerEntry.Single -> emptyList()
@@ -265,6 +352,8 @@ fun AppDrawerContent(
 ) {
     val scope = rememberCoroutineScope()
     val pinnedRoutes by session.pinnedRoutes.collectAsState()
+    val permissions by session.permissions.collectAsState()
+    val entries = remember(permissions) { visibleDrawerEntries(permissions) }
     val onTogglePin: (String) -> Unit = { route -> scope.launch { session.togglePinnedRoute(route) } }
 
     ModalDrawerSheet {
@@ -323,7 +412,7 @@ fun AppDrawerContent(
                 .weight(1f)
                 .verticalScroll(rememberScrollState()),
         ) {
-            drawerEntries.forEach { entry ->
+            entries.forEach { entry ->
                 when (entry) {
                     is DrawerEntry.Single -> {
                         val pinnable = entry.leaf.route != AppRoutes.HOME

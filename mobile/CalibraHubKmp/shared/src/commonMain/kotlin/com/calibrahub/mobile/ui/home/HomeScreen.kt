@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.calibrahub.mobile.session.SessionManager
 import com.calibrahub.mobile.ui.nav.DrawerLeaf
 import com.calibrahub.mobile.ui.nav.leafGroupLabels
+import com.calibrahub.mobile.ui.nav.isVisibleFor
 import com.calibrahub.mobile.ui.nav.pinnableDrawerLeaves
 
 /**
@@ -53,9 +54,13 @@ fun HomeScreen(
     onNavigate: (String) -> Unit,
 ) {
     val pinnedRoutes by session.pinnedRoutes.collectAsState()
+    val permissions by session.permissions.collectAsState()
 
-    val pinnedLeaves = remember(pinnedRoutes) {
-        pinnableDrawerLeaves.filter { it.route in pinnedRoutes }
+    // Yetkisi olmayan kisayol GIZLENIR: kullanici daha once sabitlediyse ya da yetkisi sonradan
+    // alindiysa kart durmasin (dokununca 403 alirdi). Sabitleme kaydi SILINMEZ — yetki geri
+    // verilirse kisayol kendiliginden geri gelir.
+    val pinnedLeaves = remember(pinnedRoutes, permissions) {
+        pinnableDrawerLeaves.filter { it.route in pinnedRoutes && it.isVisibleFor(permissions) }
     }
 
     Scaffold(

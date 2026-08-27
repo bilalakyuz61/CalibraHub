@@ -116,6 +116,18 @@ class SessionManager(private val storage: SecureStorage) {
      * BUNDAN besler, [com.calibrahub.mobile.ui.nav.AppDrawerContent] pin ikonuyla degistirir. */
     val pinnedRoutes: StateFlow<Set<String>> = _pinnedRoutes.asStateFlow()
 
+    private val _permissions = MutableStateFlow<Set<String>?>(null)
+
+    /**
+     * Kullanicinin gorebilecegi ekranlarin form kodlari — GET /api/mobile/session'dan gelir.
+     * `null` = HENUZ BILINMIYOR ya da sunucu bu alani gondermiyor (eski surum) -> menu HICBIR
+     * SEYI gizlemez (fail-open). Bos kume = gercekten hicbir ekrana yetki yok.
+     *
+     * Bu YALNIZCA gorunurluk katmanidir: yetkisiz bir ekrana yine de gidilse endpoint 403
+     * doner. Yani buradaki bir hata veri sizdirmaz, olsa olsa kart gosterir/gizler.
+     */
+    val permissions: StateFlow<Set<String>?> = _permissions.asStateFlow()
+
     /** Acilis tohumlamasi icin uygulama-omurlu scope — bkz. [init]. */
     private val initScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -213,6 +225,10 @@ class SessionManager(private val storage: SecureStorage) {
         storage.remove(DISPLAY_NAME_KEY)
         storage.remove(COMPANY_ID_KEY)
         storage.remove(COMPANY_NAME_KEY)
+        // Izinler oturuma baglidir: baska kullanici giris yaparsa onceki kullanicinin
+        // menu suzgeci kalmamali (null = bilinmiyor -> yeni probe/refresh gelene kadar
+        // hicbir sey gizlenmez, fail-open).
+        _permissions.value = null
     }
 
     private suspend fun handleUnauthorized() {
@@ -220,6 +236,7 @@ class SessionManager(private val storage: SecureStorage) {
         storage.remove(DISPLAY_NAME_KEY)
         storage.remove(COMPANY_ID_KEY)
         storage.remove(COMPANY_NAME_KEY)
+        _permissions.value = null
         _sessionExpiredEvents.tryEmit(Unit)
     }
 
@@ -306,16 +323,38 @@ class SessionManager(private val storage: SecureStorage) {
         ApiResult.Failure(e.message ?: "Bağlantı hatası")
     }
 
-    /** Acilis probe'u (auto-login) — bkz. [SessionProbeResult] KDoc. */
+    /** Acilis probe'u (auto-login) — bkz. [SessionProbeResult] KDoc. Yan etki: yanittaki
+     * izin listesi [permissions] akisina yazilir (menu suzgeci bundan beslenir). */
     suspend fun probeSession(): SessionProbeResult = try {
         val resp = authApi().session()
         when {
-            resp.status == HttpStatusCode.OK -> SessionProbeResult.Success(resp.body<SessionDto>())
+            resp.status == HttpStatusCode.OK -> {
+                val dto = resp.body<SessionDto>()
+                _permissions.value = dto.permissions?.toSet()
+                SessionProbeResult.Success(dto)
+            }
             resp.status == HttpStatusCode.Unauthorized -> SessionProbeResult.Unauthorized
             else -> SessionProbeResult.Error("HTTP ${resp.status.value}")
         }
     } catch (e: Exception) {
         SessionProbeResult.Error(e.message ?: "Bağlantı hatası")
+    }
+
+    /**
+     * Izin listesini tazeler. Giris BASARILI olduktan hemen sonra cagrilir: /login yaniti
+     * izin tasimaz, otomatik-giris probe'u ise yalniz uygulama acilisinda calisir — bu cagri
+     * olmadan elle giris yapan kullanicinin menusu o oturum boyunca suzulmeden kalirdi.
+     *
+     * Sessizce basarisiz olur (izinler `null` kalir -> menu hicbir seyi gizlemez): agdaki
+     * gecici bir sorun kullaniciyi bos menuyle kilitlememeli.
+     */
+    suspend fun refreshPermissions() {
+        runCatching {
+            val resp = authApi().session()
+            if (resp.status == HttpStatusCode.OK) {
+                _permissions.value = resp.body<SessionDto>().permissions?.toSet()
+            }
+        }
     }
 
     companion object {
