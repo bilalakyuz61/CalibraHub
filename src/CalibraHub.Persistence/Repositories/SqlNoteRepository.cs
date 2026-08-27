@@ -373,13 +373,12 @@ public sealed class SqlNoteRepository : INoteRepository
         try
         {
             command.Transaction = tx;
-            // tenant-ok: NoteReminder tablosunda CompanyId kolonu yok; izolasyon NoteId FK'sıyla
-            // Note'tan miras alınır (reminder.NoteId çağıran controller'da zaten şirket bazlı okunan bir Note'a bağlıdır).
+            // CompanyId ebeveyn Note'tan alınır — oturumdan değil, çocuk ile ebeveynin şirketi asla ayrışamaz.
             command.CommandText = $"""
                 INSERT INTO {_remindersTable}
-                    ([Id], [NoteId], [RemindAt], [IsSent], [SentAt], [recurrence_type], [recurrence_data],
+                    ([Id], [NoteId], [CompanyId], [RemindAt], [IsSent], [SentAt], [recurrence_type], [recurrence_data],
                      [delivery_channel], [target_user_id])
-                VALUES (@Id, @NoteId, @RemindAt, 0, NULL, @RecurrenceType, @RecurrenceData,
+                VALUES (@Id, @NoteId, (SELECT n.[CompanyId] FROM {_notesTable} n WHERE n.[Id] = @NoteId), @RemindAt, 0, NULL, @RecurrenceType, @RecurrenceData,
                         @DeliveryChannel, NULL);
                 """;
             command.Parameters.Add(new SqlParameter("@Id", reminder.Id));
@@ -394,9 +393,11 @@ public sealed class SqlNoteRepository : INoteRepository
             {
                 await using var tCmd = connection.CreateCommand();
                 tCmd.Transaction = tx;
-                // tenant-ok: NoteReminderTarget'ta CompanyId kolonu yok; izolasyon ReminderId FK'sıyla
-                // NoteReminder -> Note zincirinden miras alınır.
-                tCmd.CommandText = $"INSERT INTO {_reminderTargetsTable} ([Id],[ReminderId],[UserId]) VALUES (@Id,@Rid,@Uid);";
+                // CompanyId ebeveyn NoteReminder'dan alınır (NoteReminderTarget bir alt-çocuk; kendi ParentId'i ReminderId).
+                tCmd.CommandText = $"""
+                    INSERT INTO {_reminderTargetsTable} ([Id],[ReminderId],[CompanyId],[UserId])
+                    VALUES (@Id,@Rid,(SELECT r.[CompanyId] FROM {_remindersTable} r WHERE r.[Id] = @Rid),@Uid);
+                    """;
                 tCmd.Parameters.Add(new SqlParameter("@Id",  Guid.NewGuid()));
                 tCmd.Parameters.Add(new SqlParameter("@Rid", reminder.Id));
                 tCmd.Parameters.Add(new SqlParameter("@Uid", uid));
@@ -416,11 +417,7 @@ public sealed class SqlNoteRepository : INoteRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            DELETE r FROM {_remindersTable} r
-            INNER JOIN {_notesTable} n ON r.[NoteId] = n.[Id]
-            WHERE r.[Id] = @Id AND n.[CompanyId] = @CompanyId;
-            """;
+        command.CommandText = $"DELETE FROM {_remindersTable} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         command.Parameters.Add(new SqlParameter("@Id", reminderId));
         command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -519,12 +516,7 @@ public sealed class SqlNoteRepository : INoteRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            UPDATE s SET [CanEdit] = @CanEdit
-            FROM {_sharesTable} s
-            INNER JOIN {_notesTable} n ON s.[NoteId] = n.[Id]
-            WHERE s.[Id] = @Id AND n.[CompanyId] = @CompanyId;
-            """;
+        command.CommandText = $"UPDATE {_sharesTable} SET [CanEdit] = @CanEdit WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         command.Parameters.Add(new SqlParameter("@Id", shareId));
         command.Parameters.Add(new SqlParameter("@CanEdit", canEdit));
         command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
@@ -535,11 +527,7 @@ public sealed class SqlNoteRepository : INoteRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            DELETE s FROM {_sharesTable} s
-            INNER JOIN {_notesTable} n ON s.[NoteId] = n.[Id]
-            WHERE s.[Id] = @Id AND n.[CompanyId] = @CompanyId;
-            """;
+        command.CommandText = $"DELETE FROM {_sharesTable} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         command.Parameters.Add(new SqlParameter("@Id", shareId));
         command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -681,8 +669,8 @@ public sealed class SqlNoteRepository : INoteRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            IF EXISTS (SELECT 1 FROM {_foldersTable} WHERE [Id] = @Id)
-                UPDATE {_foldersTable} SET [Name] = @Name WHERE [Id] = @Id;
+            IF EXISTS (SELECT 1 FROM {_foldersTable} WHERE [Id] = @Id AND [CompanyId] = @CompanyId)
+                UPDATE {_foldersTable} SET [Name] = @Name WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             ELSE
                 INSERT INTO {_foldersTable} ([Id], [CompanyId], [UserId], [Name], [ParentFolderId], [Created], [IsDeleted])
                 VALUES (@Id, @CompanyId, @UserId, @Name, @ParentFolderId, @CreatedAt, 0);
@@ -730,10 +718,11 @@ public sealed class SqlNoteRepository : INoteRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"UPDATE {_notesTable} SET [IsDeleted] = 0, [Updated] = @Now WHERE [Id] = @Id AND [UserId] = @UserId;";
+        command.CommandText = $"UPDATE {_notesTable} SET [IsDeleted] = 0, [Updated] = @Now WHERE [Id] = @Id AND [UserId] = @UserId AND [CompanyId] = @CompanyId;";
         command.Parameters.Add(new SqlParameter("@Id", id));
         command.Parameters.Add(new SqlParameter("@UserId", userId));
         command.Parameters.Add(new SqlParameter("@Now", DateTime.Now));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -744,14 +733,15 @@ public sealed class SqlNoteRepository : INoteRepository
         command.CommandText = $"""
             DELETE r FROM {_remindersTable} r
             INNER JOIN {_notesTable} n ON r.[NoteId] = n.[Id]
-            WHERE n.[Id] = @Id AND n.[UserId] = @UserId;
+            WHERE n.[Id] = @Id AND n.[UserId] = @UserId AND n.[CompanyId] = @CompanyId;
             DELETE s FROM {_sharesTable} s
             INNER JOIN {_notesTable} n ON s.[NoteId] = n.[Id]
-            WHERE n.[Id] = @Id AND n.[UserId] = @UserId;
-            DELETE FROM {_notesTable} WHERE [Id] = @Id AND [UserId] = @UserId;
+            WHERE n.[Id] = @Id AND n.[UserId] = @UserId AND n.[CompanyId] = @CompanyId;
+            DELETE FROM {_notesTable} WHERE [Id] = @Id AND [UserId] = @UserId AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
         command.Parameters.Add(new SqlParameter("@UserId", userId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -778,9 +768,10 @@ public sealed class SqlNoteRepository : INoteRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"UPDATE {_foldersTable} SET [Name] = @Name WHERE [Id] = @Id";
+        command.CommandText = $"UPDATE {_foldersTable} SET [Name] = @Name WHERE [Id] = @Id AND [CompanyId] = @CompanyId";
         command.Parameters.Add(new SqlParameter("@Name", name));
         command.Parameters.Add(new SqlParameter("@Id", folderId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -789,12 +780,13 @@ public sealed class SqlNoteRepository : INoteRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            DECLARE @ParentId UNIQUEIDENTIFIER = (SELECT [ParentFolderId] FROM {_foldersTable} WHERE [Id] = @FolderId);
-            UPDATE {_notesTable} SET [FolderId] = NULL WHERE [FolderId] = @FolderId;
-            UPDATE {_foldersTable} SET [ParentFolderId] = @ParentId WHERE [ParentFolderId] = @FolderId;
-            UPDATE {_foldersTable} SET [IsDeleted] = 1 WHERE [Id] = @FolderId;
+            DECLARE @ParentId UNIQUEIDENTIFIER = (SELECT [ParentFolderId] FROM {_foldersTable} WHERE [Id] = @FolderId AND [CompanyId] = @CompanyId);
+            UPDATE {_notesTable} SET [FolderId] = NULL WHERE [FolderId] = @FolderId AND [CompanyId] = @CompanyId;
+            UPDATE {_foldersTable} SET [ParentFolderId] = @ParentId WHERE [ParentFolderId] = @FolderId AND [CompanyId] = @CompanyId;
+            UPDATE {_foldersTable} SET [IsDeleted] = 1 WHERE [Id] = @FolderId AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@FolderId", folderId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -880,12 +872,13 @@ public sealed class SqlNoteRepository : INoteRepository
         command.CommandText = $"""
             UPDATE {_notesTable}
             SET [share_token] = @Token, [share_is_public] = @IsPublic, [share_include_attachments] = @IncludeAttachments
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@Id", noteId));
         command.Parameters.Add(new SqlParameter("@IsPublic", isPublic));
         command.Parameters.Add(new SqlParameter("@Token", (object?)token ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@IncludeAttachments", includeAttachments));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

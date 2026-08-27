@@ -90,13 +90,14 @@ public sealed class SqlOrgChartRepository : IOrgChartRepository
             cmd.CommandText = $"""
                 UPDATE {_chartsTable}
                 SET [Name] = @Name, [IsDefault] = @IsDefault, [Updated] = @Updated, [UpdatedById] = @UpdatedById
-                WHERE [Id] = @Id;
+                WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
                 """;
             cmd.Parameters.Add(new SqlParameter("@Id", chart.Id));
             cmd.Parameters.Add(new SqlParameter("@Name", chart.Name));
             cmd.Parameters.Add(new SqlParameter("@IsDefault", chart.IsDefault));
             cmd.Parameters.Add(new SqlParameter("@Updated", (object?)chart.Updated ?? DBNull.Value));
             cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)chart.UpdatedById ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
             await cmd.ExecuteNonQueryAsync(ct);
         }
         else
@@ -120,10 +121,12 @@ public sealed class SqlOrgChartRepository : IOrgChartRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            DELETE FROM {_nodesTable} WHERE [ChartId] = @Id;
-            DELETE FROM {_chartsTable} WHERE [Id] = @Id;
+            DELETE FROM {_nodesTable} WHERE [ChartId] = @Id
+              AND EXISTS (SELECT 1 FROM {_chartsTable} c WHERE c.[Id] = @Id AND c.[CompanyId] = @CompanyId);
+            DELETE FROM {_chartsTable} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -194,14 +197,17 @@ public sealed class SqlOrgChartRepository : IOrgChartRepository
         if (node.Id > 0)
         {
             cmd.CommandText = $"""
-                UPDATE {_nodesTable}
-                SET [UserId] = @UserId, [ParentUserId] = @ParentUserId, [ParentNodeId] = @ParentNodeId,
+                UPDATE n SET
+                    [UserId] = @UserId, [ParentUserId] = @ParentUserId, [ParentNodeId] = @ParentNodeId,
                     [PositionTitle] = @PositionTitle, [SortOrder] = @SortOrder,
                     [NodeType] = @NodeType, [DepartmentId] = @DepartmentId, [PersonnelId] = @PersonnelId
-                WHERE [Id] = @Id;
+                FROM {_nodesTable} n
+                WHERE n.[Id] = @Id
+                  AND EXISTS (SELECT 1 FROM {_chartsTable} c WHERE c.[Id] = n.[ChartId] AND c.[CompanyId] = @CompanyId);
                 """;
             cmd.Parameters.Add(new SqlParameter("@Id", node.Id));
             AddNodeParams(cmd, node);
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
             await cmd.ExecuteNonQueryAsync(ct);
         }
         else
@@ -209,10 +215,11 @@ public sealed class SqlOrgChartRepository : IOrgChartRepository
             cmd.CommandText = $"""
                 INSERT INTO {_nodesTable}
                     ([ChartId], [UserId], [ParentUserId], [ParentNodeId],
-                     [PositionTitle], [SortOrder], [NodeType], [DepartmentId], [PersonnelId])
+                     [PositionTitle], [SortOrder], [NodeType], [DepartmentId], [PersonnelId], [CompanyId])
                 VALUES
                     (@ChartId, @UserId, @ParentUserId, @ParentNodeId,
-                     @PositionTitle, @SortOrder, @NodeType, @DepartmentId, @PersonnelId);
+                     @PositionTitle, @SortOrder, @NodeType, @DepartmentId, @PersonnelId,
+                     (SELECT c.[CompanyId] FROM {_chartsTable} c WHERE c.[Id] = @ChartId));
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;
             AddNodeParams(cmd, node);
@@ -224,8 +231,13 @@ public sealed class SqlOrgChartRepository : IOrgChartRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_nodesTable} WHERE [Id] = @Id;";
+        cmd.CommandText = $"""
+            DELETE FROM {_nodesTable} WHERE [Id] = @Id
+              AND EXISTS (SELECT 1 FROM {_chartsTable} c
+                          WHERE c.[Id] = {_nodesTable}.[ChartId] AND c.[CompanyId] = @CompanyId);
+            """;
         cmd.Parameters.Add(new SqlParameter("@Id", nodeId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -235,8 +247,12 @@ public sealed class SqlOrgChartRepository : IOrgChartRepository
 
         // Step 1: Delete all existing nodes for the chart
         await using var delCmd = conn.CreateCommand();
-        delCmd.CommandText = $"DELETE FROM {_nodesTable} WHERE [ChartId] = @ChartId;";
+        delCmd.CommandText = $"""
+            DELETE FROM {_nodesTable} WHERE [ChartId] = @ChartId
+              AND EXISTS (SELECT 1 FROM {_chartsTable} c WHERE c.[Id] = @ChartId AND c.[CompanyId] = @CompanyId);
+            """;
         delCmd.Parameters.Add(new SqlParameter("@ChartId", chartId));
+        delCmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await delCmd.ExecuteNonQueryAsync(ct);
 
         if (nodes.Count == 0) return;
@@ -250,10 +266,11 @@ public sealed class SqlOrgChartRepository : IOrgChartRepository
             cmd.CommandText = $"""
                 INSERT INTO {_nodesTable}
                     ([ChartId], [UserId], [ParentUserId], [PositionTitle],
-                     [SortOrder], [NodeType], [DepartmentId], [PersonnelId])
+                     [SortOrder], [NodeType], [DepartmentId], [PersonnelId], [CompanyId])
                 VALUES
                     (@ChartId, @UserId, @ParentUserId, @PositionTitle,
-                     @SortOrder, @NodeType, @DepartmentId, @PersonnelId);
+                     @SortOrder, @NodeType, @DepartmentId, @PersonnelId,
+                     (SELECT c.[CompanyId] FROM {_chartsTable} c WHERE c.[Id] = @ChartId));
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;
             cmd.Parameters.Add(new SqlParameter("@ChartId", chartId));
@@ -275,6 +292,8 @@ public sealed class SqlOrgChartRepository : IOrgChartRepository
         {
             if (!idMap.TryGetValue(node.ParentNodeId!.Value, out var newParentId)) continue;
             await using var updateCmd = conn.CreateCommand();
+            // tenant-ok: node.Id az once Step 2'de bu metodun kendi INSERT'inden donen Id (istemciden gelmiyor);
+            // Step 2'deki INSERT zaten chartId uzerinden CompanyId ile turetildi.
             updateCmd.CommandText = $"UPDATE {_nodesTable} SET [ParentNodeId] = @ParentNodeId WHERE [Id] = @Id;";
             updateCmd.Parameters.Add(new SqlParameter("@Id", node.Id));
             updateCmd.Parameters.Add(new SqlParameter("@ParentNodeId", newParentId));
@@ -287,13 +306,15 @@ public sealed class SqlOrgChartRepository : IOrgChartRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            UPDATE {_nodesTable}
-            SET [ParentNodeId] = @ParentNodeId, [SortOrder] = @SortOrder
-            WHERE [Id] = @Id;
+            UPDATE n SET [ParentNodeId] = @ParentNodeId, [SortOrder] = @SortOrder
+            FROM {_nodesTable} n
+            WHERE n.[Id] = @Id
+              AND EXISTS (SELECT 1 FROM {_chartsTable} c WHERE c.[Id] = n.[ChartId] AND c.[CompanyId] = @CompanyId);
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", nodeId));
         cmd.Parameters.Add(new SqlParameter("@ParentNodeId", (object?)newParentNodeId ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@SortOrder", newSortOrder));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

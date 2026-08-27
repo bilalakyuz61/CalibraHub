@@ -87,6 +87,19 @@ public sealed class UiConfigController : Controller
     private const int MaxWorkspaceTabsJsonLength = 100_000;
 
     /// <summary>
+    /// Sekme JSON'u icin TEK secenek kumesi — yazma ve okuma AYNI kurallari kullanmali.
+    /// Onceki surumde yazma anonim nesneyle (camelCase alan adlari) yapiliyor, okuma ise
+    /// varsayilan (buyuk/kucuk harf DUYARLI) ayarlarla PascalCase DTO'ya deserialize
+    /// ediliyordu; hicbir alan eslesmiyor ve sekmeler tum alanlari null olarak geri
+    /// donuyordu. Kayit "basarili" gorunup bir sonraki giriste bos sekmeler acilirdi.
+    /// </summary>
+    private static readonly JsonSerializerOptions WorkspaceTabsJson = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+    };
+
+    /// <summary>
     /// GET /UiConfig/WorkspaceTabs — kullanıcının (dolayısıyla şirketin; her şirkette
     /// ayrı bir kullanıcı kaydı olduğundan userId zaten şirket bazında ayrışır) kayıtlı
     /// açık sekmelerini döner. "saved:false" (hiç kayıt yok / ilk giriş) ile
@@ -111,7 +124,7 @@ public sealed class UiConfigController : Controller
             List<WorkspaceTabDto>? tabs;
             try
             {
-                tabs = JsonSerializer.Deserialize<List<WorkspaceTabDto>>(raw);
+                tabs = JsonSerializer.Deserialize<List<WorkspaceTabDto>>(raw, WorkspaceTabsJson);
             }
             catch (JsonException)
             {
@@ -148,7 +161,7 @@ public sealed class UiConfigController : Controller
         if (tabs.Count > MaxWorkspaceTabCount)
             return Json(new { ok = false, error = $"En fazla {MaxWorkspaceTabCount} sekme saklanabilir (gönderilen: {tabs.Count})." });
 
-        var sanitized = new List<object>(tabs.Count);
+        var sanitized = new List<WorkspaceTabDto>(tabs.Count);
         foreach (var tab in tabs)
         {
             var key = tab.Key?.Trim();
@@ -169,16 +182,14 @@ public sealed class UiConfigController : Controller
             if (!string.IsNullOrEmpty(parentKey) && parentKey.Length > MaxTabKeyLength)
                 parentKey = null;
 
-            sanitized.Add(new
-            {
+            sanitized.Add(new WorkspaceTabDto(
                 key,
                 url,
-                title = string.IsNullOrEmpty(title) ? null : title,
-                parentKey = string.IsNullOrEmpty(parentKey) ? null : parentKey,
-            });
+                string.IsNullOrEmpty(title) ? null : title,
+                string.IsNullOrEmpty(parentKey) ? null : parentKey));
         }
 
-        var json = JsonSerializer.Serialize(sanitized);
+        var json = JsonSerializer.Serialize(sanitized, WorkspaceTabsJson);
         if (json.Length > MaxWorkspaceTabsJsonLength)
             return Json(new { ok = false, error = "Sekme verisi izin verilen boyutu aşıyor." });
 

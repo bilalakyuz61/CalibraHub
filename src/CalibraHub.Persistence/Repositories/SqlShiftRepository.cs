@@ -77,6 +77,7 @@ public sealed class SqlShiftRepository : IShiftRepository
         {
             // 1) Shift UPSERT
             int newId;
+            var companyId = _factory.ResolveEffectiveCompanyId();
             await using (var cmd = conn.CreateCommand())
             {
                 cmd.Transaction = tx;
@@ -85,10 +86,10 @@ public sealed class SqlShiftRepository : IShiftRepository
                     cmd.CommandText = $@"
                         INSERT INTO {_table}
                             ([Code],[Name],[StartTime],[EndTime],[IsOvernight],
-                             [ColorHex],[SortOrder],[IsActive],[CreatedById],[Created])
+                             [ColorHex],[SortOrder],[IsActive],[CreatedById],[Created],[CompanyId])
                         VALUES
                             (@Code,@Name,@Start,@End,@Overnight,
-                             @Color,@Sort,@Active,@CreatedById,SYSUTCDATETIME());
+                             @Color,@Sort,@Active,@CreatedById,SYSUTCDATETIME(),@CompanyId);
                         SELECT CAST(SCOPE_IDENTITY() AS INT);";
                 }
                 else
@@ -98,7 +99,7 @@ public sealed class SqlShiftRepository : IShiftRepository
                         SET [Code]=@Code,[Name]=@Name,[StartTime]=@Start,[EndTime]=@End,
                             [IsOvernight]=@Overnight,[ColorHex]=@Color,[SortOrder]=@Sort,
                             [IsActive]=@Active,[UpdatedById]=@UpdatedById,[Updated]=SYSUTCDATETIME()
-                        WHERE [Id]=@Id;
+                        WHERE [Id]=@Id AND [CompanyId]=@CompanyId;
                         SELECT @Id;";
                     cmd.Parameters.AddWithValue("@Id", entity.Id);
                     cmd.Parameters.AddWithValue("@UpdatedById", (object?)entity.UpdatedById ?? DBNull.Value);
@@ -111,6 +112,7 @@ public sealed class SqlShiftRepository : IShiftRepository
                 cmd.Parameters.AddWithValue("@Color",     (object?)entity.ColorHex ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@Sort",      entity.SortOrder);
                 cmd.Parameters.AddWithValue("@Active",    entity.IsActive);
+                cmd.Parameters.AddWithValue("@CompanyId", companyId);
                 if (entity.Id <= 0)
                     cmd.Parameters.AddWithValue("@CreatedById", (object?)entity.CreatedById ?? DBNull.Value);
                 var result = await cmd.ExecuteScalarAsync(ct);
@@ -125,8 +127,9 @@ public sealed class SqlShiftRepository : IShiftRepository
                 await using (var delCmd = conn.CreateCommand())
                 {
                     delCmd.Transaction = tx;
-                    delCmd.CommandText = $"DELETE FROM {_breakTable} WHERE [ShiftId] = @Id;";
+                    delCmd.CommandText = $"DELETE FROM {_breakTable} WHERE [ShiftId] = @Id AND [CompanyId] = @CompanyId;";
                     delCmd.Parameters.AddWithValue("@Id", newId);
+                    delCmd.Parameters.AddWithValue("@CompanyId", companyId);
                     await delCmd.ExecuteNonQueryAsync(ct);
                 }
                 foreach (var b in breaks)
@@ -135,11 +138,14 @@ public sealed class SqlShiftRepository : IShiftRepository
                     insCmd.Transaction = tx;
                     // 2026-06-06: IsPaid kullanım dışı — DB kolonu duruyor (backward-compat),
                     // INSERT'te yer almıyor, default(0) ile kayıt edilir.
+                    // CompanyId ebeveyn Shift'ten alınır (ShiftId, session'dan degil) — çocuk kayıt
+                    // her zaman gerçek sahibiyle aynı şirkette kalır.
                     insCmd.CommandText = $@"
                         INSERT INTO {_breakTable}
-                            ([ShiftId],[Name],[StartTime],[EndTime],[SortOrder])
+                            ([ShiftId],[Name],[StartTime],[EndTime],[SortOrder],[CompanyId])
                         VALUES
-                            (@ShiftId,@Name,@Start,@End,@Sort);";
+                            (@ShiftId,@Name,@Start,@End,@Sort,
+                             (SELECT sh.[CompanyId] FROM {_table} sh WHERE sh.[Id] = @ShiftId));";
                     insCmd.Parameters.AddWithValue("@ShiftId", newId);
                     insCmd.Parameters.AddWithValue("@Name",    b.Name.Trim());
                     insCmd.Parameters.AddWithValue("@Start",   b.StartTime);
@@ -216,9 +222,10 @@ public sealed class SqlShiftRepository : IShiftRepository
             SET [IsActive] = 0,
                 [UpdatedById] = @UpdatedById,
                 [Updated]     = SYSUTCDATETIME()
-            WHERE [Id] = @Id;";
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
         cmd.Parameters.AddWithValue("@UpdatedById", (object?)userId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

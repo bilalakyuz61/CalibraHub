@@ -67,9 +67,9 @@ public sealed class SqlBpmFormRepository(SqlServerConnectionFactory connectionFa
         {
             cmd.CommandText = """
                 INSERT INTO [BpmFormDefinition]
-                    (Name, Code, Description, WorkflowDefinitionId, IsActive, CreatedById, Created)
+                    (Name, Code, Description, WorkflowDefinitionId, IsActive, CreatedById, Created, CompanyId)
                 OUTPUT INSERTED.Id
-                VALUES (@Name, @Code, @Desc, @WfId, @IsActive, @Actor, SYSUTCDATETIME());
+                VALUES (@Name, @Code, @Desc, @WfId, @IsActive, @Actor, SYSUTCDATETIME(), @CompanyId);
                 """;
         }
         else
@@ -79,7 +79,7 @@ public sealed class SqlBpmFormRepository(SqlServerConnectionFactory connectionFa
                 SET Name=@Name, Code=@Code, Description=@Desc,
                     WorkflowDefinitionId=@WfId, IsActive=@IsActive,
                     UpdatedById=@Actor, Updated=SYSUTCDATETIME()
-                WHERE Id=@Id;
+                WHERE Id=@Id AND CompanyId=@CompanyId;
                 SELECT @Id;
                 """;
             cmd.Parameters.AddWithValue("@Id", def.Id);
@@ -90,6 +90,7 @@ public sealed class SqlBpmFormRepository(SqlServerConnectionFactory connectionFa
         cmd.Parameters.AddWithValue("@WfId",     (object?)def.WorkflowDefinitionId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@IsActive",  def.IsActive);
         cmd.Parameters.AddWithValue("@Actor",     (object?)actor ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CompanyId", connectionFactory.ResolveEffectiveCompanyId());
         return (int)(await cmd.ExecuteScalarAsync(ct))!;
     }
 
@@ -97,8 +98,9 @@ public sealed class SqlBpmFormRepository(SqlServerConnectionFactory connectionFa
     {
         await using var conn = await connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
-        cmd.CommandText = "UPDATE [BpmFormDefinition] SET IsActive=0 WHERE Id=@Id;";
+        cmd.CommandText = "UPDATE [BpmFormDefinition] SET IsActive=0 WHERE Id=@Id AND CompanyId=@CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@CompanyId", connectionFactory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -113,26 +115,30 @@ public sealed class SqlBpmFormRepository(SqlServerConnectionFactory connectionFa
                     (FormDefinitionId, [Key], Label, FieldType, IsRequired,
                      SortOrder, OptionsJson, Placeholder, DefaultValue,
                      LayoutRow, LayoutCol, LayoutColSpan,
-                     CreatedById, Created)
+                     CreatedById, Created, CompanyId)
                 OUTPUT INSERTED.Id
                 VALUES (@FormId, @Key, @Label, @FieldType, @IsRequired,
                         @Sort, @Options, @Placeholder, @Default,
                         @LayoutRow, @LayoutCol, @LayoutColSpan,
-                        @Actor, SYSUTCDATETIME());
+                        @Actor, SYSUTCDATETIME(),
+                        (SELECT fd.CompanyId FROM [BpmFormDefinition] fd WHERE fd.Id = @FormId));
                 """;
         }
         else
         {
             cmd.CommandText = """
-                UPDATE [BpmFormField]
-                SET [Key]=@Key, Label=@Label, FieldType=@FieldType, IsRequired=@IsRequired,
+                UPDATE f SET
+                    [Key]=@Key, Label=@Label, FieldType=@FieldType, IsRequired=@IsRequired,
                     SortOrder=@Sort, OptionsJson=@Options, Placeholder=@Placeholder,
                     DefaultValue=@Default, LayoutRow=@LayoutRow, LayoutCol=@LayoutCol,
                     LayoutColSpan=@LayoutColSpan, UpdatedById=@Actor, Updated=SYSUTCDATETIME()
-                WHERE Id=@Id;
+                FROM [BpmFormField] f
+                WHERE f.Id=@Id
+                  AND EXISTS (SELECT 1 FROM [BpmFormDefinition] fd WHERE fd.Id = f.FormDefinitionId AND fd.CompanyId = @CompanyId);
                 SELECT @Id;
                 """;
             cmd.Parameters.AddWithValue("@Id", field.Id);
+            cmd.Parameters.AddWithValue("@CompanyId", connectionFactory.ResolveEffectiveCompanyId());
         }
         cmd.Parameters.AddWithValue("@FormId",        field.FormDefinitionId);
         cmd.Parameters.AddWithValue("@Key",            field.Key);
@@ -154,8 +160,13 @@ public sealed class SqlBpmFormRepository(SqlServerConnectionFactory connectionFa
     {
         await using var conn = await connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM [BpmFormField] WHERE Id=@Id;";
+        cmd.CommandText = """
+            DELETE FROM [BpmFormField] WHERE Id=@Id
+              AND EXISTS (SELECT 1 FROM [BpmFormDefinition] fd
+                          WHERE fd.Id = [BpmFormField].FormDefinitionId AND fd.CompanyId = @CompanyId);
+            """;
         cmd.Parameters.AddWithValue("@Id", fieldId);
+        cmd.Parameters.AddWithValue("@CompanyId", connectionFactory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -243,9 +254,10 @@ public sealed class SqlBpmFormRepository(SqlServerConnectionFactory connectionFa
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = """
             INSERT INTO [BpmFormSubmission]
-                (FormDefinitionId, SubmittedBy, SubmittedAt, Status, WorkflowInstanceId, CreatedById, Created)
+                (FormDefinitionId, SubmittedBy, SubmittedAt, Status, WorkflowInstanceId, CreatedById, Created, CompanyId)
             OUTPUT INSERTED.Id
-            VALUES (@FormId, @SubmittedBy, @SubmittedAt, @Status, @WfId, @CreatedById, SYSUTCDATETIME());
+            VALUES (@FormId, @SubmittedBy, @SubmittedAt, @Status, @WfId, @CreatedById, SYSUTCDATETIME(),
+                    (SELECT fd.CompanyId FROM [BpmFormDefinition] fd WHERE fd.Id = @FormId));
             """;
         cmd.Parameters.AddWithValue("@FormId",      submission.FormDefinitionId);
         cmd.Parameters.AddWithValue("@SubmittedBy",  (object?)submission.SubmittedBy  ?? DBNull.Value);
@@ -259,6 +271,8 @@ public sealed class SqlBpmFormRepository(SqlServerConnectionFactory connectionFa
         foreach (var v in submission.Values)
         {
             await using var vcmd = conn.CreateCommand();
+            // tenant-ok: submissionId az once bu metodun kendi INSERT'inden donen Id (istemciden gelmiyor),
+            // ustteki INSERT zaten FormDefinitionId uzerinden CompanyId ile turetildi.
             vcmd.CommandText = """
                 INSERT INTO [BpmFormSubmissionValue] (SubmissionId, FieldKey, Value)
                 VALUES (@SubId, @Key, @Val);
@@ -278,11 +292,12 @@ public sealed class SqlBpmFormRepository(SqlServerConnectionFactory connectionFa
         cmd.CommandText = """
             UPDATE [BpmFormSubmission]
             SET Status=@Status, WorkflowInstanceId=@WfId, Updated=SYSUTCDATETIME()
-            WHERE Id=@Id;
+            WHERE Id=@Id AND CompanyId=@CompanyId;
             """;
         cmd.Parameters.AddWithValue("@Id",     submission.Id);
         cmd.Parameters.AddWithValue("@Status", submission.Status);
         cmd.Parameters.AddWithValue("@WfId",   (object?)submission.WorkflowInstanceId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CompanyId", connectionFactory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

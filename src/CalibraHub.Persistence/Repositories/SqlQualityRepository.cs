@@ -133,15 +133,16 @@ public sealed class SqlQualityRepository : IQualityRepository
             await using (var cmd = conn.CreateCommand())
             {
                 cmd.Transaction = tx;
+                var companyId = _connectionFactory.ResolveEffectiveCompanyId();
                 cmd.CommandText = plan.Id > 0
                     ? $"""
                         UPDATE {_planTable} SET [ItemId]=@Item,[MaterialGroupId]=@Grp,[InspectionType]=@Type,
-                            [Name]=@Name,[IsActive]=@Active,[UpdatedById]=@Upd,[Updated]=SYSUTCDATETIME() WHERE [Id]=@Id;
-                        SELECT @Id;
+                            [Name]=@Name,[IsActive]=@Active,[UpdatedById]=@Upd,[Updated]=SYSUTCDATETIME() WHERE [Id]=@Id AND [CompanyId]=@Company;
+                        SELECT [Id] FROM {_planTable} WHERE [Id]=@Id AND [CompanyId]=@Company;
                         """
                     : $"""
-                        INSERT INTO {_planTable} ([ItemId],[MaterialGroupId],[InspectionType],[Name],[IsActive],[CreatedById],[Created])
-                        VALUES (@Item,@Grp,@Type,@Name,@Active,@Cre,SYSUTCDATETIME());
+                        INSERT INTO {_planTable} ([ItemId],[MaterialGroupId],[InspectionType],[Name],[IsActive],[CreatedById],[Created],[CompanyId])
+                        VALUES (@Item,@Grp,@Type,@Name,@Active,@Cre,SYSUTCDATETIME(),@Company);
                         SELECT CAST(SCOPE_IDENTITY() AS INT);
                         """;
                 cmd.Parameters.Add(new SqlParameter("@Id", plan.Id));
@@ -152,9 +153,12 @@ public sealed class SqlQualityRepository : IQualityRepository
                 cmd.Parameters.Add(new SqlParameter("@Active", plan.IsActive));
                 cmd.Parameters.Add(new SqlParameter("@Cre", (object?)plan.CreatedById ?? DBNull.Value));
                 cmd.Parameters.Add(new SqlParameter("@Upd", (object?)plan.UpdatedById ?? DBNull.Value));
+                cmd.Parameters.Add(new SqlParameter("@Company", companyId));
                 planId = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
             }
-            // Satırlar DELETE+INSERT
+            // tenant-ok: planId yukarida SELECT ... WHERE [Id]=@Id AND [CompanyId]=@Company ile
+            // dogrulandi (yabanci sirket plan.Id ise ExecuteScalar null doner ve Convert.ToInt32 patlar) —
+            // bu satirlar zaten sadece kendi sirketimizin plani icin calisir.
             await using (var del = conn.CreateCommand())
             {
                 del.Transaction = tx;
@@ -166,6 +170,7 @@ public sealed class SqlQualityRepository : IQualityRepository
             {
                 await using var cmd = conn.CreateCommand();
                 cmd.Transaction = tx;
+                // tenant-ok: PlanId (@P) yukarida dogrulanan planId — bkz. yukaridaki not.
                 cmd.CommandText = $"""
                     INSERT INTO {_planLineTable} ([PlanId],[CharacteristicName],[Nominal],[LowerTol],[UpperTol],[UnitId],[Method],[GaugeName],[IsNumeric],[OrderNo],[CreatedById],[Created])
                     VALUES (@P,@Char,@Nom,@Low,@Up,@Unit,@Method,@Gauge,@Num,@Order,@Cre,SYSUTCDATETIME());
@@ -193,9 +198,10 @@ public sealed class SqlQualityRepository : IQualityRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE {_planTable} SET [IsActive]=0,[UpdatedById]=@Upd,[Updated]=SYSUTCDATETIME() WHERE [Id]=@Id;";
+        cmd.CommandText = $"UPDATE {_planTable} SET [IsActive]=0,[UpdatedById]=@Upd,[Updated]=SYSUTCDATETIME() WHERE [Id]=@Id AND [CompanyId]=@Company;";
         cmd.Parameters.Add(new SqlParameter("@Id", planId));
         cmd.Parameters.Add(new SqlParameter("@Upd", (object?)userId ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@Company", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -396,17 +402,18 @@ public sealed class SqlQualityRepository : IQualityRepository
             await using (var cmd = conn.CreateCommand())
             {
                 cmd.Transaction = tx;
+                var companyId = _connectionFactory.ResolveEffectiveCompanyId();
                 cmd.CommandText = $"""
-                    IF EXISTS (SELECT 1 FROM {_inspTable} WHERE [DocumentId]=@Doc)
+                    IF EXISTS (SELECT 1 FROM {_inspTable} WHERE [DocumentId]=@Doc AND [CompanyId]=@Company)
                         UPDATE {_inspTable} SET [PlanId]=@Plan,[ItemId]=@Item,[InspectionType]=@Type,[Status]=@Status,
                             [Verdict]=@Verdict,[Disposition]=@Disp,[SourceKind]=@SrcK,[SourceId]=@SrcId,[Quantity]=@Qty,
                             [InspectedByPersonnelId]=@Insp,[InspectedAt]=@InspAt,[Notes]=@Notes,
-                            [UpdatedById]=@Upd,[Updated]=SYSUTCDATETIME() WHERE [DocumentId]=@Doc;
-                    ELSE
+                            [UpdatedById]=@Upd,[Updated]=SYSUTCDATETIME() WHERE [DocumentId]=@Doc AND [CompanyId]=@Company;
+                    ELSE IF NOT EXISTS (SELECT 1 FROM {_inspTable} WHERE [DocumentId]=@Doc)
                         INSERT INTO {_inspTable} ([DocumentId],[PlanId],[ItemId],[InspectionType],[Status],[Verdict],[Disposition],
-                            [SourceKind],[SourceId],[Quantity],[InspectedByPersonnelId],[InspectedAt],[Notes],[CreatedById],[Created])
-                        VALUES (@Doc,@Plan,@Item,@Type,@Status,@Verdict,@Disp,@SrcK,@SrcId,@Qty,@Insp,@InspAt,@Notes,@Cre,SYSUTCDATETIME());
-                    SELECT [Id] FROM {_inspTable} WHERE [DocumentId]=@Doc;
+                            [SourceKind],[SourceId],[Quantity],[InspectedByPersonnelId],[InspectedAt],[Notes],[CreatedById],[Created],[CompanyId])
+                        VALUES (@Doc,@Plan,@Item,@Type,@Status,@Verdict,@Disp,@SrcK,@SrcId,@Qty,@Insp,@InspAt,@Notes,@Cre,SYSUTCDATETIME(),@Company);
+                    SELECT [Id] FROM {_inspTable} WHERE [DocumentId]=@Doc AND [CompanyId]=@Company;
                     """;
                 cmd.Parameters.Add(new SqlParameter("@Doc", q.DocumentId));
                 cmd.Parameters.Add(new SqlParameter("@Plan", (object?)q.PlanId ?? DBNull.Value));
@@ -423,8 +430,10 @@ public sealed class SqlQualityRepository : IQualityRepository
                 cmd.Parameters.Add(new SqlParameter("@Notes", (object?)q.Notes ?? DBNull.Value));
                 cmd.Parameters.Add(new SqlParameter("@Cre", (object?)q.CreatedById ?? DBNull.Value));
                 cmd.Parameters.Add(new SqlParameter("@Upd", (object?)q.UpdatedById ?? DBNull.Value));
+                cmd.Parameters.Add(new SqlParameter("@Company", companyId));
                 inspectionId = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
             }
+            // tenant-ok: inspectionId yukarida [CompanyId]=@Company ile dogrulanmis satirdan geldi.
             await using (var del = conn.CreateCommand())
             {
                 del.Transaction = tx;
@@ -436,6 +445,7 @@ public sealed class SqlQualityRepository : IQualityRepository
             {
                 await using var cmd = conn.CreateCommand();
                 cmd.Transaction = tx;
+                // tenant-ok: InspectionId (@I) yukarida dogrulanan inspectionId — bkz. yukaridaki not.
                 cmd.CommandText = $"""
                     INSERT INTO {_inspLineTable} ([InspectionId],[PlanLineId],[CharacteristicName],[Nominal],[LowerTol],[UpperTol],
                         [Measured],[IsNumeric],[Result],[DefectCodeId],[OrderNo],[Notes],[CreatedById],[Created])
@@ -465,7 +475,7 @@ public sealed class SqlQualityRepository : IQualityRepository
     {
         var sql = $"""
             UPDATE {_inspTable} SET [Status]=@Status,[Verdict]=@Verdict,[Disposition]=@Disp,
-                [UpdatedById]=@Upd,[Updated]=SYSUTCDATETIME() WHERE [DocumentId]=@Doc;
+                [UpdatedById]=@Upd,[Updated]=SYSUTCDATETIME() WHERE [DocumentId]=@Doc AND [CompanyId]=@Company;
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
@@ -475,6 +485,7 @@ public sealed class SqlQualityRepository : IQualityRepository
         cmd.Parameters.Add(new SqlParameter("@Verdict", (object?)verdict ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Disp", (object?)disposition ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Upd", (object?)userId ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@Company", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

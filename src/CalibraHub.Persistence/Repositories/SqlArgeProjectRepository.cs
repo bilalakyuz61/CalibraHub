@@ -294,17 +294,19 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
                 UPDATE {_protoTable} SET
                     [Name]=@Name, [Description]=@Desc, [VersionLabel]=@Ver,
                     [UpdatedById]=@Upd, [Updated]=SYSUTCDATETIME()
-                WHERE [Id]=@Id;
+                WHERE [Id]=@Id AND [CompanyId] = @CompanyId;
                 SELECT @Id;
                 """;
             cmd.Parameters.Add(new SqlParameter("@Id", p.Id));
             cmd.Parameters.Add(new SqlParameter("@Upd", (object?)p.UpdatedById ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         }
         else
         {
             cmd.CommandText = $"""
-                INSERT INTO {_protoTable} ([ProjectId],[Name],[Description],[VersionLabel],[CreatedById],[Created])
-                VALUES (@Proj,@Name,@Desc,@Ver,@Cre,SYSUTCDATETIME());
+                INSERT INTO {_protoTable} ([ProjectId],[Name],[Description],[VersionLabel],[CreatedById],[Created],[CompanyId])
+                VALUES (@Proj,@Name,@Desc,@Ver,@Cre,SYSUTCDATETIME(),
+                    (SELECT d.[CompanyId] FROM {_docTable} d WHERE d.[Id] = @Proj));
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;
             cmd.Parameters.Add(new SqlParameter("@Proj", p.ProjectId));
@@ -323,10 +325,11 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             UPDATE {_protoTable} SET [IsActive]=0, [UpdatedById]=@Upd, [Updated]=SYSUTCDATETIME()
-            WHERE [Id]=@Id;
+            WHERE [Id]=@Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", prototypeId));
         cmd.Parameters.Add(new SqlParameter("@Upd", (object?)updatedById ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -336,11 +339,12 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             UPDATE {_protoTable} SET [ItemId]=@Item, [UpdatedById]=@Upd, [Updated]=SYSUTCDATETIME()
-            WHERE [Id]=@Id;
+            WHERE [Id]=@Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Item", itemId));
         cmd.Parameters.Add(new SqlParameter("@Id", prototypeId));
         cmd.Parameters.Add(new SqlParameter("@Upd", (object?)updatedById ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -352,17 +356,18 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
         cmd.CommandText = approved
             ? $"""
                 UPDATE {_protoTable} SET [IsApproved]=0, [UpdatedById]=@Upd, [Updated]=SYSUTCDATETIME()
-                WHERE [ProjectId]=@Proj AND [Id]<>@Id;
+                WHERE [ProjectId]=@Proj AND [Id]<>@Id AND [CompanyId] = @CompanyId;
                 UPDATE {_protoTable} SET [IsApproved]=1, [UpdatedById]=@Upd, [Updated]=SYSUTCDATETIME()
-                WHERE [Id]=@Id;
+                WHERE [Id]=@Id AND [CompanyId] = @CompanyId;
                 """
             : $"""
                 UPDATE {_protoTable} SET [IsApproved]=0, [UpdatedById]=@Upd, [Updated]=SYSUTCDATETIME()
-                WHERE [Id]=@Id;
+                WHERE [Id]=@Id AND [CompanyId] = @CompanyId;
                 """;
         cmd.Parameters.Add(new SqlParameter("@Id", prototypeId));
         cmd.Parameters.Add(new SqlParameter("@Proj", projectId));
         cmd.Parameters.Add(new SqlParameter("@Upd", (object?)updatedById ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

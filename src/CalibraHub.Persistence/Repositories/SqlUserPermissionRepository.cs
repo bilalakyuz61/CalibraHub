@@ -115,11 +115,13 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
         {
+            var companyId = _factory.ResolveEffectiveCompanyId();
             await using (var delCmd = conn.CreateCommand())
             {
                 delCmd.Transaction = tx;
-                delCmd.CommandText = $"DELETE FROM {_table} WHERE [GroupId]=@G;";
+                delCmd.CommandText = $"DELETE FROM {_table} WHERE [GroupId]=@G AND [CompanyId]=@CompanyId;";
                 delCmd.Parameters.AddWithValue("@G", groupId);
+                delCmd.Parameters.AddWithValue("@CompanyId", companyId);
                 await delCmd.ExecuteNonQueryAsync(ct);
             }
 
@@ -134,12 +136,13 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
                 insCmd.Transaction = tx;
                 insCmd.CommandText = $@"
                     INSERT INTO {_table}
-                        ([UserId],[DepartmentId],[GroupId],[PermissionDefId],[IsGranted],[CreatedById])
-                    VALUES (NULL,NULL,@G,@P,@Gr,@CreatedById);";
+                        ([UserId],[DepartmentId],[GroupId],[PermissionDefId],[IsGranted],[CreatedById],[CompanyId])
+                    VALUES (NULL,NULL,@G,@P,@Gr,@CreatedById,@CompanyId);";
                 insCmd.Parameters.AddWithValue("@G", groupId);
                 insCmd.Parameters.AddWithValue("@P", e.PermissionDefId);
                 insCmd.Parameters.AddWithValue("@Gr", e.IsGranted);
                 insCmd.Parameters.AddWithValue("@CreatedById", (object?)e.CreatedById ?? DBNull.Value);
+                insCmd.Parameters.AddWithValue("@CompanyId", companyId);
                 await insCmd.ExecuteNonQueryAsync(ct);
             }
 
@@ -157,12 +160,13 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
         entity.EnsureValid();
         await using var conn = await _factory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        var companyId = _factory.ResolveEffectiveCompanyId();
         if (entity.Id > 0)
         {
             cmd.CommandText = $@"
                 UPDATE {_table} SET
                     [UserId]=@U,[DepartmentId]=@D,[GroupId]=@Grp,[PermissionDefId]=@P,[IsGranted]=@G
-                WHERE [Id]=@Id;
+                WHERE [Id]=@Id AND [CompanyId]=@CompanyId;
                 SELECT @Id;";
             cmd.Parameters.AddWithValue("@Id", entity.Id);
         }
@@ -170,8 +174,8 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
         {
             cmd.CommandText = $@"
                 INSERT INTO {_table}
-                    ([UserId],[DepartmentId],[GroupId],[PermissionDefId],[IsGranted],[CreatedById])
-                VALUES (@U,@D,@Grp,@P,@G,@CreatedById);
+                    ([UserId],[DepartmentId],[GroupId],[PermissionDefId],[IsGranted],[CreatedById],[CompanyId])
+                VALUES (@U,@D,@Grp,@P,@G,@CreatedById,@CompanyId);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
             cmd.Parameters.AddWithValue("@CreatedById", (object?)entity.CreatedById ?? DBNull.Value);
         }
@@ -180,6 +184,7 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
         cmd.Parameters.AddWithValue("@Grp", (object?)entity.GroupId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@P", entity.PermissionDefId);
         cmd.Parameters.AddWithValue("@G", entity.IsGranted);
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
 
         var result = await cmd.ExecuteScalarAsync(ct);
         return Convert.ToInt32(result);
@@ -198,20 +203,23 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
         {
+            var companyId = _factory.ResolveEffectiveCompanyId();
+
             // 1) Mevcut sahibin tüm satırlarını sil
             await using (var delCmd = conn.CreateCommand())
             {
                 delCmd.Transaction = tx;
                 if (userId.HasValue)
                 {
-                    delCmd.CommandText = $"DELETE FROM {_table} WHERE [UserId]=@U;";
+                    delCmd.CommandText = $"DELETE FROM {_table} WHERE [UserId]=@U AND [CompanyId]=@CompanyId;";
                     delCmd.Parameters.AddWithValue("@U", userId.Value);
                 }
                 else
                 {
-                    delCmd.CommandText = $"DELETE FROM {_table} WHERE [DepartmentId]=@D;";
+                    delCmd.CommandText = $"DELETE FROM {_table} WHERE [DepartmentId]=@D AND [CompanyId]=@CompanyId;";
                     delCmd.Parameters.AddWithValue("@D", departmentId!.Value);
                 }
+                delCmd.Parameters.AddWithValue("@CompanyId", companyId);
                 await delCmd.ExecuteNonQueryAsync(ct);
             }
 
@@ -228,13 +236,14 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
                 insCmd.Transaction = tx;
                 insCmd.CommandText = $@"
                     INSERT INTO {_table}
-                        ([UserId],[DepartmentId],[PermissionDefId],[IsGranted],[CreatedById])
-                    VALUES (@U,@D,@P,@G,@CreatedById);";
+                        ([UserId],[DepartmentId],[PermissionDefId],[IsGranted],[CreatedById],[CompanyId])
+                    VALUES (@U,@D,@P,@G,@CreatedById,@CompanyId);";
                 insCmd.Parameters.AddWithValue("@U", (object?)e.UserId ?? DBNull.Value);
                 insCmd.Parameters.AddWithValue("@D", (object?)e.DepartmentId ?? DBNull.Value);
                 insCmd.Parameters.AddWithValue("@P", e.PermissionDefId);
                 insCmd.Parameters.AddWithValue("@G", e.IsGranted);
                 insCmd.Parameters.AddWithValue("@CreatedById", (object?)e.CreatedById ?? DBNull.Value);
+                insCmd.Parameters.AddWithValue("@CompanyId", companyId);
                 await insCmd.ExecuteNonQueryAsync(ct);
             }
 
@@ -251,8 +260,9 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
     {
         await using var conn = await _factory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id]=@Id;";
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -260,8 +270,9 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
     {
         await using var conn = await _factory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [UserId]=@U;";
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [UserId]=@U AND [CompanyId]=@CompanyId;";
         cmd.Parameters.AddWithValue("@U", userId);
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -269,8 +280,9 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
     {
         await using var conn = await _factory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [DepartmentId]=@D;";
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [DepartmentId]=@D AND [CompanyId]=@CompanyId;";
         cmd.Parameters.AddWithValue("@D", departmentId);
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

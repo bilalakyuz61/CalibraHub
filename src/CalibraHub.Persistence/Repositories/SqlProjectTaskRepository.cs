@@ -509,21 +509,27 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
                 upd.CommandText = $"""
                     UPDATE {_tplTable} SET [Name]=@Name, [Description]=@Desc, [IsSequentialDefault]=@Seq,
                         [UpdatedById]=@Upd, [Updated]=SYSUTCDATETIME()
-                    WHERE [Id]=@Id AND [IsActive]=1;
+                    WHERE [Id]=@Id AND [IsActive]=1 AND [CompanyId]=@CompanyId;
                     """;
                 upd.Parameters.Add(new SqlParameter("@Id", template.Id));
                 upd.Parameters.Add(new SqlParameter("@Name", template.Name));
                 upd.Parameters.Add(new SqlParameter("@Desc", (object?)template.Description ?? DBNull.Value));
                 upd.Parameters.Add(new SqlParameter("@Seq", template.IsSequentialDefault ? 1 : 0));
                 upd.Parameters.Add(new SqlParameter("@Upd", (object?)template.UpdatedById ?? DBNull.Value));
+                upd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
                 await upd.ExecuteNonQueryAsync(ct);
                 templateId = template.Id;
 
                 // Satırlar topluca yeniden yazılır (DELETE+INSERT) — küçük hacim, basit yaşam döngüsü.
+                // EXISTS: templateId baska sirkete aitse (yukaridaki UPDATE 0 satir etkiledi) satirlar da silinmez.
                 await using var del = conn.CreateCommand();
                 del.Transaction = tx;
-                del.CommandText = $"DELETE FROM {_tplLineTable} WHERE [TemplateId]=@Id;";
+                del.CommandText = $"""
+                    DELETE FROM {_tplLineTable} WHERE [TemplateId]=@Id
+                      AND EXISTS (SELECT 1 FROM {_tplTable} p WHERE p.[Id]=@Id AND p.[CompanyId]=@CompanyId);
+                    """;
                 del.Parameters.Add(new SqlParameter("@Id", templateId));
+                del.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
                 await del.ExecuteNonQueryAsync(ct);
             }
             else
@@ -531,14 +537,15 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
                 await using var ins = conn.CreateCommand();
                 ins.Transaction = tx;
                 ins.CommandText = $"""
-                    INSERT INTO {_tplTable} ([Name],[Description],[IsSequentialDefault],[CreatedById],[Created])
-                    VALUES (@Name,@Desc,@Seq,@Cre,SYSUTCDATETIME());
+                    INSERT INTO {_tplTable} ([Name],[Description],[IsSequentialDefault],[CreatedById],[Created],[CompanyId])
+                    VALUES (@Name,@Desc,@Seq,@Cre,SYSUTCDATETIME(),@CompanyId);
                     SELECT CAST(SCOPE_IDENTITY() AS INT);
                     """;
                 ins.Parameters.Add(new SqlParameter("@Name", template.Name));
                 ins.Parameters.Add(new SqlParameter("@Desc", (object?)template.Description ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@Seq", template.IsSequentialDefault ? 1 : 0));
                 ins.Parameters.Add(new SqlParameter("@Cre", (object?)template.CreatedById ?? DBNull.Value));
+                ins.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
                 templateId = Convert.ToInt32(await ins.ExecuteScalarAsync(ct));
             }
 
@@ -547,8 +554,9 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
                 await using var cmd = conn.CreateCommand();
                 cmd.Transaction = tx;
                 cmd.CommandText = $"""
-                    INSERT INTO {_tplLineTable} ([TemplateId],[Title],[Description],[OrderNo],[CreatedById],[Created])
-                    VALUES (@Tpl,@Title,@Desc,@Order,@Cre,SYSUTCDATETIME());
+                    INSERT INTO {_tplLineTable} ([TemplateId],[Title],[Description],[OrderNo],[CreatedById],[Created],[CompanyId])
+                    VALUES (@Tpl,@Title,@Desc,@Order,@Cre,SYSUTCDATETIME(),
+                        (SELECT p.[CompanyId] FROM {_tplTable} p WHERE p.[Id] = @Tpl));
                     """;
                 cmd.Parameters.Add(new SqlParameter("@Tpl", templateId));
                 cmd.Parameters.Add(new SqlParameter("@Title", line.Title));
@@ -571,14 +579,18 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
     public async Task SoftDeleteTemplateAsync(int templateId, int? updatedById, CancellationToken ct)
     {
         var sql = $"""
-            UPDATE {_tplTable} SET [IsActive]=0, [UpdatedById]=@Upd, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Id;
-            UPDATE {_tplLineTable} SET [IsActive]=0, [UpdatedById]=@Upd, [Updated]=SYSUTCDATETIME() WHERE [TemplateId]=@Id;
+            UPDATE {_tplTable} SET [IsActive]=0, [UpdatedById]=@Upd, [Updated]=SYSUTCDATETIME()
+              WHERE [Id]=@Id AND [CompanyId]=@CompanyId;
+            UPDATE {_tplLineTable} SET [IsActive]=0, [UpdatedById]=@Upd, [Updated]=SYSUTCDATETIME()
+              WHERE [TemplateId]=@Id
+                AND EXISTS (SELECT 1 FROM {_tplTable} p WHERE p.[Id]=@Id AND p.[CompanyId]=@CompanyId);
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@Id", templateId));
         cmd.Parameters.Add(new SqlParameter("@Upd", (object?)updatedById ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 }

@@ -11,6 +11,7 @@ public sealed class SqlAddressRepository : IAddressRepository
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _postalTable;   // PostalLocality
     private readonly string _addressTable;  // ContactAddress
+    private readonly string _contactTable;  // Contact — ContactAddress'in CompanyId'si yok, tenant kontrolü buradan yapılır
 
     public SqlAddressRepository(SqlServerConnectionFactory connectionFactory, CalibraDatabaseOptions options)
     {
@@ -18,6 +19,7 @@ public sealed class SqlAddressRepository : IAddressRepository
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         _postalTable  = $"[{schema}].[PostalLocality]";
         _addressTable = $"[{schema}].[ContactAddress]";
+        _contactTable = $"[{schema}].[Contact]";
     }
 
     // ════════════════════════════════════════════════════════════
@@ -177,6 +179,8 @@ public sealed class SqlAddressRepository : IAddressRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
+        // tenant-ok: ContactAddress'te CompanyId kolonu yok; izolasyon ContactId FK'sıyla Contact'tan
+        // miras alınır. a.ContactId çağıran serviste zaten şirket bazlı okunan bir Contact'a bağlıdır.
         cmd.CommandText = $"""
             INSERT INTO {_addressTable}
                 ([ContactId],[Name],[CountryCode],[CityName],[DistrictName],[NeighborhoodName],[PostalCode],[AddressLine],[IsDefault],[Created])
@@ -193,7 +197,7 @@ public sealed class SqlAddressRepository : IAddressRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = $"""
-            UPDATE {_addressTable}
+            UPDATE a
             SET [Name]             = @Name,
                 [CountryCode]      = @Cc,
                 [CityName]         = @City,
@@ -202,10 +206,13 @@ public sealed class SqlAddressRepository : IAddressRepository
                 [PostalCode]       = @Pk,
                 [AddressLine]      = @Addr,
                 [IsDefault]        = @Def
-            WHERE [Id] = @Id;
+            FROM {_addressTable} a
+            INNER JOIN {_contactTable} c ON a.[ContactId] = c.[Id]
+            WHERE a.[Id] = @Id AND c.[CompanyId] = @CompanyId;
             """;
         AddAddressParams(cmd, a);
         cmd.Parameters.Add(new SqlParameter("@Id", a.Id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -213,8 +220,13 @@ public sealed class SqlAddressRepository : IAddressRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_addressTable} WHERE [Id] = @Id;";
+        cmd.CommandText = $"""
+            DELETE a FROM {_addressTable} a
+            INNER JOIN {_contactTable} c ON a.[ContactId] = c.[Id]
+            WHERE a.[Id] = @Id AND c.[CompanyId] = @CompanyId;
+            """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -223,11 +235,19 @@ public sealed class SqlAddressRepository : IAddressRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = $"""
-            UPDATE {_addressTable} SET [IsDefault] = 0 WHERE [ContactId] = @Cid;
-            UPDATE {_addressTable} SET [IsDefault] = 1 WHERE [Id] = @Aid AND [ContactId] = @Cid;
+            UPDATE a SET [IsDefault] = 0
+            FROM {_addressTable} a
+            INNER JOIN {_contactTable} c ON a.[ContactId] = c.[Id]
+            WHERE a.[ContactId] = @Cid AND c.[CompanyId] = @CompanyId;
+
+            UPDATE a SET [IsDefault] = 1
+            FROM {_addressTable} a
+            INNER JOIN {_contactTable} c ON a.[ContactId] = c.[Id]
+            WHERE a.[Id] = @Aid AND a.[ContactId] = @Cid AND c.[CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Cid", contactId));
         cmd.Parameters.Add(new SqlParameter("@Aid", addressId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
