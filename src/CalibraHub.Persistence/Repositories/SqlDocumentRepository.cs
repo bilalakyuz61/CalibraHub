@@ -967,9 +967,10 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT TOP 1 [DocumentNumber] FROM {_quoteTable}
-            WHERE [DocumentNumber] LIKE @Prefix + '%'
+            WHERE [CompanyId] = @CompanyId AND [DocumentNumber] LIKE @Prefix + '%'
             ORDER BY [DocumentNumber] DESC;
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@Prefix", prefix));
         var last = await cmd.ExecuteScalarAsync(ct) as string;
         int nextSeq = 1;
@@ -995,11 +996,12 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT TOP 1 [Id] FROM {_quoteTable}
-            WHERE [SourceDocumentNo] = @SourceDocumentNo
+            WHERE [CompanyId] = @CompanyId AND [SourceDocumentNo] = @SourceDocumentNo
               AND [DocumentTypeId]   = @DocumentTypeId
               AND [IsActive] = 1
             ORDER BY [Id];
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@SourceDocumentNo", sourceDocumentNo.Trim()));
         cmd.Parameters.Add(new SqlParameter("@DocumentTypeId", documentTypeId));
 

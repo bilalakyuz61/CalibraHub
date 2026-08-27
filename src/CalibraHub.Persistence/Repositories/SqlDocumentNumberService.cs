@@ -235,8 +235,9 @@ public sealed class SqlDocumentNumberService : IDocumentNumberService
         cmd.Transaction = tx;
         cmd.CommandText = $"""
             SELECT COUNT(1) FROM {_docTable}
-            WHERE [DocumentNumber] = @DocNumber;
+            WHERE [CompanyId] = @CompanyId AND [DocumentNumber] = @DocNumber;
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@DocNumber", docNumber));
         var raw = await cmd.ExecuteScalarAsync(ct);
         return raw is not null && Convert.ToInt32(raw) > 0;
@@ -261,9 +262,10 @@ public sealed class SqlDocumentNumberService : IDocumentNumberService
         cmd.CommandText = $"""
             SELECT TOP 1 [DocumentNumber]
             FROM {_docTable}
-            WHERE [DocumentNumber] LIKE @Prefix + '%'
+            WHERE [CompanyId] = @CompanyId AND [DocumentNumber] LIKE @Prefix + '%'
             ORDER BY LEN([DocumentNumber]) DESC, [DocumentNumber] DESC;
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@Prefix", prefix));
         var raw = await cmd.ExecuteScalarAsync(ct);
         if (raw is null || raw is DBNull) return 0;

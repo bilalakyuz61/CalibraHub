@@ -23,6 +23,7 @@ public sealed partial class DocDesignerService : IDocDesignerService
     private readonly IDocLayoutRenderer _renderer;
     private readonly IMemoryCache _cache;
     private readonly ILogger<DocDesignerService> _logger;
+    private readonly ICurrentCompanyProvider _company;
 
     public DocDesignerService(
         IDocLayoutRepository repo,
@@ -30,8 +31,10 @@ public sealed partial class DocDesignerService : IDocDesignerService
         IReportQueryExecutor executor,
         IDocLayoutRenderer renderer,
         IMemoryCache cache,
-        ILogger<DocDesignerService> logger)
+        ILogger<DocDesignerService> logger,
+        ICurrentCompanyProvider company)
     {
+        _company = company;
         _repo = repo;
         _views = views;
         _executor = executor;
@@ -184,9 +187,11 @@ public sealed partial class DocDesignerService : IDocDesignerService
         {
             try
             {
+                // Onizleme ornegi olarak EN SON belge secilir. Sirket suzgeci olmadan
+                // baska sirketin belgesi secilip icerigi tasarim onizlemesine dusebilirdi.
                 var fallback = await _executor.ExecuteAsync(
-                    "SELECT TOP 1 [id] FROM [dbo].[Document] WHERE [IsActive] = 1 ORDER BY [id] DESC",
-                    Array.Empty<ReportSqlParameter>(), ct);
+                    "SELECT TOP 1 [id] FROM [dbo].[Document] WHERE [IsActive] = 1 AND [CompanyId] = @CompanyId ORDER BY [id] DESC",
+                    new[] { new ReportSqlParameter("@CompanyId", null, _company.GetCurrentCompanyId()) }, ct);
                 if (fallback.Rows.Count > 0 && fallback.Rows[0].Count > 0 && fallback.Rows[0][0] != null)
                     effectiveDocId = Convert.ToInt32(fallback.Rows[0][0]);
             }
