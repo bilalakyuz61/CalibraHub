@@ -871,6 +871,10 @@ END;";
             await EnsureReportEngineTablesAsync(connection, cancellationToken);
             await EnsureFulfillmentLineExtrasViewAsync(connection, cancellationToken);
             await EnsureViewMetaTableAsync(connection, cancellationToken);
+            // 2026-08-28: E-belge detay tablolari (kalem / vergi / tasima). IncomingDocument
+            // ana tablosu EnsureSchemaAndTablesAsync icinde kurulur; bu metot FK hedefinin
+            // hazir oldugu noktada calisir ve ana tablo yoksa kendini atlar.
+            await EnsureIncomingDocumentDetailTablesAsync(connection, cancellationToken);
             // 2026-07-17 — Sayfa-içi Yorum sistemi (PageComment ailesi). Bağımsız feature,
             // başka tabloya FK yok (yalnız aile-içi self-FK). View override machinery'sinden
             // ÖNCE, standalone feature tablolarıyla birlikte zincirin kuyruğunda.
@@ -1333,7 +1337,12 @@ END;";
         ("FK_ApprovalFlowStep_Company",                 "ApprovalFlowStep",           "CompanyId",              "Company"),
         ("FK_ApprovalFlowVariable_Company",             "ApprovalFlowVariable",       "CompanyId",              "Company"),
         ("FK_ApprovalInstance_Company",                 "ApprovalInstance",           "CompanyId",              "Company"),
-        ("FK_ApprovalInstance_Document",                "ApprovalInstance",           "DocumentId",             "Document"),
+        // FK_ApprovalInstance_Document BILINCLI olarak YOK: ApprovalInstance.DocumentId
+        // tek bir tabloyu isaret etmez — EntityKind'e gore Document / WorkOrder / Capa
+        // kaydini gosterebilir (bkz. EnsureApprovalFlowTablesAsync EntityKind blogu, o blok
+        // bu FK'yi acikca DUSURUR). Buraya eklenmesi iki migration'i birbirine dusuruyordu:
+        // bu liste kisiti KURUYOR, onay blogu DUSURUYOR; ayrica birinin kurdugunu digerinin
+        // dusurmesi 3728 ("is not a constraint") ile ACILISI COKERTTI.
         ("FK_ApprovalInstanceVariable_Company",         "ApprovalInstanceVariable",   "CompanyId",              "Company"),
         ("FK_ApprovalSqlQuery_Company",                 "ApprovalSqlQuery",           "CompanyId",              "Company"),
         ("FK_ApprovalStepRecord_Company",               "ApprovalStepRecord",         "CompanyId",              "Company"),
@@ -2247,6 +2256,180 @@ END;";
 
         if (repaired > 0)
             Console.WriteLine($"[DB INIT] {repaired}/{targets.Count} guvenilmez kisit dogrulandi (artik guvenilir).");
+    }
+
+    /// <summary>
+    /// E-BELGE DETAY TABLOLARI (2026-08-28) - dis CBT_EBELGE* bagimliliginin yerlisi.
+    ///
+    /// <para>Gelen e-belgeler bugune kadar dis sistemin tablolarindan (EYS veritabanindaki
+    /// TBLEFATMAS/KALEM/MASTAX/KALEMTAX ailesi ve onun CBT_EBELGE* gorunumleri) okunuyordu.
+    /// Ana kayit zaten yerli IncomingDocument tablosunda tutuluyor ve Kind ayirt edicisi uc
+    /// aileyi (e-fatura / e-irsaliye / e-arsiv) TEK tabloda topluyor. Eksik olan parca
+    /// detaydi: kalemler, vergi kirilimi ve e-irsaliye tasima bilgisi. Bu metot o ucunu ekler.</para>
+    ///
+    /// <para><b>Neden paralel bir ElectronicDocument ailesi kurulmadi:</b> IncomingDocument
+    /// zaten yerli, onay kuyruguna bagli ve deposu/ekranlari yazilmis durumda. Yanina ayni isi
+    /// yapan ikinci bir ana tablo koymak calisan bir varligi cogaltmak olurdu.</para>
+    ///
+    /// <para><b>Dis semadan bilincli SAPMALAR:</b>
+    /// (1) YEDEK kolonlari (C_YEDEK1, S_YEDEK2, F_YEDEK1...) ALINMADI - bunlar dis urunun
+    ///     ileride lazim olur diye biraktigi bos yedek alanlar; tasimak YAGNI ihlali olurdu.
+    /// (2) Ana tablodaki KDV1O/KDV1T ... KDV7O/KDV7T (yedi SABIT oran/tutar cifti) alinmadi;
+    ///     vergi kirilimi IncomingDocumentTax satirlarina NORMALIZE edildi. Yedi sabit sutun
+    ///     sekizinci vergi oraninda cuvallardi.
+    /// (3) Ana ve kalem vergisi TEK tabloda toplandi: dis semada *MASTAX ve *KALEMTAX
+    ///     kolonlari BIREBIR ayni (kalem olaninda ek olarak satir kimligi var).
+    ///     IncomingDocumentLineId NULL ise belge (ana) seviyesi vergisidir.</para>
+    ///
+    /// <para><b>VERI GOCU YOK</b> (kullanici karari): tablolar BOS baslar, eski CBT_EBELGE* /
+    /// TBLE* icerigi tasinmaz ve o tablolar SILINMEZ - icerigi musteri verisidir
+    /// (PLT_SISTEM_LOG kararinda izlenen ayni desen).</para>
+    ///
+    /// <para>Kiraci kurali: her tabloda CompanyId vardir ve deger yazarken OTURUMDAN DEGIL
+    /// EBEVEYNDEN turetilir; FK Company(Id) uzerine baglidir.</para>
+    /// </summary>
+    private async Task EnsureIncomingDocumentDetailTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+
+        // Ana tablo yoksa detaylari kurmanin anlami yok (FK hedefi eksik olur).
+        await using (var probe = connection.CreateCommand())
+        {
+            probe.CommandText = $"SELECT CASE WHEN OBJECT_ID(N'[{s}].[IncomingDocument]', N'U') IS NULL THEN 0 ELSE 1 END;";
+            if (Convert.ToInt32(await probe.ExecuteScalarAsync(cancellationToken) ?? 0) == 0)
+            {
+                Console.WriteLine("[DB INIT] IncomingDocument yok, e-belge detay tablolari atlandi.");
+                return;
+            }
+        }
+
+        try
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = $@"
+IF OBJECT_ID(N'[{s}].[IncomingDocumentLine]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [{s}].[IncomingDocumentLine] (
+        [Id]                  INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_IncomingDocumentLine] PRIMARY KEY,
+        [IncomingDocumentId]  INT            NOT NULL,
+        [CompanyId]           INT            NULL,
+        [LineNumber]          INT            NOT NULL,
+        [ItemCode]            NVARCHAR(50)   NULL,
+        [ItemName]            NVARCHAR(200)  NULL,
+        [BuyerItemCode]       NVARCHAR(50)   NULL,
+        [ManufacturerCode]    NVARCHAR(50)   NULL,
+        [Quantity]            DECIMAL(18,4)  NOT NULL CONSTRAINT [DF_IncomingDocumentLine_Quantity] DEFAULT(0),
+        [UnitCode]            NVARCHAR(20)   NULL,
+        [UnitPrice]           DECIMAL(18,4)  NOT NULL CONSTRAINT [DF_IncomingDocumentLine_UnitPrice] DEFAULT(0),
+        [CurrencyCode]        NVARCHAR(10)   NULL,
+        [CurrencyUnitPrice]   DECIMAL(18,4)  NULL,
+        [DiscountAmount]      DECIMAL(18,4)  NULL,
+        [DiscountReason]      NVARCHAR(200)  NULL,
+        [VatRate]             DECIMAL(5,2)   NULL,
+        [LineAmount]          DECIMAL(18,4)  NULL,
+        [Description]         NVARCHAR(1000) NULL,
+        [DespatchNumber]      NVARCHAR(50)   NULL,
+        [DespatchDate]        DATE           NULL,
+        [OrderNumber]         NVARCHAR(50)   NULL,
+        [OrderDate]           DATE           NULL,
+        [IsActive]            BIT            NOT NULL CONSTRAINT [DF_IncomingDocumentLine_IsActive] DEFAULT(1),
+        [CreatedBy]           NVARCHAR(120)  NULL,
+        [Created]             DATETIME       NOT NULL CONSTRAINT [DF_IncomingDocumentLine_Created] DEFAULT SYSUTCDATETIME(),
+        [UpdatedBy]           NVARCHAR(120)  NULL,
+        [Updated]             DATETIME       NULL,
+        CONSTRAINT [FK_IncomingDocumentLine_IncomingDocument]
+            FOREIGN KEY ([IncomingDocumentId]) REFERENCES [{s}].[IncomingDocument]([Id]),
+        CONSTRAINT [FK_IncomingDocumentLine_Company]
+            FOREIGN KEY ([CompanyId]) REFERENCES [{s}].[Company]([id])
+    );
+    CREATE INDEX [IX_IncomingDocumentLine_IncomingDocument]
+        ON [{s}].[IncomingDocumentLine]([IncomingDocumentId], [LineNumber]);
+END;
+
+IF OBJECT_ID(N'[{s}].[IncomingDocumentTax]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [{s}].[IncomingDocumentTax] (
+        [Id]                       INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_IncomingDocumentTax] PRIMARY KEY,
+        [IncomingDocumentId]       INT            NOT NULL,
+        [IncomingDocumentLineId]   INT            NULL,
+        [CompanyId]                INT            NULL,
+        [TaxTypeCode]              NVARCHAR(20)   NULL,
+        [Name]                     NVARCHAR(200)  NULL,
+        [TaxableAmount]            DECIMAL(18,4)  NULL,
+        [TaxAmount]                DECIMAL(18,4)  NULL,
+        [TaxPercent]               DECIMAL(5,2)   NULL,
+        [CalculationSequence]      INT            NULL,
+        [CurrencyTaxAmount]        DECIMAL(18,4)  NULL,
+        [BaseUnitMeasure]          DECIMAL(18,4)  NULL,
+        [PerUnitAmount]            DECIMAL(18,4)  NULL,
+        [ExemptionReason]          NVARCHAR(500)  NULL,
+        [ExemptionReasonCode]      INT            NULL,
+        [IsActive]                 BIT            NOT NULL CONSTRAINT [DF_IncomingDocumentTax_IsActive] DEFAULT(1),
+        [CreatedBy]                NVARCHAR(120)  NULL,
+        [Created]                  DATETIME       NOT NULL CONSTRAINT [DF_IncomingDocumentTax_Created] DEFAULT SYSUTCDATETIME(),
+        [UpdatedBy]                NVARCHAR(120)  NULL,
+        [Updated]                  DATETIME       NULL,
+        CONSTRAINT [FK_IncomingDocumentTax_IncomingDocument]
+            FOREIGN KEY ([IncomingDocumentId]) REFERENCES [{s}].[IncomingDocument]([Id]),
+        CONSTRAINT [FK_IncomingDocumentTax_IncomingDocumentLine]
+            FOREIGN KEY ([IncomingDocumentLineId]) REFERENCES [{s}].[IncomingDocumentLine]([Id]),
+        CONSTRAINT [FK_IncomingDocumentTax_Company]
+            FOREIGN KEY ([CompanyId]) REFERENCES [{s}].[Company]([id])
+    );
+    CREATE INDEX [IX_IncomingDocumentTax_IncomingDocument]
+        ON [{s}].[IncomingDocumentTax]([IncomingDocumentId]);
+    CREATE INDEX [IX_IncomingDocumentTax_Line]
+        ON [{s}].[IncomingDocumentTax]([IncomingDocumentLineId]) WHERE [IncomingDocumentLineId] IS NOT NULL;
+END;
+
+IF OBJECT_ID(N'[{s}].[IncomingDocumentShipment]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [{s}].[IncomingDocumentShipment] (
+        [Id]                   INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_IncomingDocumentShipment] PRIMARY KEY,
+        [IncomingDocumentId]   INT            NOT NULL,
+        [CompanyId]            INT            NULL,
+        [DespatchDate]         DATETIME       NULL,
+        [LicensePlate]         NVARCHAR(20)   NULL,
+        [TrailerPlate1]        NVARCHAR(20)   NULL,
+        [TrailerPlate2]        NVARCHAR(20)   NULL,
+        [TrailerPlate3]        NVARCHAR(20)   NULL,
+        [CarrierTaxNumber]     NVARCHAR(20)   NULL,
+        [CarrierName]          NVARCHAR(200)  NULL,
+        [CarrierCity]          NVARCHAR(100)  NULL,
+        [CarrierDistrict]      NVARCHAR(100)  NULL,
+        [CarrierCountry]       NVARCHAR(50)   NULL,
+        [CarrierPostalCode]    NVARCHAR(20)   NULL,
+        [Driver1FirstName]     NVARCHAR(100)  NULL,
+        [Driver1LastName]      NVARCHAR(100)  NULL,
+        [Driver1NationalId]    NVARCHAR(20)   NULL,
+        [Driver2FirstName]     NVARCHAR(100)  NULL,
+        [Driver2LastName]      NVARCHAR(100)  NULL,
+        [Driver2NationalId]    NVARCHAR(20)   NULL,
+        [Driver3FirstName]     NVARCHAR(100)  NULL,
+        [Driver3LastName]      NVARCHAR(100)  NULL,
+        [Driver3NationalId]    NVARCHAR(20)   NULL,
+        [IsActive]             BIT            NOT NULL CONSTRAINT [DF_IncomingDocumentShipment_IsActive] DEFAULT(1),
+        [CreatedBy]            NVARCHAR(120)  NULL,
+        [Created]              DATETIME       NOT NULL CONSTRAINT [DF_IncomingDocumentShipment_Created] DEFAULT SYSUTCDATETIME(),
+        [UpdatedBy]            NVARCHAR(120)  NULL,
+        [Updated]              DATETIME       NULL,
+        CONSTRAINT [FK_IncomingDocumentShipment_IncomingDocument]
+            FOREIGN KEY ([IncomingDocumentId]) REFERENCES [{s}].[IncomingDocument]([Id]),
+        CONSTRAINT [FK_IncomingDocumentShipment_Company]
+            FOREIGN KEY ([CompanyId]) REFERENCES [{s}].[Company]([id])
+    );
+    CREATE UNIQUE INDEX [UX_IncomingDocumentShipment_IncomingDocument]
+        ON [{s}].[IncomingDocumentShipment]([IncomingDocumentId]);
+END;
+";
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+            Console.WriteLine("[DB INIT] E-belge detay tablolari hazir (Line / Tax / Shipment).");
+        }
+        catch (Exception ex)
+        {
+            // Tek feature acilisi COKERTMEZ; sebep loglanir (sessiz atlama YOK).
+            Console.Error.WriteLine($"[DB INIT WARN] E-belge detay tablolari kurulamadi: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -19715,9 +19898,22 @@ END;";
                 ALTER TABLE [{s}].[ApprovalInstance]
                     DROP CONSTRAINT [FK_ApprovalInstance_Document];
             """;
-        await using var ekCmd = connection.CreateCommand();
-        ekCmd.CommandText = entityKindSql;
-        await ekCmd.ExecuteNonQueryAsync(cancellationToken);
+        // Bu blok ACILISI COKERTMEMELI. Kisit baska bir surec/migration tarafindan araya
+        // girilip dusurulmus olabilir (yaris) ya da adi baska bir nesneye ait olabilir; ikisinde de
+        // dogru davranis loglayip devam etmektir — dosyadaki diger DB INIT bloklariyla ayni desen.
+        // 2026-08-28: burada yakalanmayan bir SqlException 3728 uygulamayi hic ayaga kaldirmiyordu.
+        try
+        {
+            await using var ekCmd = connection.CreateCommand();
+            ekCmd.CommandText = entityKindSql;
+            await ekCmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (SqlException ex)
+        {
+            Console.Error.WriteLine(
+                $"[DB INIT WARN] [{connection.Database}] ApprovalInstance EntityKind/FK adimi atlandi " +
+                $"(SqlException {ex.Number}): {ex.Message}");
+        }
 
         // ApprovalFlowRevision — akış revizyonu snapshot tablosu + ApprovalInstance.RevisionId
         var revisionSql = $"""
