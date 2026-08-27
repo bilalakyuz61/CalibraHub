@@ -413,6 +413,80 @@ export default function SmartBoard(props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery])
 
+  /* ── Filtre + sunucu sayfalama uyusmazligi (2026-08-28) ─────────────────
+     SORUN: Filtreler ISTEMCI tarafinda, sunucu sayfalamasi ise SUNUCU tarafinda
+     calisiyor. Yani filtre yalnizca O ANDA YUKLENMIS satirlarda arama yapiyordu:
+     39.803 malzemenin ilk 50'si yuklenmisken "Barkod 8 ile baslar" filtresi tek
+     sonuc gosteriyor, kullanici "Daha Fazla Yukle"ye bastikca yeni eslesmeler
+     "sonradan ortaya cikiyordu". Kullanici acisindan bu, filtrenin YANLIS sonuc
+     vermesi demek.
+
+     COZUM: Filtre aktifken kalan sayfalar arka planda TARANIR ve yalnizca
+     ESLESEN satirlar bellekte tutulur. Neden sadece eslesenler: tablo satirlari
+     sanallastirilmiyor (virtualization yok); 39 bin satiri bellekte tutup
+     render etmek tarayiciyi kilitlerdi. Filtre degisince/temizlenince liste
+     bastan (sayfa 1) yeniden yuklenir.
+
+     Tarama sayfa 1'den ve SABIT SCAN_BATCH ile yapilir: sayfa/offset hesabi
+     sunucuda (page-1)*pageSize oldugu icin tarama ortasinda batch boyutu
+     degistirmek satir atlamaya/tekrarina yol acardi. */
+  var SCAN_BATCH = 200
+  var [scan, setScan] = useState({ running: false, scanned: 0, done: false, stopped: false })
+  var scanTokenRef = useRef(0)
+  var filterSignature = JSON.stringify(filters || [])
+
+  // Filtre (veya arama) degisti → onceki tarama gecersiz.
+  useEffect(function () {
+    scanTokenRef.current += 1
+    setScan({ running: false, scanned: 0, done: false, stopped: false })
+  }, [filterSignature, searchQuery])
+
+  var runFilterScan = useCallback(function () {
+    if (!apiUrl) return
+    var token = ++scanTokenRef.current
+    setScan({ running: true, scanned: 0, done: false, stopped: false })
+
+    var matches = []
+    var page = 1
+    var total = 0
+
+    function step() {
+      if (token !== scanTokenRef.current) return   // filtre degisti / iptal
+      var url = apiUrl + '?page=' + page + '&pageSize=' + SCAN_BATCH
+      if (searchQuery) url += '&search=' + encodeURIComponent(searchQuery)
+      fetch(url, { credentials: 'same-origin' })
+        .then(function (r) { return r.json() })
+        .then(function (data) {
+          if (token !== scanTokenRef.current) return
+          if (data.error) throw new Error(data.error)
+          var rows = Array.isArray(data.entities) ? data.entities : []
+          total = data.totalCount || total
+          rows.forEach(function (e) { if (entityMatchesFilters(e, filters)) matches.push(e) })
+
+          var scanned = (page - 1) * SCAN_BATCH + rows.length
+          setEntities(matches.slice())
+          setTotalCount(total)
+          setScan({ running: scanned < total && rows.length > 0, scanned: scanned, done: false, stopped: false })
+
+          if (rows.length > 0 && scanned < total) {
+            page += 1
+            step()
+          } else {
+            setHasMore(false)
+            setScan({ running: false, scanned: scanned, done: true, stopped: false })
+          }
+        })
+        .catch(function (err) {
+          console.error('[SmartBoard] filtre taramasi hatasi:', err)
+          if (token === scanTokenRef.current) {
+            // Sessizce bitirme YOK: tarama yarim kaldi bilgisi kullaniciya gosterilir.
+            setScan({ running: false, scanned: (page - 1) * SCAN_BATCH, done: false, stopped: true })
+          }
+        })
+    }
+    step()
+  }, [apiUrl, searchQuery, filters])
+
   // ── Load more ──
   var handleLoadMore = useCallback(function () {
     if (!hasMore || loading) return
@@ -425,6 +499,22 @@ export default function SmartBoard(props) {
   // gorunur, sonraki sayfayi getir, yine filtrelendi, ..." flickering).
   // Filter aktifken kullanici "Daha Fazla Yukle" butonuna basarak manuel ilerler.
   var hasActiveFilter = Array.isArray(filters) && filters.length > 0
+
+  /* Filtre aktif ve sunucuda daha fazla kayit varsa TARAMAYI baslat.
+     Filtre kalkinca liste kirpilmis (yalnizca eslesenler) durumda oldugu icin
+     sayfa 1'den yeniden yuklenir — aksi halde kullanici filtreyi temizledigi
+     halde eski eslesme kumesini gormeye devam ederdi. */
+  var prevHadFilterRef = useRef(hasActiveFilter)
+  useEffect(function () {
+    if (!isPaginated) return
+    if (hasActiveFilter) {
+      if (!scan.running && !scan.done && !scan.stopped && totalCount > entities.length) runFilterScan()
+    } else if (prevHadFilterRef.current) {
+      fetchPage(1, searchQuery, false)
+    }
+    prevHadFilterRef.current = hasActiveFilter
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasActiveFilter, filterSignature, isPaginated])
 
   /* ── Sonsuz kaydirma (2026-08-22 yeniden yazildi) ────────────────────────
      ONCEKI TASARIM: listenin altina bir "sentinel" <div> konur, IntersectionObserver
@@ -1101,22 +1191,45 @@ export default function SmartBoard(props) {
      orada TIKLANABILIR bir "Daha Fazla Yukle" cipi gosterilir — o da katmanda,
      yine yer kaplamadan. */
   var kalan = Math.max(0, totalCount - entities.length)
-  var paginationOverlay = (isPaginated && (loading || (hasActiveFilter && hasMore))) ? (
+
+  /* Filtre taramasi seridi — kullanici "kac kayit tarandi" bilgisini GORUR ve
+     istedigi an durdurabilir. Sessizce tarama yapip kullaniciyi bekletmek,
+     "liste dondu mu kaldi mi" belirsizligi yaratirdi. */
+  var scanOverlay = (isPaginated && hasActiveFilter && (scan.running || scan.stopped)) ? (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center pb-2">
-      {loading ? (
-        <span className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium text-slate-500 bg-white/70 backdrop-blur-sm dark:text-white/55 dark:bg-[#0f172a]/70">
-          <Loader2 size={13} className="animate-spin" />
-          {kalan > 0 ? ('Yukleniyor… (' + kalan.toLocaleString('tr-TR') + ' kalan)') : 'Yukleniyor…'}
-        </span>
-      ) : (
-        <button
-          onClick={handleLoadMore}
-          className="pointer-events-auto flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[11px] font-semibold text-slate-600 bg-white/80 backdrop-blur-sm border border-slate-200 hover:bg-white dark:text-white/70 dark:bg-[#0f172a]/80 dark:border-white/10"
-        >
-          <ChevronDown size={13} />
-          <span>Daha Fazla Yukle ({kalan.toLocaleString('tr-TR')} kalan)</span>
-        </button>
-      )}
+      <span className="pointer-events-auto flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[11px] font-medium text-slate-600 bg-white/85 backdrop-blur-sm border border-slate-200 dark:text-white/70 dark:bg-[#0f172a]/85 dark:border-white/10">
+        {scan.running ? <Loader2 size={13} className="animate-spin" /> : null}
+        {scan.running
+          ? ('Filtre taraniyor… ' + scan.scanned.toLocaleString('tr-TR') + ' / ' + totalCount.toLocaleString('tr-TR'))
+          : ('Tarama durduruldu — ' + scan.scanned.toLocaleString('tr-TR') + ' kayit tarandi, sonrasi kontrol edilmedi')}
+        {scan.running ? (
+          <button
+            onClick={function () {
+              scanTokenRef.current += 1
+              setScan(function (p) { return { running: false, scanned: p.scanned, done: false, stopped: true } })
+            }}
+            className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:text-white/50 dark:hover:text-white dark:hover:bg-white/10"
+          >Durdur</button>
+        ) : (
+          <button
+            onClick={runFilterScan}
+            className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-semibold text-indigo-600 hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-400/10"
+          >Devam et</button>
+        )}
+      </span>
+    </div>
+  ) : null
+
+  /* Filtre YOKKEN yukleme gostergesi. Filtre varken "Daha Fazla Yukle" butonu
+     kaldirildi (2026-08-28): filtre artik tum kayitlari tariyor, dolayisiyla
+     elle sayfa ilerletmek gereksiz — ve daha onemlisi yaniltici, cunku butona
+     basmadan filtre sonucunun eksik oldugu anlasilmiyordu. */
+  var paginationOverlay = (isPaginated && !hasActiveFilter && loading) ? (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center pb-2">
+      <span className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium text-slate-500 bg-white/70 backdrop-blur-sm dark:text-white/55 dark:bg-[#0f172a]/70">
+        <Loader2 size={13} className="animate-spin" />
+        {kalan > 0 ? ('Yukleniyor… (' + kalan.toLocaleString('tr-TR') + ' kalan)') : 'Yukleniyor…'}
+      </span>
     </div>
   ) : null
 
@@ -1468,6 +1581,7 @@ export default function SmartBoard(props) {
           </div>
         )}
         {paginationOverlay}
+        {scanOverlay}
       </div>
 
       {/* ── Widget Config Panel (kart modu) ─── */}

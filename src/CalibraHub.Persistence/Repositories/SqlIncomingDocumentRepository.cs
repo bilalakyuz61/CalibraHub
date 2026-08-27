@@ -1,4 +1,5 @@
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Services.EDocument;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Persistence.Database;
@@ -381,14 +382,18 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
     {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
+        // [Id] INSERT'e YAZILMAZ: kolon INT IDENTITY. Eskiden acikca yaziliyordu ve SQL Server
+        // bunu "Cannot insert explicit value for identity column" ile REDDEDERDI — yerli ekleme
+        // yolu bu haliyle hic calisamazdi (tablo bos oldugu icin fark edilmemisti).
+        // SCOPE_IDENTITY() ayrica cocuk satirlar (kalem/vergi/tasima) icin de gereklidir.
         command.CommandText = $"""
             INSERT INTO {_tableName}
-                ([Id], [IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [SenderName], [RecipientTaxNumber], [PayloadRaw], [ApprovalStatus], [ImportedAt], [CompanyId])
+                ([IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [SenderName], [RecipientTaxNumber], [PayloadRaw], [ApprovalStatus], [ImportedAt], [CompanyId])
             VALUES
-                (@Id, @IntegratorSettingsId, @EnvelopeId, @DocumentNumber, @Kind, @IssueDate, @SenderTaxNumber, @SenderName, @RecipientTaxNumber, @PayloadRaw, @ApprovalStatus, @ImportedAt, @CompanyId);
+                (@IntegratorSettingsId, @EnvelopeId, @DocumentNumber, @Kind, @IssueDate, @SenderTaxNumber, @SenderName, @RecipientTaxNumber, @PayloadRaw, @ApprovalStatus, @ImportedAt, @CompanyId);
+            SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
 
-        command.Parameters.Add(CreateParameter("@Id", document.Id));
         command.Parameters.Add(CreateParameter("@IntegratorSettingsId", document.IntegratorSettingsId));
         command.Parameters.Add(CreateParameter("@EnvelopeId", document.EnvelopeId));
         command.Parameters.Add(CreateParameter("@DocumentNumber", document.DocumentNumber));
@@ -402,7 +407,193 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         command.Parameters.Add(CreateParameter("@ImportedAt", document.ImportedAt));
         command.Parameters.Add(CreateParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        var newId = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
+        await InsertIncomingDocumentDetailsAsync(connection, transaction, newId, document.PayloadRaw, cancellationToken);
+    }
+
+
+    /// <summary>
+    /// Ice aktarilan e-belgenin kalem / vergi / tasima satirlarini YERLI tablolara yazar.
+    ///
+    /// <para>Kalemler bugune kadar hicbir tablodan okunmuyordu: ekran her istekte PayloadRaw
+    /// icindeki UBL XML'ini bastan ayristiriyordu. Ayristirma artik ice aktarimda BIR KEZ yapilir,
+    /// sonuc sorgulanabilir/raporlanabilir satirlara donusur.</para>
+    ///
+    /// <para><b>Ice aktarimi asla cokertmez:</b> payload bozuk/eksikse ayristirici null doner ve
+    /// bu metot sessizce cikar — ana kayit (PayloadRaw dahil) yine yazilir, yani e-belgenin
+    /// kendisi hicbir kosulda kaybolmaz. Yazma hatasi da yakalanir ve LOGLANIR (sessiz yutma yok);
+    /// detay satiri yazilamadi diye belgenin tamamini reddetmek daha buyuk zarar olurdu.</para>
+    ///
+    /// <para>CompanyId OTURUMDAN DEGIL EBEVEYNDEN turetilir (CLAUDE.md cocuk kurali) — cocuk ile
+    /// ebeveyninin sirketi dogdugu anda ayrisamaz.</para>
+    /// </summary>
+    private async Task InsertIncomingDocumentDetailsAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        int incomingDocumentId,
+        string? payloadRaw,
+        CancellationToken cancellationToken)
+    {
+        if (incomingDocumentId <= 0) return;
+
+        var details = EDocumentPayloadParser.Parse(payloadRaw);
+        if (details is null) return;
+
+        try
+        {
+            var lineTable = $"[{_schema}].[IncomingDocumentLine]";
+            var taxTable = $"[{_schema}].[IncomingDocumentTax]";
+            var shipTable = $"[{_schema}].[IncomingDocumentShipment]";
+
+            // Detay tablolari eski kurulumlarda henuz olmayabilir -> varsa yaz, yoksa atla.
+            if (!await TableExistsAsync(connection, "IncomingDocumentLine", cancellationToken)) return;
+
+            const string parentCompany =
+                "(SELECT p.[CompanyId] FROM {0} p WHERE p.[Id] = @DocId)";
+            var companyExpr = string.Format(parentCompany, _tableName);
+
+            foreach (var line in details.Lines)
+            {
+                int lineId;
+                await using (var cmd = connection.CreateCommand())
+                {
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = $@"
+                        INSERT INTO {lineTable}
+                            ([IncomingDocumentId],[CompanyId],[LineNumber],[ItemCode],[ItemName],[BuyerItemCode],
+                             [ManufacturerCode],[Quantity],[UnitCode],[UnitPrice],[CurrencyCode],[DiscountAmount],
+                             [VatRate],[LineAmount],[Description])
+                        VALUES
+                            (@DocId, {companyExpr}, @LineNumber, @ItemCode, @ItemName, @BuyerItemCode,
+                             @ManufacturerCode, @Quantity, @UnitCode, @UnitPrice, @CurrencyCode, @DiscountAmount,
+                             @VatRate, @LineAmount, @Description);
+                        SELECT CAST(SCOPE_IDENTITY() AS INT);";
+                    cmd.Parameters.Add(CreateParameter("@DocId", incomingDocumentId));
+                    cmd.Parameters.Add(CreateParameter("@LineNumber", line.LineNumber));
+                    cmd.Parameters.Add(CreateParameter("@ItemCode", Trunc(line.ItemCode, 50)));
+                    cmd.Parameters.Add(CreateParameter("@ItemName", Trunc(line.ItemName, 200)));
+                    cmd.Parameters.Add(CreateParameter("@BuyerItemCode", Trunc(line.BuyerItemCode, 50)));
+                    cmd.Parameters.Add(CreateParameter("@ManufacturerCode", Trunc(line.ManufacturerCode, 50)));
+                    cmd.Parameters.Add(CreateParameter("@Quantity", line.Quantity));
+                    cmd.Parameters.Add(CreateParameter("@UnitCode", Trunc(line.UnitCode, 20)));
+                    cmd.Parameters.Add(CreateParameter("@UnitPrice", line.UnitPrice));
+                    cmd.Parameters.Add(CreateParameter("@CurrencyCode", Trunc(line.CurrencyCode, 10)));
+                    cmd.Parameters.Add(CreateParameter("@DiscountAmount", (object?)line.DiscountAmount ?? DBNull.Value));
+                    cmd.Parameters.Add(CreateParameter("@VatRate", (object?)line.VatRate ?? DBNull.Value));
+                    cmd.Parameters.Add(CreateParameter("@LineAmount", (object?)line.LineAmount ?? DBNull.Value));
+                    cmd.Parameters.Add(CreateParameter("@Description", Trunc(line.Description, 1000)));
+                    lineId = Convert.ToInt32(await cmd.ExecuteScalarAsync(cancellationToken));
+                }
+
+                foreach (var tax in line.Taxes)
+                    await InsertTaxAsync(connection, transaction, taxTable, companyExpr,
+                                         incomingDocumentId, lineId, tax, cancellationToken);
+            }
+
+            // Belge (ana) seviyesi vergiler: kalem baglantisi YOK -> IncomingDocumentLineId NULL.
+            foreach (var tax in details.DocumentTaxes)
+                await InsertTaxAsync(connection, transaction, taxTable, companyExpr,
+                                     incomingDocumentId, null, tax, cancellationToken);
+
+            if (details.Shipment is { } ship
+                && await TableExistsAsync(connection, "IncomingDocumentShipment", cancellationToken))
+            {
+                await using var cmd = connection.CreateCommand();
+                cmd.Transaction = transaction;
+                cmd.CommandText = $@"
+                    INSERT INTO {shipTable}
+                        ([IncomingDocumentId],[CompanyId],[DespatchDate],[LicensePlate],
+                         [TrailerPlate1],[TrailerPlate2],[TrailerPlate3],
+                         [CarrierTaxNumber],[CarrierName],[CarrierCity],[CarrierDistrict],
+                         [CarrierCountry],[CarrierPostalCode],
+                         [Driver1FirstName],[Driver1LastName],[Driver1NationalId],
+                         [Driver2FirstName],[Driver2LastName],[Driver2NationalId],
+                         [Driver3FirstName],[Driver3LastName],[Driver3NationalId])
+                    VALUES
+                        (@DocId, {companyExpr}, @DespatchDate, @LicensePlate,
+                         @Trailer1, @Trailer2, @Trailer3,
+                         @CarrierVkn, @CarrierName, @CarrierCity, @CarrierDistrict,
+                         @CarrierCountry, @CarrierPostal,
+                         @D1First, @D1Last, @D1Nid,
+                         @D2First, @D2Last, @D2Nid,
+                         @D3First, @D3Last, @D3Nid);";
+                cmd.Parameters.Add(CreateParameter("@DocId", incomingDocumentId));
+                cmd.Parameters.Add(CreateParameter("@DespatchDate", (object?)ship.DespatchDate ?? DBNull.Value));
+                cmd.Parameters.Add(CreateParameter("@LicensePlate", Trunc(ship.LicensePlate, 20)));
+                cmd.Parameters.Add(CreateParameter("@Trailer1", Trunc(ship.TrailerPlate1, 20)));
+                cmd.Parameters.Add(CreateParameter("@Trailer2", Trunc(ship.TrailerPlate2, 20)));
+                cmd.Parameters.Add(CreateParameter("@Trailer3", Trunc(ship.TrailerPlate3, 20)));
+                cmd.Parameters.Add(CreateParameter("@CarrierVkn", Trunc(ship.CarrierTaxNumber, 20)));
+                cmd.Parameters.Add(CreateParameter("@CarrierName", Trunc(ship.CarrierName, 200)));
+                cmd.Parameters.Add(CreateParameter("@CarrierCity", Trunc(ship.CarrierCity, 100)));
+                cmd.Parameters.Add(CreateParameter("@CarrierDistrict", Trunc(ship.CarrierDistrict, 100)));
+                cmd.Parameters.Add(CreateParameter("@CarrierCountry", Trunc(ship.CarrierCountry, 50)));
+                cmd.Parameters.Add(CreateParameter("@CarrierPostal", Trunc(ship.CarrierPostalCode, 20)));
+                cmd.Parameters.Add(CreateParameter("@D1First", Trunc(ship.Driver1FirstName, 100)));
+                cmd.Parameters.Add(CreateParameter("@D1Last", Trunc(ship.Driver1LastName, 100)));
+                cmd.Parameters.Add(CreateParameter("@D1Nid", Trunc(ship.Driver1NationalId, 20)));
+                cmd.Parameters.Add(CreateParameter("@D2First", Trunc(ship.Driver2FirstName, 100)));
+                cmd.Parameters.Add(CreateParameter("@D2Last", Trunc(ship.Driver2LastName, 100)));
+                cmd.Parameters.Add(CreateParameter("@D2Nid", Trunc(ship.Driver2NationalId, 20)));
+                cmd.Parameters.Add(CreateParameter("@D3First", Trunc(ship.Driver3FirstName, 100)));
+                cmd.Parameters.Add(CreateParameter("@D3Last", Trunc(ship.Driver3LastName, 100)));
+                cmd.Parameters.Add(CreateParameter("@D3Nid", Trunc(ship.Driver3NationalId, 20)));
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Detay yazilamadi diye belgenin TAMAMINI reddetmek daha buyuk zarar olurdu:
+            // PayloadRaw ana kayitta duruyor ve ekran onu ayristirmaya devam edebiliyor.
+            Console.Error.WriteLine(
+                $"[EBelge] Detay satirlari yazilamadi (IncomingDocumentId={incomingDocumentId}): {ex.Message}");
+        }
+    }
+
+    private async Task InsertTaxAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        string taxTable,
+        string companyExpr,
+        int incomingDocumentId,
+        int? lineId,
+        EDocumentTaxData tax,
+        CancellationToken cancellationToken)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.Transaction = transaction;
+        cmd.CommandText = $@"
+            INSERT INTO {taxTable}
+                ([IncomingDocumentId],[IncomingDocumentLineId],[CompanyId],[TaxTypeCode],[Name],
+                 [TaxableAmount],[TaxAmount],[TaxPercent],[CurrencyTaxAmount],
+                 [ExemptionReason],[ExemptionReasonCode])
+            VALUES
+                (@DocId, @LineId, {companyExpr}, @TaxTypeCode, @Name,
+                 @TaxableAmount, @TaxAmount, @TaxPercent, @CurrencyTaxAmount,
+                 @ExemptionReason, @ExemptionReasonCode);";
+        cmd.Parameters.Add(CreateParameter("@DocId", incomingDocumentId));
+        cmd.Parameters.Add(CreateParameter("@LineId", (object?)lineId ?? DBNull.Value));
+        cmd.Parameters.Add(CreateParameter("@TaxTypeCode", Trunc(tax.TaxTypeCode, 20)));
+        cmd.Parameters.Add(CreateParameter("@Name", Trunc(tax.Name, 200)));
+        cmd.Parameters.Add(CreateParameter("@TaxableAmount", (object?)tax.TaxableAmount ?? DBNull.Value));
+        cmd.Parameters.Add(CreateParameter("@TaxAmount", (object?)tax.TaxAmount ?? DBNull.Value));
+        cmd.Parameters.Add(CreateParameter("@TaxPercent", (object?)tax.TaxPercent ?? DBNull.Value));
+        cmd.Parameters.Add(CreateParameter("@CurrencyTaxAmount", (object?)tax.CurrencyTaxAmount ?? DBNull.Value));
+        cmd.Parameters.Add(CreateParameter("@ExemptionReason", Trunc(tax.ExemptionReason, 500)));
+        cmd.Parameters.Add(CreateParameter("@ExemptionReasonCode", (object?)tax.ExemptionReasonCode ?? DBNull.Value));
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Kolon sinirina kirpar. Gerekli: e-belge dis kaynaklidir, gonderen taraf alan uzunlugumuzu
+    /// bilmez; kirpmadan yazmak "String or binary data would be truncated" ile TUM ice aktarimi
+    /// dusururdu. Bos/null -> DBNull.
+    /// </summary>
+    private static object Trunc(string? value, int max)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return DBNull.Value;
+        var v = value.Trim();
+        return v.Length <= max ? v : v[..max];
     }
 
     private async Task InsertLegacyEBelgeRowsAsync(
