@@ -15,3 +15,19 @@ trim_trailing_whitespace = false
 [*.{cs,cshtml,jsx,js,ts,tsx,css,json,kt,kts,razor}]
 charset = utf-8
 indent_style = space
+
+# ── Yutulan exception = DERLEME HATASI (2026-08-27) ────────────────────────
+# CS0168: "degisken tanimlandi ama hic kullanilmadi". Bu projede neredeyse her
+# zaman tek bir seyi gosterir:
+#
+#     catch (Exception ex) { return Json(new { error = "Bir hata olustu." }); }
+#
+# Gercek hata (Invalid column name, timeout, null referans) o noktada yok olur:
+# kullanici jenerik mesaj gorur, sunucu logunda hicbir iz kalmaz, teshis imkansizlasir.
+# CLAUDE.md'nin 2. kurali bunu yasakliyor — burasi o kurali DERLEYICIYE baglar.
+#
+# 2026-08-27'de 205 ihlal temizlendi (hepsine _logger.LogError eklendi); bu satir
+# yenilerinin eklenmesini engeller. Exception'i gercekten kullanmayacaksan
+# degiskeni yazma: `catch (Exception)` uyari uretmez.
+[*.cs]
+dotnet_diagnostic.CS0168.severity = error
