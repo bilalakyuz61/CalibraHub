@@ -162,6 +162,17 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    /// <summary>
+    /// Rota operasyonlarini is emrine patlatir.
+    ///
+    /// <para><b>KIRACI NOTU (2026-08-27):</b> <paramref name="routingId"/> ISTEMCIDEN gelir.
+    /// Eskiden yalnizca <c>WHERE ro.[RoutingId] = @RoutingId</c> vardi: baska bir sirketin rota
+    /// numarasi verilerek O SIRKETIN operasyon tanimlari kendi is emrine kopyalanabiliyordu.
+    /// Cocuk satirin CompanyId'si ebeveynden dogru turetildigi icin sonuc "temiz" gorunuyordu —
+    /// veri dogru etiketle yaziliyor, iceriği calinmis oluyordu. Artik HEM kaynak rota HEM hedef
+    /// is emri oturumun sirketine gore suzulur; biri baska sirkete aitse SELECT satir uretmez ve
+    /// hicbir sey kopyalanmaz (fail-closed).</para>
+    /// </summary>
     public async Task ExplodeFromRoutingAsync(int workOrderId, int routingId, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
@@ -195,11 +206,14 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                     FROM {_routingOpTable} ro
                     CROSS JOIN (SELECT [DefaultMachineId], [CompanyId]
                                 FROM [{_schema}].[WorkOrder]
-                                WHERE [Id] = @WorkOrderId) wo
+                                WHERE [Id] = @WorkOrderId
+                                  AND [CompanyId] = @CompanyId) wo
                     WHERE ro.[RoutingId] = @RoutingId
+                      AND ro.[CompanyId] = @CompanyId
                     ORDER BY ro.[Sequence];";
                 ins.Parameters.AddWithValue("@WorkOrderId", workOrderId);
                 ins.Parameters.AddWithValue("@RoutingId", routingId);
+                ins.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
                 await ins.ExecuteNonQueryAsync(ct);
             }
 
