@@ -59,7 +59,10 @@ public static class SchemaProbeRegistry
                 ("CompanyId",    FirstCompanyId),
                 ("AccountCode",  "N'HCTEST'"),
                 ("AccountTitle", "N'HCTEST'"),
-                ("CreatedAt",    "SYSUTCDATETIME()"),
+                // 2026-08-28: kolon adi "CreatedAt" degil "Created" (snake→Pascal gecisinde
+                // audit dortlusu adlandirmasina uyduruldu). Probe eski adi kullandigi icin
+                // Cari ekrani icin "Invalid column name 'CreatedAt'" uretiyordu.
+                ("Created",      "SYSUTCDATETIME()"),
             },
             ScreenPaths: new[]
             {

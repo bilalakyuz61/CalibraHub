@@ -83,6 +83,7 @@ public sealed class MobileApiController : ControllerBase
         CalibraHub.Application.Constants.FormCodes.ShopFloor,
         CalibraHub.Application.Constants.FormCodes.ApprovalPending,
         CalibraHub.Application.Constants.FormCodes.Contacts,
+        CalibraHub.Application.Constants.FormCodes.PurchaseRequest,
     };
 
     /// <summary>GET kapilariyla ayni aday aksiyonlar (PermissionEnforcementFilter GET seti).</summary>
