@@ -899,6 +899,12 @@ END;";
             // 2026-08-27: Kiraci ayrimi kolonu. FK'lerden SONRA calisir — kolon eklemek
             // kisit kurmayi etkilemez ama sira sabit kalsin diye zincirin sonuna konuldu.
             await EnsureCompanyIdColumnsAsync(connection, cancellationToken);
+            // RLS — su an UYKUDA (RlsPilotTables bos). Cagri burada duruyor ki mekanizma
+            // gerektiginde tek satirlik bir liste degisikligiyle devreye girsin. Zincirin
+            // SONUNDA: RLS korudugu tabloda sp_rename'i engelliyor, dolayisiyla rename
+            // migration'larindan SONRA kurulmali (test edildi: rename "object participates
+            // in a security policy" hatasi veriyor).
+            await EnsureCompanyRlsAsync(connection, cancellationToken);
             // Startup override pass (clobber savunması) — BİRİNCİL geçiş. Kod baseline'ı
             // yukarıdaki tüm program view'larını ensure ettikten SONRA aktif kullanıcı
             // override'larını uygular (kullanıcı sürümü kazanır). NOT: flat view'lar +
@@ -1300,6 +1306,10 @@ END;";
     /// </summary>
     private async Task EnsureCompanyRlsAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
+        // Kapsam bossa HICBIR nesne uretme: kullanilmayan yuklem fonksiyonunu her
+        // veritabanina birakmak, ileride "bu ne?" diye bakilacak olu bir iz olurdu.
+        if (RlsPilotTables.Length == 0) return;
+
         const string fn = "fn_CompanyRowFilter";
         const string policy = "CompanyRowLevelSecurity";
 
@@ -1352,10 +1362,20 @@ END;";
     }
 
     /// <summary>
-    /// RLS'nin uygulandığı tablolar. Pilot aşamada tek tablo; desen doğrulanınca
-    /// <see cref="CompanyScopeExemptTables"/> dışındaki tüm tablolara açılacak.
+    /// RLS'nin uygulandığı tablolar. <b>Şu an BOŞ — mekanizma uykuda.</b>
+    ///
+    /// <para>2026-08-27 kullanıcı kararı: kiracı ayrımı sorgulardaki açık
+    /// <c>WHERE CompanyId = @CompanyId</c> süzgeciyle yapılacak, RLS ile değil. Sebep:
+    /// RLS, koruduğu tabloda <c>sp_rename</c>'i ve <c>CompanyId</c> kolonunu düşürmeyi
+    /// ENGELLER (SCHEMABINDING) — test edildi, ikisi de hata veriyor. Bu projede tablo/kolon
+    /// yeniden adlandırma migration'ları var, o esnekliği kaybetmek istenmedi.</para>
+    ///
+    /// <para>Kod bilinçli olarak KALDIRILMADI: statik tarayıcının denetleyemediği yollar
+    /// (rapor motorunun çalıştırdığı kullanıcı SQL'i, /ViewBuilder'ın gelişmiş SQL kaçış
+    /// kapısı) için RLS tek gerçekçi koruma. Böyle bir tabloya ihtiyaç doğarsa adını buraya
+    /// eklemek yeterli — mekanizma kurulu ve sınanmış.</para>
     /// </summary>
-    private static readonly string[] RlsPilotTables = { "Document" };
+    private static readonly string[] RlsPilotTables = Array.Empty<string>();
 
     /// <summary>
     /// Kiraci (şirket) ayrımı için GLOBAL olmayan her tabloya <c>CompanyId</c> ekler.
