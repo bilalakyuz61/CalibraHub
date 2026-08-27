@@ -54,10 +54,11 @@ public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
         cmd.CommandText = $"""
             INSERT INTO {_table}
                 ([LinkType],[SourceLineId],[SourceDocId],[TargetLineId],[TargetDocId],[TargetWorkOrderId],
-                 [Quantity],[Notes],[IsActive],[CreatedById],[Created])
+                 [Quantity],[Notes],[IsActive],[CreatedById],[Created],[CompanyId])
             VALUES
                 (@LinkType,@SourceLineId,@SourceDocId,@TargetLineId,@TargetDocId,@TargetWorkOrderId,
-                 @Quantity,@Notes,1,@CreatedById,SYSUTCDATETIME());
+                 @Quantity,@Notes,1,@CreatedById,SYSUTCDATETIME(),
+                 (SELECT p.[CompanyId] FROM {_docTable} p WHERE p.[id] = @SourceDocId));
             """;
         cmd.Parameters.AddWithValue("@LinkType", (byte)entry.LinkType);
         cmd.Parameters.AddWithValue("@SourceLineId", entry.SourceLineId);
@@ -92,16 +93,18 @@ public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
              WHERE [IsActive] = 1
                AND [LinkType] = @LinkType
                AND [SourceLineId] = @SourceLineId
+               AND [SourceDocId] = @SourceDocId
                AND ISNULL([TargetLineId], -1) = ISNULL(@TargetLineId, -1)
                AND ISNULL([TargetDocId], -1) = ISNULL(@TargetDocId, -1)
                AND ISNULL([TargetWorkOrderId], -1) = ISNULL(@TargetWorkOrderId, -1);
             IF @@ROWCOUNT = 0
                 INSERT INTO {_table}
                     ([LinkType],[SourceLineId],[SourceDocId],[TargetLineId],[TargetDocId],[TargetWorkOrderId],
-                     [Quantity],[Notes],[IsActive],[CreatedById],[Created])
+                     [Quantity],[Notes],[IsActive],[CreatedById],[Created],[CompanyId])
                 VALUES
                     (@LinkType,@SourceLineId,@SourceDocId,@TargetLineId,@TargetDocId,@TargetWorkOrderId,
-                     @Quantity,@Notes,1,@CreatedById,SYSUTCDATETIME());
+                     @Quantity,@Notes,1,@CreatedById,SYSUTCDATETIME(),
+                     (SELECT p.[CompanyId] FROM {_docTable} p WHERE p.[id] = @SourceDocId));
             """;
         cmd.Parameters.AddWithValue("@LinkType", (byte)entry.LinkType);
         cmd.Parameters.AddWithValue("@SourceLineId", entry.SourceLineId);
@@ -169,10 +172,12 @@ public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
                    [Updated] = SYSUTCDATETIME()
              WHERE [IsActive] = 1
                AND [TargetDocId] = @TargetDocId
+               AND [CompanyId] = @CompanyId
                {typeFilter};
             """;
         cmd.Parameters.AddWithValue("@TargetDocId", targetDocId);
         cmd.Parameters.AddWithValue("@UpdatedById", (object?)userId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         if (linkType.HasValue)
             cmd.Parameters.AddWithValue("@LinkType", (byte)linkType.Value);
         return await cmd.ExecuteNonQueryAsync(ct);
@@ -196,10 +201,12 @@ public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
                    [Updated] = SYSUTCDATETIME()
              WHERE [IsActive] = 1
                AND [TargetDocId] = @TargetDocId
+               AND [CompanyId] = @CompanyId
                AND [LinkType] IN (1,2,3,4,5,6,7);
             """;
         cmd.Parameters.AddWithValue("@TargetDocId", targetDocId);
         cmd.Parameters.AddWithValue("@UpdatedById", (object?)userId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         return await cmd.ExecuteNonQueryAsync(ct);
     }
 

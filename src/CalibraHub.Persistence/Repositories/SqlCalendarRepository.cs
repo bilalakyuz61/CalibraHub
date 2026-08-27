@@ -73,7 +73,7 @@ public sealed class SqlCalendarRepository : ICalendarRepository
                     StartDate = @StartDate, EndDate = @EndDate,
                     IsAllDay = @IsAllDay, Color = @Color,
                     UpdatedBy = @User, Updated = SYSUTCDATETIME()
-                WHERE Id = @Id AND UserId = @UserId AND IsActive = 1;
+                WHERE Id = @Id AND UserId = @UserId AND IsActive = 1 AND CompanyId = @CompanyId;
                 SELECT @Id;";
             cmd.Parameters.AddWithValue("@Id", req.Id.Value);
         }
@@ -81,9 +81,9 @@ public sealed class SqlCalendarRepository : ICalendarRepository
         {
             cmd.CommandText = @"
                 INSERT INTO dbo.CalendarEvent
-                    (Title, Description, StartDate, EndDate, IsAllDay, Color, UserId, IsActive, CreatedBy, Created)
+                    (Title, Description, StartDate, EndDate, IsAllDay, Color, UserId, IsActive, CreatedBy, Created, CompanyId)
                 VALUES
-                    (@Title, @Description, @StartDate, @EndDate, @IsAllDay, @Color, @UserId, 1, @User, SYSUTCDATETIME());
+                    (@Title, @Description, @StartDate, @EndDate, @IsAllDay, @Color, @UserId, 1, @User, SYSUTCDATETIME(), @CompanyId);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
         }
 
@@ -95,6 +95,7 @@ public sealed class SqlCalendarRepository : ICalendarRepository
         cmd.Parameters.AddWithValue("@Color", (object?)req.Color ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@UserId", userId);
         cmd.Parameters.AddWithValue("@User", username);
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
 
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
     }
@@ -217,10 +218,11 @@ public sealed class SqlCalendarRepository : ICalendarRepository
         cmd.CommandText = @"
             UPDATE dbo.CalendarEvent
             SET IsActive = 0, UpdatedBy = @User, Updated = SYSUTCDATETIME()
-            WHERE Id = @Id AND UserId = @UserId;";
+            WHERE Id = @Id AND UserId = @UserId AND CompanyId = @CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
         cmd.Parameters.AddWithValue("@UserId", userId);
         cmd.Parameters.AddWithValue("@User", username);
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

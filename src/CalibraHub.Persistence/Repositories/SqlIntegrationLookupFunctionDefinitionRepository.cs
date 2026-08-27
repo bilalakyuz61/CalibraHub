@@ -128,10 +128,11 @@ public sealed class SqlIntegrationLookupFunctionDefinitionRepository
         await using (var cmd = conn.CreateCommand())
         {
             cmd.Transaction = tx;
+            var companyId = _connectionFactory.ResolveEffectiveCompanyId();
             cmd.CommandText = $@"
-                INSERT INTO {_table} ([Code],[Label],[Description],[ViewName],[KeyColumn],[SqlSnippet],[SqlFunctionName],[SortOrder],[IsActive],[CreatedById],[Created])
+                INSERT INTO {_table} ([Code],[Label],[Description],[ViewName],[KeyColumn],[SqlSnippet],[SqlFunctionName],[SortOrder],[IsActive],[CreatedById],[CompanyId],[Created])
                 OUTPUT INSERTED.[Id]
-                VALUES (@Code,@Label,@Description,@ViewName,@KeyColumn,@SqlSnippet,@SqlFunctionName,@SortOrder,@IsActive,@CreatedById,SYSUTCDATETIME());";
+                VALUES (@Code,@Label,@Description,@ViewName,@KeyColumn,@SqlSnippet,@SqlFunctionName,@SortOrder,@IsActive,@CreatedById,@CompanyId,SYSUTCDATETIME());";
             cmd.Parameters.Add(new SqlParameter("@Code", entity.Code));
             cmd.Parameters.Add(new SqlParameter("@Label", entity.Label));
             cmd.Parameters.Add(new SqlParameter("@Description", (object?)entity.Description ?? DBNull.Value));
@@ -142,6 +143,7 @@ public sealed class SqlIntegrationLookupFunctionDefinitionRepository
             cmd.Parameters.Add(new SqlParameter("@SortOrder", entity.SortOrder));
             cmd.Parameters.Add(new SqlParameter("@IsActive", entity.IsActive));
             cmd.Parameters.Add(new SqlParameter("@CreatedById", (object?)userId ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             newId = (int)(await cmd.ExecuteScalarAsync(ct))!;
         }
 
@@ -165,8 +167,9 @@ public sealed class SqlIntegrationLookupFunctionDefinitionRepository
                     [SqlFunctionName]=@SqlFunctionName,
                     [SortOrder]=@SortOrder, [IsActive]=@IsActive,
                     [UpdatedById]=@UpdatedById, [Updated]=SYSUTCDATETIME()
-                WHERE [Id]=@Id;";
+                WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
             cmd.Parameters.Add(new SqlParameter("@Id", entity.Id));
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
             cmd.Parameters.Add(new SqlParameter("@Code", entity.Code));
             cmd.Parameters.Add(new SqlParameter("@Label", entity.Label));
             cmd.Parameters.Add(new SqlParameter("@Description", (object?)entity.Description ?? DBNull.Value));
@@ -184,8 +187,9 @@ public sealed class SqlIntegrationLookupFunctionDefinitionRepository
         await using (var del = conn.CreateCommand())
         {
             del.Transaction = tx;
-            del.CommandText = $"DELETE FROM {_colTable} WHERE [FunctionId]=@Id;";
+            del.CommandText = $"DELETE FROM {_colTable} WHERE [FunctionId]=@Id AND [CompanyId]=@CompanyId;";
             del.Parameters.Add(new SqlParameter("@Id", entity.Id));
+            del.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
             await del.ExecuteNonQueryAsync(ct);
         }
         await InsertColumnsAsync(conn, tx, entity.Id, entity.Columns, ct);
@@ -197,9 +201,10 @@ public sealed class SqlIntegrationLookupFunctionDefinitionRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE {_table} SET [IsActive]=0, [UpdatedById]=@UpdatedById, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Id;";
+        cmd.CommandText = $"UPDATE {_table} SET [IsActive]=0, [UpdatedById]=@UpdatedById, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
         cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)userId ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -207,8 +212,9 @@ public sealed class SqlIntegrationLookupFunctionDefinitionRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id]=@Id;";  // CASCADE kolonlari da siler
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";  // CASCADE kolonlari da siler
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -222,9 +228,10 @@ public sealed class SqlIntegrationLookupFunctionDefinitionRepository
             idx++;
             await using var cmd = conn.CreateCommand();
             cmd.Transaction = tx;
+            // CompanyId ebeveyn IntegrationLookupFunction'dan alınır.
             cmd.CommandText = $@"
-                INSERT INTO {_colTable} ([FunctionId],[Column],[Label],[SortOrder])
-                VALUES (@F,@C,@L,@S);";
+                INSERT INTO {_colTable} ([FunctionId],[CompanyId],[Column],[Label],[SortOrder])
+                VALUES (@F,(SELECT f.[CompanyId] FROM {_table} f WHERE f.[Id] = @F),@C,@L,@S);";
             cmd.Parameters.Add(new SqlParameter("@F", functionId));
             cmd.Parameters.Add(new SqlParameter("@C", c.Column));
             cmd.Parameters.Add(new SqlParameter("@L", c.Label));

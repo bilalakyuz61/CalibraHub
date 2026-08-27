@@ -80,23 +80,25 @@ public sealed class SqlAiUserKeyRepository : IAiUserKeyRepository
                 UPDATE {_table}
                 SET [ApiKeyEncrypted] = @ApiKeyEncrypted,
                     [Updated] = SYSUTCDATETIME()
-                WHERE [Id] = @Id;
+                WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
                 """;
             upd.Parameters.Add(new SqlParameter("@Id", existingId));
             upd.Parameters.Add(new SqlParameter("@ApiKeyEncrypted", encrypted));
+            upd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
             await upd.ExecuteNonQueryAsync(ct);
             return existingId;
         }
 
         await using var ins = conn.CreateCommand();
         ins.CommandText = $"""
-            INSERT INTO {_table} ([UserId],[AiProviderId],[ApiKeyEncrypted])
+            INSERT INTO {_table} ([UserId],[AiProviderId],[ApiKeyEncrypted],[CompanyId])
             OUTPUT INSERTED.[Id]
-            VALUES (@UserId,@ProviderId,@ApiKeyEncrypted);
+            VALUES (@UserId,@ProviderId,@ApiKeyEncrypted,@CompanyId);
             """;
         ins.Parameters.Add(new SqlParameter("@UserId", userId));
         ins.Parameters.Add(new SqlParameter("@ProviderId", providerId));
         ins.Parameters.Add(new SqlParameter("@ApiKeyEncrypted", encrypted));
+        ins.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var newId = (int)(await ins.ExecuteScalarAsync(ct) ?? 0);
         return newId;
     }
@@ -105,9 +107,10 @@ public sealed class SqlAiUserKeyRepository : IAiUserKeyRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [UserId] = @UserId AND [AiProviderId] = @ProviderId;";
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [UserId] = @UserId AND [AiProviderId] = @ProviderId AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@UserId", userId));
         cmd.Parameters.Add(new SqlParameter("@ProviderId", providerId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

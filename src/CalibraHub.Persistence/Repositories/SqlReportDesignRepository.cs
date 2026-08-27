@@ -19,15 +19,16 @@ public sealed class SqlReportDesignRepository : IReportDesignRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO dbo.ReportDesign (Title, GroupName, Description, PanelsJson, CreatedBy)
+            INSERT INTO dbo.ReportDesign (Title, GroupName, Description, PanelsJson, CreatedBy, CompanyId)
             OUTPUT INSERTED.Id
-            VALUES (@Title, @GroupName, @Description, @PanelsJson, @User);
+            VALUES (@Title, @GroupName, @Description, @PanelsJson, @User, @CompanyId);
             """;
         cmd.Parameters.Add(new SqlParameter("@Title",      req.Title));
         cmd.Parameters.Add(new SqlParameter("@GroupName",  (object?)req.GroupName?.Trim() ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Description",(object?)req.Description?.Trim() ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@PanelsJson", req.PanelsJson));
         cmd.Parameters.Add(new SqlParameter("@User",       (object?)user ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId",  _connectionFactory.ResolveEffectiveCompanyId()));
         var result = await cmd.ExecuteScalarAsync(ct);
         return Convert.ToInt32(result);
     }
@@ -44,7 +45,7 @@ public sealed class SqlReportDesignRepository : IReportDesignRepository
                 PanelsJson  = @PanelsJson,
                 Updated     = SYSUTCDATETIME(),
                 UpdatedBy   = @User
-            WHERE Id = @Id AND IsActive = 1;
+            WHERE Id = @Id AND IsActive = 1 AND CompanyId = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Title",      req.Title));
         cmd.Parameters.Add(new SqlParameter("@GroupName",  (object?)req.GroupName?.Trim() ?? DBNull.Value));
@@ -52,6 +53,7 @@ public sealed class SqlReportDesignRepository : IReportDesignRepository
         cmd.Parameters.Add(new SqlParameter("@PanelsJson", req.PanelsJson));
         cmd.Parameters.Add(new SqlParameter("@User",       (object?)user ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Id",         id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId",  _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -59,8 +61,9 @@ public sealed class SqlReportDesignRepository : IReportDesignRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
-        cmd.CommandText = "UPDATE dbo.ReportDesign SET IsActive = 0 WHERE Id = @Id;";
+        cmd.CommandText = "UPDATE dbo.ReportDesign SET IsActive = 0 WHERE Id = @Id AND CompanyId = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

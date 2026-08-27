@@ -78,10 +78,11 @@ public sealed class SqlUserNotificationRepository : IUserNotificationRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"UPDATE {_table} SET [IsRead] = 1, [ReadAt] = @ReadAt WHERE [Id] = @Id AND [UserId] = @UserId;";
+        cmd.CommandText = $"UPDATE {_table} SET [IsRead] = 1, [ReadAt] = @ReadAt WHERE [Id] = @Id AND [UserId] = @UserId AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Id",     notificationId));
         cmd.Parameters.Add(new SqlParameter("@UserId", userId));
         cmd.Parameters.Add(new SqlParameter("@ReadAt", readAt));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -89,9 +90,10 @@ public sealed class SqlUserNotificationRepository : IUserNotificationRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"UPDATE {_table} SET [IsRead] = 1, [ReadAt] = @ReadAt WHERE [UserId] = @UserId AND [IsRead] = 0;";
+        cmd.CommandText = $"UPDATE {_table} SET [IsRead] = 1, [ReadAt] = @ReadAt WHERE [UserId] = @UserId AND [IsRead] = 0 AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@UserId", userId));
         cmd.Parameters.Add(new SqlParameter("@ReadAt", readAt));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -102,11 +104,12 @@ public sealed class SqlUserNotificationRepository : IUserNotificationRepository
         cmd.CommandText = $"""
             UPDATE {_table}
             SET [IsPinned] = CASE WHEN [IsPinned] = 1 THEN 0 ELSE 1 END
-            WHERE [Id] = @Id AND [UserId] = @UserId;
-            SELECT [IsPinned] FROM {_table} WHERE [Id] = @Id AND [UserId] = @UserId;
+            WHERE [Id] = @Id AND [UserId] = @UserId AND [CompanyId] = @CompanyId;
+            SELECT [IsPinned] FROM {_table} WHERE [Id] = @Id AND [UserId] = @UserId AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", notificationId));
         cmd.Parameters.Add(new SqlParameter("@UserId", userId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var v = await cmd.ExecuteScalarAsync(cancellationToken);
         return v != null && Convert.ToBoolean(v);
     }
@@ -115,9 +118,10 @@ public sealed class SqlUserNotificationRepository : IUserNotificationRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id AND [UserId] = @UserId;";
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id AND [UserId] = @UserId AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Id", notificationId));
         cmd.Parameters.Add(new SqlParameter("@UserId", userId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 

@@ -49,12 +49,13 @@ public sealed class SqlReportSourceRepository : IReportSourceRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
 
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         if (req.Id is null or 0)
         {
             cmd.CommandText = """
-                INSERT INTO dbo.ReportSource (Name, Description, SqlQuery, CacheTtlMinutes, Materialize, RefreshScheduleJson, CreatedBy)
+                INSERT INTO dbo.ReportSource (Name, Description, SqlQuery, CacheTtlMinutes, Materialize, RefreshScheduleJson, CreatedBy, CompanyId)
                 OUTPUT INSERTED.Id
-                VALUES (@Name, @Desc, @Sql, @Ttl, @Mat, @Sched, @User);
+                VALUES (@Name, @Desc, @Sql, @Ttl, @Mat, @Sched, @User, @CompanyId);
                 """;
         }
         else
@@ -64,7 +65,7 @@ public sealed class SqlReportSourceRepository : IReportSourceRepository
                 SET Name = @Name, Description = @Desc, SqlQuery = @Sql,
                     CacheTtlMinutes = @Ttl, Materialize = @Mat, RefreshScheduleJson = @Sched,
                     UpdatedBy = @User, Updated = SYSUTCDATETIME()
-                WHERE Id = @Id;
+                WHERE Id = @Id AND CompanyId = @CompanyId;
                 SELECT @Id;
                 """;
             cmd.Parameters.Add(new SqlParameter("@Id", req.Id.Value));
@@ -77,6 +78,7 @@ public sealed class SqlReportSourceRepository : IReportSourceRepository
         cmd.Parameters.Add(new SqlParameter("@Mat",  req.Materialize));
         cmd.Parameters.Add(new SqlParameter("@Sched",(object?)req.RefreshScheduleJson ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@User", (object?)user ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         var result = await cmd.ExecuteScalarAsync(ct);
         return Convert.ToInt32(result);
@@ -86,8 +88,9 @@ public sealed class SqlReportSourceRepository : IReportSourceRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
-        cmd.CommandText = "UPDATE dbo.ReportSource SET IsActive = 0, Updated = SYSUTCDATETIME() WHERE Id = @Id;";
+        cmd.CommandText = "UPDATE dbo.ReportSource SET IsActive = 0, Updated = SYSUTCDATETIME() WHERE Id = @Id AND CompanyId = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -110,9 +113,10 @@ public sealed class SqlReportSourceRepository : IReportSourceRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
-        cmd.CommandText = "UPDATE dbo.ReportSource SET LastMaterialized = SYSUTCDATETIME(), MaterializedRows = @Rows WHERE Id = @Id;";
+        cmd.CommandText = "UPDATE dbo.ReportSource SET LastMaterialized = SYSUTCDATETIME(), MaterializedRows = @Rows WHERE Id = @Id AND CompanyId = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Rows", rowCount));
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 }

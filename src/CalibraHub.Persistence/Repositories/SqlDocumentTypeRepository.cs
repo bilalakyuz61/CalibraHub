@@ -73,18 +73,20 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
                     SET [Code]=@Code,[Name]=@Name,[SqlViewName]=@SqlViewName,
                         [RequiredKeyColumn]=@ReqKey,
                         [Description]=@Description,[IsActive]=@IsActive,[Updated]=GETDATE()
-                    WHERE [Id]=@Id;
+                    WHERE [Id]=@Id AND [CompanyId]=@CompanyId;
                 SELECT @Id;
                 """;
             command.Parameters.Add(new SqlParameter("@Id", entity.Id));
+            command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         }
         else
         {
             command.CommandText = $"""
-                INSERT INTO {_table} ([Code],[Name],[SqlViewName],[RequiredKeyColumn],[Description],[IsActive],[Created],[Updated])
-                VALUES (@Code,@Name,@SqlViewName,@ReqKey,@Description,@IsActive,GETDATE(),GETDATE());
+                INSERT INTO {_table} ([Code],[Name],[SqlViewName],[RequiredKeyColumn],[Description],[IsActive],[CompanyId],[Created],[Updated])
+                VALUES (@Code,@Name,@SqlViewName,@ReqKey,@Description,@IsActive,@CompanyId,GETDATE(),GETDATE());
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;
+            command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         }
         command.Parameters.Add(new SqlParameter("@Code", entity.Code));
         command.Parameters.Add(new SqlParameter("@Name", entity.Name));
@@ -100,8 +102,9 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id;";
+        command.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

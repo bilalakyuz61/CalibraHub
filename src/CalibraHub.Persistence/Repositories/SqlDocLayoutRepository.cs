@@ -188,11 +188,13 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
         {
+            var companyId = _connectionFactory.ResolveEffectiveCompanyId();
             await using (var delCmd = conn.CreateCommand())
             {
                 delCmd.Transaction = tx;
-                delCmd.CommandText = $"DELETE FROM {_ds} WHERE [LayoutId] = @LayoutId;";
+                delCmd.CommandText = $"DELETE FROM {_ds} WHERE [LayoutId] = @LayoutId AND [CompanyId] = @CompanyId;";
                 delCmd.Parameters.AddWithValue("@LayoutId", layoutId);
+                delCmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
                 await delCmd.ExecuteNonQueryAsync(ct);
             }
 
@@ -201,9 +203,10 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
             {
                 await using var insCmd = conn.CreateCommand();
                 insCmd.Transaction = tx;
+                // CompanyId ebeveyn DocLayout'tan alınır.
                 insCmd.CommandText = $@"
-                    INSERT INTO {_ds} ([LayoutId],[Alias],[Role],[ViewId],[AdHocSql],[JoinOn],[ParentAlias],[Ordinal])
-                    VALUES (@LayoutId,@Alias,@Role,@ViewId,@AdHocSql,@JoinOn,@ParentAlias,@Ordinal);";
+                    INSERT INTO {_ds} ([LayoutId],[CompanyId],[Alias],[Role],[ViewId],[AdHocSql],[JoinOn],[ParentAlias],[Ordinal])
+                    VALUES (@LayoutId,(SELECT l.[CompanyId] FROM {_layout} l WHERE l.[Id] = @LayoutId),@Alias,@Role,@ViewId,@AdHocSql,@JoinOn,@ParentAlias,@Ordinal);";
                 insCmd.Parameters.AddWithValue("@LayoutId", layoutId);
                 insCmd.Parameters.AddWithValue("@Alias", src.Alias);
                 insCmd.Parameters.AddWithValue("@Role", src.Role);
@@ -232,8 +235,9 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE {_layout} SET [IsActive]=0, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Id;";
+        cmd.CommandText = $"UPDATE {_layout} SET [IsActive]=0, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -247,18 +251,20 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
             DECLARE @DocType        nvarchar(60);
             DECLARE @DocumentTypeId int;
             SELECT @DocType = [DocType], @DocumentTypeId = [DocumentTypeId]
-            FROM {_layout} WHERE [Id] = @Id AND [IsActive] = 1;
+            FROM {_layout} WHERE [Id] = @Id AND [IsActive] = 1 AND [CompanyId] = @CompanyId;
             IF @DocType IS NULL AND @DocumentTypeId IS NULL
                 THROW 51001, 'Layout bulunamadi veya pasif.', 1;
             UPDATE {_layout}
             SET [IsDefault] = CASE WHEN [Id] = @Id THEN 1 ELSE 0 END,
                 [Updated] = SYSUTCDATETIME()
             WHERE [IsActive] = 1
+              AND [CompanyId] = @CompanyId
               AND (
                     (@DocumentTypeId IS NOT NULL AND [DocumentTypeId] = @DocumentTypeId)
                  OR (@DocumentTypeId IS NULL     AND [DocType] = @DocType)
               );";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

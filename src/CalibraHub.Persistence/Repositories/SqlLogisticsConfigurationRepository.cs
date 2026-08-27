@@ -1052,10 +1052,13 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var command = connection.CreateCommand();
         var sql = new StringBuilder();
         sql.AppendLine("BEGIN TRANSACTION;");
+        // CompanyId feature ebeveyninden turetilir (self-referencing tablo); featureId baska
+        // sirkete aitse subquery NULL doner ve NOT NULL kisitlamasi insert'i reddeder.
         sql.AppendLine($"""
             DELETE FROM {_itemConfigurationTableName}
             WHERE [RecordType] = N'FEATURE_STOCK'
-              AND [ParentId] = @FeatureId;
+              AND [ParentId] = @FeatureId
+              AND [CompanyId] = (SELECT [CompanyId] FROM {_itemConfigurationTableName} WHERE [Id] = @FeatureId);
             """);
 
         command.Parameters.Add(new SqlParameter("@FeatureId", featureId));
@@ -1069,9 +1072,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         {
             sql.AppendLine($"""
                 INSERT INTO {_itemConfigurationTableName}
-                    ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [Created])
+                    ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CompanyId], [Created])
                 VALUES
-                    (@FeatureId, N'FEATURE_STOCK', @StockCode{index}, @StockCode{index}, NULL, @StockCode{index}, 1, GETDATE());
+                    (@FeatureId, N'FEATURE_STOCK', @StockCode{index}, @StockCode{index}, NULL, @StockCode{index}, 1,
+                     (SELECT [CompanyId] FROM {_itemConfigurationTableName} WHERE [Id] = @FeatureId), GETDATE());
                 """);
 
             command.Parameters.Add(new SqlParameter($"@StockCode{index}", normalizedCodes[index]));
@@ -1121,8 +1125,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         // Bu stok'un TUM linklerini sil (header + value-restriction)
         await using (var delCmd = connection.CreateCommand())
         {
-            delCmd.CommandText = $"DELETE FROM {_itemFeatureMappingsTableName} WHERE [ItemId] = @ItemId;";
+            delCmd.CommandText = $"DELETE FROM {_itemFeatureMappingsTableName} WHERE [ItemId] = @ItemId AND [CompanyId] = @CompanyId;";
             delCmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+            delCmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await delCmd.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -1144,13 +1149,14 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             {
                 headerCmd.CommandText = $"""
                     INSERT INTO {_itemFeatureMappingsTableName}
-                        ([ItemId], [FeatureId], [FeatureValueId], [PrintDescriptionInDesign], [IsActive], [Created], [Updated])
+                        ([ItemId], [FeatureId], [FeatureValueId], [PrintDescriptionInDesign], [IsActive], [CompanyId], [Created], [Updated])
                     VALUES
-                        (@ItemId, @FeatureId, NULL, @PrintDesc, 1, @CreatedAt, @UpdatedAt);
+                        (@ItemId, @FeatureId, NULL, @PrintDesc, 1, @CompanyId, @CreatedAt, @UpdatedAt);
                     """;
                 headerCmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
                 headerCmd.Parameters.Add(new SqlParameter("@FeatureId", f.FeatureId));
                 headerCmd.Parameters.Add(new SqlParameter("@PrintDesc", f.PrintDescriptionInDesign));
+                headerCmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
                 headerCmd.Parameters.Add(new SqlParameter("@CreatedAt", now));
                 headerCmd.Parameters.Add(new SqlParameter("@UpdatedAt", now));
                 await headerCmd.ExecuteNonQueryAsync(cancellationToken);
@@ -1162,14 +1168,15 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 await using var valCmd = connection.CreateCommand();
                 valCmd.CommandText = $"""
                     INSERT INTO {_itemFeatureMappingsTableName}
-                        ([ItemId], [FeatureId], [FeatureValueId], [PrintDescriptionInDesign], [IsActive], [Created], [Updated])
+                        ([ItemId], [FeatureId], [FeatureValueId], [PrintDescriptionInDesign], [IsActive], [CompanyId], [Created], [Updated])
                     VALUES
-                        (@ItemId, @FeatureId, @FeatureValueId, @PrintDesc, 1, @CreatedAt, @UpdatedAt);
+                        (@ItemId, @FeatureId, @FeatureValueId, @PrintDesc, 1, @CompanyId, @CreatedAt, @UpdatedAt);
                     """;
                 valCmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
                 valCmd.Parameters.Add(new SqlParameter("@FeatureId", f.FeatureId));
                 valCmd.Parameters.Add(new SqlParameter("@FeatureValueId", valueId));
                 valCmd.Parameters.Add(new SqlParameter("@PrintDesc", f.PrintDescriptionInDesign));
+                valCmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
                 valCmd.Parameters.Add(new SqlParameter("@CreatedAt", now));
                 valCmd.Parameters.Add(new SqlParameter("@UpdatedAt", now));
                 await valCmd.ExecuteNonQueryAsync(cancellationToken);
@@ -1179,6 +1186,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task UpdateProductFeatureAsync(int id, string name, string dataType, string? unitOfMeasure, bool visibleInDesign, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
@@ -1188,10 +1196,12 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 [RelatedMaterialCode] = @UnitOfMeasure,
                 [VisibleInDesign]     = @VisibleInDesign
             WHERE [Id] = @Id
+              AND [CompanyId] = @CompanyId
               AND [RecordType] = N'FEATURE';
             """;
 
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         command.Parameters.Add(new SqlParameter("@RecordName", name));
         command.Parameters.Add(new SqlParameter("@DataType", dataType));
         command.Parameters.Add(new SqlParameter("@UnitOfMeasure", (object?)unitOfMeasure ?? DBNull.Value));
@@ -1202,6 +1212,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task DeleteProductFeatureAsync(int id, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
@@ -1209,40 +1220,48 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
             DELETE FROM {_itemConfigurationTableName}
             WHERE [RecordType] = N'FEATURE_STOCK'
-              AND [ParentId] = @Id;
+              AND [ParentId] = @Id
+              AND [CompanyId] = @CompanyId;
 
             DELETE FROM {_itemConfigurationTableName}
             WHERE [RecordType] = N'CONFIG'
+              AND [CompanyId] = @CompanyId
               AND [ParentId] IN (
                     SELECT [Id]
                     FROM {_itemConfigurationTableName}
                     WHERE [RecordType] = N'VALUE'
-                      AND [ParentId] = @Id);
+                      AND [ParentId] = @Id
+                      AND [CompanyId] = @CompanyId);
 
             DELETE FROM {_itemConfigurationTableName}
             WHERE [RecordType] = N'VALUE'
-              AND [ParentId] = @Id;
+              AND [ParentId] = @Id
+              AND [CompanyId] = @CompanyId;
 
             DELETE FROM {_itemConfigurationTableName}
             WHERE [Id] = @Id
+              AND [CompanyId] = @CompanyId
               AND [RecordType] = N'FEATURE';
 
             COMMIT TRANSACTION;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task DeleteProductValueAsync(int id, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
 
         // 1) ItemFeatureMappings — bu FeatureValue'yu kullanan stok kisit satirlarini temizle (FK)
         await using (var clearMappings = connection.CreateCommand())
         {
-            clearMappings.CommandText = $"DELETE FROM {_itemFeatureMappingsTableName} WHERE [FeatureValueId] = @Id;";
+            clearMappings.CommandText = $"DELETE FROM {_itemFeatureMappingsTableName} WHERE [FeatureValueId] = @Id AND [CompanyId] = @CompanyId;";
             clearMappings.Parameters.Add(new SqlParameter("@Id", id));
+            clearMappings.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await clearMappings.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -1258,21 +1277,25 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             -- CONFIG child kayitlari: RecordName=valueId (string olarak) — bu deger silinince temizlenmeli
             DELETE FROM {_itemConfigurationTableName}
             WHERE [RecordType] = N'CONFIG'
+              AND [CompanyId] = @CompanyId
               AND TRY_CAST([RecordName] AS INT) = @Id;
 
             -- Asil deger
             DELETE FROM {_propertyValuesTableName}
-            WHERE [id] = @Id;
+            WHERE [id] = @Id
+              AND [CompanyId] = @CompanyId;
 
             COMMIT TRANSACTION;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task UpdateProductValueAsync(int id, string name, string? aciklama, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
@@ -1280,9 +1303,11 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             SET [RecordName] = @RecordName,
                 [RelatedMaterialCode] = @Aciklama
             WHERE [Id] = @Id
+              AND [CompanyId] = @CompanyId
               AND [RecordType] = N'VALUE';
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         command.Parameters.Add(new SqlParameter("@RecordName", name));
         command.Parameters.Add(new SqlParameter("@Aciklama", (object?)aciklama ?? DBNull.Value));
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -1290,6 +1315,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task DeleteProductConfigAsync(int id, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
@@ -1297,28 +1323,31 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             BEGIN TRANSACTION;
 
             DELETE FROM {_itemConfigurationTableName}
-            WHERE [RecordType] = N'CONFIG' AND [ParentId] = @Id;
+            WHERE [RecordType] = N'CONFIG' AND [ParentId] = @Id AND [CompanyId] = @CompanyId;
 
             DELETE FROM {_itemConfigurationTableName}
-            WHERE [RecordType] = N'CONFIG' AND [Id] = @Id;
+            WHERE [RecordType] = N'CONFIG' AND [Id] = @Id AND [CompanyId] = @CompanyId;
 
             COMMIT TRANSACTION;
             """;
 
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task UpdateProductConfigDescriptionAsync(int id, string? description, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             UPDATE {_itemConfigurationTableName}
             SET [RecordName] = @RecordName
-            WHERE [RecordType] = N'CONFIG' AND [Id] = @Id AND [ParentId] IS NULL;
+            WHERE [RecordType] = N'CONFIG' AND [Id] = @Id AND [CompanyId] = @CompanyId AND [ParentId] IS NULL;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         command.Parameters.Add(new SqlParameter("@RecordName", (object?)description ?? DBNull.Value));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -1517,15 +1546,17 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task AddLocationAsync(Location location, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_warehouseLocationsTableName}
-                ([ParentId], [LocationTypeCode], [LocationCode], [LocationName], [SortOrder], [MaxWeightCapacity], [VolumeCapacity], [IsActive], [IsMachinePark], [IsStorageArea], [IsCountReference], [IsSingleChildType], [AllowNegativeBalance])
+                ([CompanyId], [ParentId], [LocationTypeCode], [LocationCode], [LocationName], [SortOrder], [MaxWeightCapacity], [VolumeCapacity], [IsActive], [IsMachinePark], [IsStorageArea], [IsCountReference], [IsSingleChildType], [AllowNegativeBalance])
             VALUES
-                (@ParentId, @LocationTypeCode, @LocationCode, @LocationName, @SortOrder, @MaxWeightCapacity, @VolumeCapacity, @IsActive, @IsMachinePark, @IsStorageArea, @IsCountReference, @IsSingleChildType, @AllowNegativeBalance);
+                (@CompanyId, @ParentId, @LocationTypeCode, @LocationCode, @LocationName, @SortOrder, @MaxWeightCapacity, @VolumeCapacity, @IsActive, @IsMachinePark, @IsStorageArea, @IsCountReference, @IsSingleChildType, @AllowNegativeBalance);
             """;
 
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         command.Parameters.Add(new SqlParameter("@ParentId", (object?)location.ParentId ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@LocationTypeCode", location.LocationTypeCode));
         command.Parameters.Add(new SqlParameter("@LocationCode", location.LocationCode));
@@ -1545,6 +1576,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task UpdateLocationAsync(Location location, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
@@ -1563,10 +1595,11 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 [IsCountReference] = @IsCountReference,
                 [IsSingleChildType] = @IsSingleChildType,
                 [AllowNegativeBalance] = @AllowNegativeBalance
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
 
         command.Parameters.Add(new SqlParameter("@Id", location.Id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         command.Parameters.Add(new SqlParameter("@ParentId", (object?)location.ParentId ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@LocationTypeCode", location.LocationTypeCode));
         command.Parameters.Add(new SqlParameter("@LocationCode", location.LocationCode));
@@ -1586,14 +1619,16 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task DeleteLocationAsync(int locationId, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             DELETE FROM {_warehouseLocationsTableName}
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
 
         command.Parameters.Add(new SqlParameter("@Id", locationId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -1701,15 +1736,17 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task AddUnitAsync(Unit definition, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_measureUnitDefinitionsTableName}
-                ([Code], [Name], [IntlCode], [SortOrder], [IsActive], [CreatedById], [Created], [UpdatedById], [Updated])
+                ([CompanyId], [Code], [Name], [IntlCode], [SortOrder], [IsActive], [CreatedById], [Created], [UpdatedById], [Updated])
             VALUES
-                (@Code, @Name, @IntlCode, @SortOrder, @IsActive, @CreatedById, SYSUTCDATETIME(), NULL, NULL);
+                (@CompanyId, @Code, @Name, @IntlCode, @SortOrder, @IsActive, @CreatedById, SYSUTCDATETIME(), NULL, NULL);
             """;
 
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         command.Parameters.Add(new SqlParameter("@Code", definition.Code));
         command.Parameters.Add(new SqlParameter("@Name", definition.Name));
         command.Parameters.Add(new SqlParameter("@IntlCode", (object?)definition.IntlCode ?? DBNull.Value));
@@ -1722,6 +1759,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task UpdateUnitAsync(Unit definition, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
@@ -1734,10 +1772,11 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 [IsActive] = @IsActive,
                 [UpdatedById] = @UpdatedById,
                 [Updated] = SYSUTCDATETIME()
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
 
         command.Parameters.Add(new SqlParameter("@Id", definition.Id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         command.Parameters.Add(new SqlParameter("@Code", definition.Code));
         command.Parameters.Add(new SqlParameter("@Name", definition.Name));
         command.Parameters.Add(new SqlParameter("@IntlCode", (object?)definition.IntlCode ?? DBNull.Value));
@@ -1750,14 +1789,16 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task DeleteUnitAsync(int id, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             DELETE FROM {_measureUnitDefinitionsTableName}
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
 
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -1861,14 +1902,16 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task SaveItemUnitsAsync(int itemId, IReadOnlyCollection<ItemUnit> conversions, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await EnsureItemUnitsTableAsync(connection, cancellationToken);
 
         // Mevcut satirlari sil
         await using (var delCmd = connection.CreateCommand())
         {
-            delCmd.CommandText = $"DELETE FROM {_itemUnitsTableName} WHERE [ItemId] = @ItemId;";
+            delCmd.CommandText = $"DELETE FROM {_itemUnitsTableName} WHERE [ItemId] = @ItemId AND [CompanyId] = @CompanyId;";
             delCmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+            delCmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await delCmd.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -1880,13 +1923,14 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             await using var cmd = connection.CreateCommand();
             cmd.CommandText = $"""
                 INSERT INTO {_itemUnitsTableName}
-                    ([ItemId],[LineNo],[UnitId],[Multiplier])
-                VALUES (@ItemId, @LineNo, @UnitId, @Multiplier);
+                    ([ItemId],[LineNo],[UnitId],[Multiplier],[CompanyId])
+                VALUES (@ItemId, @LineNo, @UnitId, @Multiplier, @CompanyId);
                 """;
             cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
             cmd.Parameters.Add(new SqlParameter("@LineNo", lineNo));
             cmd.Parameters.Add(new SqlParameter("@UnitId", c.UnitId));
             cmd.Parameters.Add(new SqlParameter("@Multiplier", c.Multiplier));
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await cmd.ExecuteNonQueryAsync(cancellationToken);
         }
     }
@@ -1979,13 +2023,15 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         (int ItemId, int[] AllowedValueIds, bool PrintDescriptionInDesign)[] items,
         CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
 
         // Bu ozellige ait TUM linkleri sil (header + value-restriction)
         await using (var delCmd = connection.CreateCommand())
         {
-            delCmd.CommandText = $"DELETE FROM {_itemFeatureMappingsTableName} WHERE [FeatureId] = @FeatureId;";
+            delCmd.CommandText = $"DELETE FROM {_itemFeatureMappingsTableName} WHERE [FeatureId] = @FeatureId AND [CompanyId] = @CompanyId;";
             delCmd.Parameters.Add(new SqlParameter("@FeatureId", featureId));
+            delCmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await delCmd.ExecuteNonQueryAsync(cancellationToken);
         }
 

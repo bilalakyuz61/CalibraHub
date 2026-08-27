@@ -381,11 +381,12 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
             {
                 cmd.Transaction = tx;
                 cmd.CommandText = $@"
-                    INSERT INTO {_srcTable} ([WorkOrderId],[SourceDocumentId],[SourceLineId],[AllocatedQuantity],[Created])
-                    SELECT @NewId, [SourceDocumentId], [SourceLineId], [AllocatedQuantity], SYSUTCDATETIME()
-                    FROM {_srcTable} WHERE [WorkOrderId] = @OldId;";
+                    INSERT INTO {_srcTable} ([WorkOrderId],[SourceDocumentId],[SourceLineId],[AllocatedQuantity],[Created],[CompanyId])
+                    SELECT @NewId, [SourceDocumentId], [SourceLineId], [AllocatedQuantity], SYSUTCDATETIME(), @CompanyId
+                    FROM {_srcTable} WHERE [WorkOrderId] = @OldId AND [CompanyId] = @CompanyId;";
                 cmd.Parameters.AddWithValue("@NewId", newId);
                 cmd.Parameters.AddWithValue("@OldId", existingId);
+                cmd.Parameters.AddWithValue("@CompanyId", companyId);
                 await cmd.ExecuteNonQueryAsync(ct);
             }
 
@@ -435,8 +436,9 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
-            INSERT INTO {_srcTable} ([WorkOrderId],[SourceDocumentId],[SourceLineId],[AllocatedQuantity],[Created])
-            VALUES (@WorkOrderId, @SourceDocumentId, @SourceLineId, @AllocatedQuantity, SYSUTCDATETIME());";
+            INSERT INTO {_srcTable} ([WorkOrderId],[SourceDocumentId],[SourceLineId],[AllocatedQuantity],[Created],[CompanyId])
+            VALUES (@WorkOrderId, @SourceDocumentId, @SourceLineId, @AllocatedQuantity, SYSUTCDATETIME(),
+                    (SELECT p.[CompanyId] FROM {_woTable} p WHERE p.[Id] = @WorkOrderId));";
         cmd.Parameters.AddWithValue("@WorkOrderId", workOrderId);
         cmd.Parameters.AddWithValue("@SourceDocumentId", sourceDocumentId);
         cmd.Parameters.AddWithValue("@SourceLineId", sourceLineId);
@@ -696,10 +698,11 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
             UPDATE {_woTable}
                SET [ProducedQuantity] = @Produced,
                    [ScrapQuantity]    = @Scrap
-             WHERE [Id] = @Id;";
+             WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Id", workOrderId);
         cmd.Parameters.AddWithValue("@Produced", produced);
         cmd.Parameters.AddWithValue("@Scrap", scrap);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

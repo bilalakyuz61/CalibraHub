@@ -64,7 +64,10 @@ public sealed class SqlServerConnectionFactory : IDbConnectionFactory
     /// </summary>
     private async Task ApplyCompanyContextAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
-        var companyId = ResolveCurrentCompanyId();
+        // Ham OTURUM degeri: RLS baglami yalniz gercek bir kullanici oturumunda yazilmali.
+        // Sahibi-sirket geri donusu burada YANLIS olurdu — arka plan isleri kendini
+        // bir kiraciymis gibi tanitirdi.
+        var companyId = ResolveSessionCompanyId();
         if (companyId <= 0) return;
 
         try
@@ -127,7 +130,7 @@ public sealed class SqlServerConnectionFactory : IDbConnectionFactory
     /// </summary>
     public int ResolveEffectiveCompanyId()
     {
-        var current = ResolveCurrentCompanyId();
+        var current = ResolveSessionCompanyId();
         if (current > 0) return current;
 
         var key = ResolveConnectionString();
@@ -163,11 +166,22 @@ public sealed class SqlServerConnectionFactory : IDbConnectionFactory
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> OwnerCompanyCache = new();
 
     /// <summary>
-    /// Mevcut request'in company_id claim degerini dondurur. Authenticated degilse 0 doner.
-    /// Kiraci suzgeci icin <see cref="ResolveEffectiveCompanyId"/> kullanin — bu metod
-    /// ham claim degerini verir, geri donus degeri YOKTUR.
+    /// Kiracı süzgeçlerinin ve INSERT'lerin kullandığı şirket. <see cref="ResolveEffectiveCompanyId"/>
+    /// ile AYNI davranır — geri dönüşü vardır.
+    ///
+    /// <para><b>2026-08-27'de davranışı DEĞİŞTİ.</b> Eskiden kimliksiz bağlamda <c>0</c> dönüyordu
+    /// ve 135 çağrı yerinin tamamı bu değeri doğrudan kullanıyordu. Sonuç: malzeme içe aktarımı
+    /// 39.796 satırı <c>CompanyId = 0</c> ile yazdı — var olmayan bir şirkete ait, hiçbir ekranda
+    /// görünmeyen ölü kayıtlar. Veri temizlendikten sonra aktarım tekrar çalıştı ve aynı yığını
+    /// yeniden üretti; sebep veri değil koddu.</para>
+    ///
+    /// <para>Ham oturum değeri gerekiyorsa (ör. "gerçekten giriş yapılmış mı") özel
+    /// <c>ResolveSessionCompanyId</c> kullanılır — o hâlâ 0 döner.</para>
     /// </summary>
-    public int ResolveCurrentCompanyId()
+    public int ResolveCurrentCompanyId() => ResolveEffectiveCompanyId();
+
+    /// <summary>Ham <c>company_id</c> claim'i. Oturum yoksa 0 — geri dönüş YOK.</summary>
+    private int ResolveSessionCompanyId()
     {
         var httpContext = _httpContextAccessor.HttpContext;
         if (httpContext?.User.Identity?.IsAuthenticated != true) return 0;

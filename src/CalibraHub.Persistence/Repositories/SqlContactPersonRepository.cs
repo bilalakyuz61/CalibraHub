@@ -20,6 +20,7 @@ public sealed class SqlContactPersonRepository : IContactPersonRepository
     private readonly string _schema;
     private readonly string _table;
     private readonly string _titleTable;
+    private readonly string _contactTable;
 
     public SqlContactPersonRepository(SqlServerConnectionFactory connectionFactory, CalibraDatabaseOptions options)
     {
@@ -28,6 +29,7 @@ public sealed class SqlContactPersonRepository : IContactPersonRepository
         _schema = schema.Replace("]", "]]");
         _table = $"[{_schema}].[ContactPerson]";
         _titleTable = $"[{_schema}].[ContactPersonTitle]";
+        _contactTable = $"[{_schema}].[Contact]";
     }
 
     private string SelectColumns => $"""
@@ -78,10 +80,11 @@ public sealed class SqlContactPersonRepository : IContactPersonRepository
         cmd.CommandText = $"""
             INSERT INTO {_table}
                 ([ContactId],[TitleId],[FullName],[Phone],[Email],[Notes],
-                 [IsPrimary],[IsActive],[Created],[CreatedById])
+                 [IsPrimary],[IsActive],[Created],[CreatedById],[CompanyId])
             VALUES
                 (@ContactId,@TitleId,@FullName,@Phone,@Email,@Notes,
-                 @IsPrimary,@IsActive,SYSUTCDATETIME(),@CreatedById);
+                 @IsPrimary,@IsActive,SYSUTCDATETIME(),@CreatedById,
+                 (SELECT c.[CompanyId] FROM {_contactTable} c WHERE c.[Id] = @ContactId));
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         AddCommonParams(cmd, entity);
@@ -105,11 +108,12 @@ public sealed class SqlContactPersonRepository : IContactPersonRepository
                 [IsActive]  = @IsActive,
                 [Updated]   = SYSUTCDATETIME(),
                 [UpdatedById] = @UpdatedById
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         AddCommonParams(cmd, entity);
         cmd.Parameters.Add(new SqlParameter("@Id", entity.Id));
         cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)entity.UpdatedById ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -122,10 +126,11 @@ public sealed class SqlContactPersonRepository : IContactPersonRepository
             SET [IsActive] = 0,
                 [Updated]  = SYSUTCDATETIME(),
                 [UpdatedById]= @UpdatedById
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
         cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)deletedById ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

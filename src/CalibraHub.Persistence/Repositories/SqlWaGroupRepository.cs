@@ -54,7 +54,7 @@ public sealed class SqlWaGroupRepository : IWaGroupRepository
                    [Description] = @Desc,
                    [MemberCount] = @Cnt,
                    [Updated]     = SYSUTCDATETIME()
-             WHERE [GroupJid] = @Jid;
+             WHERE [GroupJid] = @Jid AND [CompanyId] = @CompanyId;
             """;
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
@@ -62,6 +62,7 @@ public sealed class SqlWaGroupRepository : IWaGroupRepository
         cmd.Parameters.AddWithValue("@Subject",  subject);
         cmd.Parameters.AddWithValue("@Desc",     (object?)description ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Cnt",      memberCount);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

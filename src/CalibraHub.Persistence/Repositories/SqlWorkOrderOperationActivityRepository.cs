@@ -19,6 +19,7 @@ public sealed class SqlWorkOrderOperationActivityRepository : IWorkOrderOperatio
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _schema;
     private readonly string _table;
+    private readonly string _opTable;
 
     public SqlWorkOrderOperationActivityRepository(SqlServerConnectionFactory factory, CalibraDatabaseOptions options)
     {
@@ -26,6 +27,7 @@ public sealed class SqlWorkOrderOperationActivityRepository : IWorkOrderOperatio
         _schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         var s = _schema.Replace("]", "]]");
         _table = $"[{s}].[WorkOrderOperationActivity]";
+        _opTable = $"[{s}].[WorkOrderOperation]";
     }
 
     public async Task<WorkOrderOperationActivityDto?> GetActiveAsync(int workOrderOperationId, CancellationToken ct)
@@ -65,11 +67,12 @@ public sealed class SqlWorkOrderOperationActivityRepository : IWorkOrderOperatio
                                      WHEN [Notes] IS NULL OR [Notes] = N'' THEN @Notes
                                      ELSE [Notes] + N' | ' + @Notes
                                    END
-            WHERE  [WorkOrderOperationId] = @OpId AND [EndedAt] IS NULL;
+            WHERE  [WorkOrderOperationId] = @OpId AND [EndedAt] IS NULL AND [CompanyId] = @CompanyId;
             SELECT @@ROWCOUNT;";
         cmd.Parameters.AddWithValue("@OpId", workOrderOperationId);
         cmd.Parameters.AddWithValue("@UpdatedById", personnelId);
         cmd.Parameters.AddWithValue("@Notes", (object?)notes ?? DBNull.Value);
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var rows = (int)(await cmd.ExecuteScalarAsync(ct) ?? 0);
         return rows > 0;
     }
@@ -78,13 +81,14 @@ public sealed class SqlWorkOrderOperationActivityRepository : IWorkOrderOperatio
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // CompanyId ebeveyn WorkOrderOperation'dan alınır.
         cmd.CommandText = $@"
             INSERT INTO {_table}
-                ([WorkOrderOperationId],[PersonnelId],[ActivityType],[ActivityReasonId],
+                ([WorkOrderOperationId],[CompanyId],[PersonnelId],[ActivityType],[ActivityReasonId],
                  [StartedAt],[EndedAt],[Quantity],[ScrapQuantity],[Notes],
                  [CreatedById],[Created])
             VALUES
-                (@OpId,@PersonnelId,@Type,@ReasonId,
+                (@OpId,(SELECT o.[CompanyId] FROM {_opTable} o WHERE o.[Id] = @OpId),@PersonnelId,@Type,@ReasonId,
                  @StartedAt,NULL,@Quantity,@ScrapQuantity,@Notes,
                  @CreatedById,SYSUTCDATETIME());
             SELECT CAST(SCOPE_IDENTITY() AS INT);";

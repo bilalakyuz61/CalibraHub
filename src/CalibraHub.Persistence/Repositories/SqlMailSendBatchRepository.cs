@@ -59,10 +59,11 @@ public sealed class SqlMailSendBatchRepository : IMailSendBatchRepository
         cmd.CommandText = $"""
             INSERT INTO {_itemTable}
                 ([BatchId],[ContactPersonId],[RecipientName],[RecipientEmail],
-                 [TitleName],[ContactName],[Status],[ErrorMessage],[SentAt])
+                 [TitleName],[ContactName],[Status],[ErrorMessage],[SentAt],[CompanyId])
             VALUES
                 (@BatchId,@ContactPersonId,@RecipientName,@RecipientEmail,
-                 @TitleName,@ContactName,@Status,@ErrorMessage,@SentAt);
+                 @TitleName,@ContactName,@Status,@ErrorMessage,@SentAt,
+                 (SELECT b.[CompanyId] FROM {_batchTable} b WHERE b.[Id] = @BatchId));
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         cmd.Parameters.Add(new SqlParameter("@BatchId",         item.BatchId));
@@ -82,16 +83,19 @@ public sealed class SqlMailSendBatchRepository : IMailSendBatchRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            UPDATE {_itemTable}
-            SET [Status]       = @Status,
+            UPDATE it SET
+                [Status]       = @Status,
                 [ErrorMessage] = @ErrorMessage,
                 [SentAt]       = @SentAt
-            WHERE [Id] = @Id;
+            FROM {_itemTable} it
+            WHERE it.[Id] = @Id
+              AND EXISTS (SELECT 1 FROM {_batchTable} b WHERE b.[Id] = it.[BatchId] AND b.[CompanyId] = @CompanyId);
             """;
         cmd.Parameters.Add(new SqlParameter("@Id",           itemId));
         cmd.Parameters.Add(new SqlParameter("@Status",       status ?? "Queued"));
         cmd.Parameters.Add(new SqlParameter("@ErrorMessage", (object?)errorMessage ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@SentAt",       (object?)sentAt ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId",    _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -103,11 +107,12 @@ public sealed class SqlMailSendBatchRepository : IMailSendBatchRepository
             UPDATE {_batchTable}
             SET [SentCount] = @Sent,
                 [FailCount] = @Fail
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id",   batchId));
         cmd.Parameters.Add(new SqlParameter("@Sent", sentCount));
         cmd.Parameters.Add(new SqlParameter("@Fail", failCount));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -219,8 +224,12 @@ public sealed class SqlMailSendBatchRepository : IMailSendBatchRepository
             await using (var cmd = conn.CreateCommand())
             {
                 cmd.Transaction = tx;
-                cmd.CommandText = $"DELETE FROM {_itemTable} WHERE [BatchId] = @Id;";
+                cmd.CommandText = $"""
+                    DELETE FROM {_itemTable} WHERE [BatchId] = @Id
+                      AND EXISTS (SELECT 1 FROM {_batchTable} b WHERE b.[Id] = @Id AND (@CompanyId = 0 OR b.[CompanyId] = @CompanyId));
+                    """;
                 cmd.Parameters.Add(new SqlParameter("@Id", batchId));
+                cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
                 await cmd.ExecuteNonQueryAsync(ct);
             }
             await using (var cmd = conn.CreateCommand())

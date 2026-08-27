@@ -44,14 +44,15 @@ public sealed class SqlCurrencyRepository : ICurrencyRepository
         await using var conn = await _connectionFactory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            INSERT INTO {_table} ([Code],[Name],[Symbol],[IsActive],[Created],[Updated])
-            VALUES (@Code, @Name, @Symbol, @IsActive, GETDATE(), GETDATE());
+            INSERT INTO {_table} ([Code],[Name],[Symbol],[IsActive],[Created],[Updated],[CompanyId])
+            VALUES (@Code, @Name, @Symbol, @IsActive, GETDATE(), GETDATE(), @CompanyId);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         cmd.Parameters.Add(new SqlParameter("@Code", entity.Code));
         cmd.Parameters.Add(new SqlParameter("@Name", entity.Name));
         cmd.Parameters.Add(new SqlParameter("@Symbol", (object?)entity.Symbol ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@IsActive", entity.IsActive));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
     }
 
@@ -59,12 +60,13 @@ public sealed class SqlCurrencyRepository : ICurrencyRepository
     {
         await using var conn = await _connectionFactory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE {_table} SET [Code]=@Code,[Name]=@Name,[Symbol]=@Symbol,[IsActive]=@IsActive,[Updated]=GETDATE() WHERE [Id]=@Id;";
+        cmd.CommandText = $"UPDATE {_table} SET [Code]=@Code,[Name]=@Name,[Symbol]=@Symbol,[IsActive]=@IsActive,[Updated]=GETDATE() WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Id", entity.Id));
         cmd.Parameters.Add(new SqlParameter("@Code", entity.Code));
         cmd.Parameters.Add(new SqlParameter("@Name", entity.Name));
         cmd.Parameters.Add(new SqlParameter("@Symbol", (object?)entity.Symbol ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@IsActive", entity.IsActive));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -72,8 +74,9 @@ public sealed class SqlCurrencyRepository : ICurrencyRepository
     {
         await using var conn = await _connectionFactory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id]=@Id;";
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

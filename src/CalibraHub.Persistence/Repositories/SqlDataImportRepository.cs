@@ -281,9 +281,10 @@ public sealed class SqlDataImportRepository : IDataImportRepository
                 [ErrorMessage] = @ErrorMessage,
                 [PreProcedureResult] = @PreProcedureResult,
                 [PostProcedureResult] = @PostProcedureResult
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", run.Id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@FinishedAt", (object?)run.FinishedAt ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@DurationMs", (object?)run.DurationMs ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Status", (int)run.Status));

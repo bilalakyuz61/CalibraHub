@@ -157,8 +157,9 @@ public sealed class SqlRoutingRepository : IRoutingRepository
                 await using (var del = conn.CreateCommand())
                 {
                     del.Transaction = tx;
-                    del.CommandText = $"DELETE FROM {_opTable} WHERE [RoutingId] = @RoutingId;";
+                    del.CommandText = $"DELETE FROM {_opTable} WHERE [RoutingId] = @RoutingId AND [CompanyId] = @CompanyId;";
                     del.Parameters.AddWithValue("@RoutingId", routingId);
+                    del.Parameters.AddWithValue("@CompanyId", companyId);
                     await del.ExecuteNonQueryAsync(ct);
                 }
 
@@ -169,9 +170,9 @@ public sealed class SqlRoutingRepository : IRoutingRepository
                     ins.CommandText = $@"
                         INSERT INTO {_opTable}
                             ([RoutingId],[Sequence],[OperationId],[MachineId],
-                             [OverrideDuration],[DurationUnit],[Notes])
+                             [OverrideDuration],[DurationUnit],[Notes],[CompanyId])
                         VALUES (@RoutingId,@Sequence,@OperationId,@MachineId,
-                                @OverrideDuration,@DurationUnit,@Notes);";
+                                @OverrideDuration,@DurationUnit,@Notes,@CompanyId);";
                     ins.Parameters.AddWithValue("@RoutingId", routingId);
                     ins.Parameters.AddWithValue("@Sequence", op.Sequence);
                     ins.Parameters.AddWithValue("@OperationId", op.OperationId);
@@ -179,6 +180,7 @@ public sealed class SqlRoutingRepository : IRoutingRepository
                     ins.Parameters.AddWithValue("@OverrideDuration", (object?)op.OverrideDuration ?? DBNull.Value);
                     ins.Parameters.AddWithValue("@DurationUnit", (byte)op.DurationUnit);
                     ins.Parameters.AddWithValue("@Notes", (object?)op.Notes ?? DBNull.Value);
+                    ins.Parameters.AddWithValue("@CompanyId", companyId);
                     await ins.ExecuteNonQueryAsync(ct);
                 }
             }
@@ -307,8 +309,9 @@ public sealed class SqlRoutingRepository : IRoutingRepository
                   AND ((@ConfigId IS NULL AND [ConfigId] IS NULL) OR [ConfigId]=@ConfigId)
             )
             BEGIN
-                INSERT INTO {_mapTable} ([RoutingId],[ItemId],[ConfigId])
-                VALUES (@RoutingId,@ItemId,@ConfigId);
+                INSERT INTO {_mapTable} ([RoutingId],[ItemId],[ConfigId],[CompanyId])
+                VALUES (@RoutingId,@ItemId,@ConfigId,
+                    (SELECT r.[CompanyId] FROM {_routingTable} r WHERE r.[Id] = @RoutingId));
             END
             SELECT ISNULL(
                 (SELECT [Id] FROM {_mapTable}
@@ -326,8 +329,9 @@ public sealed class SqlRoutingRepository : IRoutingRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_mapTable} WHERE [Id]=@Id;";
+        cmd.CommandText = $"DELETE FROM {_mapTable} WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveCurrentCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

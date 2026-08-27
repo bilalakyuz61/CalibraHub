@@ -81,14 +81,15 @@ public sealed class SqlImportTemplateRepository : IImportTemplateRepository
             cmd.CommandText = $"""
                 INSERT INTO {_table}
                   ([Name],[TargetEntity],[SheetName],[HeaderRowIndex],[MatchKeyField],
-                   [MappingJson],[IsActive],[CreatedById])
+                   [MappingJson],[IsActive],[CreatedById],[CompanyId])
                 OUTPUT INSERTED.[Id]
                 VALUES
                   (@Name,@TargetEntity,@SheetName,@HeaderRowIndex,@MatchKeyField,
-                   @MappingJson,@IsActive,@CreatedById);
+                   @MappingJson,@IsActive,@CreatedById,@CompanyId);
                 """;
             Bind(cmd, entity);
             cmd.Parameters.Add(new SqlParameter("@CreatedById", (object?)entity.CreatedById ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
             return (int)(await cmd.ExecuteScalarAsync(ct) ?? 0);
         }
 
@@ -103,11 +104,12 @@ public sealed class SqlImportTemplateRepository : IImportTemplateRepository
                 [IsActive] = @IsActive,
                 [UpdatedById] = @UpdatedById,
                 [Updated] = SYSUTCDATETIME()
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", entity.Id));
         Bind(cmd, entity);
         cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)entity.UpdatedById ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
         return entity.Id;
     }
@@ -116,8 +118,9 @@ public sealed class SqlImportTemplateRepository : IImportTemplateRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id;";
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -129,9 +132,10 @@ public sealed class SqlImportTemplateRepository : IImportTemplateRepository
             UPDATE {_table} SET [IsActive] = CASE WHEN [IsActive] = 1 THEN 0 ELSE 1 END,
                                 [Updated] = SYSUTCDATETIME()
             OUTPUT INSERTED.[IsActive]
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var res = await cmd.ExecuteScalarAsync(ct);
         return res is bool b && b;
     }

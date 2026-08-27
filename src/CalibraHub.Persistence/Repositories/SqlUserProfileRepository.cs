@@ -136,11 +136,13 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
                 [GridPreferencesJson] = @GridPreferencesJson,
                 [IsActive] = @IsActive,
                 [PhoneNumber] = @PhoneNumber
-            WHERE [Id] = @Id AND [CompanyId] = @FilterCompanyId;
+            WHERE [Id] = @Id;
             """;
+        // tenant-ok: bilincli DOKUNULMADI — bkz. dosya sonu notu (Users sistem DB'de
+        // paylasilan/coklu-sirket tablo; AccountController.ResetPassword/SetupController
+        // gibi anonim/oturumsuz akislarda CompanyId oturumdan cozulemez).
 
         AddUserParameters(command, userProfile, includeId: true);
-        command.Parameters.Add(new SqlParameter("@FilterCompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -233,6 +235,11 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
     {
         await using var connection = await _connectionFactory.OpenSystemConnectionAsync(ct);
         await using var command = connection.CreateCommand();
+        // tenant-ok: bilincli DOKUNULMADI — ForgotPassword akisi [AllowAnonymous], sirket
+        // sorulmadan email'e gore TUM sirketlerdeki aktif kullanicilar taranir (bkz.
+        // AccountController.ForgotPassword yorumu: "sirket sorulmaz, sifre sirket bazli degil").
+        // Oturum yok -> ResolveEffectiveCompanyId() DB sahibi sirkete duser, digfer sirketlerin
+        // kullanicilari icin token sessizce yazilmaz olurdu (surgecsizlikten daha kotu).
         command.CommandText = $"""
             UPDATE {_tableName}
             SET [PasswordResetToken] = @Token, [PasswordResetTokenExpiry] = @Expiry
@@ -260,6 +267,9 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         return await reader.ReadAsync(ct) ? MapUser(reader) : null;
     }
 
+    // tenant-ok: bilincli DOKUNULMADI — bkz. UpdateAsync/SetResetTokenAsync yorumlari.
+    // userId zaten GetByResetTokenAsync/GetByIdAsync ile onceden dogrulanmis; ayni anonim
+    // ResetPassword akisinin parcasi (AccountController.cs:520) + admin akislarindan cagrilir.
     public async Task SetMustChangePasswordAsync(int userId, bool mustChange, CancellationToken ct)
     {
         await using var connection = await _connectionFactory.OpenSystemConnectionAsync(ct);
@@ -272,6 +282,8 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    // tenant-ok: bilincli DOKUNULMADI — ayni anonim ResetPassword akisinin parcasi
+    // (AccountController.cs:516), userId GetByResetTokenAsync ile onceden dogrulanmis.
     public async Task ClearResetTokenAsync(int userId, CancellationToken ct)
     {
         await using var connection = await _connectionFactory.OpenSystemConnectionAsync(ct);

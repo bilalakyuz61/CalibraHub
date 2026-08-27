@@ -62,9 +62,9 @@ public sealed class SqlWorkflowInstanceRepository(SqlServerConnectionFactory con
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = """
             INSERT INTO [WorkflowInstance]
-                (DefinitionId, SourceType, SourceId, Status, StartedAt, StartedBy, CompletedAt, ContextJson, CreatedById, Created)
+                (DefinitionId, SourceType, SourceId, Status, StartedAt, StartedBy, CompletedAt, ContextJson, CreatedById, Created, CompanyId)
             OUTPUT INSERTED.Id
-            VALUES (@DefinitionId, @SourceType, @SourceId, @Status, @StartedAt, @StartedBy, @CompletedAt, @ContextJson, @CreatedById, SYSUTCDATETIME());
+            VALUES (@DefinitionId, @SourceType, @SourceId, @Status, @StartedAt, @StartedBy, @CompletedAt, @ContextJson, @CreatedById, SYSUTCDATETIME(), @CompanyId);
             """;
         cmd.Parameters.AddWithValue("@DefinitionId", instance.DefinitionId);
         cmd.Parameters.AddWithValue("@SourceType",   instance.SourceType);
@@ -75,6 +75,7 @@ public sealed class SqlWorkflowInstanceRepository(SqlServerConnectionFactory con
         cmd.Parameters.AddWithValue("@CompletedAt",   (object?)instance.CompletedAt ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@ContextJson",   (object?)instance.ContextJson ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@CreatedById",   (object?)instance.CreatedById ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CompanyId",     connectionFactory.ResolveEffectiveCompanyId());
         return (int)(await cmd.ExecuteScalarAsync(ct))!;
     }
 
@@ -85,11 +86,12 @@ public sealed class SqlWorkflowInstanceRepository(SqlServerConnectionFactory con
         cmd.CommandText = """
             UPDATE [WorkflowInstance]
             SET Status = @Status, CompletedAt = @CompletedAt, Updated = SYSUTCDATETIME()
-            WHERE Id = @Id;
+            WHERE Id = @Id AND CompanyId = @CompanyId;
             """;
         cmd.Parameters.AddWithValue("@Id",          instance.Id);
         cmd.Parameters.AddWithValue("@Status",       instance.Status.ToString());
         cmd.Parameters.AddWithValue("@CompletedAt",  (object?)instance.CompletedAt ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CompanyId",    connectionFactory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -114,10 +116,11 @@ public sealed class SqlWorkflowInstanceRepository(SqlServerConnectionFactory con
         cmd.CommandText = """
             INSERT INTO [WorkflowInstanceNode]
                 (InstanceId, NodeId, Status, AssignedUserId, EnteredAt, CompletedAt,
-                 Action, ActionBy, Note, CreatedById, Created)
+                 Action, ActionBy, Note, CreatedById, Created, CompanyId)
             OUTPUT INSERTED.Id
             VALUES (@InstanceId, @NodeId, @Status, @AssignedUserId, @EnteredAt, @CompletedAt,
-                    @Action, @ActionBy, @Note, @CreatedById, SYSUTCDATETIME());
+                    @Action, @ActionBy, @Note, @CreatedById, SYSUTCDATETIME(),
+                    (SELECT p.CompanyId FROM [WorkflowInstance] p WHERE p.Id = @InstanceId));
             """;
         cmd.Parameters.AddWithValue("@InstanceId",     node.InstanceId);
         cmd.Parameters.AddWithValue("@NodeId",         node.NodeId);
@@ -142,7 +145,7 @@ public sealed class SqlWorkflowInstanceRepository(SqlServerConnectionFactory con
                 EnteredAt = @EnteredAt, CompletedAt = @CompletedAt,
                 Action = @Action, ActionBy = @ActionBy, Note = @Note,
                 Updated = SYSUTCDATETIME()
-            WHERE Id = @Id;
+            WHERE Id = @Id AND CompanyId = @CompanyId;
             """;
         cmd.Parameters.AddWithValue("@Id",             node.Id);
         cmd.Parameters.AddWithValue("@Status",         node.Status.ToString());
@@ -152,6 +155,7 @@ public sealed class SqlWorkflowInstanceRepository(SqlServerConnectionFactory con
         cmd.Parameters.AddWithValue("@Action",         (object?)node.Action ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@ActionBy",       (object?)node.ActionBy ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Note",           (object?)node.Note ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CompanyId",      connectionFactory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

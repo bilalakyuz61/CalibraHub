@@ -1214,7 +1214,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 var i = 0;
                 foreach (var e in entries)
                 {
-                    values.Add($"(@Q{i}, @K{i}, @D{i}, @V{i}, @L{i}, @N{i}, 1, @User, SYSUTCDATETIME())");
+                    values.Add($"(@Q{i}, @K{i}, @D{i}, @V{i}, @L{i}, @N{i}, 1, @User, SYSUTCDATETIME(), (SELECT dl.[CompanyId] FROM {_lineTable} dl WHERE dl.[Id] = @Q{i}))");
                     insert.Parameters.Add(new SqlParameter($"@Q{i}", e.RequestLineId));
                     insert.Parameters.Add(new SqlParameter($"@K{i}", (byte)e.Kind));
                     insert.Parameters.Add(new SqlParameter($"@D{i}", e.RefDocId));
@@ -1226,7 +1226,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 insert.Parameters.Add(new SqlParameter("@User", (object?)userId ?? DBNull.Value));
                 insert.CommandText = $"""
                     INSERT INTO {_fulfillmentTable}
-                        ([RequestLineId], [FulfillmentType], [RefDocId], [Quantity], [RefDocLineId], [Notes], [IsActive], [CreatedById], [Created])
+                        ([RequestLineId], [FulfillmentType], [RefDocId], [Quantity], [RefDocLineId], [Notes], [IsActive], [CreatedById], [Created], [CompanyId])
                     VALUES {string.Join(",\n           ", values)};
                     """;
                 await insert.ExecuteNonQueryAsync(ct);
@@ -1359,10 +1359,12 @@ public sealed class SqlDocumentRepository : IDocumentRepository
     public async Task SaveLineDetailsAsync(int documentLineId, IReadOnlyCollection<DocumentLineDetail> details, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using (var del = conn.CreateCommand())
         {
-            del.CommandText = $"DELETE FROM {_detailTable} WHERE [QuoteLineId] = @LineId;";
+            del.CommandText = $"DELETE FROM {_detailTable} WHERE [QuoteLineId] = @LineId AND [CompanyId] = @CompanyId;";
             del.Parameters.Add(new SqlParameter("@LineId", documentLineId));
+            del.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await del.ExecuteNonQueryAsync(ct);
         }
         var order = 0;
@@ -1371,8 +1373,9 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             order++;
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = $"""
-                INSERT INTO {_detailTable} ([QuoteLineId],[FeatureName],[ValueCode],[ValueName],[Description],[LineOrder])
-                VALUES (@LineId, @Feature, @ValCode, @ValName, @Desc, @Order);
+                INSERT INTO {_detailTable} ([QuoteLineId],[FeatureName],[ValueCode],[ValueName],[Description],[LineOrder],[CompanyId])
+                VALUES (@LineId, @Feature, @ValCode, @ValName, @Desc, @Order,
+                    (SELECT dl.[CompanyId] FROM {_lineTable} dl WHERE dl.[Id] = @LineId));
                 """;
             cmd.Parameters.Add(new SqlParameter("@LineId", documentLineId));
             cmd.Parameters.Add(new SqlParameter("@Feature", d.FeatureName));

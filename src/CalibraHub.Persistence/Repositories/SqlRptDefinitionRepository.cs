@@ -174,11 +174,13 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
         {
+            var companyId = _connectionFactory.ResolveEffectiveCompanyId();
             await using (var delCmd = conn.CreateCommand())
             {
                 delCmd.Transaction = tx;
-                delCmd.CommandText = $"DELETE FROM {_rptDefRole} WHERE [DefId] = @DefId;";
+                delCmd.CommandText = $"DELETE FROM {_rptDefRole} WHERE [DefId] = @DefId AND [CompanyId] = @CompanyId;";
                 delCmd.Parameters.AddWithValue("@DefId", defId);
+                delCmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
                 await delCmd.ExecuteNonQueryAsync(ct);
             }
 
@@ -186,9 +188,10 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
             {
                 await using var insCmd = conn.CreateCommand();
                 insCmd.Transaction = tx;
+                // CompanyId ebeveyn RptDef'ten alınır.
                 insCmd.CommandText = $@"
-                    INSERT INTO {_rptDefRole} ([DefId],[Role],[CanView],[CanEdit],[CanDelete])
-                    VALUES (@DefId,@Role,@CanView,@CanEdit,@CanDelete);";
+                    INSERT INTO {_rptDefRole} ([DefId],[CompanyId],[Role],[CanView],[CanEdit],[CanDelete])
+                    VALUES (@DefId,(SELECT d.[CompanyId] FROM {_rptDef} d WHERE d.[Id] = @DefId),@Role,@CanView,@CanEdit,@CanDelete);";
                 insCmd.Parameters.AddWithValue("@DefId", defId);
                 insCmd.Parameters.AddWithValue("@Role", (byte)role.Role);
                 insCmd.Parameters.AddWithValue("@CanView", role.CanView);
@@ -210,8 +213,9 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE {_rptDef} SET [IsActive] = 0, [Updated] = SYSUTCDATETIME() WHERE [Id] = @Id;";
+        cmd.CommandText = $"UPDATE {_rptDef} SET [IsActive] = 0, [Updated] = SYSUTCDATETIME() WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

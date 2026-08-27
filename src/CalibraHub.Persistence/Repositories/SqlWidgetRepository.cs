@@ -471,15 +471,18 @@ public sealed class SqlWidgetRepository : IWidgetRepository
                 del.CommandText = $"""
                     DELETE FROM {_widgetTraTable}
                     WHERE [RecordId] = @RecordId
-                      AND [WidgetId] IN (SELECT [Id] FROM {_widgetMasTable} WHERE [FormId] = @FormId);
+                      AND [WidgetId] IN (SELECT [Id] FROM {_widgetMasTable} WHERE [FormId] = @FormId)
+                      AND (@CompanyId = 0 OR [CompanyId] = @CompanyId);
                     """;
                 del.Parameters.Add(new SqlParameter("@FormId", formId));
                 del.Parameters.Add(new SqlParameter("@RecordId", recordId));
+                del.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
                 await del.ExecuteNonQueryAsync(ct);
             }
 
             // Yeni degerleri ekle (null olmayanlar)
             var now = DateTime.Now;
+            var companyIdForInsert = GetCurrentCompanyId();
             var userCols = hasAudit ? ",[CreatedBy],[UpdatedBy]" : string.Empty;
             var userVals = hasAudit ? ", @UserName, @UserName" : string.Empty;
             foreach (var kv in valuesByWidgetId)
@@ -489,9 +492,9 @@ public sealed class SqlWidgetRepository : IWidgetRepository
                 ins.Transaction = tx;
                 ins.CommandText = $"""
                     INSERT INTO {_widgetTraTable}
-                        ([WidgetId],[RecordId],[ParentRecordId],[Value],[CreatedAt],[UpdatedAt]{userCols})
+                        ([WidgetId],[RecordId],[ParentRecordId],[Value],[CreatedAt],[UpdatedAt],[CompanyId]{userCols})
                     VALUES
-                        (@WidgetId, @RecordId, @ParentRecordId, @Value, @CreatedAt, @UpdatedAt{userVals});
+                        (@WidgetId, @RecordId, @ParentRecordId, @Value, @CreatedAt, @UpdatedAt, @CompanyId{userVals});
                     """;
                 ins.Parameters.Add(new SqlParameter("@WidgetId", kv.Key));
                 ins.Parameters.Add(new SqlParameter("@RecordId", recordId));
@@ -499,6 +502,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
                 ins.Parameters.Add(new SqlParameter("@Value", (object?)kv.Value ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@CreatedAt", now));
                 ins.Parameters.Add(new SqlParameter("@UpdatedAt", now));
+                ins.Parameters.Add(new SqlParameter("@CompanyId", companyIdForInsert));
                 if (hasAudit)
                     ins.Parameters.Add(new SqlParameter("@UserName", (object?)userName ?? DBNull.Value));
                 await ins.ExecuteNonQueryAsync(ct);
@@ -533,9 +537,9 @@ public sealed class SqlWidgetRepository : IWidgetRepository
                     log.Transaction = tx;
                     log.CommandText = $"""
                         INSERT INTO {_widgetTraLogTable}
-                            ([FormId],[WidgetId],[WidgetCode],[RecordId],[ParentRecordId],[OldValue],[NewValue],[ChangedBy],[ChangedAt])
+                            ([FormId],[WidgetId],[WidgetCode],[RecordId],[ParentRecordId],[OldValue],[NewValue],[ChangedBy],[ChangedAt],[CompanyId])
                         VALUES
-                            (@FormId, @WidgetId, @WidgetCode, @RecordId, @ParentRecordId, @OldValue, @NewValue, @ChangedBy, @ChangedAt);
+                            (@FormId, @WidgetId, @WidgetCode, @RecordId, @ParentRecordId, @OldValue, @NewValue, @ChangedBy, @ChangedAt, @CompanyId);
                         """;
                     log.Parameters.Add(new SqlParameter("@FormId", formId));
                     log.Parameters.Add(new SqlParameter("@WidgetId", c.WidgetId));
@@ -547,6 +551,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
                     log.Parameters.Add(new SqlParameter("@NewValue", (object?)c.New ?? DBNull.Value));
                     log.Parameters.Add(new SqlParameter("@ChangedBy", (object?)userName ?? DBNull.Value));
                     log.Parameters.Add(new SqlParameter("@ChangedAt", now));
+                    log.Parameters.Add(new SqlParameter("@CompanyId", companyIdForInsert));
                     await log.ExecuteNonQueryAsync(ct);
                 }
             }
@@ -579,19 +584,22 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         var userCols = hasAudit ? ", [CreatedBy], [UpdatedBy]" : string.Empty;
         var userVals = hasAudit ? ", @UserName, @UserName" : string.Empty;
         await using var cmd = conn.CreateCommand();
+        var companyId = GetCurrentCompanyId();
         cmd.CommandText = $"""
-            INSERT INTO {_widgetTraTable} ([WidgetId], [RecordId], [ParentRecordId], [Value], [CreatedAt], [UpdatedAt]{userCols})
-            SELECT t.[WidgetId], @Target, NULL, t.[Value], @Now, @Now{userVals}
+            INSERT INTO {_widgetTraTable} ([WidgetId], [RecordId], [ParentRecordId], [Value], [CreatedAt], [UpdatedAt], [CompanyId]{userCols})
+            SELECT t.[WidgetId], @Target, NULL, t.[Value], @Now, @Now, @CompanyId{userVals}
             FROM {_widgetTraTable} t
             INNER JOIN {_widgetMasTable} m ON m.[Id] = t.[WidgetId]
             WHERE m.[FormId] = @FormId
               AND t.[RecordId] = @Source
-              AND t.[ParentRecordId] IS NULL;
+              AND t.[ParentRecordId] IS NULL
+              AND (@CompanyId = 0 OR t.[CompanyId] = @CompanyId);
             """;
         cmd.Parameters.Add(new SqlParameter("@FormId", formId));
         cmd.Parameters.Add(new SqlParameter("@Source", sourceRecordId));
         cmd.Parameters.Add(new SqlParameter("@Target", targetRecordId));
         cmd.Parameters.Add(new SqlParameter("@Now", DateTime.Now));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         if (hasAudit)
             cmd.Parameters.Add(new SqlParameter("@UserName", (object?)GetCurrentUserName() ?? DBNull.Value));
         await cmd.ExecuteNonQueryAsync(ct);
@@ -686,6 +694,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         try
         {
             // Her child RecordId icin ayri DELETE — parametre listesi esnek kalsin
+            var companyId = GetCurrentCompanyId();
             foreach (var rid in childRecordIds)
             {
                 await using var del = conn.CreateCommand();
@@ -693,10 +702,12 @@ public sealed class SqlWidgetRepository : IWidgetRepository
                 del.CommandText = $"""
                     DELETE FROM {_widgetTraTable}
                     WHERE [RecordId] = @RecordId
-                      AND [WidgetId] IN (SELECT [Id] FROM {_widgetMasTable} WHERE [FormId] = @FormId);
+                      AND [WidgetId] IN (SELECT [Id] FROM {_widgetMasTable} WHERE [FormId] = @FormId)
+                      AND (@CompanyId = 0 OR [CompanyId] = @CompanyId);
                     """;
                 del.Parameters.Add(new SqlParameter("@FormId", childFormId));
                 del.Parameters.Add(new SqlParameter("@RecordId", rid));
+                del.Parameters.Add(new SqlParameter("@CompanyId", companyId));
                 await del.ExecuteNonQueryAsync(ct);
             }
             await tx.CommitAsync(ct);

@@ -71,9 +71,10 @@ public sealed class SqlContactItemRepository : IContactItemRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             INSERT INTO {_table}
-                ([ContactId],[ItemId],[VendorCode],[VendorName],[Notes],[IsActive],[Created])
+                ([ContactId],[ItemId],[VendorCode],[VendorName],[Notes],[IsActive],[Created],[CompanyId])
             VALUES
-                (@ContactId,@ItemId,@VendorCode,@VendorName,@Notes,@IsActive,@CreatedAt);
+                (@ContactId,@ItemId,@VendorCode,@VendorName,@Notes,@IsActive,@CreatedAt,
+                 (SELECT c.[CompanyId] FROM [{_schema}].[Contact] c WHERE c.[Id] = @ContactId));
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         AddParams(cmd, entity);
@@ -102,10 +103,11 @@ public sealed class SqlContactItemRepository : IContactItemRepository
                 [Notes]      = @Notes,
                 [IsActive]   = @IsActive,
                 [Updated]    = SYSUTCDATETIME()
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         AddParams(cmd, entity);
         cmd.Parameters.Add(new SqlParameter("@Id", entity.Id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         try
         {
@@ -121,8 +123,9 @@ public sealed class SqlContactItemRepository : IContactItemRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id;";
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

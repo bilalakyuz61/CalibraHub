@@ -189,6 +189,7 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
 
+        var companyId = _factory.ResolveEffectiveCompanyId();
         if (req.Id > 0)
         {
             cmd.CommandText = $@"
@@ -203,18 +204,20 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
                     [AccountType]    = @AccountType,
                     [IsActive]       = @IsActive,
                     [Updated]        = SYSUTCDATETIME()
-                WHERE [Id] = @Id;
+                WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
                 SELECT @Id;";
             cmd.Parameters.AddWithValue("@Id", req.Id);
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         }
         else
         {
             cmd.CommandText = $@"
                 INSERT INTO {_ruleTable}
-                    ([DocType],[LayoutId],[CustomerId],[ContactGroupId],[UserId],[BranchId],[WarehouseId],[AccountType],[IsActive])
+                    ([DocType],[LayoutId],[CustomerId],[ContactGroupId],[UserId],[BranchId],[WarehouseId],[AccountType],[IsActive],[CompanyId])
                 VALUES
-                    (@DocType,@LayoutId,@CustomerId,@ContactGroupId,@UserId,@BranchId,@WarehouseId,@AccountType,@IsActive);
+                    (@DocType,@LayoutId,@CustomerId,@ContactGroupId,@UserId,@BranchId,@WarehouseId,@AccountType,@IsActive,@CompanyId);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         }
 
         cmd.Parameters.Add(new SqlParameter("@DocType",  SqlDbType.NVarChar, 60) { Value = req.DocType });
@@ -242,11 +245,12 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
 
     public async Task SoftDeleteAsync(int id, CancellationToken ct)
     {
-        var sql = $"UPDATE {_ruleTable} SET [IsActive]=0, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Id;";
+        var sql = $"UPDATE {_ruleTable} SET [IsActive]=0, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _factory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

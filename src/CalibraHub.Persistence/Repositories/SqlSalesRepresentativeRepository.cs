@@ -45,12 +45,13 @@ public sealed class SqlSalesRepresentativeRepository : ISalesRepresentativeRepos
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            INSERT INTO {_table} ([RepName],[IsActive],[Created],[Updated])
-            VALUES (@Name, @IsActive, GETDATE(), GETDATE());
+            INSERT INTO {_table} ([RepName],[IsActive],[Created],[Updated],[CompanyId])
+            VALUES (@Name, @IsActive, GETDATE(), GETDATE(), @CompanyId);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         command.Parameters.Add(new SqlParameter("@Name", entity.RepName));
         command.Parameters.Add(new SqlParameter("@IsActive", entity.IsActive));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var result = await command.ExecuteScalarAsync(cancellationToken);
         return Convert.ToInt32(result);
     }
@@ -61,11 +62,12 @@ public sealed class SqlSalesRepresentativeRepository : ISalesRepresentativeRepos
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             UPDATE {_table} SET [RepName]=@Name, [IsActive]=@IsActive, [Updated]=GETDATE()
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@Id", entity.Id));
         command.Parameters.Add(new SqlParameter("@Name", entity.RepName));
         command.Parameters.Add(new SqlParameter("@IsActive", entity.IsActive));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -73,8 +75,9 @@ public sealed class SqlSalesRepresentativeRepository : ISalesRepresentativeRepos
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id;";
+        command.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
