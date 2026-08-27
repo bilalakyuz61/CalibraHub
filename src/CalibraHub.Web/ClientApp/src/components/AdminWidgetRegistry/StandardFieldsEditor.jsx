@@ -51,7 +51,7 @@ import {
   SlidersHorizontal, X as XIcon, Eye, EyeOff, Lock,
   AlertTriangle, Plus, Minus, LayoutGrid, Settings2, Trash2,
   GripVertical, ChevronDown, ChevronRight, Search, RotateCcw, Link2,
-  AlignLeft, AlignCenter, AlignRight,
+  AlignLeft, AlignCenter, AlignRight, Settings,
 } from 'lucide-react'
 // Top govdesine portallanmaz — bkz. LineCardLayoutEditor'daki ayni not: tam ekran
 // perde ust menu seridini kilitliyordu. iframe'in kendi body'sine portallanir.
@@ -395,15 +395,16 @@ var inputCls = 'w-full px-2 py-1 rounded-md text-[11.5px] border border-slate-20
   'dark:border-white/[0.14] dark:bg-slate-900/60 dark:text-white/85 dark:placeholder:text-white/45'
 
 /**
- * "Ayarla" butonunun etiketi — hangi davranislarin tanimli oldugunu tek bakista
- * gosterir. Hicbiri yoksa notr "Ayarla" yazar (kullanici neyin bos oldugunu bilir).
+ * Cark butonunun TOOLTIP ozeti — hangi davranislarin tanimli oldugunu soyler.
+ * (2026-08-27'ye kadar butonun gorunur etiketiydi; buton ikona indirilince
+ * metin title'a tasindi, bkz. renderFieldRow.)
  */
 function describeBehavior(f) {
   var parts = []
   if (f.defaultValue) parts.push('varsayılan: ' + f.defaultValue)
   if (f.visibleIf) parts.push('koşullu görünür')
   if (f.requiredIf) parts.push('koşullu zorunlu')
-  return parts.length ? parts.join(' · ') : 'Ayarla'
+  return parts.length ? parts.join(' · ') : 'henüz tanımlı değil'
 }
 
 // Sekme key'ine göre bağlam rozeti (yalnız üst bilgi formunda; kalem formunda
@@ -706,7 +707,7 @@ export default function StandardFieldsEditor(props) {
     (katlama) state'i tamamen kalkti. */
     return (
     <div className="w-full grid items-center gap-2"
-                         style={{ gridTemplateColumns: 'minmax(0,1.3fr) minmax(0,1fr) 74px 74px 150px 148px' }}>
+                         style={{ gridTemplateColumns: 'minmax(0,1.3fr) minmax(0,1fr) 74px 74px 150px 78px 30px' }}>
                       {/* 1) Alan adı + kilit + sekme rozeti */}
                       <div className="flex items-center gap-1.5 min-w-0">
                         {f.locked && <span title="Çekirdek alan — gizlenemez"><Lock size={11} className="text-slate-400 dark:text-white/45 flex-shrink-0" /></span>}
@@ -783,19 +784,27 @@ export default function StandardFieldsEditor(props) {
                           )
                         })}
                       </div>
-                      {/* 7) Varsayilan Deger / Gorunurluk / Zorunluluk kosulu — modal */}
+                      {/* 7) Varsayilan Deger / Gorunurluk / Zorunluluk kosulu — modal.
+                          2026-08-27 (kullanici istegi): bu buton 7. cocuk ama grid'de
+                          yalnizca 6 sutun tanimliydi -> IMPLICIT 2. SATIRA dusuyor,
+                          "her satir tek satir" duzeni bozuluyordu. Sutun eklendi ve
+                          buton sag uctaki dar cark ikonuna indirildi; ozet metin
+                          title'a tasindi, tanimli davranis indigo renk + nokta ile
+                          tek bakista belli olur. */}
                       <button
                         type="button"
                         onClick={function () { setBehaviorKey(f.key) }}
-                        title="Varsayılan değer, görünürlük ve zorunluluk koşulunu tanımla"
-                        className={'w-full flex items-center justify-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold border transition-colors ' + (
+                        title={'Varsayılan değer, görünürlük ve zorunluluk koşulu — ' + describeBehavior(f)}
+                        className={'relative justify-self-end w-7 h-7 flex items-center justify-center rounded-md border transition-colors ' + (
                           (f.defaultValue || f.visibleIf || f.requiredIf)
                             ? 'text-indigo-600 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 dark:text-indigo-300 dark:border-indigo-400/30 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20'
                             : 'text-slate-500 border-slate-200 bg-[#fff] hover:bg-slate-50 dark:text-white/55 dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08]'
                         )}
                       >
-                        <Settings2 size={12} strokeWidth={2.2} className="flex-shrink-0" />
-                        <span className="truncate">{describeBehavior(f)}</span>
+                        <Settings size={13} strokeWidth={2.2} />
+                        {(f.defaultValue || f.visibleIf || f.requiredIf) && (
+                          <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-indigo-500 dark:bg-indigo-400" />
+                        )}
                       </button>
                     </div>
     )
