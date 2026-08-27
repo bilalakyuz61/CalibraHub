@@ -4151,7 +4151,17 @@ body.app-theme-dark .cst-root {
 }
 
 .cst-wrap {
-  overflow-x: auto;
+  /* 2026-08-28: kutu, govdenin KALAN yuksekligini doldurur.
+     Onceden yalnizca icerigi kadar yuksekti; bu yuzden tek satirlik bir listede
+     yatay kaydirma cubugu satirin hemen altinda, sayfanin ortasinda asili
+     kaliyordu. flex:1 + min-height:0 ile kutu asagiya kadar uzar, cubuk da
+     dogal yerine — listenin dibine — oturur.
+     overflow: auto (yalnizca -x degil) ayrica dikey kaydiriciyi da BU kutuya
+     tasir; sonsuz kaydirma kodu (SmartBoard) zaten .cst-wrap'in scroll olayini
+     dinliyordu — yani tasarimin bastan beri varsaydigi davranis budur. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
   min-width: 0;
   border-radius: 16px;
   border: 1px solid var(--cst-border);
@@ -4165,9 +4175,9 @@ body.app-theme-dark .cst-root {
   table-layout: fixed;
 }
 
-/* Sticky header — SmartBoard'un disaridaki overflow-y-auto kapsayicisina
-   gore sabit kalir (bu sarmalayicida sadece overflow-x tanimli oldugu icin
-   dikey scroll bir ust ataya devreder — standart sticky-table deseni). */
+/* Sticky header — 2026-08-28'den itibaren dikey kaydirici .cst-wrap'in KENDISI
+   (overflow: auto). Basliklar bu kutuya gore sabit kalir; onceki notta anlatilan
+   "dikey scroll bir ust ataya devreder" davranisi artik gecerli DEGIL. */
 .cst-th {
   position: sticky;
   top: 0;
