@@ -183,9 +183,10 @@ public sealed class SqlFinanceRepository : IFinanceRepository
             SELECT TOP 1 [Id],[CompanyId],[AccountType],[AccountCode],[AccountTitle],
                    [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[WaPhone],[WaName],[Created],[ContactGroupId]
             FROM {_tableName}
-            WHERE [TaxNumber] = @TaxNumber;
+            WHERE [TaxNumber] = @TaxNumber AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@TaxNumber", taxNumber.Trim()));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? MapRow(reader) : null;
     }

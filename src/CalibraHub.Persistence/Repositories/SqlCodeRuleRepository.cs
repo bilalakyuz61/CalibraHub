@@ -47,9 +47,10 @@ public sealed class SqlCodeRuleRepository : ICodeRuleRepository
         cmd.CommandText = $"""
             SELECT TOP 1 [Id],[EntityType],[Name],[Template],[Priority],[ResetPeriod],[IsActive],
                    [CreatedById],[Created],[UpdatedById],[Updated]
-            FROM {_ruleTable} WHERE [Id]=@Id;
+            FROM {_ruleTable} WHERE [Id]=@Id AND [CompanyId]=@CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         CodeRule? rule = null;
         await using (var reader = await cmd.ExecuteReaderAsync(ct))
         {
@@ -204,9 +205,10 @@ public sealed class SqlCodeRuleRepository : ICodeRuleRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT [Id],[RuleId],[ResetKey],[CurrentValue],[LastUpdated]
-            FROM {_counterTable} WHERE [RuleId]=@Rid ORDER BY [ResetKey] DESC;
+            FROM {_counterTable} WHERE [RuleId]=@Rid AND [CompanyId]=@CompanyId ORDER BY [ResetKey] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@Rid", ruleId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
@@ -246,8 +248,8 @@ public sealed class SqlCodeRuleRepository : ICodeRuleRepository
         await using (var cmd = conn.CreateCommand())
         {
             var where = includeInactive
-                ? "WHERE [EntityType]=@Et"
-                : "WHERE [EntityType]=@Et AND [IsActive]=1";
+                ? "WHERE [EntityType]=@Et AND [CompanyId]=@CompanyId"
+                : "WHERE [EntityType]=@Et AND [IsActive]=1 AND [CompanyId]=@CompanyId";
             cmd.CommandText = $"""
                 SELECT [Id],[EntityType],[Name],[Template],[Priority],[ResetPeriod],[IsActive],
                        [CreatedById],[Created],[UpdatedById],[Updated]
@@ -255,6 +257,7 @@ public sealed class SqlCodeRuleRepository : ICodeRuleRepository
                 ORDER BY [Priority] DESC, [Name];
                 """;
             cmd.Parameters.Add(new SqlParameter("@Et", entityType));
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
             await using var reader = await cmd.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct)) rules.Add(MapRule(reader));
         }

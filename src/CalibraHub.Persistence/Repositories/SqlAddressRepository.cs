@@ -11,7 +11,7 @@ public sealed class SqlAddressRepository : IAddressRepository
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _postalTable;   // PostalLocality
     private readonly string _addressTable;  // ContactAddress
-    private readonly string _contactTable;  // Contact — ContactAddress'in CompanyId'si yok, tenant kontrolü buradan yapılır
+    private readonly string _contactTable;  // Contact — UPDATE/DELETE/SetDefault için ebeveyn tenant kontrolü buradan yapılır (JOIN deseni korunur); ContactAddress'e de sonradan [CompanyId] eklendi (2026-08-27)
 
     public SqlAddressRepository(SqlServerConnectionFactory connectionFactory, CalibraDatabaseOptions options)
     {
@@ -152,10 +152,11 @@ public sealed class SqlAddressRepository : IAddressRepository
         cmd.CommandText = $"""
             SELECT [Id],[ContactId],[Name],[CountryCode],[CityName],[DistrictName],[NeighborhoodName],[PostalCode],[AddressLine],[IsDefault],[Created]
             FROM {_addressTable}
-            WHERE [ContactId] = @ContactId
+            WHERE [ContactId] = @ContactId AND [CompanyId] = @CompanyId
             ORDER BY [IsDefault] DESC, [Created];
             """;
         cmd.Parameters.Add(new SqlParameter("@ContactId", contactId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var list = new List<ContactAddress>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) list.Add(MapAddress(r));
@@ -168,9 +169,10 @@ public sealed class SqlAddressRepository : IAddressRepository
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT [Id],[ContactId],[Name],[CountryCode],[CityName],[DistrictName],[NeighborhoodName],[PostalCode],[AddressLine],[IsDefault],[Created]
-            FROM {_addressTable} WHERE [Id] = @Id;
+            FROM {_addressTable} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? MapAddress(r) : null;
     }
@@ -184,10 +186,11 @@ public sealed class SqlAddressRepository : IAddressRepository
             INSERT INTO {_addressTable}
                 ([ContactId],[CompanyId],[Name],[CountryCode],[CityName],[DistrictName],[NeighborhoodName],[PostalCode],[AddressLine],[IsDefault],[Created])
             VALUES
-                (@ContactId,(SELECT c.[CompanyId] FROM {_contactTable} c WHERE c.[Id] = @ContactId),@Name,@Cc,@City,@Dist,@Ng,@Pk,@Addr,@Def,@At);
+                (@ContactId,(SELECT c.[CompanyId] FROM {_contactTable} c WHERE c.[Id] = @ContactId AND c.[CompanyId] = @CompanyId),@Name,@Cc,@City,@Dist,@Ng,@Pk,@Addr,@Def,@At);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         AddAddressParams(cmd, a);
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         return (int)(await cmd.ExecuteScalarAsync(ct))!;
     }
 

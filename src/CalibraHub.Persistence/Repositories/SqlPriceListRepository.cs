@@ -252,6 +252,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
             sb.AppendLine("  ) AS rn");
             sb.AppendLine($"  FROM {_tblEntries} p");
             sb.AppendLine("  WHERE p.[GroupId] = @GroupId");
+            sb.AppendLine("    AND p.[CompanyId] = @CompanyId");
             sb.AppendLine("    AND p.[IsActive] = 1");
             sb.AppendLine("    AND p.[ValidFrom] <= @ActiveOn");
             sb.AppendLine("    AND (p.[ValidTo] IS NULL OR p.[ValidTo] >= @ActiveOn)");
@@ -283,7 +284,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
             sb.AppendLine($"LEFT JOIN {TblItems} i ON i.[Id] = p.[ItemId]");
             sb.AppendLine($"LEFT JOIN {TblConfigurations} cfg ON cfg.[Id] = p.[ConfigId]");
             sb.AppendLine($"LEFT JOIN {TblCurrencies} cur ON cur.[Id] = p.[CurrencyId]");
-            sb.AppendLine($"WHERE p.[GroupId] = @GroupId");
+            sb.AppendLine($"WHERE p.[GroupId] = @GroupId AND p.[CompanyId] = @CompanyId");
         }
 
         if (filter.ItemId is int iid && iid > 0)
@@ -327,6 +328,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         sb.AppendLine("OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;");
 
         cmd.Parameters.Add(new SqlParameter("@GroupId",  groupId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@Offset",   offset));
         cmd.Parameters.Add(new SqlParameter("@PageSize", pageSize));
         cmd.CommandText = sb.ToString();
@@ -365,8 +367,9 @@ public sealed class SqlPriceListRepository : IPriceListRepository
     {
         await using var conn = await _cf.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
-        cmd.CommandText = $"SELECT {EntryCols} FROM {_tblEntries} WHERE [Id]=@Id;";
+        cmd.CommandText = $"SELECT {EntryCols} FROM {_tblEntries} WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? MapEntry(r) : null;
     }
@@ -377,11 +380,12 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = $"""
             INSERT INTO {_tblEntries}
-                ([GroupId],[ItemId],[ConfigId],[CurrencyId],[PriceType],[Price],[ValidFrom],[ValidTo],[IsActive],[Created],[Updated])
-            VALUES (@GroupId,@ItemId,@ConfigId,@CurrencyId,@PriceType,@Price,@ValidFrom,@ValidTo,@Active,GETDATE(),GETDATE());
+                ([GroupId],[ItemId],[ConfigId],[CurrencyId],[PriceType],[Price],[ValidFrom],[ValidTo],[IsActive],[Created],[Updated],[CompanyId])
+            VALUES (@GroupId,@ItemId,@ConfigId,@CurrencyId,@PriceType,@Price,@ValidFrom,@ValidTo,@Active,GETDATE(),GETDATE(),@CompanyId);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         AddEntryParams(cmd, e);
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
     }
 
@@ -389,15 +393,17 @@ public sealed class SqlPriceListRepository : IPriceListRepository
     {
         if (entries.Count == 0) return;
         await using var conn = await _cf.OpenConnectionAsync(ct);
+        var companyId = GetCurrentCompanyId();
         foreach (var e in entries)
         {
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = $"""
                 INSERT INTO {_tblEntries}
-                    ([GroupId],[ItemId],[ConfigId],[CurrencyId],[PriceType],[Price],[ValidFrom],[ValidTo],[IsActive],[Created],[Updated])
-                VALUES (@GroupId,@ItemId,@ConfigId,@CurrencyId,@PriceType,@Price,@ValidFrom,@ValidTo,@Active,GETDATE(),GETDATE());
+                    ([GroupId],[ItemId],[ConfigId],[CurrencyId],[PriceType],[Price],[ValidFrom],[ValidTo],[IsActive],[Created],[Updated],[CompanyId])
+                VALUES (@GroupId,@ItemId,@ConfigId,@CurrencyId,@PriceType,@Price,@ValidFrom,@ValidTo,@Active,GETDATE(),GETDATE(),@CompanyId);
                 """;
             AddEntryParams(cmd, e);
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await cmd.ExecuteNonQueryAsync(ct);
         }
     }
@@ -462,6 +468,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
               AND [PriceType]  = @PriceType
               AND [ValidFrom]  = @ValidFrom
               AND [IsActive]   = 1
+              AND [CompanyId]  = @CompanyId
               AND [Id]        <> @ExcludeId;";
         cmd.Parameters.Add(new SqlParameter("@GroupId",    groupId));
         cmd.Parameters.Add(new SqlParameter("@ItemId",     itemId));
@@ -470,6 +477,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         cmd.Parameters.Add(new SqlParameter("@CurrencyId", currencyId));
         cmd.Parameters.Add(new SqlParameter("@PriceType",  priceType));
         cmd.Parameters.Add(new SqlParameter("@ValidFrom",  validFrom));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId",  GetCurrentCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@ExcludeId",  excludeId));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? MapEntry(r) : null;
@@ -485,9 +493,12 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         var updated  = 0;
 
         await using var conn = await _cf.OpenConnectionAsync(ct);
+        var companyId = GetCurrentCompanyId();
         foreach (var e in entries)
         {
             await using var cmd = conn.CreateCommand();
+            // Kiraci suzgeci: ON kosuluna CompanyId eklendi (aksi halde baska sirketin ayni
+            // anahtarli kaydi guncellenebilirdi) + INSERT dalina CompanyId yazilir.
             cmd.CommandText = $"""
                 MERGE {_tblEntries} AS tgt
                 USING (SELECT
@@ -496,7 +507,8 @@ public sealed class SqlPriceListRepository : IPriceListRepository
                         @ConfigId   AS ConfigId,
                         @CurrencyId AS CurrencyId,
                         @PriceType  AS PriceType,
-                        @ValidFrom  AS ValidFrom
+                        @ValidFrom  AS ValidFrom,
+                        @CompanyId  AS CompanyId
                       ) AS src
                 ON tgt.[GroupId] = src.GroupId
                    AND tgt.[ItemId] = src.ItemId
@@ -504,6 +516,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
                    AND tgt.[CurrencyId] = src.CurrencyId
                    AND tgt.[PriceType] = src.PriceType
                    AND tgt.[ValidFrom] = src.ValidFrom
+                   AND tgt.[CompanyId] = src.CompanyId
                 WHEN MATCHED THEN
                     UPDATE SET
                         [Price]      = @Price,
@@ -512,12 +525,13 @@ public sealed class SqlPriceListRepository : IPriceListRepository
                         [Updated] = GETDATE()
                 WHEN NOT MATCHED THEN
                     INSERT ([GroupId],[ItemId],[ConfigId],[CurrencyId],[PriceType],[Price],
-                            [ValidFrom],[ValidTo],[IsActive],[Created],[Updated])
+                            [ValidFrom],[ValidTo],[IsActive],[Created],[Updated],[CompanyId])
                     VALUES (@GroupId,@ItemId,@ConfigId,@CurrencyId,@PriceType,@Price,
-                            @ValidFrom,@ValidTo,@Active,GETDATE(),GETDATE())
+                            @ValidFrom,@ValidTo,@Active,GETDATE(),GETDATE(),@CompanyId)
                 OUTPUT $action AS Act;
                 """;
             AddEntryParams(cmd, e);
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await using var r = await cmd.ExecuteReaderAsync(ct);
             if (await r.ReadAsync(ct))
             {
@@ -540,6 +554,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
 
         var list = new List<ExistingPriceRow>();
         await using var conn = await _cf.OpenConnectionAsync(ct);
+        var companyId = GetCurrentCompanyId();
 
         // DEBUG: maliyet sorunu teshisi icin (gecici) — params + her key icin sonuc
         Console.WriteLine($"[PriceLookup] GroupId={groupId} CurrencyId={currencyId} PriceType='{priceType}' ValidFrom={validFrom:yyyy-MM-dd} keys={keys.Count}");
@@ -561,6 +576,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
                   AND [CurrencyId] = @CurrencyId
                   AND [PriceType]  = @PriceType
                   AND [IsActive]   = 1
+                  AND [CompanyId]  = @CompanyId
                   AND [ValidFrom] <= @ValidFrom
                   AND ([ValidTo] IS NULL OR [ValidTo] >= @ValidFrom)
                 ORDER BY [ValidFrom] DESC;
@@ -571,6 +587,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
             cmd.Parameters.Add(new SqlParameter("@CurrencyId", currencyId));
             cmd.Parameters.Add(new SqlParameter("@PriceType",  priceType));
             cmd.Parameters.Add(new SqlParameter("@ValidFrom",  validFrom));
+            cmd.Parameters.Add(new SqlParameter("@CompanyId",  companyId));
 
             await using var r = await cmd.ExecuteReaderAsync(ct);
             if (await r.ReadAsync(ct))
@@ -605,6 +622,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
 
         var list = new List<ResolvedPriceRow>();
         await using var conn = await _cf.OpenConnectionAsync(ct);
+        var companyId = GetCurrentCompanyId();
 
         foreach (var k in keys)
         {
@@ -618,6 +636,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
                   AND [CurrencyId]  = @CurrencyId
                   AND [PriceType]  = @PriceType
                   AND [IsActive]   = 1
+                  AND [CompanyId]  = @CompanyId
                   AND [ValidFrom] <= @Date
                   AND ([ValidTo] IS NULL OR [ValidTo] >= @Date)
                   AND ([ConfigId] = @ConfigId OR [ConfigId] IS NULL)
@@ -633,6 +652,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
             cmd.Parameters.Add(new SqlParameter("@CurrencyId", currencyId));
             cmd.Parameters.Add(new SqlParameter("@PriceType",  priceType));
             cmd.Parameters.Add(new SqlParameter("@Date",       date));
+            cmd.Parameters.Add(new SqlParameter("@CompanyId",  companyId));
 
             await using var r = await cmd.ExecuteReaderAsync(ct);
             if (await r.ReadAsync(ct))

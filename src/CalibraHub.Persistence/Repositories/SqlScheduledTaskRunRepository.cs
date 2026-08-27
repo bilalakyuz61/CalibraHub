@@ -79,11 +79,12 @@ public sealed class SqlScheduledTaskRunRepository : IScheduledTaskRunRepository
         cmd.CommandText = $"""
             SELECT TOP (@Limit) {SelectColumns}
               FROM {_table}
-             WHERE [TaskId] = @TaskId
+             WHERE [TaskId] = @TaskId AND ([CompanyId] = @CompanyId OR [CompanyId] IS NULL)
              ORDER BY [StartedAt] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@TaskId", taskId));
         cmd.Parameters.Add(new SqlParameter("@Limit",  limit));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await r.ReadAsync(cancellationToken)) list.Add(Map(r));
         return list;

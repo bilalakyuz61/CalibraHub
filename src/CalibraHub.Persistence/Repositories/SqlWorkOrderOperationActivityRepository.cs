@@ -35,8 +35,9 @@ public sealed class SqlWorkOrderOperationActivityRepository : IWorkOrderOperatio
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = BuildSelect(
-            filter: "WHERE a.[WorkOrderOperationId] = @OpId AND a.[EndedAt] IS NULL");
+            filter: "WHERE a.[WorkOrderOperationId] = @OpId AND a.[EndedAt] IS NULL AND a.[CompanyId] = @CompanyId");
         cmd.Parameters.AddWithValue("@OpId", workOrderOperationId);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         var list = await ReadListAsync(cmd, ct);
         return list.FirstOrDefault();
     }
@@ -46,8 +47,9 @@ public sealed class SqlWorkOrderOperationActivityRepository : IWorkOrderOperatio
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = BuildSelect(
-            filter: "WHERE a.[WorkOrderOperationId] = @OpId ORDER BY a.[StartedAt] DESC, a.[Id] DESC");
+            filter: "WHERE a.[WorkOrderOperationId] = @OpId AND a.[CompanyId] = @CompanyId ORDER BY a.[StartedAt] DESC, a.[Id] DESC");
         cmd.Parameters.AddWithValue("@OpId", workOrderOperationId);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         return await ReadListAsync(cmd, ct);
     }
 

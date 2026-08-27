@@ -31,14 +31,16 @@ public sealed class SqlIntegrationLookupFunctionDefinitionRepository
     {
         var list = new List<IntegrationLookupFunctionDefinition>();
         var byId = new Dictionary<int, IntegrationLookupFunctionDefinition>();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
 
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
 
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = includeInactive
-                ? $"SELECT [Id],[Code],[Label],[Description],[ViewName],[KeyColumn],[SortOrder],[IsActive],[SqlSnippet],[SqlFunctionName] FROM {_table} ORDER BY [SortOrder],[Label];"
-                : $"SELECT [Id],[Code],[Label],[Description],[ViewName],[KeyColumn],[SortOrder],[IsActive],[SqlSnippet],[SqlFunctionName] FROM {_table} WHERE [IsActive] = 1 ORDER BY [SortOrder],[Label];";
+                ? $"SELECT [Id],[Code],[Label],[Description],[ViewName],[KeyColumn],[SortOrder],[IsActive],[SqlSnippet],[SqlFunctionName] FROM {_table} WHERE [CompanyId] = @CompanyId ORDER BY [SortOrder],[Label];"
+                : $"SELECT [Id],[Code],[Label],[Description],[ViewName],[KeyColumn],[SortOrder],[IsActive],[SqlSnippet],[SqlFunctionName] FROM {_table} WHERE [IsActive] = 1 AND [CompanyId] = @CompanyId ORDER BY [SortOrder],[Label];";
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await using var rd = await cmd.ExecuteReaderAsync(ct);
             while (await rd.ReadAsync(ct))
             {
@@ -77,12 +79,14 @@ public sealed class SqlIntegrationLookupFunctionDefinitionRepository
 
     public async Task<IntegrationLookupFunctionDefinition?> GetByIdAsync(int id, CancellationToken ct)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         IntegrationLookupFunctionDefinition? def = null;
         await using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = $"SELECT [Id],[Code],[Label],[Description],[ViewName],[KeyColumn],[SortOrder],[IsActive],[SqlSnippet],[SqlFunctionName] FROM {_table} WHERE [Id]=@Id;";
+            cmd.CommandText = $"SELECT [Id],[Code],[Label],[Description],[ViewName],[KeyColumn],[SortOrder],[IsActive],[SqlSnippet],[SqlFunctionName] FROM {_table} WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
             cmd.Parameters.Add(new SqlParameter("@Id", id));
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await using var rd = await cmd.ExecuteReaderAsync(ct);
             if (await rd.ReadAsync(ct)) def = MapHeader(rd);
         }
@@ -108,12 +112,14 @@ public sealed class SqlIntegrationLookupFunctionDefinitionRepository
 
     public async Task<bool> CodeExistsAsync(string code, int? excludeId, CancellationToken ct)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = excludeId.HasValue
-            ? $"SELECT COUNT(1) FROM {_table} WHERE [Code]=@Code AND [Id]<>@Id AND [IsActive]=1;"
-            : $"SELECT COUNT(1) FROM {_table} WHERE [Code]=@Code AND [IsActive]=1;";
+            ? $"SELECT COUNT(1) FROM {_table} WHERE [Code]=@Code AND [Id]<>@Id AND [IsActive]=1 AND [CompanyId]=@CompanyId;"
+            : $"SELECT COUNT(1) FROM {_table} WHERE [Code]=@Code AND [IsActive]=1 AND [CompanyId]=@CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Code", code));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         if (excludeId.HasValue) cmd.Parameters.Add(new SqlParameter("@Id", excludeId.Value));
         var result = (int)(await cmd.ExecuteScalarAsync(ct) ?? 0);
         return result > 0;

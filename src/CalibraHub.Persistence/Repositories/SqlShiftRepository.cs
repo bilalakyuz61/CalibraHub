@@ -25,15 +25,17 @@ public sealed class SqlShiftRepository : IShiftRepository
 
     public async Task<IReadOnlyList<ShiftDto>> ListAsync(bool includeInactive, CancellationToken ct)
     {
+        var companyId = _factory.ResolveEffectiveCompanyId();
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        var filter = includeInactive ? "" : "WHERE [IsActive] = 1";
+        var filter = includeInactive ? "WHERE [CompanyId] = @CompanyId" : "WHERE [IsActive] = 1 AND [CompanyId] = @CompanyId";
         cmd.CommandText = $@"
             SELECT [Id],[Code],[Name],[StartTime],[EndTime],[IsOvernight],
                    [ColorHex],[SortOrder],[IsActive],[Created],[Updated]
             FROM {_table}
             {filter}
             ORDER BY [SortOrder], [StartTime], [Code];";
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
         var list = new List<ShiftDto>();
         await using (var r = await cmd.ExecuteReaderAsync(ct))
             while (await r.ReadAsync(ct)) list.Add(Read(r));
@@ -58,8 +60,9 @@ public sealed class SqlShiftRepository : IShiftRepository
         cmd.CommandText = $@"
             SELECT [Id],[Code],[Name],[StartTime],[EndTime],[IsOvernight],
                    [ColorHex],[SortOrder],[IsActive],[Created],[Updated]
-            FROM {_table} WHERE [Id] = @Id;";
+            FROM {_table} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
         ShiftDto? dto;
         await using (var r = await cmd.ExecuteReaderAsync(ct))
             dto = await r.ReadAsync(ct) ? Read(r) : null;

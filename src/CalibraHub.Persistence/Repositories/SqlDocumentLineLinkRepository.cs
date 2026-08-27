@@ -12,9 +12,11 @@ namespace CalibraHub.Persistence.Repositories;
 /// FAZ 1b-i (yazma, iş emri) ile genişledi — bkz. aşağıdaki notlar.
 ///
 /// SqlWorkOrderRepository ile aynı bağlantı deseni (per-company connection factory, SELECT/
-/// INSERT/UPDATE parametreli) + FulfillmentLedger ile aynı ters-çevirme deseni izlenir. Bu
-/// tabloda CompanyId kolonu YOKTUR — per-company DB mimarisi gereği bağlantının kendisi zaten
-/// ilgili şirkete çözülür.
+/// INSERT/UPDATE parametreli) + FulfillmentLedger ile aynı ters-çevirme deseni izlenir.
+/// GÜNCELLEME (2026-08-27): tabloya [CompanyId] kolonu sonradan eklendi — per-company DB
+/// mimarisi zaten izolasyonu sağlasa da, kiracı ayrımı sertleştirme çalışması kapsamında tüm
+/// sorgular ek savunma katmanı olarak [CompanyId] ile de süzülür (bkz. write-path + okuma
+/// yollarındaki filtreler).
 ///
 /// FAZ 1a EKLEMESİ (2026-07-20): <see cref="GetFloorComponentsAsync"/> ve
 /// <see cref="GetFloorComponentsForDocumentAsync"/> okuma-only metotları eklendi — bunlar
@@ -131,9 +133,11 @@ public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
               FROM {_table}
              WHERE [SourceLineId] = @SourceLineId
                AND [IsActive] = 1
+               AND [CompanyId] = @Company
              ORDER BY [Id];
             """;
         cmd.Parameters.AddWithValue("@SourceLineId", sourceLineId);
+        cmd.Parameters.AddWithValue("@Company", _connectionFactory.ResolveEffectiveCompanyId());
 
         var list = new List<DocumentLineLink>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -231,9 +235,11 @@ public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
                 SUM(CASE WHEN [LinkType] = 20 THEN [Quantity] ELSE 0 END) AS WorkOrder
               FROM {_table}
              WHERE [SourceLineId] = @SourceLineId
-               AND [IsActive] = 1;
+               AND [IsActive] = 1
+               AND [CompanyId] = @Company;
             """;
         cmd.Parameters.AddWithValue("@SourceLineId", sourceLineId);
+        cmd.Parameters.AddWithValue("@Company", _connectionFactory.ResolveEffectiveCompanyId());
 
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (await r.ReadAsync(ct))
@@ -264,9 +270,11 @@ public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
               FROM {_table}
              WHERE [SourceDocId] = @SourceDocId
                AND [IsActive] = 1
+               AND [CompanyId] = @Company
              GROUP BY [SourceLineId];
             """;
         cmd.Parameters.AddWithValue("@SourceDocId", documentId);
+        cmd.Parameters.AddWithValue("@Company", _connectionFactory.ResolveEffectiveCompanyId());
 
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))

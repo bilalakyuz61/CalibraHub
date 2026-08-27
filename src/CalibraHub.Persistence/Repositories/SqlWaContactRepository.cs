@@ -26,6 +26,7 @@ public sealed class SqlWaContactRepository : IWaContactRepository
 
     public async Task<WaContact?> FindByJidAsync(string jid, CancellationToken ct)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
@@ -33,9 +34,10 @@ public sealed class SqlWaContactRepository : IWaContactRepository
                    [LinkedContactId],[IsBlocked],[IsActive],[CreatedById],[Created],[UpdatedById],[Updated]
             FROM {_contactTable} c
             JOIN {_jidTable} j ON j.[ContactId] = c.[Id]
-            WHERE j.[Jid] = @Jid;
+            WHERE j.[Jid] = @Jid AND c.[CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Jid", jid));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct)) return null;
         return MapContact(r);
@@ -43,15 +45,17 @@ public sealed class SqlWaContactRepository : IWaContactRepository
 
     public async Task<WaContact?> FindByPhoneAsync(string phone, CancellationToken ct)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT [Id],[PrimaryPhone],[DisplayName],[ProfilePicUrl],[LastSeen],[PresenceStatus],
                    [LinkedContactId],[IsBlocked],[IsActive],[CreatedById],[Created],[UpdatedById],[Updated]
             FROM {_contactTable}
-            WHERE [PrimaryPhone] = @Phone;
+            WHERE [PrimaryPhone] = @Phone AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Phone", phone));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct)) return null;
         return MapContact(r);
@@ -145,6 +149,7 @@ public sealed class SqlWaContactRepository : IWaContactRepository
     public async Task BackfillFromInboxAsync(CancellationToken ct)
     {
         // Her distinct contact_phone için WaContact yoksa oluştur
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
@@ -153,7 +158,7 @@ public sealed class SqlWaContactRepository : IWaContactRepository
             SELECT DISTINCT i.[ContactPhone],
                    MAX(i.[ContactName])
             FROM {_inboxTable} i
-            WHERE i.[ContactPhone] IS NOT NULL
+            WHERE i.[ContactPhone] IS NOT NULL AND i.[CompanyId] = @CompanyId
             GROUP BY i.[ContactPhone];
 
             MERGE {_contactTable} AS tgt
@@ -162,31 +167,34 @@ public sealed class SqlWaContactRepository : IWaContactRepository
                 FROM @phones p
                 WHERE NOT EXISTS (
                     SELECT 1 FROM {_jidTable} j
-                    WHERE j.[Jid] = p.phone + N'@s.whatsapp.net'
-                       OR j.[Jid] = p.phone
+                    WHERE (j.[Jid] = p.phone + N'@s.whatsapp.net' OR j.[Jid] = p.phone)
+                      AND j.[CompanyId] = @CompanyId
                 )
             ) AS src ON 1=0
             WHEN NOT MATCHED THEN
-                INSERT ([PrimaryPhone],[DisplayName],[IsActive],[Created])
-                VALUES (src.phone, src.display_name, 1, SYSUTCDATETIME());
+                INSERT ([PrimaryPhone],[DisplayName],[IsActive],[CompanyId],[Created])
+                VALUES (src.phone, src.display_name, 1, @CompanyId, SYSUTCDATETIME());
             """;
         cmd.CommandTimeout = 120;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
     public async Task LinkInboxContactIdsAsync(CancellationToken ct)
     {
         // WaInbox.ContactId = WaContact.Id (phone eşleşmesi üzerinden)
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             UPDATE i
                SET i.[ContactId] = c.[Id]
             FROM {_inboxTable} i
-            JOIN {_contactTable} c ON c.[PrimaryPhone] = i.[ContactPhone]
-            WHERE i.[ContactId] IS NULL;
+            JOIN {_contactTable} c ON c.[PrimaryPhone] = i.[ContactPhone] AND c.[CompanyId] = i.[CompanyId]
+            WHERE i.[ContactId] IS NULL AND i.[CompanyId] = @CompanyId;
             """;
         cmd.CommandTimeout = 120;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

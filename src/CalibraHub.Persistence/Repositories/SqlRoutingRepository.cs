@@ -86,9 +86,10 @@ public sealed class SqlRoutingRepository : IRoutingRepository
                    ro.[OverrideDuration], ro.[DurationUnit], ro.[Notes]
             FROM {_opTable} ro
             INNER JOIN [{_schema}].[Operation] op ON op.[Id] = ro.[OperationId]
-            WHERE ro.[RoutingId] = @RoutingId
+            WHERE ro.[RoutingId] = @RoutingId AND ro.[CompanyId] = @CompanyId
             ORDER BY ro.[Sequence];";
         cmd.Parameters.AddWithValue("@RoutingId", routingId);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         var list = new List<RoutingOperationDto>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
@@ -278,9 +279,10 @@ public sealed class SqlRoutingRepository : IRoutingRepository
             FROM {_mapTable} m
             INNER JOIN [{_schema}].[Items] i ON i.[Id] = m.[ItemId]
             LEFT JOIN [{_schema}].[ItemConfiguration] ic ON ic.[Id] = m.[ConfigId]
-            WHERE m.[RoutingId] = @RoutingId
+            WHERE m.[RoutingId] = @RoutingId AND m.[CompanyId] = @CompanyId
             ORDER BY i.[Code], ic.[Code];";
         cmd.Parameters.AddWithValue("@RoutingId", routingId);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         var list = new List<RoutingItemMapDto>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
@@ -303,24 +305,27 @@ public sealed class SqlRoutingRepository : IRoutingRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
-            IF NOT EXISTS (
+            IF EXISTS (SELECT 1 FROM {_routingTable} WHERE [Id] = @RoutingId AND [CompanyId] = @CompanyId)
+               AND NOT EXISTS (
                 SELECT 1 FROM {_mapTable}
                 WHERE [RoutingId]=@RoutingId AND [ItemId]=@ItemId
                   AND ((@ConfigId IS NULL AND [ConfigId] IS NULL) OR [ConfigId]=@ConfigId)
+                  AND [CompanyId]=@CompanyId
             )
             BEGIN
                 INSERT INTO {_mapTable} ([RoutingId],[ItemId],[ConfigId],[CompanyId])
-                VALUES (@RoutingId,@ItemId,@ConfigId,
-                    (SELECT r.[CompanyId] FROM {_routingTable} r WHERE r.[Id] = @RoutingId));
+                VALUES (@RoutingId,@ItemId,@ConfigId,@CompanyId);
             END
             SELECT ISNULL(
                 (SELECT [Id] FROM {_mapTable}
                  WHERE [RoutingId]=@RoutingId AND [ItemId]=@ItemId
-                   AND ((@ConfigId IS NULL AND [ConfigId] IS NULL) OR [ConfigId]=@ConfigId)),
+                   AND ((@ConfigId IS NULL AND [ConfigId] IS NULL) OR [ConfigId]=@ConfigId)
+                   AND [CompanyId]=@CompanyId),
                 0);";
         cmd.Parameters.AddWithValue("@RoutingId", routingId);
         cmd.Parameters.AddWithValue("@ItemId", itemId);
         cmd.Parameters.AddWithValue("@ConfigId", (object?)configId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         var res = await cmd.ExecuteScalarAsync(ct);
         return res != null && res != DBNull.Value ? Convert.ToInt32(res) : 0;
     }

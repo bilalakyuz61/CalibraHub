@@ -48,9 +48,11 @@ public sealed class SqlDataImportRepository : IDataImportRepository
         cmd.CommandText = $"""
             SELECT {JobColumns}
             FROM {_jobTable}
-            {(includeInactive ? "" : "WHERE [IsActive] = 1")}
+            WHERE [CompanyId] = @CompanyId
+            {(includeInactive ? "" : "AND [IsActive] = 1")}
             ORDER BY [Name];
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var list = new List<DataImportJob>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) list.Add(MapJob(r));
@@ -64,8 +66,9 @@ public sealed class SqlDataImportRepository : IDataImportRepository
         DataImportJob? job;
         await using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = $"SELECT {JobColumns} FROM {_jobTable} WHERE [Id] = @Id;";
+            cmd.CommandText = $"SELECT {JobColumns} FROM {_jobTable} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
             cmd.Parameters.Add(new SqlParameter("@Id", id));
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
             await using var r = await cmd.ExecuteReaderAsync(ct);
             job = await r.ReadAsync(ct) ? MapJob(r) : null;
         }
@@ -106,10 +109,12 @@ public sealed class SqlDataImportRepository : IDataImportRepository
                 WHERE [IsActive] = 1
                   AND LOWER([Name]) = LOWER(@Name)
                   AND (@ExcludeId IS NULL OR [Id] <> @ExcludeId)
+                  AND [CompanyId] = @CompanyId
             ) THEN 1 ELSE 0 END;
             """;
         cmd.Parameters.Add(new SqlParameter("@Name", name));
         cmd.Parameters.Add(new SqlParameter("@ExcludeId", (object?)excludeId ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         return ((int)(await cmd.ExecuteScalarAsync(ct) ?? 0)) == 1;
     }
 
@@ -309,10 +314,12 @@ public sealed class SqlDataImportRepository : IDataImportRepository
             SELECT TOP (@Take) {RunColumns}
             FROM {_runTable}
             WHERE (@JobId IS NULL OR [JobId] = @JobId)
+              AND [CompanyId] = @CompanyId
             ORDER BY [Id] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@Take", take));
         cmd.Parameters.Add(new SqlParameter("@JobId", (object?)jobId ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var list = new List<DataImportRun>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) list.Add(MapRun(r));

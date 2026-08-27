@@ -34,7 +34,10 @@ public sealed class SqlBodyTemplateRepository : IBodyTemplateRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
 
-        var where = "[IsActive] = 1";
+        // Built-in (sistem) sablonlar tum sirketlere ortak gorunur; kullanici-tanimli
+        // sablonlar sadece kendi sirketinden gorunur — bkz. IncrementUsageAsync aciklamasi.
+        var where = "[IsActive] = 1 AND ([IsBuiltIn] = 1 OR [CompanyId] = @CompanyId)";
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         if (!string.IsNullOrWhiteSpace(category))
         {
             where += " AND [Category] = @cat";
@@ -77,9 +80,10 @@ public sealed class SqlBodyTemplateRepository : IBodyTemplateRepository
                    [BodyJson],[Description],[Tags],[UsageCount],[IsBuiltIn],[IsActive],
                    [CreatedById],[Created],[UpdatedById],[Updated]
             FROM {_table}
-            WHERE [Id] = @id;
+            WHERE [Id] = @id AND ([IsBuiltIn] = 1 OR [CompanyId] = @CompanyId);
             """;
         cmd.Parameters.Add(new SqlParameter("@id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         return await rdr.ReadAsync(ct) ? Map(rdr) : null;
     }

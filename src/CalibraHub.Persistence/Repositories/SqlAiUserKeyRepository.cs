@@ -32,10 +32,11 @@ public sealed class SqlAiUserKeyRepository : IAiUserKeyRepository
         cmd.CommandText = $"""
             SELECT [Id],[UserId],[AiProviderId],[ApiKeyEncrypted],[Created],[Updated]
             FROM {_table}
-            WHERE [UserId] = @UserId
+            WHERE [UserId] = @UserId AND [CompanyId] = @CompanyId
             ORDER BY [Id];
             """;
         cmd.Parameters.Add(new SqlParameter("@UserId", userId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var list = new List<AiUserKey>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) list.Add(Map(r));
@@ -49,10 +50,11 @@ public sealed class SqlAiUserKeyRepository : IAiUserKeyRepository
         cmd.CommandText = $"""
             SELECT TOP 1 [Id],[UserId],[AiProviderId],[ApiKeyEncrypted],[Created],[Updated]
             FROM {_table}
-            WHERE [UserId] = @UserId AND [AiProviderId] = @ProviderId;
+            WHERE [UserId] = @UserId AND [AiProviderId] = @ProviderId AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@UserId", userId));
         cmd.Parameters.Add(new SqlParameter("@ProviderId", providerId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? Map(r) : null;
     }
@@ -68,9 +70,10 @@ public sealed class SqlAiUserKeyRepository : IAiUserKeyRepository
 
         // Mevcut mu? UPDATE veya INSERT
         await using var existsCmd = conn.CreateCommand();
-        existsCmd.CommandText = $"SELECT [Id] FROM {_table} WHERE [UserId] = @UserId AND [AiProviderId] = @ProviderId;";
+        existsCmd.CommandText = $"SELECT [Id] FROM {_table} WHERE [UserId] = @UserId AND [AiProviderId] = @ProviderId AND [CompanyId] = @CompanyId;";
         existsCmd.Parameters.Add(new SqlParameter("@UserId", userId));
         existsCmd.Parameters.Add(new SqlParameter("@ProviderId", providerId));
+        existsCmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var existing = await existsCmd.ExecuteScalarAsync(ct);
 
         if (existing is int existingId)
@@ -118,9 +121,10 @@ public sealed class SqlAiUserKeyRepository : IAiUserKeyRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT [ApiKeyEncrypted] FROM {_table} WHERE [UserId] = @UserId AND [AiProviderId] = @ProviderId;";
+        cmd.CommandText = $"SELECT [ApiKeyEncrypted] FROM {_table} WHERE [UserId] = @UserId AND [AiProviderId] = @ProviderId AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@UserId", userId));
         cmd.Parameters.Add(new SqlParameter("@ProviderId", providerId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var raw = await cmd.ExecuteScalarAsync(ct);
         if (raw is null or DBNull) return null;
         var encrypted = raw.ToString();

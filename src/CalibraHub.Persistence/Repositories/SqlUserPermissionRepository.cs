@@ -32,20 +32,24 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
 
     public async Task<PermissionGrant?> GetByIdAsync(int id, CancellationToken ct)
     {
+        var companyId = _factory.ResolveEffectiveCompanyId();
         await using var conn = await _factory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT {SelectColumns} FROM {_table} WHERE [Id]=@Id;";
+        cmd.CommandText = $"SELECT {SelectColumns} FROM {_table} WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? Map(r) : null;
     }
 
     public async Task<IReadOnlyList<PermissionGrant>> ListByUserAsync(int userId, CancellationToken ct)
     {
+        var companyId = _factory.ResolveEffectiveCompanyId();
         await using var conn = await _factory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT {SelectColumns} FROM {_table} WHERE [UserId]=@U;";
+        cmd.CommandText = $"SELECT {SelectColumns} FROM {_table} WHERE [UserId]=@U AND [CompanyId]=@CompanyId;";
         cmd.Parameters.AddWithValue("@U", userId);
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
 
         var list = new List<PermissionGrant>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -55,10 +59,12 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
 
     public async Task<IReadOnlyList<PermissionGrant>> ListByDepartmentAsync(int departmentId, CancellationToken ct)
     {
+        var companyId = _factory.ResolveEffectiveCompanyId();
         await using var conn = await _factory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT {SelectColumns} FROM {_table} WHERE [DepartmentId]=@D;";
+        cmd.CommandText = $"SELECT {SelectColumns} FROM {_table} WHERE [DepartmentId]=@D AND [CompanyId]=@CompanyId;";
         cmd.Parameters.AddWithValue("@D", departmentId);
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
 
         var list = new List<PermissionGrant>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -68,10 +74,12 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
 
     public async Task<IReadOnlyList<PermissionGrant>> ListByGroupAsync(int groupId, CancellationToken ct)
     {
+        var companyId = _factory.ResolveEffectiveCompanyId();
         await using var conn = await _factory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT {SelectColumns} FROM {_table} WHERE [GroupId]=@G;";
+        cmd.CommandText = $"SELECT {SelectColumns} FROM {_table} WHERE [GroupId]=@G AND [CompanyId]=@CompanyId;";
         cmd.Parameters.AddWithValue("@G", groupId);
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
 
         var list = new List<PermissionGrant>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -82,25 +90,28 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
     public async Task<IReadOnlyList<PermissionGrant>> ListForUserAndDepartmentAsync(
         int userId, int? departmentId, CancellationToken ct)
     {
+        var companyId = _factory.ResolveEffectiveCompanyId();
         await using var conn = await _factory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         // Kullanıcının kendi satırları + üye olduğu AKTİF grupların satırları (+ departman).
+        // Grup üyeliği ve grup tanımı da aynı şirkete ait olmalı.
         var groupFilter = $"""
             [GroupId] IN (SELECT upg.[GroupId] FROM {_memberTable} upg
                           INNER JOIN {_groupTable} pg ON pg.[Id] = upg.[GroupId] AND pg.[IsActive] = 1
-                          WHERE upg.[UserId] = @U)
+                          WHERE upg.[UserId] = @U AND upg.[CompanyId] = @CompanyId)
             """;
         if (departmentId.HasValue)
         {
-            cmd.CommandText = $"SELECT {SelectColumns} FROM {_table} WHERE [UserId]=@U OR [DepartmentId]=@D OR {groupFilter};";
+            cmd.CommandText = $"SELECT {SelectColumns} FROM {_table} WHERE [CompanyId]=@CompanyId AND ([UserId]=@U OR [DepartmentId]=@D OR {groupFilter});";
             cmd.Parameters.AddWithValue("@U", userId);
             cmd.Parameters.AddWithValue("@D", departmentId.Value);
         }
         else
         {
-            cmd.CommandText = $"SELECT {SelectColumns} FROM {_table} WHERE [UserId]=@U OR {groupFilter};";
+            cmd.CommandText = $"SELECT {SelectColumns} FROM {_table} WHERE [CompanyId]=@CompanyId AND ([UserId]=@U OR {groupFilter});";
             cmd.Parameters.AddWithValue("@U", userId);
         }
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
 
         var list = new List<PermissionGrant>();
         await using var r = await cmd.ExecuteReaderAsync(ct);

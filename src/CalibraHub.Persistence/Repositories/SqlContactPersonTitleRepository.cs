@@ -30,9 +30,10 @@ public sealed class SqlContactPersonTitleRepository : IContactPersonTitleReposit
         cmd.CommandText = $"""
             SELECT [Id],[Name],[SortOrder],[IsSystem],[IsActive],[Created],[Updated],[CreatedById],[UpdatedById]
             FROM {_table}
-            WHERE [IsActive] = 1
+            WHERE [IsActive] = 1 AND [CompanyId] = @CompanyId
             ORDER BY [SortOrder] ASC, [Name] ASC;
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var list = new List<ContactPersonTitle>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
@@ -47,9 +48,10 @@ public sealed class SqlContactPersonTitleRepository : IContactPersonTitleReposit
         cmd.CommandText = $"""
             SELECT [Id],[Name],[SortOrder],[IsSystem],[IsActive],[Created],[Updated],[CreatedById],[UpdatedById]
             FROM {_table}
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? Map(r) : null;
     }
@@ -63,9 +65,10 @@ public sealed class SqlContactPersonTitleRepository : IContactPersonTitleReposit
             SELECT TOP (1) [Id],[Name],[SortOrder],[IsSystem],[IsActive],[Created],[Updated],[CreatedById],[UpdatedById]
             FROM {_table}
             WHERE LOWER(LTRIM(RTRIM([Name]))) = LOWER(LTRIM(RTRIM(@Name)))
-              AND [IsActive] = 1;
+              AND [IsActive] = 1 AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Name", name));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? Map(r) : null;
     }

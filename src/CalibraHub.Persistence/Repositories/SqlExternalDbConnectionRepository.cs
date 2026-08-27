@@ -38,9 +38,10 @@ public sealed class SqlExternalDbConnectionRepository : IExternalDbConnectionRep
         cmd.CommandText = $"""
             SELECT {Columns}
             FROM {_table}
-            {(includeInactive ? "" : "WHERE [IsActive] = 1")}
+            WHERE [CompanyId] = @CompanyId {(includeInactive ? "" : "AND [IsActive] = 1")}
             ORDER BY [Name];
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var list = new List<ExternalDbConnection>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) list.Add(Map(r));
@@ -51,8 +52,9 @@ public sealed class SqlExternalDbConnectionRepository : IExternalDbConnectionRep
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT {Columns} FROM {_table} WHERE [Id] = @Id;";
+        cmd.CommandText = $"SELECT {Columns} FROM {_table} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? Map(r) : null;
     }
@@ -67,10 +69,12 @@ public sealed class SqlExternalDbConnectionRepository : IExternalDbConnectionRep
                 WHERE [IsActive] = 1
                   AND LOWER([Name]) = LOWER(@Name)
                   AND (@ExcludeId IS NULL OR [Id] <> @ExcludeId)
+                  AND [CompanyId] = @CompanyId
             ) THEN 1 ELSE 0 END;
             """;
         cmd.Parameters.Add(new SqlParameter("@Name", name));
         cmd.Parameters.Add(new SqlParameter("@ExcludeId", (object?)excludeId ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         return ((int)(await cmd.ExecuteScalarAsync(ct) ?? 0)) == 1;
     }
 

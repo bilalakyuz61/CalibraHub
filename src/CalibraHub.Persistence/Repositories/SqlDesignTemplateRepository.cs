@@ -26,8 +26,10 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
         command.CommandText = $"""
             SELECT [Id], [Name], [Type], [SubType], [Description], [HtmlContent], [CssContent], [GjsData], [JsrContent], [IsActive], [Created], [Updated]
             FROM {_table}
+            WHERE [CompanyId] = @CompanyId
             ORDER BY [Type], [SubType], [Name];
             """;
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
             list.Add(Map(reader));
@@ -42,10 +44,11 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
         command.CommandText = $"""
             SELECT [Id], [Name], [Type], [SubType], [Description], [HtmlContent], [CssContent], [GjsData], [JsrContent], [IsActive], [Created], [Updated]
             FROM {_table}
-            WHERE [Type] = @Type
+            WHERE [Type] = @Type AND [CompanyId] = @CompanyId
             ORDER BY [SubType], [Name];
             """;
         command.Parameters.Add(new SqlParameter("@Type", type));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
             list.Add(Map(reader));
@@ -60,10 +63,11 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
         command.CommandText = $"""
             SELECT [Id], [Name], [Type], [SubType], [Description], [HtmlContent], [CssContent], [GjsData], [JsrContent], [IsActive], [Created], [Updated]
             FROM {_table}
-            WHERE [Type] = 'document' AND [SubType] = @SubType
+            WHERE [Type] = 'document' AND [SubType] = @SubType AND [CompanyId] = @CompanyId
             ORDER BY [Name];
             """;
         command.Parameters.Add(new SqlParameter("@SubType", subType));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
             list.Add(Map(reader));
@@ -77,9 +81,10 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
         command.CommandText = $"""
             SELECT [Id], [Name], [Type], [SubType], [Description], [HtmlContent], [CssContent], [GjsData], [JsrContent], [IsActive], [Created], [Updated]
             FROM {_table}
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? Map(reader) : null;
     }

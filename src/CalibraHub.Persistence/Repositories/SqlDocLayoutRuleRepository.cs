@@ -94,6 +94,7 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
             FROM {_ruleTable} r WITH (READUNCOMMITTED)
             WHERE r.[IsActive] = 1
               AND r.[DocType] = @DocType
+              AND r.[CompanyId] = @CompanyId
               AND {string.Join(" AND ", whereClauses)}
             ORDER BY ({string.Join(" + ", weightTerms)}) DESC, r.[Updated] DESC;";
 
@@ -103,6 +104,7 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
 
         // DocType parametresi
         cmd.Parameters.Add(new SqlParameter("@DocType", SqlDbType.NVarChar, 60) { Value = ctx.DocType });
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _factory.ResolveEffectiveCompanyId()));
 
         // Her kriter için parametre (null değer → DBNull, ki rule'un IS NULL
         // bacağını seçsin — yani bağlamda yoksa o kriteri sormamış oluruz).
@@ -127,13 +129,14 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
         var sql = $@"
             SELECT TOP 1 [Id]
             FROM {_layoutTable} WITH (READUNCOMMITTED)
-            WHERE [IsActive] = 1 AND [DocType] = @DocType
+            WHERE [IsActive] = 1 AND [DocType] = @DocType AND [CompanyId] = @CompanyId
             ORDER BY [IsDefault] DESC, [Updated] DESC;";
 
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@DocType", SqlDbType.NVarChar, 60) { Value = docType });
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _factory.ResolveEffectiveCompanyId()));
 
         var result = await cmd.ExecuteScalarAsync(ct);
         if (result == null || result == DBNull.Value) return null;
@@ -153,12 +156,13 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
             SELECT {SelectRuleFields()}
             FROM {_ruleTable} r WITH (READUNCOMMITTED)
             INNER JOIN {_layoutTable} l WITH (READUNCOMMITTED) ON l.[Id] = r.[LayoutId]
-            WHERE r.[IsActive] = 1
+            WHERE r.[IsActive] = 1 AND r.[CompanyId] = @CompanyId
             ORDER BY r.[DocType], r.[Updated] DESC;";
 
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = sql;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _factory.ResolveEffectiveCompanyId()));
 
         var list = new List<DocLayoutRuleDto>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);

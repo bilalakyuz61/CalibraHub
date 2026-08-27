@@ -31,7 +31,8 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
         var list = new List<ScheduledTask>();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"SELECT {Columns} FROM {_table} ORDER BY [Name];";
+        cmd.CommandText = $"SELECT {Columns} FROM {_table} WHERE ([CompanyId] = @SessionCompanyId OR [CompanyId] IS NULL) ORDER BY [Name];";
+        cmd.Parameters.Add(new SqlParameter("@SessionCompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await r.ReadAsync(cancellationToken)) list.Add(Map(r));
         return list;
@@ -41,8 +42,9 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"SELECT {Columns} FROM {_table} WHERE [Id] = @Id;";
+        cmd.CommandText = $"SELECT {Columns} FROM {_table} WHERE [Id] = @Id AND ([CompanyId] = @SessionCompanyId OR [CompanyId] IS NULL);";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@SessionCompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
         return await r.ReadAsync(cancellationToken) ? Map(r) : null;
     }
@@ -56,8 +58,9 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"SELECT TOP 1 {Columns} FROM {_table} WHERE [Name] = @Name ORDER BY [Id];";
+        cmd.CommandText = $"SELECT TOP 1 {Columns} FROM {_table} WHERE [Name] = @Name AND ([CompanyId] = @SessionCompanyId OR [CompanyId] IS NULL) ORDER BY [Id];";
         cmd.Parameters.Add(new SqlParameter("@Name", name));
+        cmd.Parameters.Add(new SqlParameter("@SessionCompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
         return await r.ReadAsync(cancellationToken) ? Map(r) : null;
     }
@@ -76,9 +79,11 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
                AND [TaskType] <> 0
                AND [ScheduleType] <> 4
                AND ([NextRunAt] IS NOT NULL AND [NextRunAt] <= @Now)
+               AND ([CompanyId] = @SessionCompanyId OR [CompanyId] IS NULL)
              ORDER BY [NextRunAt];
             """;
         cmd.Parameters.Add(new SqlParameter("@Now", nowUtc));
+        cmd.Parameters.Add(new SqlParameter("@SessionCompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await r.ReadAsync(cancellationToken)) list.Add(Map(r));
         return list;

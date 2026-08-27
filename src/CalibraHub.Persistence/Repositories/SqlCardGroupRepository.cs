@@ -31,7 +31,7 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
             command.CommandText = $"""
                 SELECT [Id], [CardType], [Level], [ParentId], [Code], [Description]
                 FROM {_table}
-                WHERE [CardType] = @CardType AND [Level] = 1
+                WHERE [CardType] = @CardType AND [Level] = 1 AND [CompanyId] = @CompanyId
                 ORDER BY [Code];
                 """;
         }
@@ -40,7 +40,7 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
             command.CommandText = $"""
                 SELECT [Id], [CardType], [Level], [ParentId], [Code], [Description]
                 FROM {_table}
-                WHERE [CardType] = @CardType AND [Level] = @Level AND [ParentId] = @ParentId
+                WHERE [CardType] = @CardType AND [Level] = @Level AND [ParentId] = @ParentId AND [CompanyId] = @CompanyId
                 ORDER BY [Code];
                 """;
             command.Parameters.Add(new SqlParameter("@Level", level));
@@ -52,13 +52,14 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
             command.CommandText = $"""
                 SELECT [Id], [CardType], [Level], [ParentId], [Code], [Description]
                 FROM {_table}
-                WHERE [CardType] = @CardType AND [Level] = @Level
+                WHERE [CardType] = @CardType AND [Level] = @Level AND [CompanyId] = @CompanyId
                 ORDER BY [Code];
                 """;
             command.Parameters.Add(new SqlParameter("@Level", level));
         }
 
         command.Parameters.Add(new SqlParameter("@CardType", cardType));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
@@ -75,10 +76,11 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
         command.CommandText = $"""
             SELECT [Id], [CardType], [Level], [ParentId], [Code], [Description]
             FROM {_table}
-            WHERE [ParentId] = @ParentId
+            WHERE [ParentId] = @ParentId AND [CompanyId] = @CompanyId
             ORDER BY [Code];
             """;
         command.Parameters.Add(new SqlParameter("@ParentId", parentId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
             list.Add(Map(reader));
@@ -91,9 +93,10 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             SELECT [Id], [CardType], [Level], [ParentId], [Code], [Description]
-            FROM {_table} WHERE [Id] = @Id;
+            FROM {_table} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await command.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct)) return null;
         return Map(reader);
@@ -103,8 +106,9 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(ct);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT COUNT(1) FROM {_table} WHERE [ParentId] = @Id;";
+        command.CommandText = $"SELECT COUNT(1) FROM {_table} WHERE [ParentId] = @Id AND [CompanyId] = @CompanyId;";
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var result = await command.ExecuteScalarAsync(ct);
         return Convert.ToInt32(result) > 0;
     }
@@ -192,11 +196,12 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
             SELECT m.[Level], g.[Id], g.[Code], g.[Description]
             FROM {_mappingTable} m
             INNER JOIN {_table} g ON g.[Id] = m.[CardGroupId]
-            WHERE m.[EntityType] = @EntityType AND m.[EntityId] = @EntityId
+            WHERE m.[EntityType] = @EntityType AND m.[EntityId] = @EntityId AND m.[CompanyId] = @CompanyId
             ORDER BY m.[Level];
             """;
         command.Parameters.Add(new SqlParameter("@EntityType", entityType));
         command.Parameters.Add(new SqlParameter("@EntityId", entityId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
             list.Add(new CardGroupMappingRow(

@@ -33,8 +33,9 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = BuildSelect(filter: "WHERE wo.[WorkOrderId] = @WorkOrderId ORDER BY wo.[Sequence]");
+        cmd.CommandText = BuildSelect(filter: "WHERE wo.[WorkOrderId] = @WorkOrderId AND wo.[CompanyId] = @CompanyId ORDER BY wo.[Sequence]");
         cmd.Parameters.AddWithValue("@WorkOrderId", workOrderId);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         return await ReadListAsync(cmd, ct);
     }
 
@@ -93,9 +94,11 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
               AND wo.[Status] IN (0, 1)
               AND w.[Status] IN (1, 2)
               AND w.[IsActive] = 1
+              AND w.[CompanyId] = @CompanyId
             ORDER BY w.[Priority] DESC, d.[DocumentDate], wo.[Sequence];";
         cmd.Parameters.Clear();
         cmd.Parameters.AddWithValue("@MachineId", machineId);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         return await ReadListAsync(cmd, ct);
     }
 
@@ -103,8 +106,9 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = BuildSelect(filter: "WHERE wo.[Id] = @Id");
+        cmd.CommandText = BuildSelect(filter: "WHERE wo.[Id] = @Id AND wo.[CompanyId] = @CompanyId");
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         var list = await ReadListAsync(cmd, ct);
         return list.FirstOrDefault();
     }

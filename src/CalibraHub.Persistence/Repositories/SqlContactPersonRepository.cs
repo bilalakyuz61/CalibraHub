@@ -46,10 +46,11 @@ public sealed class SqlContactPersonRepository : IContactPersonRepository
             SELECT {SelectColumns}
             FROM {_table} p
             LEFT JOIN {_titleTable} t ON t.[Id] = p.[TitleId]
-            WHERE p.[ContactId] = @ContactId AND p.[IsActive] = 1
+            WHERE p.[ContactId] = @ContactId AND p.[IsActive] = 1 AND p.[CompanyId] = @CompanyId
             ORDER BY p.[IsPrimary] DESC, t.[Name] ASC, p.[Id] ASC;
             """;
         cmd.Parameters.Add(new SqlParameter("@ContactId", contactId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         var list = new List<ContactPerson>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -66,9 +67,10 @@ public sealed class SqlContactPersonRepository : IContactPersonRepository
             SELECT {SelectColumns}
             FROM {_table} p
             LEFT JOIN {_titleTable} t ON t.[Id] = p.[TitleId]
-            WHERE p.[Id] = @Id;
+            WHERE p.[Id] = @Id AND p.[CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? Map(r) : null;
     }
@@ -150,12 +152,13 @@ public sealed class SqlContactPersonRepository : IContactPersonRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        var sql = $"SELECT TOP(1) 1 FROM {_table} WHERE [ContactId] = @ContactId AND [TitleId] = @TitleId AND [IsActive] = 1";
+        var sql = $"SELECT TOP(1) 1 FROM {_table} WHERE [ContactId] = @ContactId AND [TitleId] = @TitleId AND [IsActive] = 1 AND [CompanyId] = @CompanyId";
         if (excludeId.HasValue && excludeId.Value > 0)
             sql += " AND [Id] <> @ExcludeId";
         cmd.CommandText = sql + ";";
         cmd.Parameters.Add(new SqlParameter("@ContactId", contactId));
         cmd.Parameters.Add(new SqlParameter("@TitleId",   titleId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         if (excludeId.HasValue && excludeId.Value > 0)
             cmd.Parameters.Add(new SqlParameter("@ExcludeId", excludeId.Value));
         var result = await cmd.ExecuteScalarAsync(ct);
