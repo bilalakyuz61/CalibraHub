@@ -847,7 +847,13 @@
                 stepExpand('setup', false);
                 // Kurulum bitti → oturumu test sirketine gecir, kalan isler orada koşsun.
                 if (tst.companyId) {
-                    switchToTestCompany(tst.companyId, frame.companyName).then(function (res) {
+                    // Soz SAKLANIR: sirkete gecis asenkron ve fetch/beklemesiz birakilinca
+                    // fonksiyon testleri gecis TAMAMLANMADAN tetikleniyor, sunucu hala eski
+                    // sirketi goruyor ve "yalniz TEST_ sirketlerinde calisir" hatasi veriyor.
+                    // Ekranin sol altinda yeni sirket gorunurken sunucunun eskisini gormesi
+                    // tam olarak bu yaristandi.
+                    tst.switchPromise = switchToTestCompany(tst.companyId, frame.companyName).then(function (res) {
+                        tst.switchOk = !!(res && res.ok);
                         if (res.ok) {
                             stepBody('setup', baseInfo
                               + '<div class="hc-substep-info">✓ Oturum <b>' + escapeHtml(frame.companyName)
@@ -1122,6 +1128,21 @@
         setFnBtnRunning(true);
         fnSummaryEl.innerHTML = '';
         fnResultsEl.innerHTML = '<div style="padding:16px;color:#64748b;font-size:13px;">Başlatılıyor…</div>';
+
+        // Ayri DB kapaliyken test sirketi CANLI sirketle ayni veritabanini paylasir ve
+        // sunucudaki guvenlik kilidi testleri reddeder (testler gercek belge/stok yazar).
+        // Kullaniciyi bos yere bekletip sunucu hatasina dusurmek yerine burada soyle.
+        // Kilit, sorgulara CompanyId suzgeci girdiginde kalkacak; o zaman kapali konum da calisir.
+        if (!document.getElementById('hcNewDb')?.checked) {
+            setFnBtnRunning(false);
+            fnResultsEl.innerHTML = '<div class="hc-fn-error-banner">'
+              + '<b>Ayrı test veritabanı kur</b> kapalıyken fonksiyon testleri çalıştırılamaz. '
+              + 'Testler gerçek belge ve stok hareketi yazar; test şirketi canlı şirketle aynı '
+              + 'veritabanını paylaşırsa sunucu güvenlik kilidi işlemi reddeder. '
+              + 'Anahtarı açıp tekrar deneyin.</div>';
+            return;
+        }
+
         try {
             // Fonksiyon testleri gercek belge/stok hareketi YAZAR — once izole test
             // sirketi kurulur ve oturum oraya gecirilir. Bu adim Calisma Ortami
@@ -1136,7 +1157,14 @@
                     headers: { 'RequestVerificationToken': getCsrf() } });
                 if (!prep.ok || !prep.body) throw new Error('Hazırlık HTTP ' + prep.status);
                 await readStream(prep.body, handleTestFrame);
+                // Sirkete gecis tamamlanmadan testleri baslatma (yukaridaki nota bak).
+                if (tst.switchPromise) await tst.switchPromise;
                 if (window.hcActivateTab) window.hcActivateTab('fn');
+                if (tst.switchOk === false) {
+                    fnResultsEl.innerHTML = '<div class="hc-fn-error-banner">Test şirketine geçilemedi — '
+                      + 'Fonksiyon Testleri çalıştırılamaz. Çalışma Ortamı sekmesindeki hataya bakın.</div>';
+                    return;
+                }
             }
             const resp = await fetch('/Admin/HealthCheck/StreamFunctionalTests?groups=' + encodeURIComponent(groups.join(',')), { method:'POST', credentials:'same-origin', headers:{ 'RequestVerificationToken': getCsrf() } });
             if (!resp.ok || !resp.body) throw new Error('HTTP ' + resp.status);
