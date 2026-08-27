@@ -83,6 +83,10 @@ private data class DocLineUi(
     val itemName: String,
     val unit: String?,
     val quantity: Double,
+    /** Lot-takipli kalemde girilen lot kodu; takipsizde null. */
+    val lotNo: String? = null,
+    /** Seri-takipli kalemde secilen/okutulan seriler; otomatik seri yolunda bos kalir. */
+    val serials: List<String> = emptyList(),
 )
 
 /**
@@ -124,6 +128,13 @@ fun StockDocScreen(session: SessionManager, mode: StockDocMode, onBack: () -> Un
     var resolveError by remember { mutableStateOf<String?>(null) }
     var qtyText by remember { mutableStateOf("") }
 
+    // Cozulen malzemenin takip tipine gore doldurulan gecici lot/seri girisi. Satir eklenince
+    // DocLineUi'ye tasinir ve sifirlanir.
+    var lotNo by remember { mutableStateOf("") }
+    var serials by remember { mutableStateOf(listOf<String>()) }
+    var autoGenerateSerials by remember { mutableStateOf(false) }
+    var showSerialPicker by remember { mutableStateOf(false) }
+
     var lines by remember { mutableStateOf(listOf<DocLineUi>()) }
     var note by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
@@ -148,18 +159,41 @@ fun StockDocScreen(session: SessionManager, mode: StockDocMode, onBack: () -> Un
         val item = resolved ?: return
         val qty = qtyValue
         if (qty == null || qty <= 0.0 || saving) return
+
+        // Lot/seri dogrulamasi ISTEMCIDE de yapilir — ama kural sunucunun (asil kapi orasi).
+        // Amac erken ve anlasilir geri bildirim: kullanici belgeyi kaydedene kadar bekleyip
+        // sonra "Lot zorunlu" hatasi almasin.
+        val tracking = trackingTypeFromString(item.trackingType)
+        val autoOk = isStockIn && item.autoSerial && autoGenerateSerials
+        when {
+            tracking == ItemTrackingType.LOT && lotNo.isBlank() -> {
+                saveError = "Bu malzeme lot takipli — lot kodu zorunlu."
+                return
+            }
+            tracking == ItemTrackingType.SERIAL && !autoOk && serials.size != qty.toInt() -> {
+                saveError = "Bu malzeme seri takipli — miktar kadar (${qty.toInt()}) seri gerekli, " +
+                    "şu an ${serials.size} adet."
+                return
+            }
+        }
+
         lines = lines + DocLineUi(
             itemId = item.itemId,
             itemCode = item.itemCode,
             itemName = item.itemName,
             unit = item.unit,
             quantity = qty,
+            lotNo = lotNo.trim().takeIf { it.isNotBlank() },
+            serials = if (autoOk) emptyList() else serials,
         )
         code = ""
         qtyText = ""
         resolved = null
         resolveError = null
         saveError = null
+        lotNo = ""
+        serials = emptyList()
+        autoGenerateSerials = false
     }
 
     fun save() {
@@ -173,7 +207,14 @@ fun StockDocScreen(session: SessionManager, mode: StockDocMode, onBack: () -> Un
         scope.launch {
             saving = true
             saveError = null
-            val reqLines = lines.map { StockDocLineRequest(itemId = it.itemId, quantity = it.quantity) }
+            val reqLines = lines.map {
+                StockDocLineRequest(
+                    itemId = it.itemId,
+                    quantity = it.quantity,
+                    lotNo = it.lotNo,
+                    serials = it.serials.takeIf { s -> s.isNotEmpty() },
+                )
+            }
             val noteOrNull = note.trim().takeIf { it.isNotBlank() }
             val extraFields = dynamicFieldsPayload(widgetValues)
             val result = if (isStockIn) repo.stockIn(loc.id, reqLines, noteOrNull, extraFields)
@@ -334,6 +375,46 @@ fun StockDocScreen(session: SessionManager, mode: StockDocMode, onBack: () -> Un
                                 Icon(Icons.Default.Add, contentDescription = "Satıra ekle")
                             }
                         }
+
+                        // ── Lot / Seri bolumu — YALNIZ takipli malzemede cizilir ──────────
+                        // Irsaliye ekraninin parcalari AYNEN kullanilir (DeliverySerialLotSection):
+                        // ayni davranis, ayni tarama seam'i, tek kaynak. Giris ~ "alis" (seri
+                        // gir/okut + otomatik seri), cikis ~ "satis" (stoktaki serilerden sec).
+                        val trackingUi = trackingTypeFromString(item.trackingType)
+                        if (trackingUi == ItemTrackingType.LOT) {
+                            LotInputRow(
+                                itemId = item.itemId,
+                                value = lotNo,
+                                enabled = !saving,
+                                // Cikista mevcut lotlar onerilir; giriste yeni lot yazilir.
+                                isSales = !isStockIn,
+                                repo = repo,
+                                onValueChange = { lotNo = it },
+                            )
+                        } else if (trackingUi == ItemTrackingType.SERIAL) {
+                            val targetQty = qtyValue?.toInt() ?: 0
+                            if (isStockIn) {
+                                PurchaseSerialEntryRow(
+                                    serials = serials,
+                                    autoGenerate = autoGenerateSerials,
+                                    autoGenerateAvailable = item.autoSerial,
+                                    targetQuantity = targetQty,
+                                    enabled = !saving,
+                                    onAddSerial = { v ->
+                                        if (serials.none { it.equals(v, ignoreCase = true) }) serials = serials + v
+                                    },
+                                    onRemoveSerial = { v -> serials = serials.filterNot { it == v } },
+                                    onAutoGenerateChange = { autoGenerateSerials = it },
+                                )
+                            } else {
+                                SalesSerialTrackingRow(
+                                    selectedSerials = serials,
+                                    targetQuantity = targetQty,
+                                    enabled = !saving,
+                                    onOpenPicker = { showSerialPicker = true },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -489,6 +570,28 @@ fun StockDocScreen(session: SessionManager, mode: StockDocMode, onBack: () -> Un
                 TextButton(onClick = { showLocationPicker = false }) { Text("Vazgeç") }
             },
         )
+    }
+
+    // Cikista stoktaki serilerden secim — irsaliyedeki AYNI diyalog (tek kaynak).
+    if (showSerialPicker) {
+        val pickItem = resolved
+        if (pickItem == null) {
+            showSerialPicker = false
+        } else {
+            SerialSelectionDialog(
+                itemId = pickItem.itemId,
+                itemName = pickItem.itemName,
+                itemCode = pickItem.itemCode,
+                targetQuantity = qtyValue?.toInt() ?: 0,
+                initiallySelected = serials,
+                repo = repo,
+                onDismiss = { showSerialPicker = false },
+                onConfirm = { picked ->
+                    serials = picked
+                    showSerialPicker = false
+                },
+            )
+        }
     }
 
     if (successResult != null) {

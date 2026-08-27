@@ -54,6 +54,16 @@ data class StockBalanceDto(
 data class StockDocLineRequest(
     val itemId: Int,
     val quantity: Double,
+    /**
+     * Lot-takipli malzemede ZORUNLU (sunucu kurali). Takipsizde null birakilir.
+     */
+    val lotNo: String? = null,
+    /**
+     * Seri-takipli malzemede ADET KADAR seri. Girişte AutoSerial=1 olan malzemede bos
+     * birakilabilir — sunucu uretir. Kural sunucuda (SqlStockDocRepository), istemci
+     * yalnizca toplar.
+     */
+    val serials: List<String>? = null,
 )
 
 /** stock-in/stock-out istek govdesi. [extraFields] — dinamik ek saha (WidgetMas) degerleri,
