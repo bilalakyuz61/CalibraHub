@@ -1246,6 +1246,12 @@ END;";
         ("FK_Document_Location",            "Document",             "LocationId",            "Location"),
         ("FK_DocumentLine_Location",        "DocumentLine",         "LocationId",            "Location"),
         ("FK_DocumentLine_Unit",            "DocumentLine",         "UnitId",                "Unit"),
+        // Kalemin malzemesi (2026-08-27). Bu kisit uzun sure YOKTU ve malzeme silme
+        // fiziksel DELETE oldugu icin canlida 40 oksuz kalem / 24 belge olusmustu —
+        // belge acilinca malzeme adi/birimi cozulemiyordu. Silme artik pasife cekiyor
+        // (SqlLogisticsConfigurationRepository.DeleteItemAsync); FK ise ikinci savunma:
+        // baska bir yol yine fiziksel silmeye kalkarsa veritabani durdurur.
+        ("FK_DocumentLine_Items",           "DocumentLine",         "ItemId",                "Items"),
         // ── Alan ayarlari ────────────────────────────────────────────────────
         ("FK_FldSet_Forms",                 "FldSet",               "FormId",                "Forms"),
         // ── Sayim ────────────────────────────────────────────────────────────
