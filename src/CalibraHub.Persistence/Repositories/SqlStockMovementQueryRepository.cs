@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
@@ -44,6 +44,21 @@ public sealed class SqlStockMovementQueryRepository : IStockMovementQueryReposit
         return n ?? c;
     }
 
+    /// <summary>
+    /// Bir hareket satirinda gosterilecek EN FAZLA seri sayisi. Amac iki yonlu:
+    /// (1) SQL tarafinda STRING_AGG'in sisip anlamsiz buyumesini onlemek,
+    /// (2) gridde tek hucreye binlerce seri basip duzeni bozmamak.
+    /// </summary>
+    private const int SerialDisplayLimit = 20;
+
+    /// <summary>Kirpilan seri listesine "+N" ozeti ekler (kullanici eksik veriyi fark etsin).</summary>
+    private static string? BuildSerialDisplay(string? joined, int total)
+    {
+        if (string.IsNullOrWhiteSpace(joined)) return null;
+        var shown = joined.Split(',').Length;
+        return total > shown ? $"{joined} (+{total - shown})" : joined;
+    }
+
     public async Task<ItemStockMovementResultDto> ListForItemAsync(ItemStockMovementFilter filter, CancellationToken ct)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
@@ -63,10 +78,23 @@ public sealed class SqlStockMovementQueryRepository : IStockMovementQueryReposit
                     cfg.[RecordCode] AS CombinationCode,
                     usr.[FullName] AS CreatedByName,
                     l.[BaseQuantity],
-                    (SELECT STRING_AGG(s.[SerialNo], N', ') WITHIN GROUP (ORDER BY s.[SerialNo])
-                     FROM {T("DocumentLineSerial")} dls
-                     INNER JOIN {T("ItemSerial")} s ON s.[Id] = dls.[SerialId]
-                     WHERE dls.[DocumentLineId] = l.[Id]) AS SerialNos
+                    -- CAST(... AS NVARCHAR(MAX)) ZORUNLU: STRING_AGG girdisi NVARCHAR(MAX)
+                    -- degilse sonuc 8000 bayti asinca SQL Server hata firlatir
+                    -- ("STRING_AGG aggregation result exceeded the limit of 8000 bytes").
+                    -- Seri takibi yapilan bir satirda yuzlerce seri olabilir; bu limit
+                    -- gercek bir kayitla asildi ve TUM stok hareketleri ekrani cokuyordu
+                    -- (2026-08-28). Yalnizca gosterim icin ilk {SerialDisplayLimit} seri
+                    -- birlestirilir; gerisi "+N" olarak ozetlenir (bkz. asagidaki TOP).
+                    (SELECT STRING_AGG(CAST(x.[SerialNo] AS NVARCHAR(MAX)), N', ')
+                            WITHIN GROUP (ORDER BY x.[SerialNo])
+                     FROM (SELECT TOP ({SerialDisplayLimit}) s.[SerialNo]
+                           FROM {T("DocumentLineSerial")} dls
+                           INNER JOIN {T("ItemSerial")} s ON s.[Id] = dls.[SerialId]
+                           WHERE dls.[DocumentLineId] = l.[Id]
+                           ORDER BY s.[SerialNo]) x) AS SerialNos,
+                    (SELECT COUNT(*)
+                     FROM {T("DocumentLineSerial")} dls2
+                     WHERE dls2.[DocumentLineId] = l.[Id]) AS SerialCount
                 FROM {T("DocumentLine")} l
                 INNER JOIN {T("Document")} d        ON d.[Id]  = l.[DocumentId]
                 LEFT  JOIN {T("DocumentType")} dt   ON dt.[Id] = d.[DocumentTypeId]
@@ -120,7 +148,9 @@ public sealed class SqlStockMovementQueryRepository : IStockMovementQueryReposit
                     Notes = r.IsDBNull(17) ? null : r.GetString(17),
                     CombinationCode = r.IsDBNull(18) ? null : r.GetString(18),
                     CreatedByName = r.IsDBNull(19) ? null : r.GetString(19),
-                    SerialNos = r.IsDBNull(21) ? null : r.GetString(21),
+                    SerialNos = BuildSerialDisplay(
+                        r.IsDBNull(21) ? null : r.GetString(21),
+                        r.IsDBNull(22) ? 0 : r.GetInt32(22)),
                     SignedDelta = signed,
                     BaseSignedDelta = baseSigned,
                 });
