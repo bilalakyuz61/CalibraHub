@@ -646,11 +646,12 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                         INSERT INTO {_lineTable}
                             ([DocumentId],[LineNo],[ItemId],[UnitId],
                              [Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
-                             [CombinationId],[LocationId],[Notes],[NotesPinned],[RevisedFromId],[SourceLineId],[DeliveryDate],[DeliveryDays])
+                             [CombinationId],[LocationId],[Notes],[NotesPinned],[RevisedFromId],[SourceLineId],[DeliveryDate],[DeliveryDays],[CompanyId])
                         VALUES
                             (@DocumentId,@LineNo,@ItemId,@UnitId,
                              @Quantity,{baseQtyExpr},@UnitPrice,@DiscountRate,@LineTotal,
-                             @CombinationId,@LocationId,@Notes,@NotesPinned,@RevisedFromId,@SourceLineId,@DeliveryDate,@DeliveryDays);
+                             @CombinationId,@LocationId,@Notes,@NotesPinned,@RevisedFromId,@SourceLineId,@DeliveryDate,@DeliveryDays,
+                             (SELECT d.[CompanyId] FROM {_quoteTable} d WHERE d.[Id] = @DocumentId));
                         """;
                 }
                 cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
@@ -744,10 +745,11 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         insCmd.CommandText = $"""
             INSERT INTO {_lineTable}
                 ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
-                 [CombinationId],[LocationId],[FromLocationId],[MovementType],[UnitCost],[LotNo],[Notes])
+                 [CombinationId],[LocationId],[FromLocationId],[MovementType],[UnitCost],[LotNo],[Notes],[CompanyId])
             VALUES
                 (@DocumentId,@LineNo,@ItemId,@UnitId,@Quantity,{StockUnitSql.BaseQtyExpr($"[{_schema}].[Items]", $"[{_schema}].[ItemUnits]", "@Quantity", "@ItemId", "@UnitId")},0,0,0,
-                 @CombinationId,@LocationId,@FromLocationId,@MovementType,@UnitCost,@LotNo,@Notes);
+                 @CombinationId,@LocationId,@FromLocationId,@MovementType,@UnitCost,@LotNo,@Notes,
+                 (SELECT d.[CompanyId] FROM {_quoteTable} d WHERE d.[Id] = @DocumentId));
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         insCmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
@@ -880,7 +882,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             await using (var upd = conn.CreateCommand())
             {
                 upd.Transaction = tx;
-                upd.CommandText = $"UPDATE {_lineTable} SET [Notes] = @Desc WHERE [Id] = @Id;";
+                upd.CommandText = $"UPDATE {_lineTable} SET [Notes] = @Desc WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
+                upd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
                 upd.Parameters.Add(new SqlParameter("@Id", parentLineId));
                 upd.Parameters.Add(new SqlParameter("@Desc",
                     string.IsNullOrWhiteSpace(description) ? (object)DBNull.Value : description));
@@ -898,11 +901,11 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                     INSERT INTO {_lineTable}
                         ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],
                          [DiscountRate],[LineTotal],[CombinationId],[LocationId],[Notes],
-                         [NotesPinned],[RevisedFromId],[SourceLineId],[DeliveryDate],[DeliveryDays])
+                         [NotesPinned],[RevisedFromId],[SourceLineId],[DeliveryDate],[DeliveryDays],[CompanyId])
                     SELECT
                         [DocumentId], @NewLineNo, [ItemId], [UnitId], [Quantity], [BaseQuantity], [UnitPrice],
                         [DiscountRate], [LineTotal], [CombinationId], [LocationId], @OrigNotes,
-                        [NotesPinned], NULL, [SourceLineId], [DeliveryDate], [DeliveryDays]
+                        [NotesPinned], NULL, [SourceLineId], [DeliveryDate], [DeliveryDays], [CompanyId]
                     FROM {_lineTable}
                     WHERE [Id] = @ParentId;
                     SELECT CAST(SCOPE_IDENTITY() AS INT);
@@ -918,7 +921,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             await using (var markOld = conn.CreateCommand())
             {
                 markOld.Transaction = tx;
-                markOld.CommandText = $"UPDATE {_lineTable} SET [RevisedFromId] = @NewLineId WHERE [Id] = @ParentId;";
+                markOld.CommandText = $"UPDATE {_lineTable} SET [RevisedFromId] = @NewLineId WHERE [Id] = @ParentId AND [CompanyId] = @CompanyId;";
+                markOld.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
                 markOld.Parameters.Add(new SqlParameter("@NewLineId", newLineId));
                 markOld.Parameters.Add(new SqlParameter("@ParentId", parentLineId));
                 await markOld.ExecuteNonQueryAsync(ct);
@@ -1161,7 +1165,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = $"""
             DECLARE @qty DECIMAL(18,4), @newStatus INT;
-            SELECT @qty = [Quantity] FROM {_lineTable} WHERE [Id] = @LineId;
+            SELECT @qty = [Quantity] FROM {_lineTable} WHERE [Id] = @LineId AND [CompanyId] = @CompanyId;
             SET @newStatus = CASE
                 WHEN @qty IS NULL THEN 0
                 WHEN (@FulfilledFromStock + @FulfilledByPurchase) >= @qty THEN 2
@@ -1172,8 +1176,9 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                SET [FulfilledFromStock]  = @FulfilledFromStock,
                    [FulfilledByPurchase] = @FulfilledByPurchase,
                    [FulfillmentStatus]   = @newStatus
-             WHERE [Id] = @LineId;
+             WHERE [Id] = @LineId AND [CompanyId] = @CompanyId;
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@LineId", lineId));
         cmd.Parameters.Add(new SqlParameter("@FulfilledFromStock",  fulfilledFromStock));
         cmd.Parameters.Add(new SqlParameter("@FulfilledByPurchase", fulfilledByPurchase));
