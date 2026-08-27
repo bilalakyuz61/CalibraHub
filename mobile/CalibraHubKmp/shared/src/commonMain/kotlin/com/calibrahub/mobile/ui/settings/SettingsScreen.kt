@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.SettingsBrightness
 import androidx.compose.material3.Card
@@ -34,6 +35,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.remember
+import com.calibrahub.mobile.platform.currentAppVersion
 import com.calibrahub.mobile.session.SessionManager
 import com.calibrahub.mobile.session.ThemeMode
 import kotlinx.coroutines.launch
@@ -94,7 +97,42 @@ fun SettingsScreen(session: SessionManager, onBack: () -> Unit) {
                     onClick = { scope.launch { session.setThemeMode(ThemeMode.DARK) } },
                 )
             }
+
+            SettingsSection(title = "Hakkında") {
+                // Surum PLATFORMDAN okunur (Android versionName/Code, iOS Info.plist) — commonMain'de
+                // elle tutulan bir sabit, CI'in urettigi yapi numarasiyla ilk yuklemede sapardi.
+                val version = remember { currentAppVersion() }
+                InfoRow(
+                    icon = Icons.Default.Info,
+                    label = "Sürüm",
+                    value = if (version.name.isBlank()) "bilinmiyor" else version.display,
+                )
+            }
         }
+    }
+}
+
+/** Salt-okunur bilgi satiri — solda ikon + etiket, sagda deger. */
+@Composable
+private fun InfoRow(
+    icon: ImageVector,
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(16.dp))
+        Text(text = label, modifier = Modifier.weight(1f))
+        Text(
+            text = value,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 

@@ -100,7 +100,14 @@ fun LoginScreen(sessionManager: SessionManager, onLoggedIn: () -> Unit) {
 
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var baseUrl by remember { mutableStateOf("") }
+    // Sunucu adresi ARTIK PARCALI tutulur (host + port + sema). Kullanici tek bir "Backend URL"
+    // yazarken sema/slash/port hatalari sik yapiliyordu; parcali giris her alani tek basina
+    // dogrulanabilir kilar. Ag katmani hala tek bir URL bekledigi icin [composeBaseUrl] ile
+    // birlestirilir, kayitli deger [parseBaseUrl] ile geri ayristirilir.
+    var host by remember { mutableStateOf("") }
+    var port by remember { mutableStateOf("") }
+    var useHttps by remember { mutableStateOf(false) }
+    val baseUrl = composeBaseUrl(host, port, useHttps)
     var showPwd by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var showServerSettings by remember { mutableStateOf(false) }
@@ -110,6 +117,10 @@ fun LoginScreen(sessionManager: SessionManager, onLoggedIn: () -> Unit) {
     // companyId/companyName kalıcı yazılır (bkz. doLogin) ve uygulama bir sonraki açılışta
     // otomatik giriş dener. KAPALIYSA hiçbiri persist edilmez.
     var rememberMe by remember { mutableStateOf(true) }
+
+    // "Parolayi hatirla" — [rememberMe]'den AYRI ve varsayilani KAPALI (bkz.
+    // SessionManager.isRememberPasswordEnabled KDoc'u: parola cerezden farkli bir risk sinifi).
+    var rememberPassword by remember { mutableStateOf(false) }
 
     // Sunucu doğrulama ("Doğrula") akışının görsel durumu — login kilit-kadranından tamamen
     // bağımsız; kadrana hiç dokunmaz.
@@ -126,9 +137,14 @@ fun LoginScreen(sessionManager: SessionManager, onLoggedIn: () -> Unit) {
     var dialState by remember { mutableStateOf(LockDialState.Idle) }
 
     LaunchedEffect(Unit) {
-        baseUrl = session.currentBaseUrl()
+        val parsed = parseBaseUrl(session.currentBaseUrl())
+        host = parsed.host
+        port = parsed.port
+        useHttps = parsed.https
         rememberMe = session.isRememberMeEnabled()
         session.rememberedEmail()?.let { email = it }
+        rememberPassword = session.isRememberPasswordEnabled()
+        session.rememberedPassword()?.let { password = it }
     }
 
     suspend fun doLogin(company: CompanyDto) {
@@ -152,6 +168,9 @@ fun LoginScreen(sessionManager: SessionManager, onLoggedIn: () -> Unit) {
                     // olmadan elle giris yapan kullanicinin menusu suzulmeden kalirdi.
                     // Sessizce basarisiz olabilir (izinler null -> hicbir sey gizlenmez).
                     session.refreshPermissions()
+                    // Parola yalniz tercih ACIKKEN ve giris DOGRULANDIKTAN sonra yazilir —
+                    // yanlis parola hicbir zaman diske dusmez.
+                    session.persistPasswordIfEnabled(password)
                     if (dialState != LockDialState.Solved) {
                         dialState = LockDialState.Solved
                         delay(1600)
@@ -170,6 +189,26 @@ fun LoginScreen(sessionManager: SessionManager, onLoggedIn: () -> Unit) {
             }
         }
         loading = false
+    }
+
+    /**
+     * Sunucuyu dogrular; BASARILIYSA adresi kendiliginden kaydeder.
+     *
+     * Eskiden "Dogrula" yalniz kontrol ediyordu, kaydetmek icin ayrica "Kaydet"e basmak
+     * gerekiyordu — dogrulayip kaydetmeden cikan kullanici bir sonraki acilista eski adresle
+     * karsilasiyordu. Basarisiz dogrulama HICBIR SEY kaydetmez: calisan bir adres, calismayan
+     * bir denemeyle ezilmemeli.
+     */
+    fun verifyServer() {
+        pingState = ServerPingState.Checking
+        scope.launch {
+            val result = checkServer(session, baseUrl)
+            pingState = result
+            if (result is ServerPingState.Verified) {
+                session.setBaseUrl(baseUrl)
+                snackbarHostState.showSnackbar("Sunucu doğrulandı ve kaydedildi.")
+            }
+        }
     }
 
     fun onGirisClick() {
@@ -282,6 +321,29 @@ fun LoginScreen(sessionManager: SessionManager, onLoggedIn: () -> Unit) {
                         enabled = !loading,
                     )
                 }
+
+                // "Parolayi hatirla" — AYRI ve varsayilani KAPALI. Kapatildiginda saklanan
+                // parola ANINDA silinir (SessionManager.setRememberPassword), "kapattim ama
+                // diskte duruyor" durumu olusmaz.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "Parolayı hatırla",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = rememberPassword,
+                        onCheckedChange = { enabled ->
+                            rememberPassword = enabled
+                            scope.launch { session.setRememberPassword(enabled) }
+                        },
+                        enabled = !loading,
+                    )
+                }
                 Spacer(Modifier.height(20.dp))
 
                 Button(
@@ -336,27 +398,62 @@ fun LoginScreen(sessionManager: SessionManager, onLoggedIn: () -> Unit) {
 
             if (showServerSettings) {
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = baseUrl,
-                    onValueChange = {
-                        baseUrl = it
-                        pingState = ServerPingState.Idle
-                    },
-                    label = { Text("Backend URL") },
-                    supportingText = {
-                        Text("Emulator için: http://10.0.2.2:61001/")
-                    },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onFocusChanged { focus ->
-                            if (baseUrlFieldWasFocused && !focus.isFocused && baseUrl.isNotBlank()) {
-                                pingState = ServerPingState.Checking
-                                scope.launch { pingState = checkServer(session, baseUrl) }
-                            }
-                            baseUrlFieldWasFocused = focus.isFocused
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = host,
+                        onValueChange = {
+                            host = it
+                            pingState = ServerPingState.Idle
                         },
-                )
+                        label = { Text("Sunucu adresi") },
+                        supportingText = { Text("IP ya da alan adı") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                        modifier = Modifier
+                            .weight(2f)
+                            .onFocusChanged { focus ->
+                                if (baseUrlFieldWasFocused && !focus.isFocused && host.isNotBlank()) {
+                                    verifyServer()
+                                }
+                                baseUrlFieldWasFocused = focus.isFocused
+                            },
+                    )
+                    OutlinedTextField(
+                        value = port,
+                        onValueChange = { input ->
+                            // Yalniz rakam: port alanina yanlislikla ":" veya bosluk girilmesi
+                            // en sik yapilan hataydi, giriste elenir.
+                            port = input.filter { it.isDigit() }.take(5)
+                            pingState = ServerPingState.Idle
+                        },
+                        label = { Text("Port") },
+                        supportingText = { Text("örn. 61001") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                ) {
+                    Text(
+                        text = "HTTPS kullan",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = useHttps,
+                        onCheckedChange = {
+                            useHttps = it
+                            pingState = ServerPingState.Idle
+                        },
+                    )
+                }
 
                 ServerPingStatusRow(state = pingState)
 
@@ -366,21 +463,19 @@ fun LoginScreen(sessionManager: SessionManager, onLoggedIn: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     OutlinedButton(
-                        onClick = {
-                            pingState = ServerPingState.Checking
-                            scope.launch { pingState = checkServer(session, baseUrl) }
-                        },
-                        enabled = baseUrl.isNotBlank() && pingState != ServerPingState.Checking,
+                        onClick = { verifyServer() },
+                        enabled = host.isNotBlank() && pingState != ServerPingState.Checking,
                         modifier = Modifier.weight(1f),
                     ) { Text("Doğrula") }
 
                     OutlinedButton(
                         onClick = {
                             scope.launch {
-                                session.setBaseUrl(baseUrl.trim())
+                                session.setBaseUrl(baseUrl)
                                 snackbarHostState.showSnackbar("Sunucu adresi kaydedildi.")
                             }
                         },
+                        enabled = host.isNotBlank(),
                         modifier = Modifier.weight(1f),
                     ) { Text("Kaydet") }
                 }
@@ -393,6 +488,43 @@ fun LoginScreen(sessionManager: SessionManager, onLoggedIn: () -> Unit) {
 // Sunucu doğrulama ("Doğrula") — LoginScreen'deki Backend URL alanına ait küçük bir alt-sistem.
 // Login kilit-kadranından TAMAMEN bağımsızdır. GET /api/mobile/ping (anonim) çağırır.
 // ─────────────────────────────────────────────────────────────────────────
+
+/** Parcali sunucu adresi — [parseBaseUrl] cikti tipi. */
+private data class ParsedBaseUrl(val host: String, val port: String, val https: Boolean)
+
+/**
+ * Kayitli tek-parca base URL'i ("http://192.168.2.61:61001/") host + port + sema uclusune ayirir.
+ * Ktor'un Url ayristiricisi yerine elle: girdi kullanicidan gelmis YARIM bir metin olabilir
+ * ("192.168.2.61", "10.0.2.2:61001") ve Url() boyle degerlerde exception atar — burada
+ * ayristirma HICBIR ZAMAN patlamamali, en kotu ihtimalle bos alanlar doner.
+ */
+private fun parseBaseUrl(raw: String?): ParsedBaseUrl {
+    val text = raw?.trim().orEmpty()
+    if (text.isEmpty()) return ParsedBaseUrl("", "", false)
+
+    val https = text.startsWith("https://", ignoreCase = true)
+    val withoutScheme = text
+        .removePrefix("https://").removePrefix("HTTPS://")
+        .removePrefix("http://").removePrefix("HTTP://")
+    // Yol/sorgu kismini at — parcali UI yalniz host:port yonetir.
+    val authority = withoutScheme.substringBefore('/').substringBefore('?')
+    val host = authority.substringBefore(':').trim()
+    val port = authority.substringAfter(':', "").filter { it.isDigit() }
+    return ParsedBaseUrl(host = host, port = port, https = https)
+}
+
+/**
+ * Parcalari tek bir base URL'e birlestirir. Port bos birakilirsa semanin varsayilan portu
+ * kullanilir (URL'e hic yazilmaz) — kullanici 80/443 yazmak zorunda kalmasin. Sondaki "/"
+ * KORUNUR: Ktor'un defaultRequest url'i goreli yol ekledigi icin eksikligi yol birlesmesini bozar.
+ */
+private fun composeBaseUrl(host: String, port: String, https: Boolean): String {
+    val cleanHost = host.trim().trimEnd('/')
+    if (cleanHost.isEmpty()) return ""
+    val scheme = if (https) "https" else "http"
+    val cleanPort = port.filter { it.isDigit() }
+    return if (cleanPort.isEmpty()) "$scheme://$cleanHost/" else "$scheme://$cleanHost:$cleanPort/"
+}
 
 private sealed class ServerPingState {
     data object Idle : ServerPingState()

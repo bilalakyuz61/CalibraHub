@@ -184,6 +184,33 @@ class SessionManager(private val storage: SecureStorage) {
 
     suspend fun rememberedEmail(): String? = storage.getString(REMEMBERED_EMAIL_KEY)
 
+    /**
+     * "Parolayi hatirla" tercihi — [setRememberMe]'den AYRI ve varsayilani KAPALI. Parolayi
+     * saklamak oturum cerezini saklamaktan farkli bir risk sinifidir (cerez suresi dolar ve
+     * iptal edilebilir, parola edilemez), bu yuzden kullanici ayrica ve bilerek acmalidir.
+     */
+    suspend fun isRememberPasswordEnabled(): Boolean =
+        storage.getString(REMEMBER_PASSWORD_KEY)?.toBooleanStrictOrNull() ?: false
+
+    /**
+     * Tercihi kaydeder; KAPATILDIGINDA saklanan parolayi da SILER — "kapattim ama diskte
+     * duruyor" durumu olusmasin.
+     */
+    suspend fun setRememberPassword(enabled: Boolean) {
+        storage.putString(REMEMBER_PASSWORD_KEY, enabled.toString())
+        if (!enabled) storage.remove(REMEMBERED_PASSWORD_KEY)
+    }
+
+    /** Saklanan parola — yalniz tercih ACIKKEN doner (kapaliyken artik kayit da yok). */
+    suspend fun rememberedPassword(): String? =
+        if (isRememberPasswordEnabled()) storage.getString(REMEMBERED_PASSWORD_KEY) else null
+
+    /** Basarili giristen SONRA cagrilir; tercih kapaliysa hicbir sey yazmaz. */
+    suspend fun persistPasswordIfEnabled(password: String) {
+        if (password.isBlank()) return
+        if (isRememberPasswordEnabled()) storage.putString(REMEMBERED_PASSWORD_KEY, password)
+    }
+
     suspend fun currentCompanyName(): String? = storage.getString(COMPANY_NAME_KEY)
 
     suspend fun currentCompanyId(): Int? = storage.getString(COMPANY_ID_KEY)?.toIntOrNull()
@@ -362,6 +389,8 @@ class SessionManager(private val storage: SecureStorage) {
         private const val DISPLAY_NAME_KEY = "display_name"
         private const val REMEMBER_ME_KEY = "remember_me"
         private const val REMEMBERED_EMAIL_KEY = "remembered_email"
+        private const val REMEMBER_PASSWORD_KEY = "remember_password"
+        private const val REMEMBERED_PASSWORD_KEY = "remembered_password"
         private const val COMPANY_ID_KEY = "company_id"
         private const val COMPANY_NAME_KEY = "company_name"
         private const val THEME_MODE_KEY = "theme_mode"
