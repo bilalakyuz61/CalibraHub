@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Constants;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -36,6 +36,7 @@ public sealed class UiConfigController : Controller
     /// </summary>
     [HttpPost("/UiConfig/LineViewMode")]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("Izin gerekmez: yalniz cagiranin kendi gorunum tercihi (userId ile yazilir)")]
     public async Task<IActionResult> LineViewMode([FromBody] LineViewModeRequest? request, CancellationToken ct)
     {
         var userId = CurrentUserId();

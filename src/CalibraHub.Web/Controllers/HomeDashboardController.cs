@@ -68,6 +68,7 @@ public sealed class HomeDashboardController : Controller
     /// <summary>POST /HomeDashboard/SavePages — kullanıcı sayfa düzenini JSON olarak kalıcılaştır.</summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("Izin gerekmez: yalniz cagiranin kendi pano duzeni (userId ile yazilir)")]
     public async Task<IActionResult> SavePages([FromBody] SaveDashboardPagesRequest request, CancellationToken ct)
     {
         var (userId, _, _) = GetCurrentUser();
@@ -88,6 +89,7 @@ public sealed class HomeDashboardController : Controller
     /// <summary>POST /HomeDashboard/ResetPages — saklı düzeni sil, varsayılan sayfaları döndür.</summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("Izin gerekmez: yalniz cagiranin kendi pano duzeni (userId ile yazilir)")]
     public async Task<IActionResult> ResetPages(CancellationToken ct)
     {
         var (userId, role, deptId) = GetCurrentUser();

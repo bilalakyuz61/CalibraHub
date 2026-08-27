@@ -237,6 +237,7 @@ public sealed class MobileApiController : ControllerBase
     }
 
     [HttpPost("logout")]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("Izin gerekmez: yalniz cagiranin kendi oturumunu kapatir")]
     public async Task<IActionResult> Logout()
     {
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
@@ -507,6 +508,7 @@ public sealed class MobileApiController : ControllerBase
 
     [Authorize]
     [HttpPost("whatsapp/mark-read")]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("Izin gerekmez: WhatsApp gelen kutusu sirket geneli paylasimlidir")]
     public async Task<IActionResult> MarkRead(
         [FromServices] IWaInboxRepository inbox,
         [FromQuery] string phone,

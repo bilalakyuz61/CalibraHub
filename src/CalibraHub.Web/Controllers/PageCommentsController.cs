@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -71,6 +71,7 @@ public sealed class PageCommentsController : ControllerBase
 
     /// <summary>POST /api/page-comments/comment — yeni yorum ekler.</summary>
     [HttpPost("comment")]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("IsAdminOrSystemAdmin() -> Forbid()")]
     public async Task<IActionResult> CreateComment([FromBody] CreatePageCommentInput input, CancellationToken ct)
     {
         if (!IsAdminOrSystemAdmin()) return Forbid();
@@ -84,6 +85,7 @@ public sealed class PageCommentsController : ControllerBase
 
     /// <summary>POST /api/page-comments/comment/status — durum değişikliği + revizyon kaydı.</summary>
     [HttpPost("comment/status")]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("IsAdminOrSystemAdmin() -> Forbid()")]
     public async Task<IActionResult> ChangeStatus([FromBody] ChangePageCommentStatusInput input, CancellationToken ct)
     {
         if (!IsAdminOrSystemAdmin()) return Forbid();
@@ -97,6 +99,7 @@ public sealed class PageCommentsController : ControllerBase
 
     /// <summary>POST /api/page-comments/comment/edit — yorum metnini günceller.</summary>
     [HttpPost("comment/edit")]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("IsAdminOrSystemAdmin() -> Forbid()")]
     public async Task<IActionResult> EditText([FromBody] EditPageCommentTextInput input, CancellationToken ct)
     {
         if (!IsAdminOrSystemAdmin()) return Forbid();
@@ -110,6 +113,7 @@ public sealed class PageCommentsController : ControllerBase
 
     /// <summary>POST /api/page-comments/comment/delete — yorumu siler (CASCADE: revizyon + görsel).</summary>
     [HttpPost("comment/delete")]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("IsAdminOrSystemAdmin() -> Forbid()")]
     public async Task<IActionResult> DeleteComment([FromBody] DeletePageCommentInput input, CancellationToken ct)
     {
         if (!IsAdminOrSystemAdmin()) return Forbid();
@@ -123,6 +127,7 @@ public sealed class PageCommentsController : ControllerBase
     /// <summary>POST /api/page-comments/comment/image — base64 görsel ekler (ör. ekran görüntüsü).</summary>
     [HttpPost("comment/image")]
     [RequestSizeLimit(20L * 1024 * 1024)]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("IsAdminOrSystemAdmin() -> Forbid()")]
     public async Task<IActionResult> AddImage([FromBody] AddPageCommentImageInput input, CancellationToken ct)
     {
         if (!IsAdminOrSystemAdmin()) return Forbid();
@@ -168,6 +173,7 @@ public sealed class PageCommentsController : ControllerBase
 
     /// <summary>POST /api/page-comments/comment/image/delete — görseli siler.</summary>
     [HttpPost("comment/image/delete")]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("IsAdminOrSystemAdmin() -> Forbid()")]
     public async Task<IActionResult> DeleteImage([FromBody] DeletePageCommentImageInput input, CancellationToken ct)
     {
         if (!IsAdminOrSystemAdmin()) return Forbid();

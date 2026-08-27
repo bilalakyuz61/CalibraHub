@@ -300,6 +300,10 @@ public sealed class HealthCheckController : Controller
             if (meta.OfType<Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute>().Any()) continue;
             if (meta.OfType<CalibraHub.Web.Authorization.PermissionScopeAttribute>().Any()) continue;
             if (meta.OfType<CalibraHub.Web.Authorization.PermissionScopeAnyAttribute>().Any()) continue;
+            // Kapısı gövdede olan (ya da izne ihtiyaç duymayan) uçlar. Bu eleme OLMADAN
+            // rapor 28 mutasyon diyordu ve 22'si aslında korumalıydı — gerçek bulgu
+            // gürültüde kayboluyordu. Gerekçe özniteliğin içinde yazılıdır.
+            if (meta.OfType<CalibraHub.Web.Authorization.PermissionGateReviewedAttribute>().Any()) continue;
 
             var method = meta.OfType<Microsoft.AspNetCore.Routing.HttpMethodMetadata>()
                 .SelectMany(m => (IEnumerable<string>)m.HttpMethods).FirstOrDefault() ?? "?";
@@ -311,17 +315,26 @@ public sealed class HealthCheckController : Controller
             return ("ok", $"{total} action denetlendi — kapısız uç yok.");
 
         var mutations = uncovered.Count(u => !string.Equals(u.Method, "GET", StringComparison.OrdinalIgnoreCase));
-        var byController = uncovered
-            .GroupBy(u => u.Controller)
-            .OrderByDescending(g => g.Count())
-            .Take(6)
-            .Select(g => $"{g.Key} ({g.Count()})");
+        // Mutasyon yoksa okuma uçları tek başına "uyarı" sayılmaz: GET'ler ekran açar,
+        // veri değiştirmez ve çoğu zaten sayfa seviyesinde korunur. Uyarıyı asıl riske
+        // sakla — her denetimde kalıcı sarı bir satır görmek uyarıyı anlamsızlaştırır.
+        if (mutations == 0)
+            return ("ok",
+                $"{total} action denetlendi — kapısız mutasyon yok " +
+                $"({uncovered.Count} okuma ucu kapısız; bunlar veri değiştirmez).");
 
-        // "warn": bu bir hijyen ölçüsüdür, tek tek incelenmesi gerekir — kimisi meşru
-        // olabilir. Mutasyon (POST/PUT/DELETE) sayısı ayrıca verilir: asıl risk oradadır.
+        var mutationList = uncovered
+            .Where(u => !string.Equals(u.Method, "GET", StringComparison.OrdinalIgnoreCase))
+            .Select(u => $"{u.Controller}.{u.Action}")
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        // Mutasyonların ADLARI verilir, yalnız sayısı değil: sayı "gidip bul" demektir,
+        // ad ise doğrudan gidilecek yeri gösterir. Gövdesinde kapısı olanlar zaten
+        // [PermissionGateReviewed] ile elendi — burada kalan gerçekten kapısızdır.
         return ("warn",
-            $"{uncovered.Count}/{total} action yetki kapısı taşımıyor ({mutations} mutasyon). " +
-            $"En yoğun: {string.Join(" · ", byController)}");
+            $"{mutations} mutasyon ucu yetki kapısı taşımıyor: {string.Join(" · ", mutationList)}. " +
+            $"(Ayrıca {uncovered.Count - mutations} okuma ucu kapısız; {total} action denetlendi.)");
     }
 
     private List<InfraSpec> BuildInfraSpecs()

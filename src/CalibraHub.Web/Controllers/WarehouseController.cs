@@ -1,4 +1,4 @@
-using CalibraHub.Application.Constants;
+﻿using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Auditing;
@@ -856,6 +856,7 @@ public sealed class WarehouseController : Controller
     // Token, StockDocEdit fetch'inde elle header olarak değil calibraDirty.js'in same-origin
     // POST'lara otomatik enjeksiyonuyla taşınır (workspace layout hidden form + fetch wrapper).
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("CheckStockDocPermissionAsync — belge tipine gore dogru form kodunda yazma izni")]
     public async Task<IActionResult> SaveDocJson([FromBody] SaveStockDocRequest? request, CancellationToken ct)
     {
         if (request is null)
@@ -1032,6 +1033,7 @@ public sealed class WarehouseController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("CheckStockDocPermissionAsync — belge tipine gore dogru form kodunda silme izni")]
     public async Task<IActionResult> DeleteDocJson(int id, CancellationToken ct)
     {
         try

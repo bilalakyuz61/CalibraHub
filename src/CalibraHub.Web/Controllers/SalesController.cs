@@ -875,6 +875,7 @@ public sealed class SalesController : Controller
     }
 
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("HasFormPermissionAsync — belge tipi DB'den cozulup dogru form kodunda izin aranir")]
     public async Task<IActionResult> CreateOrdersFromQuotes(
         [FromBody] CreateOrdersFromQuotesRequest req, CancellationToken ct)
     {
@@ -901,6 +902,7 @@ public sealed class SalesController : Controller
     /// "Dönüştür" butonundan tetiklenir. Dönüşen belge yeni sekmede açılabilsin diye id/tür döner.
     /// </summary>
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("HasFormPermissionAsync — belge tipi DB'den cozulup dogru form kodunda izin aranir")]
     public async Task<IActionResult> ConvertPurchaseDocJson(int sourceId, CancellationToken ct)
     {
         if (sourceId <= 0) return Json(new { success = false, message = "Belge bulunamadı." });
@@ -936,6 +938,7 @@ public sealed class SalesController : Controller
     /// CreateWorkOrders=true ise olusan siparişin her satirindan birer is emri (WorkOrder) acar.
     /// </summary>
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("HasFormPermissionAsync — belge tipi DB'den cozulup dogru form kodunda izin aranir")]
     public async Task<IActionResult> ConvertSingleQuoteToOrder(
         [FromBody] ConvertSingleQuoteToOrderRequest req, CancellationToken ct)
     {
@@ -1019,6 +1022,7 @@ public sealed class SalesController : Controller
     };
 
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("Izin gerekmez: yalniz cagiranin kendi sutun tercihi (userId ile yazilir)")]
     public async Task<IActionResult> SaveDocumentGridColumns([FromBody] string[] columns, CancellationToken ct)
     {
         var userId = GetUserId();
@@ -1892,6 +1896,7 @@ public sealed class SalesController : Controller
     }
 
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("CheckAnyAsync — belge tipi DB'den cozulup dogru form kodunda izin aranir")]
     public async Task<IActionResult> SaveDocument([FromBody] SaveDocumentRequest? request, CancellationToken ct)
     {
         if (request is null)
@@ -2071,6 +2076,7 @@ public sealed class SalesController : Controller
     }
 
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("CheckAnyAsync — belge tipi DB'den cozulup dogru form kodunda izin aranir (silme kodlari)")]
     public async Task<IActionResult> DeleteDocument([FromBody] DeleteQuoteBody body, CancellationToken ct)
     {
         // Belge tipini DB'den çözerek doğru parent form kodu kontrolü.
@@ -2100,6 +2106,7 @@ public sealed class SalesController : Controller
     /// pattern'i ile ayni).
     /// </summary>
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("CheckAnyAsync — belge tipi DB'den cozulup dogru form kodunda izin aranir (silme kodlari)")]
     public async Task<IActionResult> DeleteDocumentJson(int id, CancellationToken ct)
     {
         try
@@ -2165,6 +2172,7 @@ public sealed class SalesController : Controller
     /// başarılı sayılır, yalnız loglanır (widget kaybı asıl işlemi geri almaz/başarısız göstermez).
     /// </summary>
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("HasFormPermissionAsync — belge tipi DB'den cozulup dogru form kodunda izin aranir")]
     public async Task<IActionResult> CopyDocumentJson(int id, CancellationToken ct)
     {
         if (id <= 0) return Json(new { success = false, message = "Geçersiz belge." });
@@ -2223,6 +2231,7 @@ public sealed class SalesController : Controller
     }
 
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("HasDocumentPermissionAsync — belge tipi DB'den cozulup dogru form kodunda izin aranir")]
     public async Task<IActionResult> ChangeQuoteStatus([FromBody] ChangeStatusBody body, CancellationToken ct)
     {
         // Yetki (2026-07-18): durum degistirme bir MUTASYONDUR ve stok etkisi vardir —
@@ -2266,6 +2275,7 @@ public sealed class SalesController : Controller
     /// Return: { success, newLineId, documentId, message }
     /// </summary>
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("HasFormPermissionAsync — belge tipi DB'den cozulup dogru form kodunda izin aranir")]
     public async Task<IActionResult> ReviseLine([FromBody] ReviseLineBody body, CancellationToken ct)
     {
         if (body == null || body.ParentLineId <= 0)
@@ -2765,6 +2775,7 @@ public sealed class SalesController : Controller
     /// ortak endpoint'e forward eder.
     /// </summary>
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("DEPRECATED shim — mail GONDERMEZ, sabit yanit doner (gercek uc: /Document/SendMail)")]
     public IActionResult SendQuoteMail(int quoteId, string to, string subject, string body)
     {
         if (string.IsNullOrWhiteSpace(to))
@@ -2883,6 +2894,7 @@ public sealed class SalesController : Controller
     /// ince bir sarmalayicidir — is mantigi TEK yerde (CreateOrdersFromQuotesAsync).</summary>
     [HttpPost("/Sales/CreateOrdersFromQuotesBulk")]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("HasFormPermissionAsync — belge tipi DB'den cozulup dogru form kodunda izin aranir")]
     public async Task<IActionResult> CreateOrdersFromQuotesBulk(
         [FromBody] BulkIdsRequest req, CancellationToken ct)
     {

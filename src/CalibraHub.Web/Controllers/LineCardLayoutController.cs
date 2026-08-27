@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using CalibraHub.Application.Abstractions.Persistence;
@@ -205,6 +205,7 @@ public sealed partial class LineCardLayoutController : Controller
 
     [HttpPost("/api/line-card-layout/save")]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("IsAdmin() -> Forbid()")]
     public async Task<IActionResult> Save([FromBody] SaveLayoutRequest request, CancellationToken ct)
     {
         if (!IsAdmin()) return Forbid();
@@ -286,6 +287,7 @@ public sealed partial class LineCardLayoutController : Controller
 
     [HttpPost("/api/line-card-layout/reset")]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("IsAdmin() -> Forbid()")]
     public async Task<IActionResult> Reset([FromBody] ResetLayoutRequest request, CancellationToken ct)
     {
         if (!IsAdmin()) return Forbid();
