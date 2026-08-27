@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Auditing;
@@ -1265,7 +1265,13 @@ public sealed class MobileWarehouseApiController : ControllerBase
             var fc = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(entity);
             if (result.Id > 0)
             {
-                _onSaveDispatcher.FireOnSave(new[] { fc.HeaderNew, fc.Header }, result.Id.ToString(), User?.Identity?.Name);
+                // origin: Mobile — entegrasyonun OnSave trigger'indaki "Mobil dahil" anahtari
+                // kapaliysa dispatcher bunu gondermez; kayit Aktarim Kuyrugu'nda bekler.
+                _onSaveDispatcher.FireOnSave(
+                    new[] { fc.HeaderNew, fc.Header },
+                    result.Id.ToString(),
+                    User?.Identity?.Name,
+                    CalibraHub.Application.Abstractions.Services.IntegrationSaveOrigin.Mobile);
             }
 
             // Audit — entity kodu DocumentType.Code (web DeliverSalesOrderJson ile aynı /AuditLog kanalı).

@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Domain.Enums;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,10 +27,12 @@ public sealed class IntegrationOnSaveDispatcher : IIntegrationOnSaveDispatcher
         _log = log;
     }
 
-    public void FireOnSave(string formCode, string recordId, string? triggeredBy = null)
-        => FireOnSave(new[] { formCode }, recordId, triggeredBy);
+    public void FireOnSave(string formCode, string recordId, string? triggeredBy = null,
+        IntegrationSaveOrigin origin = IntegrationSaveOrigin.Web)
+        => FireOnSave(new[] { formCode }, recordId, triggeredBy, origin);
 
-    public void FireOnSave(IEnumerable<string> formCodes, string recordId, string? triggeredBy = null)
+    public void FireOnSave(IEnumerable<string> formCodes, string recordId, string? triggeredBy = null,
+        IntegrationSaveOrigin origin = IntegrationSaveOrigin.Web)
     {
         if (string.IsNullOrWhiteSpace(recordId)) return;
         var codes = (formCodes ?? Array.Empty<string>())
@@ -100,11 +102,25 @@ public sealed class IntegrationOnSaveDispatcher : IIntegrationOnSaveDispatcher
                             // ile ayni isim/varsayilan). Kayit bu entegrasyona daha once basariyla
                             // gonderildiyse (RecordStatus.Sent) atla; aksi halde belge her
                             // duzenlemede ERP'ye tekrar tekrar gider (spam katlanir).
+                            var triggers = await repo.GetTriggersAsync(integ.Id, CancellationToken.None);
+                            var onSaveTrigger = triggers.FirstOrDefault(t =>
+                                t.IsActive && t.TriggerType == IntegrationTriggerType.OnSave);
+
+                            // "Mobil dahil" KAPALI + kayit mobilden geldi -> simdi gonderme.
+                            // Kayit gonderilmemis kalir ve Aktarim Kuyrugu'nda "Bekleyen" olarak
+                            // gorunur; kullanici oradan toplu gonderir. (Kuyruk turetilmis bir
+                            // gorunum oldugu icin ayrica bir yere yazmak GEREKMEZ.)
+                            if (origin == IntegrationSaveOrigin.Mobile && !ParseIncludeMobile(onSaveTrigger?.Config))
+                            {
+                                _log.LogInformation(
+                                    "[OnSaveDispatcher] {IntegrationName} (#{Id}) mobil kaynakli kayit icin ATLANDI " +
+                                    "(Mobil dahil kapali) — kayit Aktarim Kuyrugu'nda bekleyecek. recordId={RecordId}",
+                                    integ.Name, integ.Id, statusRecordId);
+                                continue;
+                            }
+
                             if (recordStatusRepo is not null)
                             {
-                                var triggers = await repo.GetTriggersAsync(integ.Id, CancellationToken.None);
-                                var onSaveTrigger = triggers.FirstOrDefault(t =>
-                                    t.IsActive && t.TriggerType == IntegrationTriggerType.OnSave);
                                 if (ParseOnlyIfNotSent(onSaveTrigger?.Config))
                                 {
                                     var existingStatus = await recordStatusRepo.GetAsync(integ.Id, statusRecordId, CancellationToken.None);
@@ -152,6 +168,30 @@ public sealed class IntegrationOnSaveDispatcher : IIntegrationOnSaveDispatcher
     /// hatasi olursa varsayilan TRUE (guvenli taraf) — WidgetsController.ParseOnlyIfNotSent
     /// ile ayni davranis (Wizard Adim 5 "Sadece bir kez gonder" anahtari).
     /// </summary>
+    /// <summary>
+    /// OnSave trigger config'inden "includeMobile" okur. VARSAYILAN TRUE — bu alan
+    /// eklenmeden once kurulmus entegrasyonlarin davranisi degismemeli (mobil irsaliye
+    /// bugune kadar aninda gonderiyordu). Kullanici kuyruga dusurmek isterse anahtari
+    /// bilerek kapatir. Bozuk JSON'da da TRUE (mevcut davranisi koru).
+    /// </summary>
+    private static bool ParseIncludeMobile(string? configJson)
+    {
+        if (string.IsNullOrWhiteSpace(configJson)) return true;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(configJson);
+            if (doc.RootElement.TryGetProperty("includeMobile", out var v))
+                return v.ValueKind switch
+                {
+                    System.Text.Json.JsonValueKind.True  => true,
+                    System.Text.Json.JsonValueKind.False => false,
+                    _ => true,
+                };
+        }
+        catch { /* bozuk JSON -> mevcut davranis */ }
+        return true;
+    }
+
     private static bool ParseOnlyIfNotSent(string? configJson)
     {
         if (string.IsNullOrWhiteSpace(configJson)) return true; // default TRUE

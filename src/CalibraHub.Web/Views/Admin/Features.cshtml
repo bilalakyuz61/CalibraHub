@@ -1,0 +1,432 @@
+@{
+    ViewData["Title"] = "Öne Çıkan Özellikler";
+    ViewData["BodyClass"] = "page-ftr";
+
+    // Tanıtım/pazarlama amaçlı statik içerik — veri kaynağı yoktur.
+    // Yeni bir modül canlıya alındığında ilgili gruba bir satır eklenir.
+    var groups = new[]
+    {
+        new
+        {
+            Icon = "trending-up", Tone = "indigo", Title = "Satış ve Sipariş Yönetimi",
+            Lead = "Tekliften sevkiyata kadar tek zincir; her adım bir öncekinden türer.",
+            Items = new[]
+            {
+                new { T = "Uçtan Uca Satış Akışı", D = "Satış teklifi → sipariş → irsaliye zinciri. Bir belgeyi bir sonrakine dönüştürün, satırlar ve tutarlar otomatik taşınsın." },
+                new { T = "Kısmi Teslimat", D = "Siparişi satır satır, kalan miktar takibiyle irsaliyeye dönüştürün. Kalan bakiye her zaman görünür." },
+                new { T = "Fiyat Listesi ve Cariye Özel Fiyat", D = "Genel fiyat listesi ve cari bazlı listeler; belge satırında fiyat otomatik çözülür." },
+                new { T = "Kit / Paket Ürün", D = "Paketi müşteriye tek satır olarak satın, sevkiyat aşamasında bileşenlerine patlatın." },
+                new { T = "Yükleme Planlama Merkezi", D = "Sevkiyat öncesi stok rezervasyonu, yükleme listesi ve hazırlık takibi." },
+                new { T = "Özellik ve Kombinasyon", D = "Renk, beden gibi ürün özelliklerinden kombinasyon üretimi ve satışı." },
+            }
+        },
+        new
+        {
+            Icon = "shopping-bag", Tone = "violet", Title = "Satın Alma ve İhtiyaç Karşılama",
+            Lead = "İhtiyacın doğduğu andan malın girişine kadar izlenebilir tedarik.",
+            Items = new[]
+            {
+                new { T = "Tam Tedarik Zinciri", D = "İhtiyaç kaydı → satın alma talebi → teklif → sipariş → alış irsaliyesi." },
+                new { T = "İhtiyaç Karşılama Merkezi", D = "Açık ihtiyaçları stok, sipariş veya üretimle eşleştirip tek ekrandan karşılayın." },
+                new { T = "Karşılama Defteri", D = "Hangi ihtiyacın ne kadarının hangi belgeyle karşılandığı kümülatif olarak tutulur." },
+                new { T = "Malzeme Belge Kilitleri", D = "Belirli malzemelerin hangi belge türlerinde kullanılabileceğini kısıtlayın." },
+            }
+        },
+        new
+        {
+            Icon = "warehouse", Tone = "emerald", Title = "Stok ve Depo",
+            Lead = "Gerçek zamanlı bakiye, izlenebilirlik ve hatalı hareketlere karşı koruma.",
+            Items = new[]
+            {
+                new { T = "Ambar Giriş / Çıkış / Transfer / Sayım", D = "Tüm depo hareketleri aynı belge altyapısında; sayım farkları tek tuşla yansıtılır." },
+                new { T = "Lot ve Seri Takibi", D = "Lot bazlı bakiye, FEFO çıkış, otomatik seri numarası üretimi ve uçtan uca izlenebilirlik." },
+                new { T = "Baz Birim Normalizasyonu", D = "Koli, paket, kilogram gibi farklı birimlerde giriş yapın; bakiye tek baz birimde tutulur." },
+                new { T = "Eksi Bakiye Kontrolü", D = "Stokta olmayan malın çıkışını, transferini veya üretim sarfını sistem engeller." },
+                new { T = "Lokasyon Yönetimi", D = "Depo ve raf tanımları, malzeme bazlı varsayılan lokasyonlar." },
+                new { T = "Stok Hareketleri Dökümü", D = "Malzeme kartından tüm giriş-çıkış hareketleri ve bakiye seyri." },
+            }
+        },
+        new
+        {
+            Icon = "factory", Tone = "amber", Title = "Üretim Planlama ve Saha",
+            Lead = "Reçeteden makine çizelgesine, ofisten fabrika katına kadar tek sistem.",
+            Items = new[]
+            {
+                new { T = "Ürün Ağacı (Reçete)", D = "Çok seviyeli ürün ağacı, alternatif reçeteler ve versiyonlama; iş emrinde versiyon seçimi." },
+                new { T = "İş Emirleri", D = "Bileşen ihtiyacı, sarf, tüketim lokasyonu ve operasyon takibi tek ekranda." },
+                new { T = "Üretim Terminali", D = "Tablet/kiosk ekranı: operatör PIN veya NFC kart ile operasyonu başlatır, duraklatır ve tamamlar." },
+                new { T = "Makine Planlama (Gantt)", D = "Sürükle-bırak çizelge, otomatik yerleştirme, hazırlık (setup) blokları, blok kilitleme ve yeniden çizelgeleme." },
+                new { T = "Vardiya Senaryoları ve Takvim", D = "Vardiya pencereleri, tatiller ve çalışma takviminden türeyen gerçek kapasite." },
+                new { T = "Kapasite / Yük Raporu", D = "Makine ve dönem bazlı doluluk ısı haritası ile darboğazları önceden görün." },
+            }
+        },
+        new
+        {
+            Icon = "shield-check", Tone = "rose", Title = "Kalite Yönetimi",
+            Lead = "Muayeneden düzeltici faaliyete kadar kapalı çevrim kalite.",
+            Items = new[]
+            {
+                new { T = "Muayene Planları", D = "Malzeme grubu bazlı muayene kriterleri; giriş, üretim ve sevkiyat kontrolleri." },
+                new { T = "Muayene Kayıtları", D = "Her muayene kaynak belgesine (mal kabul, iş emri) bağlıdır; sonuç geriye izlenebilir." },
+                new { T = "Hata Kodları", D = "Standart hata kataloğu ile tutarlı raporlama ve trend analizi." },
+                new { T = "DÖF (Düzeltici / Önleyici Faaliyet)", D = "Durum makinesi, kök neden analizi (5N1K, Ishikawa, 8D) ve kapanış onayı." },
+                new { T = "DÖF Panosu", D = "Açık ve kapalı faaliyet, gecikme ve tekrar eden hata göstergeleri." },
+            }
+        },
+        new
+        {
+            Icon = "flask", Tone = "blue", Title = "AR-GE / ÜR-GE",
+            Lead = "Proje, görev ve maliyet üçlüsünü tek çatı altında birleştirin.",
+            Items = new[]
+            {
+                new { T = "Proje Komuta Güvertesi", D = "Projenin durumu, görevleri, maliyeti ve dokümanları tek görünümde." },
+                new { T = "Görev Şablonları ve WBS", D = "Sıralı kilitli görev şablonları, otomatik ilerleme yüzdesi, kişisel görev listesi." },
+                new { T = "Proje Maliyeti", D = "Ambar çıkışı, prototip reçete/rota ve iş emri maliyetleri projeye toplanır." },
+            }
+        },
+        new
+        {
+            Icon = "check-circle", Tone = "indigo", Title = "Onay Akışları ve Elektronik Belge",
+            Lead = "Kim neyi, hangi sırayla onaylayacak? Kod yazmadan tanımlayın.",
+            Items = new[]
+            {
+                new { T = "Görsel Onay Akışı Tasarımcısı", D = "Koşullu, çok kademeli onay adımları; revizyon geçmişiyle birlikte." },
+                new { T = "Onayda Bekleyenler", D = "Kullanıcıya düşen tüm onaylar tek kutuda, toplu işlem desteğiyle." },
+                new { T = "Tek Tık Onay Bağlantıları", D = "Mail veya WhatsApp'a düşen onayla/reddet bağlantısı; sisteme girmeden karar verin." },
+                new { T = "e-Fatura / e-Arşiv / e-İrsaliye", D = "Gelen elektronik belgelerin görüntülenmesi, onaylanması ve belgeye dönüştürülmesi." },
+                new { T = "Belge Tasarımcısı", D = "Yazdırılacak belgelerin şablonu sürükle-bırak ile tasarlanır; tasarım kurallarıyla koşullu şablon seçimi yapılır." },
+            }
+        },
+        new
+        {
+            Icon = "bar-chart", Tone = "emerald", Title = "Raporlama ve Analitik",
+            Lead = "Veriyi ekrandan çıkarmadan raporlayın, panolaştırın, paylaşın.",
+            Items = new[]
+            {
+                new { T = "Rapor Tasarımcısı", D = "Veri kaynağı, kolon, filtre ve görünüm seçimiyle kod yazmadan rapor kurun." },
+                new { T = "Rapor Panoları", D = "Grafik ve tablo bileşenlerinden oluşan panolar; yetkiye göre filtrelenir." },
+                new { T = "Anlık Görüntü / Canlı Veri", D = "Ağır raporlar için anlık görüntü önbelleği, kritik raporlar için canlı sorgu." },
+                new { T = "Ana Sayfa Panosu", D = "Kullanıcıya özel gösterge seçimi; herkes kendi işine odaklanır." },
+                new { T = "Her Listede Excel", D = "Tüm liste ekranlarından tek tuşla Excel dışa aktarım." },
+            }
+        },
+        new
+        {
+            Icon = "sliders", Tone = "violet", Title = "Kod Yazmadan Uyarlama",
+            Lead = "Her işletme farklıdır: CalibraHub'ı kendi sürecinize göre şekillendirin.",
+            Items = new[]
+            {
+                new { T = "Dinamik Alan Tanımlama", D = "Herhangi bir forma yeni alan ekleyin: metin, sayı, tarih, liste, rehber, dosya eki." },
+                new { T = "Form Davranış Katmanı", D = "Standart alanları görünür veya zorunlu yapın, varsayılan değer verin, koşullu kurallar tanımlayın." },
+                new { T = "Kart Düzeni Editörü", D = "Belge kalem kartında hangi alanın nerede duracağını sürükle-bırak ile belirleyin." },
+                new { T = "Liste Kişiselleştirme", D = "Sütun ve gösterge görünürlüğü, sırası ve filtreler kullanıcı bazında saklanır." },
+                new { T = "Kod ve Numaralandırma Kuralları", D = "Belge numarası ve kod şablonlarını işletme kurallarınıza göre tanımlayın." },
+                new { T = "Ondalık Hassasiyeti", D = "Miktar, fiyat ve tutar hane sayısını form ve şirket bazında ayarlayın." },
+                new { T = "SQL Görünüm ve Hesaplanan Kolon Yönetimi", D = "Yetkili yöneticiler için görünüm genişletme ve hesaplanan alan kurgusu." },
+            }
+        },
+        new
+        {
+            Icon = "plug", Tone = "blue", Title = "Entegrasyon ve Veri Aktarımı",
+            Lead = "Mevcut sistemlerinizle konuşur; verinizi taşımak için proje gerekmez.",
+            Items = new[]
+            {
+                new { T = "Dosyadan İçe Aktarım", D = "Excel/CSV şablonlarıyla cari, malzeme ve belge aktarımı; hatalı satır önizlemesi." },
+                new { T = "Veritabanından İçe Aktarım", D = "Harici SQL kaynağından eşleme tabanlı aktarım; anahtar alan zorunlu, tekrar çalıştırılabilir." },
+                new { T = "REST Entegrasyon Sihirbazı", D = "CalibraHub formundan dış servise veri gönderimi; tetikleyici, eşleme ve hata davranışı tanımlı." },
+                new { T = "WhatsApp İletişim Modülü", D = "Gerçek zamanlı mesajlaşma, ileti durumu ve belge paylaşımı." },
+                new { T = "Toplu Mail", D = "Şablonlu, hedef listeli toplu e-posta gönderimi." },
+            }
+        },
+        new
+        {
+            Icon = "lock", Tone = "rose", Title = "Güvenlik ve Yönetişim",
+            Lead = "Kimin neyi görüp değiştirebileceği kadar, ne yaptığı da kayıt altında.",
+            Items = new[]
+            {
+                new { T = "Form ve İşlem Bazlı Yetki", D = "Görüntüleme, ekleme, düzenleme ve silme yetkileri form form; kendi, departman veya tüm kayıt kapsamlarıyla." },
+                new { T = "Veri Perdeleme Kuralları", D = "Kullanıcı yalnızca kendisine açılan kayıtları görür; satır bazlı görünürlük kuralları." },
+                new { T = "İşlem Logları", D = "Kim, ne zaman, hangi alanı hangi değerden hangi değere çevirdi — kayıt kartından da izlenir." },
+                new { T = "Hata Logları ve Sağlık Kontrolü", D = "Sistem hatalarının merkezî kaydı ve tek tuşla uçtan uca sağlık taraması." },
+                new { T = "Oturum Zaman Aşımı", D = "Şirket parametresiyle belirlenen boşta kalma süresi sonunda güvenli çıkış." },
+                new { T = "Çok Şirketli Yapı", D = "Her şirket kendi veritabanında; veriler ayrık tutulur, tek uygulamadan yönetilir." },
+            }
+        },
+        new
+        {
+            Icon = "layout", Tone = "amber", Title = "Kullanım Deneyimi ve Mobil",
+            Lead = "Günlük kullanımda hız: sekmeler, tema, yardım ve saha uygulaması.",
+            Items = new[]
+            {
+                new { T = "Sekmeli Çalışma Alanı", D = "Birden fazla ekranı aynı anda açık tutun, aralarında kaybolmadan geçin." },
+                new { T = "Açık / Koyu Tema", D = "Tüm ekranlar iki temada da tasarlanmıştır; göz yormayan uzun mesai." },
+                new { T = "F1 ile Sayfa Yardımı", D = "Bulunduğunuz ekranın yardımı tek tuşla açılır — Türkçe ve İngilizce." },
+                new { T = "Sayfa İçi Geri Bildirim", D = "Kullanıcı ekranın üzerinde not bırakır, talep doğrudan ilgili yere düşer." },
+                new { T = "Türkçe / İngilizce Arayüz", D = "Kullanıcı bazında dil seçimi." },
+                new { T = "Mobil Depo ve Üretim", D = "Android uygulamasıyla depo hareketleri ve üretim bildirimleri sahadan girilir." },
+            }
+        },
+    };
+
+    var totalFeatures = groups.Sum(g => g.Items.Length);
+
+    // İkonlar inline: sayfa dış bağımlılık olmadan (React bundle beklemeden) render olsun.
+    var icons = new Dictionary<string, string>
+    {
+        ["trending-up"]   = "<polyline points='22 7 13.5 15.5 8.5 10.5 2 17'/><polyline points='16 7 22 7 22 13'/>",
+        ["shopping-bag"]  = "<path d='M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z'/><path d='M3 6h18'/><path d='M16 10a4 4 0 0 1-8 0'/>",
+        ["warehouse"]     = "<path d='M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z'/><path d='M6 18h12'/><path d='M6 14h12'/>",
+        ["factory"]       = "<path d='M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z'/><path d='M17 18h1'/><path d='M12 18h1'/><path d='M7 18h1'/>",
+        ["shield-check"]  = "<path d='M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1Z'/><path d='m9 12 2 2 4-4'/>",
+        ["flask"]         = "<path d='M10 2v7.31'/><path d='M14 9.3V2'/><path d='M8.5 2h7'/><path d='M14 9.3a6.5 6.5 0 1 1-4 0'/><path d='M5.52 16h12.96'/>",
+        ["check-circle"]  = "<circle cx='12' cy='12' r='10'/><path d='m9 12 2 2 4-4'/>",
+        ["bar-chart"]     = "<path d='M3 3v18h18'/><rect x='7' y='11' width='3' height='7'/><rect x='12' y='7' width='3' height='11'/><rect x='17' y='13' width='3' height='5'/>",
+        ["sliders"]       = "<line x1='4' x2='4' y1='21' y2='14'/><line x1='4' x2='4' y1='10' y2='3'/><line x1='12' x2='12' y1='21' y2='12'/><line x1='12' x2='12' y1='8' y2='3'/><line x1='20' x2='20' y1='21' y2='16'/><line x1='20' x2='20' y1='12' y2='3'/><line x1='1' x2='7' y1='14' y2='14'/><line x1='9' x2='15' y1='8' y2='8'/><line x1='17' x2='23' y1='16' y2='16'/>",
+        ["plug"]          = "<path d='M12 22v-5'/><path d='M9 8V2'/><path d='M15 8V2'/><path d='M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z'/>",
+        ["lock"]          = "<rect width='18' height='11' x='3' y='11' rx='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/>",
+        ["layout"]        = "<rect width='18' height='18' x='3' y='3' rx='2'/><path d='M3 9h18'/><path d='M9 21V9'/>",
+    };
+}
+
+@section Styles {
+<style>
+    .ftr-root {
+        color-scheme: light;
+        --ftr-bg:      #f6f7fb;
+        --ftr-surface: #ffffff;
+        --ftr-border:  #e4e8f0;
+        --ftr-text:    #0f172a;
+        --ftr-muted:   #64748b;
+        --ftr-accent:  #6366f1;
+        --ftr-hero-1:  #4f46e5;
+        --ftr-hero-2:  #7c3aed;
+        --ftr-chip-bg: #eef1f8;
+        background: var(--ftr-bg);
+        color: var(--ftr-text);
+        min-height: 100%;
+        padding: 20px 22px 48px;
+    }
+    body.app-theme-dark .ftr-root {
+        color-scheme: dark;
+        --ftr-bg:      #0b1220;
+        --ftr-surface: #131c2e;
+        --ftr-border:  #24304a;
+        --ftr-text:    #e2e8f0;
+        --ftr-muted:   #94a3b8;
+        --ftr-accent:  #818cf8;
+        --ftr-hero-1:  #3730a3;
+        --ftr-hero-2:  #5b21b6;
+        --ftr-chip-bg: #1c2740;
+    }
+
+    /* ── Hero ───────────────────────────────────────── */
+    .ftr-hero {
+        border-radius: 18px;
+        padding: 30px 32px;
+        background: linear-gradient(135deg, var(--ftr-hero-1), var(--ftr-hero-2));
+        color: #fff;
+        display: flex; flex-wrap: wrap; gap: 24px;
+        align-items: center; justify-content: space-between;
+    }
+    .ftr-hero__brand { font-size: 12px; font-weight: 600; letter-spacing: .14em; opacity: .8; }
+    .ftr-hero h1 { font-size: 30px; font-weight: 700; margin: 6px 0 8px; line-height: 1.15; color: #fff; }
+    .ftr-hero p  { font-size: 15px; margin: 0; max-width: 640px; opacity: .92; line-height: 1.55; }
+    .ftr-stats { display: flex; gap: 14px; flex-wrap: wrap; }
+    .ftr-stat {
+        background: rgba(255,255,255,.14);
+        border: 1px solid rgba(255,255,255,.22);
+        border-radius: 14px; padding: 14px 20px; min-width: 116px; text-align: center;
+    }
+    .ftr-stat b { display: block; font-size: 26px; font-weight: 700; line-height: 1.1; }
+    .ftr-stat span { font-size: 12px; opacity: .85; }
+
+    /* ── Araç çubuğu ────────────────────────────────── */
+    .ftr-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 22px 0 18px; }
+    .ftr-search { flex: 1 1 260px; max-width: 380px; position: relative; }
+    .ftr-search input {
+        width: 100%; padding: 9px 12px 9px 34px;
+        border-radius: 10px; border: 1px solid var(--ftr-border);
+        background: var(--ftr-surface); color: var(--ftr-text);
+        font-size: 13px; outline: none;
+    }
+    .ftr-search input:focus { border-color: var(--ftr-accent); }
+    .ftr-search > svg {
+        position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+        width: 15px; height: 15px; color: var(--ftr-muted);
+    }
+    .ftr-btn {
+        display: inline-flex; align-items: center; gap: 7px;
+        padding: 9px 15px; border-radius: 10px; cursor: pointer;
+        border: 1px solid var(--ftr-border); background: var(--ftr-surface);
+        color: var(--ftr-text); font-size: 13px; font-weight: 600;
+    }
+    .ftr-btn:hover { border-color: var(--ftr-accent); color: var(--ftr-accent); }
+    .ftr-btn svg { width: 15px; height: 15px; }
+
+    /* ── Grup ve kartlar ────────────────────────────── */
+    .ftr-group { margin-bottom: 26px; }
+    .ftr-group__head { display: flex; align-items: flex-start; gap: 13px; margin-bottom: 13px; }
+    .ftr-group__icon {
+        width: 40px; height: 40px; border-radius: 11px; flex: 0 0 auto;
+        display: flex; align-items: center; justify-content: center;
+        background: var(--tone-soft); color: var(--tone);
+    }
+    .ftr-group__icon svg {
+        width: 20px; height: 20px; fill: none; stroke: currentColor;
+        stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+    }
+    .ftr-group__title { font-size: 17px; font-weight: 700; margin: 0; }
+    .ftr-group__lead  { font-size: 13px; color: var(--ftr-muted); margin: 3px 0 0; }
+    .ftr-group__count {
+        margin-left: auto; flex: 0 0 auto; white-space: nowrap;
+        font-size: 11px; font-weight: 600; color: var(--ftr-muted);
+        background: var(--ftr-chip-bg); border-radius: 20px; padding: 4px 11px;
+    }
+
+    .ftr-cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+    .ftr-card {
+        background: var(--ftr-surface);
+        border: 1px solid var(--ftr-border);
+        border-left: 3px solid var(--tone);
+        border-radius: 12px; padding: 14px 16px;
+        transition: transform .12s ease, box-shadow .12s ease;
+    }
+    .ftr-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(15,23,42,.09); }
+    body.app-theme-dark .ftr-card:hover { box-shadow: 0 6px 18px rgba(0,0,0,.4); }
+    .ftr-card h3 { font-size: 14px; font-weight: 600; margin: 0 0 5px; }
+    .ftr-card p  { font-size: 12.5px; line-height: 1.55; color: var(--ftr-muted); margin: 0; }
+
+    /* Grup rengi */
+    .tone-indigo  { --tone: #6366f1; --tone-soft: rgba(99,102,241,.14); }
+    .tone-violet  { --tone: #8b5cf6; --tone-soft: rgba(139,92,246,.14); }
+    .tone-emerald { --tone: #10b981; --tone-soft: rgba(16,185,129,.14); }
+    .tone-amber   { --tone: #f59e0b; --tone-soft: rgba(245,158,11,.14); }
+    .tone-rose    { --tone: #f43f5e; --tone-soft: rgba(244,63,94,.14); }
+    .tone-blue    { --tone: #3b82f6; --tone-soft: rgba(59,130,246,.14); }
+
+    .ftr-empty { display: none; text-align: center; padding: 46px 0; color: var(--ftr-muted); font-size: 14px; }
+    .ftr-root.is-empty .ftr-empty { display: block; }
+
+    .ftr-foot {
+        margin-top: 30px; padding-top: 18px;
+        border-top: 1px solid var(--ftr-border);
+        font-size: 12px; color: var(--ftr-muted);
+    }
+
+    /* ── Yazdırma ───────────────────────────────────── */
+    @@media print {
+        .ftr-toolbar { display: none !important; }
+        .ftr-root { background: #fff; color: #000; padding: 0; }
+        .ftr-hero { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .ftr-card { break-inside: avoid; box-shadow: none; }
+        .ftr-group { break-inside: avoid-page; }
+    }
+</style>
+}
+
+<div class="ftr-root" id="ftrRoot">
+
+    <div class="ftr-hero">
+        <div>
+            <div class="ftr-hero__brand">CALIBRAHUB</div>
+            <h1>Tek Sistemde Üretim, Lojistik ve Kalite</h1>
+            <p>
+                Teklif almaktan sevkiyata, reçeteden makine çizelgesine, kalite muayenesinden
+                düzeltici faaliyete kadar tüm süreçleriniz aynı veritabanında ve aynı arayüzde.
+                Aşağıda CalibraHub'ın öne çıkan yetenekleri yer alıyor.
+            </p>
+        </div>
+        <div class="ftr-stats">
+            <div class="ftr-stat"><b>@groups.Length</b><span>Ana Modül</span></div>
+            <div class="ftr-stat"><b>@totalFeatures</b><span>Öne Çıkan Özellik</span></div>
+            <div class="ftr-stat"><b>TR / EN</b><span>Arayüz Dili</span></div>
+        </div>
+    </div>
+
+    <div class="ftr-toolbar">
+        <div class="ftr-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input type="text" id="ftrSearch" placeholder="Özellik ara… (ör. seri takibi, onay, Gantt)" autocomplete="off" />
+        </div>
+        <button type="button" class="ftr-btn" id="ftrPrint">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Yazdır / PDF
+        </button>
+    </div>
+
+    <div id="ftrList">
+        @foreach (var g in groups)
+        {
+            <section class="ftr-group tone-@g.Tone" data-ftr-group>
+                <div class="ftr-group__head">
+                    <div class="ftr-group__icon">
+                        <svg viewBox="0 0 24 24">@Html.Raw(icons.TryGetValue(g.Icon, out var iconPath) ? iconPath : "")</svg>
+                    </div>
+                    <div>
+                        <h2 class="ftr-group__title">@g.Title</h2>
+                        <p class="ftr-group__lead">@g.Lead</p>
+                    </div>
+                    <span class="ftr-group__count">@g.Items.Length özellik</span>
+                </div>
+                <div class="ftr-cards">
+                    @foreach (var it in g.Items)
+                    {
+                        <article class="ftr-card" data-ftr-card data-ftr-text="@($"{g.Title} {it.T} {it.D}")">
+                            <h3>@it.T</h3>
+                            <p>@it.D</p>
+                        </article>
+                    }
+                </div>
+            </section>
+        }
+    </div>
+
+    <div class="ftr-empty">Aramanızla eşleşen özellik bulunamadı.</div>
+
+    <div class="ftr-foot">
+        Bu sayfa tanıtım ve bilgilendirme amaçlıdır. Modüllerin kullanıma açılması
+        lisans ve yetkilendirme ayarlarınıza bağlıdır.
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var root   = document.getElementById('ftrRoot');
+    var input  = document.getElementById('ftrSearch');
+    var cards  = Array.prototype.slice.call(document.querySelectorAll('[data-ftr-card]'));
+    var groups = Array.prototype.slice.call(document.querySelectorAll('[data-ftr-group]'));
+
+    // Turkce arama: kucuk harfe cevir + aksanli harfleri sadelestir
+    // (kullanici "sayim" yazinca "sayım" karti da eslessin).
+    function normalize(s) {
+        return (s || '').toLocaleLowerCase('tr-TR')
+            .replace(/ı/g, 'i').replace(/ş/g, 's').replace(/ğ/g, 'g')
+            .replace(/ü/g, 'u').replace(/ö/g, 'o').replace(/ç/g, 'c').replace(/î/g, 'i');
+    }
+
+    cards.forEach(function (c) { c.dataset.ftrNorm = normalize(c.getAttribute('data-ftr-text')); });
+
+    function applyFilter() {
+        var q = normalize(input.value.trim());
+        var anyVisible = false;
+
+        groups.forEach(function (g) {
+            var visible = 0;
+            g.querySelectorAll('[data-ftr-card]').forEach(function (c) {
+                var hit = !q || c.dataset.ftrNorm.indexOf(q) !== -1;
+                c.style.display = hit ? '' : 'none';
+                if (hit) visible++;
+            });
+            g.style.display = visible ? '' : 'none';
+            if (visible) anyVisible = true;
+        });
+
+        root.classList.toggle('is-empty', !anyVisible);
+    }
+
+    input.addEventListener('input', applyFilter);
+    document.getElementById('ftrPrint').addEventListener('click', function () { window.print(); });
+})();
+</script>
+}

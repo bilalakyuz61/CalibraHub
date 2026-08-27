@@ -243,13 +243,18 @@ export default function WizardStep5Trigger({ state, update, apiBase }) {
                     // Default: onlyIfNotSent = true (duplicate guard)
                     // Direct config parse — getConfigValue boolean false icin '' donerek bug yapiyor
                     let onlyIfNotSent = true
+                    // Varsayilan TRUE: bu anahtar eklenmeden once kurulmus entegrasyonlarda
+                    // mobil kayitlar aninda gonderiliyordu, davranis degismemeli.
+                    let includeMobile = true
                     const _t = getTrigger(2)
                     if (_t?.config) {
                       try {
                         const _cfg = JSON.parse(_t.config)
                         if (typeof _cfg.onlyIfNotSent === 'boolean') onlyIfNotSent = _cfg.onlyIfNotSent
+                        if (typeof _cfg.includeMobile === 'boolean') includeMobile = _cfg.includeMobile
                       } catch {}
                     }
+                    const manualOn = isSelected(0)
                     return (
                       <div className="iw-trigger-config">
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
@@ -267,6 +272,29 @@ export default function WizardStep5Trigger({ state, update, apiBase }) {
                             ? <>Belge ilk kez kaydedildiğinde tetiklenir. <code>document.IntegrationSentAt</code> dolu kayıtlar SKIP edilir — düzenlemeler tekrar göndermez. Yeniden göndermek için belge ekranındaki <em>"Yeniden Gönder"</em> butonu kullanılır.</>
                             : <>⚠️ Her save'de tetiklenir. Aynı belge defalarca ERP'ye gidebilir — dikkatli kullan.</>}
                         </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, marginBottom: 8 }}>
+                          <button className={'iw-switch iw-switch--sm' + (includeMobile ? ' is-on' : '')}
+                                  onClick={() => updateTriggerConfig(2, { includeMobile: !includeMobile })}
+                                  title="Mobil uygulamadan kaydedilen belgeler de anında gönderilsin mi?">
+                            <span className="iw-switch__thumb" />
+                          </button>
+                          <span style={{ fontSize: 12, color: 'var(--iw-text)' }}>Mobil dahil</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--iw-muted)', lineHeight: 1.5 }}>
+                          {includeMobile
+                            ? <>Mobil uygulamadan kaydedilen belgeler de web ile aynı anda gönderilir.</>
+                            : <>Mobilden kaydedilen belgeler <strong>anında gönderilmez</strong>; <em>Aktarım Kuyruğu</em>'nda "Bekleyen" olarak birikir ve oradan toplu gönderilir. Web'den kaydedilenler etkilenmez.</>}
+                        </div>
+                        {!includeMobile && !manualOn && (
+                          <div style={{ fontSize: 11, lineHeight: 1.5, marginTop: 8, padding: '8px 10px',
+                                        borderRadius: 6, background: 'var(--iw-amber-bg, rgba(245,158,11,.12))',
+                                        color: 'var(--iw-amber-color, #b45309)' }}>
+                            ⚠️ Aktarım Kuyruğu yalnızca <strong>Manuel Buton</strong> tetikleyicisi açık olan
+                            entegrasyonları listeler. Bu anahtar kapalıyken belgeler birikir ama kuyrukta
+                            görünmez — Manuel Buton'u da açın.
+                          </div>
+                        )}
                       </div>
                     )
                   })()}

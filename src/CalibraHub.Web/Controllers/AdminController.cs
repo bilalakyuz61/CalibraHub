@@ -88,6 +88,18 @@ public sealed class AdminController : Controller
         return View();
     }
 
+    /// <summary>
+    /// Öne Çıkan Özellikler — tanıtım/pazarlama amaçlı statik sayfa.
+    /// İçerik view içinde tanımlıdır; veri kaynağı ve yetki kapsamı yoktur
+    /// (kurum içi bilgilendirme, hiçbir müşteri verisi göstermez).
+    /// Gezinme: Ayarlar → Öne Çıkan Özellikler (/Admin/Features)
+    /// </summary>
+    [HttpGet]
+    public IActionResult Features()
+    {
+        return View();
+    }
+
     [HttpGet]
     public async Task<IActionResult> Appearance(
         string? formKey,

@@ -1,4 +1,4 @@
-namespace CalibraHub.Application.Abstractions.Services;
+﻿namespace CalibraHub.Application.Abstractions.Services;
 
 /// <summary>
 /// Form ekranindaki Save eyleminden sonra OnSave (otomatik) trigger'li
@@ -14,11 +14,28 @@ namespace CalibraHub.Application.Abstractions.Services;
 public interface IIntegrationOnSaveDispatcher
 {
     /// <summary>Tek form code icin fire-and-forget. Bekleme yok.</summary>
-    void FireOnSave(string formCode, string recordId, string? triggeredBy = null);
+    void FireOnSave(string formCode, string recordId, string? triggeredBy = null,
+        IntegrationSaveOrigin origin = IntegrationSaveOrigin.Web);
 
     /// <summary>
     /// Coklu form code (ornek: SALES_ORDER_NEW + SALES_ORDER_EDIT) — kayit hem yeni
     /// hem mevcut formdan tetiklenebileceginden ikisini de tarayip OnSave trigger'lari calistirir.
     /// </summary>
-    void FireOnSave(IEnumerable<string> formCodes, string recordId, string? triggeredBy = null);
+    void FireOnSave(IEnumerable<string> formCodes, string recordId, string? triggeredBy = null,
+        IntegrationSaveOrigin origin = IntegrationSaveOrigin.Web);
+}
+
+/// <summary>
+/// Kaydin HANGI istemciden geldigi. OnSave trigger'inin "Mobil dahil" anahtari bu bilgiye
+/// gore karar verir: kapaliyken mobil kaynakli kayitlar ANINDA gonderilmez, gonderilmemis
+/// olarak kalir ve Aktarim Kuyrugu'nda "Bekleyen" olarak gorunur (kuyruk zaten
+/// IntegrationRecordStatus ile LEFT JOIN'lu turetilmis bir gorunumdur — ayri bir kuyruk
+/// tablosu YOK, kayit "henuz gonderilmedi" oldugu icin kendiliginden orada belirir).
+///
+/// Varsayilan [Web]: mevcut cagiranlarin davranisi degismez.
+/// </summary>
+public enum IntegrationSaveOrigin
+{
+    Web = 0,
+    Mobile = 1,
 }

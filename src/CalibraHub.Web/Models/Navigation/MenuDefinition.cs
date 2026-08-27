@@ -76,6 +76,10 @@ public static class MenuDefinition
             // Artık /AuditLog iki sekmeli tek ekran; hata sekmesi yalnız SystemAdmin'e açılır.
             new("settings.auditlog",       isEn ? "Logs"                   : "Loglar",                  "ScrollText",         "/AuditLog",                 null,
                 MatchPath: "/AuditLog", PermissionFormCode: FormCodes.AuditLog),
+            // Tanıtım/pazarlama amaçlı statik özellik listesi — müşteri verisi göstermez,
+            // bu yüzden grantable form kodu yok; yönetici (AdminOnly) görür.
+            new("settings.features",       isEn ? "Highlights"             : "Öne Çıkan Özellikler",    "Sparkles",           "/Admin/Features",           null,
+                MatchPath: "/Admin/Features", AdminOnly: true),
         };
         if (isSystemAdmin)
         {
