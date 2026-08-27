@@ -583,7 +583,23 @@ public sealed class MobileWarehouseApiController : ControllerBase
     // transaction'inda calisir. Mobil yalnizca sade DTO'yu SaveStockDocRequest'e map eder.
 
     /// <summary>Mobil kalem — itemId, /warehouse/stock yanitindaki itemId'den gelir (kod cozumu orada yapildi).</summary>
-    public sealed record MobileStockDocLineRequest(int ItemId, decimal Quantity);
+    /// <summary>
+    /// Mobil giris/cikis kalemi.
+    ///
+    /// LOT/SERI (2026-08-28): eskiden yalnizca (ItemId, Quantity) tasiniyordu; lot/seri takipli
+    /// bir malzeme mobilden islenemiyordu — sunucu dogru sekilde REDDEDIYORDU (SqlStockDocRepository
+    /// "Lot zorunlu..." / "adet kadar seri..." kurallari), yani sessiz kayip yoktu ama ozellik de
+    /// yoktu. Artik istemci lot ve seri gonderebiliyor; alanlar OPSIYONEL, takipsiz malzemede
+    /// null birakilir ve davranis birebir eskisi gibi kalir.
+    ///
+    /// [Serials]: seri-takipli satirda ADET KADAR seri beklenir. Giriste AutoSerial=1 olan
+    /// malzemede bos birakilabilir (sunucu uretir) — kural sunucuda, burada tekrarlanmaz.
+    /// </summary>
+    public sealed record MobileStockDocLineRequest(
+        int ItemId,
+        decimal Quantity,
+        string? LotNo = null,
+        IReadOnlyList<string>? Serials = null);
 
     /// <summary>Mobil giris/cikis istegi — tek lokasyon + kalemler (+ opsiyonel not).
     /// ExtraFields (2026-07-17): opsiyonel ek saha (WidgetMas/EAV) header degerleri,
@@ -591,6 +607,24 @@ public sealed class MobileWarehouseApiController : ControllerBase
     public sealed record MobileStockDocRequest(
         int LocationId, IReadOnlyList<MobileStockDocLineRequest>? Lines, string? Note,
         IReadOnlyDictionary<string, string>? ExtraFields = null);
+
+    /// <summary>
+    /// Seri listesini normalize eder: bos/whitespace elemanlar atilir, kirpilir, tekrar edenler
+    /// (buyuk-kucuk harf duyarsiz) TEKE indirilir. Hicbir sey kalmazsa null doner — bos liste
+    /// ile null'i sunucu farkli yorumluyor (bos liste "seri verildi ama sifir tane" gibi
+    /// okunabilirdi). Tekillik/adet kurallarinin KENDISI sunucuda (SqlStockDocRepository);
+    /// burada yalnizca girdi temizligi yapilir, kural TEKRARLANMAZ.
+    /// </summary>
+    private static IReadOnlyList<string>? NormalizeSerials(IReadOnlyList<string>? serials)
+    {
+        if (serials is null || serials.Count == 0) return null;
+        var cleaned = serials
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return cleaned.Count == 0 ? null : cleaned;
+    }
 
     /// <summary>Yazma aksiyon seti — web SaveDocJson ile birebir ayni (CREATE veya kendi/tum kayit duzenleme).</summary>
     private static readonly string[] WriteActions = { "CREATE", "EDIT_OWN", "EDIT_ALL" };
@@ -681,7 +715,9 @@ public sealed class MobileWarehouseApiController : ControllerBase
                 Notes: null,
                 FromLocationId: null,          // null → header lokasyonuna duser (repo davranisi)
                 ToLocationId: null,
-                UnitCost: null)).ToList(),
+                UnitCost: null,
+                LotNo: string.IsNullOrWhiteSpace(l.LotNo) ? null : l.LotNo.Trim(),
+                Serials: NormalizeSerials(l.Serials))).ToList(),
             ArgeProjectId: null);
 
         try
@@ -802,7 +838,9 @@ public sealed class MobileWarehouseApiController : ControllerBase
                 Notes: null,
                 FromLocationId: null,          // null → header kaynagina duser (repo davranisi)
                 ToLocationId: null,             // null → header hedefine duser
-                UnitCost: null)).ToList(),
+                UnitCost: null,
+                LotNo: string.IsNullOrWhiteSpace(l.LotNo) ? null : l.LotNo.Trim(),
+                Serials: NormalizeSerials(l.Serials))).ToList(),
             ArgeProjectId: null);
 
         try
