@@ -94,3 +94,7 @@ build_out.txt
 # Tüm runtime log'lar logs/ altına yazılır; klasör korunur, içerik ignored.
 logs/*
 !logs/.gitkeep
+
+# Yerel sir dosyasi (paylasilan anahtarlar) — asla commit edilmez
+appsettings.Local.json
+bridge-key.txt

@@ -53,7 +53,7 @@
        ContentRoot, bin/Debug/... klasorudur (kaynak klasoru DEGIL). Kopyalanmazsa
        AddJsonFile dosyayi bulamaz ve anahtar sessizce devre disi kalir. -->
   <ItemGroup Condition="Exists('appsettings.Local.json')">
-    <Content Include="appsettings.Local.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
+    <Content Update="appsettings.Local.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
 </Project>
