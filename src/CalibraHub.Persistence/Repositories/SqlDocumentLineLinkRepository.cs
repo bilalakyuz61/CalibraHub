@@ -58,7 +58,7 @@ public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
             VALUES
                 (@LinkType,@SourceLineId,@SourceDocId,@TargetLineId,@TargetDocId,@TargetWorkOrderId,
                  @Quantity,@Notes,1,@CreatedById,SYSUTCDATETIME(),
-                 (SELECT p.[CompanyId] FROM {_docTable} p WHERE p.[id] = @SourceDocId));
+                 (SELECT p.[CompanyId] FROM {_docTable} p WHERE p.[id] = @SourceDocId AND p.[CompanyId] = @Company));
             """;
         cmd.Parameters.AddWithValue("@LinkType", (byte)entry.LinkType);
         cmd.Parameters.AddWithValue("@SourceLineId", entry.SourceLineId);
@@ -69,6 +69,7 @@ public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
         cmd.Parameters.AddWithValue("@Quantity", entry.Quantity);
         cmd.Parameters.AddWithValue("@Notes", (object?)entry.Notes ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@CreatedById", (object?)userId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Company", _connectionFactory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -94,6 +95,7 @@ public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
                AND [LinkType] = @LinkType
                AND [SourceLineId] = @SourceLineId
                AND [SourceDocId] = @SourceDocId
+               AND [CompanyId] = @Company
                AND ISNULL([TargetLineId], -1) = ISNULL(@TargetLineId, -1)
                AND ISNULL([TargetDocId], -1) = ISNULL(@TargetDocId, -1)
                AND ISNULL([TargetWorkOrderId], -1) = ISNULL(@TargetWorkOrderId, -1);
@@ -104,7 +106,7 @@ public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
                 VALUES
                     (@LinkType,@SourceLineId,@SourceDocId,@TargetLineId,@TargetDocId,@TargetWorkOrderId,
                      @Quantity,@Notes,1,@CreatedById,SYSUTCDATETIME(),
-                     (SELECT p.[CompanyId] FROM {_docTable} p WHERE p.[id] = @SourceDocId));
+                     (SELECT p.[CompanyId] FROM {_docTable} p WHERE p.[id] = @SourceDocId AND p.[CompanyId] = @Company));
             """;
         cmd.Parameters.AddWithValue("@LinkType", (byte)entry.LinkType);
         cmd.Parameters.AddWithValue("@SourceLineId", entry.SourceLineId);
@@ -115,6 +117,7 @@ public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
         cmd.Parameters.AddWithValue("@Quantity", entry.Quantity);
         cmd.Parameters.AddWithValue("@Notes", (object?)entry.Notes ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@CreatedById", (object?)userId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Company", _connectionFactory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

@@ -121,13 +121,14 @@ public sealed class SqlNoteRepository : INoteRepository
             command.CommandText = $"""
                 SELECT n.[Content], n.[ocr_text], n.[snippet], n.[IsFullyEncrypted]
                 FROM {_notesTable} n
-                WHERE n.[Id] = @Id AND n.[IsDeleted] = 0
+                WHERE n.[Id] = @Id AND n.[IsDeleted] = 0 AND n.[CompanyId] = @CompanyId
                   AND (n.[UserId] = @UserId
                        OR n.[visibility] = 1
                        OR EXISTS (SELECT 1 FROM {_sharesTable} s WHERE s.[NoteId] = n.[Id] AND s.[SharedWithUserId] = @UserId));
                 """;
             command.Parameters.Add(new SqlParameter("@Id", noteId));
             command.Parameters.Add(new SqlParameter("@UserId", userId));
+            command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             if (!await reader.ReadAsync(cancellationToken)) return null;
@@ -164,9 +165,10 @@ public sealed class SqlNoteRepository : INoteRepository
         command.CommandText = $"""
             SELECT [Id], [CompanyId], [UserId], [Title], [Content], [Created], [Updated], [FolderId], [IsPinned], [IsFullyEncrypted], [EncryptionHint], [Tags], [linked_entity_type], [linked_entity_id], [linked_entity_label], [visibility], [share_token], [share_is_public], [share_include_attachments], [ocr_text]
             FROM {_notesTable}
-            WHERE [Id] = @Id AND [IsDeleted] = 0;
+            WHERE [Id] = @Id AND [IsDeleted] = 0 AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
@@ -265,7 +267,7 @@ public sealed class SqlNoteRepository : INoteRepository
             UPDATE {_notesTable}
             SET [IsPinned] = CASE WHEN [IsPinned] = 1 THEN 0 ELSE 1 END
             WHERE [Id] = @Id AND [UserId] = @UserId AND [CompanyId] = @CompanyId;
-            SELECT [IsPinned] FROM {_notesTable} WHERE [Id] = @Id;
+            SELECT [IsPinned] FROM {_notesTable} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
         command.Parameters.Add(new SqlParameter("@UserId", userId));
@@ -290,6 +292,7 @@ public sealed class SqlNoteRepository : INoteRepository
         var targetMap = new Dictionary<Guid, List<int>>();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
 
         // 1) Reminders
         await using (var command = connection.CreateCommand())
@@ -298,10 +301,11 @@ public sealed class SqlNoteRepository : INoteRepository
                 SELECT [Id], [NoteId], [RemindAt], [IsSent], [SentAt], [recurrence_type], [recurrence_data],
                        [delivery_channel], [target_user_id]
                 FROM {_remindersTable}
-                WHERE [NoteId] = @NoteId
+                WHERE [NoteId] = @NoteId AND [CompanyId] = @CompanyId
                 ORDER BY [RemindAt];
                 """;
             command.Parameters.Add(new SqlParameter("@NoteId", noteId));
+            command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
@@ -318,9 +322,10 @@ public sealed class SqlNoteRepository : INoteRepository
                 SELECT t.[ReminderId], t.[UserId]
                 FROM {_reminderTargetsTable} t
                 INNER JOIN {_remindersTable} r ON r.[Id] = t.[ReminderId]
-                WHERE r.[NoteId] = @NoteId;
+                WHERE r.[NoteId] = @NoteId AND r.[CompanyId] = @CompanyId;
                 """;
             tCmd.Parameters.Add(new SqlParameter("@NoteId", noteId));
+            tCmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await using var tReader = await tCmd.ExecuteReaderAsync(cancellationToken);
             while (await tReader.ReadAsync(cancellationToken))
             {
@@ -468,10 +473,11 @@ public sealed class SqlNoteRepository : INoteRepository
             SELECT [Id], [NoteId], [SharedWithUserId], [SharedAt],
                    ISNULL([CanEdit], 0) AS [CanEdit]
             FROM {_sharesTable}
-            WHERE [NoteId] = @NoteId
+            WHERE [NoteId] = @NoteId AND [CompanyId] = @CompanyId
             ORDER BY [SharedAt];
             """;
         command.Parameters.Add(new SqlParameter("@NoteId", noteId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))

@@ -31,6 +31,10 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
         var list = new List<ExchangeRate>();
         await using var conn = await _connectionFactory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
+        // Kiraci suzgeci: Exchange/Currency sistem DB'sinde ama CompanyId kolonu tasir
+        // (her sirket kendi kur listesini yonetir) — hem ana sorguda hem alt sorguda
+        // (MAX(Date) hesaplamasi baska sirketin tarihini karistirmasin) filtre uygulanir.
         cmd.CommandText = $"""
             SELECT {SelectCols}
             FROM {_table} r
@@ -38,10 +42,13 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
             INNER JOIN (
                 SELECT [CurrencyId], MAX([Date]) AS [max_date]
                 FROM {_table}
+                WHERE [CompanyId] = @CompanyId
                 GROUP BY [CurrencyId]
             ) latest ON r.[CurrencyId] = latest.[CurrencyId] AND r.[Date] = latest.[max_date]
+            WHERE r.[CompanyId] = @CompanyId
             ORDER BY c.[Code];
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await using var rd = await cmd.ExecuteReaderAsync(ct);
         while (await rd.ReadAsync(ct)) list.Add(Map(rd));
         return list;
@@ -52,6 +59,7 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
         var list = new List<ExchangeRate>();
         await using var conn = await _connectionFactory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         // O tarihte kur varsa onu getir, yoksa en yakin onceki tarihteki kuru getir (hafta sonu icin cuma)
         cmd.CommandText = $"""
             SELECT {SelectCols}
@@ -60,12 +68,14 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
             INNER JOIN (
                 SELECT [CurrencyId], MAX([Date]) AS [best_date]
                 FROM {_table}
-                WHERE [Date] <= @Date
+                WHERE [Date] <= @Date AND [CompanyId] = @CompanyId
                 GROUP BY [CurrencyId]
             ) best ON r.[CurrencyId] = best.[CurrencyId] AND r.[Date] = best.[best_date]
+            WHERE r.[CompanyId] = @CompanyId
             ORDER BY c.[Code];
             """;
         cmd.Parameters.Add(new SqlParameter("@Date", date.Date));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await using var rd = await cmd.ExecuteReaderAsync(ct);
         while (await rd.ReadAsync(ct)) list.Add(Map(rd));
         return list;
@@ -79,11 +89,12 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
             SELECT TOP 1 {SelectCols}
             FROM {_table} r
             INNER JOIN {_currenciesTable} c ON c.[Id] = r.[CurrencyId]
-            WHERE c.[Code] = @Code AND r.[Date] <= @Date
+            WHERE c.[Code] = @Code AND r.[Date] <= @Date AND r.[CompanyId] = @CompanyId
             ORDER BY r.[Date] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@Code", currencyCode));
         cmd.Parameters.Add(new SqlParameter("@Date", date.Date));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var rd = await cmd.ExecuteReaderAsync(ct);
         return await rd.ReadAsync(ct) ? Map(rd) : null;
     }
@@ -92,15 +103,19 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
     {
         if (rates.Count == 0) return;
         await using var conn = await _connectionFactory.OpenSystemConnectionAsync(ct);
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
 
         // Caller'lar (TCMB worker dahil) genellikle CurrencyId yerine sadece CurrencyCode tasiyor.
         // Tek seferlik code → id lookup tablosu hazirla; CurrencyId zaten set edilmisse atla.
+        // Kiraci suzgeci: lookup mevcut sirkete ait kayitlarla sinirlanir — aksi halde
+        // ayni kodu (orn. "USD") kullanan baska sirketin CurrencyId'si yanlislikla eslesebilirdi.
         Dictionary<string, int>? codeIdMap = null;
         if (rates.Any(r => r.CurrencyId == 0 && !string.IsNullOrWhiteSpace(r.CurrencyCode)))
         {
             codeIdMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             await using var lookupCmd = conn.CreateCommand();
-            lookupCmd.CommandText = $"SELECT [Id], [Code] FROM {_currenciesTable};";
+            lookupCmd.CommandText = $"SELECT [Id], [Code] FROM {_currenciesTable} WHERE [CompanyId] = @CompanyId;";
+            lookupCmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await using var lookupRd = await lookupCmd.ExecuteReaderAsync(ct);
             while (await lookupRd.ReadAsync(ct))
                 codeIdMap[lookupRd.GetString(1)] = lookupRd.GetInt32(0);
@@ -114,17 +129,19 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
             if (currencyId == 0) continue; // currencies tablosunda kod yoksa atla — sessizce
 
             await using var cmd = conn.CreateCommand();
+            // Kiraci suzgeci: MERGE ON kosuluna CompanyId eklendi (aksi halde baska sirketin
+            // ayni CurrencyId+Date satiri güncellenebilirdi) + INSERT'e CompanyId yazilir.
             cmd.CommandText = $"""
                 MERGE {_table} AS tgt
-                USING (SELECT @CurrencyId AS [cid], @Date AS [d]) AS src
-                    ON tgt.[CurrencyId] = src.[cid] AND tgt.[Date] = src.[d]
+                USING (SELECT @CurrencyId AS [cid], @Date AS [d], @CompanyId AS [company]) AS src
+                    ON tgt.[CurrencyId] = src.[cid] AND tgt.[Date] = src.[d] AND tgt.[CompanyId] = src.[company]
                 WHEN MATCHED THEN
                     UPDATE SET [BuyingRate]=@Buying, [SellingRate]=@Selling,
                                [EffectiveBuyingRate]=@EffBuying, [EffectiveSellingRate]=@EffSelling,
                                [Source]=@Source
                 WHEN NOT MATCHED THEN
-                    INSERT ([CurrencyId],[Date],[BuyingRate],[SellingRate],[EffectiveBuyingRate],[EffectiveSellingRate],[Source],[Created])
-                    VALUES (@CurrencyId, @Date, @Buying, @Selling, @EffBuying, @EffSelling, @Source, GETDATE());
+                    INSERT ([CurrencyId],[Date],[BuyingRate],[SellingRate],[EffectiveBuyingRate],[EffectiveSellingRate],[Source],[Created],[CompanyId])
+                    VALUES (@CurrencyId, @Date, @Buying, @Selling, @EffBuying, @EffSelling, @Source, GETDATE(), @CompanyId);
                 """;
             cmd.Parameters.Add(new SqlParameter("@CurrencyId", currencyId));
             cmd.Parameters.Add(new SqlParameter("@Date", rate.Date.Date));
@@ -133,6 +150,7 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
             cmd.Parameters.Add(new SqlParameter("@EffBuying", rate.EffectiveBuyingRate));
             cmd.Parameters.Add(new SqlParameter("@EffSelling", rate.EffectiveSellingRate));
             cmd.Parameters.Add(new SqlParameter("@Source", rate.Source));
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await cmd.ExecuteNonQueryAsync(ct);
         }
     }
@@ -146,12 +164,13 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
             SELECT {SelectCols}
             FROM {_table} r
             INNER JOIN {_currenciesTable} c ON c.[Id] = r.[CurrencyId]
-            WHERE c.[Code] = @Code AND r.[Date] BETWEEN @From AND @To
+            WHERE c.[Code] = @Code AND r.[Date] BETWEEN @From AND @To AND r.[CompanyId] = @CompanyId
             ORDER BY r.[Date] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@Code", currencyCode));
         cmd.Parameters.Add(new SqlParameter("@From", from.Date));
         cmd.Parameters.Add(new SqlParameter("@To", to.Date));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var rd = await cmd.ExecuteReaderAsync(ct);
         while (await rd.ReadAsync(ct)) list.Add(Map(rd));
         return list;
@@ -166,11 +185,12 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
             SELECT {SelectCols}
             FROM {_table} r
             INNER JOIN {_currenciesTable} c ON c.[Id] = r.[CurrencyId]
-            WHERE r.[Date] BETWEEN @From AND @To
+            WHERE r.[Date] BETWEEN @From AND @To AND r.[CompanyId] = @CompanyId
             ORDER BY r.[Date] DESC, c.[Code];
             """;
         cmd.Parameters.Add(new SqlParameter("@From", from.Date));
         cmd.Parameters.Add(new SqlParameter("@To", to.Date));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var rd = await cmd.ExecuteReaderAsync(ct);
         while (await rd.ReadAsync(ct)) list.Add(Map(rd));
         return list;
@@ -183,10 +203,11 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
         cmd.CommandText = $"""
             DELETE r FROM {_table} r
             INNER JOIN {_currenciesTable} c ON c.[Id] = r.[CurrencyId]
-            WHERE c.[Code] = @Code AND r.[Date] = @Date;
+            WHERE c.[Code] = @Code AND r.[Date] = @Date AND r.[CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Code", currencyCode));
         cmd.Parameters.Add(new SqlParameter("@Date", date.Date));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

@@ -56,6 +56,7 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
             FROM {_rptDef} d
             INNER JOIN {_rptView} v ON v.[Id] = d.[ViewId]
             WHERE d.[IsActive] = 1
+              AND d.[CompanyId] = @CompanyId
               AND (
                     d.[OwnerUserId] = @UserId
                  OR @IsAdmin = 1
@@ -64,6 +65,7 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
             ORDER BY d.[Updated] DESC, d.[Name];";
         cmd.Parameters.AddWithValue("@UserId", userId);
         cmd.Parameters.AddWithValue("@IsAdmin", isAdmin);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
 
         var list = new List<ReportDefinitionSummaryDto>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -90,8 +92,9 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
         cmd.CommandText = $@"
             SELECT [Id],[Code],[Name],[ViewId],[Category],[ConfigJson],[OwnerUserId],
                    [IsShared],[IsActive],[Created],[Updated]
-            FROM {_rptDef} WHERE [Id] = @Id;";
+            FROM {_rptDef} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? Map(reader) : null;
     }
@@ -103,8 +106,9 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
         cmd.CommandText = $@"
             SELECT [Id],[Code],[Name],[ViewId],[Category],[ConfigJson],[OwnerUserId],
                    [IsShared],[IsActive],[Created],[Updated]
-            FROM {_rptDef} WHERE [Code] = @Code;";
+            FROM {_rptDef} WHERE [Code] = @Code AND [CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Code", code);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? Map(reader) : null;
     }
@@ -115,8 +119,9 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
             SELECT [Id],[DefId],[Role],[CanView],[CanEdit],[CanDelete]
-            FROM {_rptDefRole} WHERE [DefId] = @DefId ORDER BY [Role];";
+            FROM {_rptDefRole} WHERE [DefId] = @DefId AND [CompanyId] = @CompanyId ORDER BY [Role];";
         cmd.Parameters.AddWithValue("@DefId", defId);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         var list = new List<RptDefinitionRole>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))

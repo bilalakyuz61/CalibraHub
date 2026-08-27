@@ -57,7 +57,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
                    t.[TargetDate], t.[CompletedAt], t.[TemplateLineId], t.[Created]
             FROM {_taskTable} t
             LEFT JOIN {_usersTable} u ON u.[Id] = t.[AssignedUserId]
-            WHERE t.[ProjectId] = @P AND t.[IsActive] = 1
+            WHERE t.[ProjectId] = @P AND t.[IsActive] = 1 AND t.[CompanyId] = @Company
             ORDER BY t.[OrderNo], t.[Id];
             """;
         var list = new List<ProjectTaskDto>();
@@ -66,6 +66,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@P", projectId));
         cmd.Parameters.Add(new SqlParameter("@Seq", sequential ? 1 : 0));
+        cmd.Parameters.Add(new SqlParameter("@Company", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
         {
@@ -93,12 +94,13 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
             SELECT [Id],[ProjectId],[Title],[Description],[OrderNo],[Status],[AssignedUserId],
                    [TargetDate],[CompletedAt],[CompletedByUserId],[LinkedEntityKind],[LinkedEntityId],
                    [TemplateLineId],[IsActive],[CreatedById],[Created],[UpdatedById],[Updated]
-            FROM {_taskTable} WHERE [Id] = @Id;
+            FROM {_taskTable} WHERE [Id] = @Id AND [CompanyId] = @Company;
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@Id", taskId));
+        cmd.Parameters.Add(new SqlParameter("@Company", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct)) return null;
         return ReadTask(r);
@@ -134,7 +136,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
                  [LinkedEntityKind],[LinkedEntityId],[TemplateLineId],[CreatedById],[Created],[CompanyId])
             VALUES
                 (@P,@Title,@Desc,@Order,@Status,@Assigned,@Target,@LinkKind,@LinkId,@TplLine,@Cre,SYSUTCDATETIME(),
-                 (SELECT d.[CompanyId] FROM {_docTable} d WHERE d.[Id] = @P));
+                 (SELECT d.[CompanyId] FROM {_docTable} d WHERE d.[Id] = @P AND d.[CompanyId] = @Company));
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
@@ -142,6 +144,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
         cmd.CommandText = sql;
         AddTaskParams(cmd, task);
         cmd.Parameters.Add(new SqlParameter("@Cre", (object?)task.CreatedById ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@Company", _connectionFactory.ResolveEffectiveCompanyId()));
         var result = await cmd.ExecuteScalarAsync(ct);
         return Convert.ToInt32(result);
     }
@@ -205,7 +208,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
             UPDATE t SET [Status]=1, [CompletedAt]=SYSUTCDATETIME(), [CompletedByUserId]=@U,
                          [UpdatedById]=@U, [Updated]=SYSUTCDATETIME()
             FROM {_taskTable} t
-            WHERE t.[Id]=@Id AND t.[IsActive]=1 AND t.[Status]=0
+            WHERE t.[Id]=@Id AND t.[IsActive]=1 AND t.[Status]=0 AND t.[CompanyId]=@Company
               AND (@Seq = 0 OR NOT EXISTS (
                     SELECT 1 FROM {_taskTable} p
                     WHERE p.[ProjectId] = t.[ProjectId] AND p.[IsActive] = 1 AND p.[Status] = 0
@@ -217,6 +220,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
         cmd.Parameters.Add(new SqlParameter("@Id", taskId));
         cmd.Parameters.Add(new SqlParameter("@U", (object?)userId ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Seq", sequential ? 1 : 0));
+        cmd.Parameters.Add(new SqlParameter("@Company", _connectionFactory.ResolveEffectiveCompanyId()));
         var rows = await cmd.ExecuteNonQueryAsync(ct);
         return rows > 0;
     }
@@ -248,7 +252,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
         var sql = $"""
             SELECT CASE WHEN EXISTS (
                 SELECT 1 FROM {_taskTable}
-                WHERE [ProjectId]=@P AND [IsActive]=1 AND [Status]=1
+                WHERE [ProjectId]=@P AND [IsActive]=1 AND [Status]=1 AND [CompanyId]=@Company
                   AND ([OrderNo] > @Order OR ([OrderNo] = @Order AND [Id] > @Id))
             ) THEN 1 ELSE 0 END;
             """;
@@ -258,6 +262,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
         cmd.Parameters.Add(new SqlParameter("@P", projectId));
         cmd.Parameters.Add(new SqlParameter("@Order", orderNo));
         cmd.Parameters.Add(new SqlParameter("@Id", taskId));
+        cmd.Parameters.Add(new SqlParameter("@Company", _connectionFactory.ResolveEffectiveCompanyId()));
         var result = await cmd.ExecuteScalarAsync(ct);
         return Convert.ToInt32(result) == 1;
     }
@@ -269,7 +274,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
                    [TargetDate],[CompletedAt],[CompletedByUserId],[LinkedEntityKind],[LinkedEntityId],
                    [TemplateLineId],[IsActive],[CreatedById],[Created],[UpdatedById],[Updated]
             FROM {_taskTable}
-            WHERE [ProjectId]=@P AND [IsActive]=1 AND [Status]=0
+            WHERE [ProjectId]=@P AND [IsActive]=1 AND [Status]=0 AND [CompanyId]=@Company
               AND ([OrderNo] > @Order OR ([OrderNo] = @Order AND [Id] > @Id))
             ORDER BY [OrderNo], [Id];
             """;
@@ -279,6 +284,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
         cmd.Parameters.Add(new SqlParameter("@P", projectId));
         cmd.Parameters.Add(new SqlParameter("@Order", orderNo));
         cmd.Parameters.Add(new SqlParameter("@Id", taskId));
+        cmd.Parameters.Add(new SqlParameter("@Company", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct)) return null;
         return ReadTask(r);
@@ -286,11 +292,12 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
 
     public async Task<int> GetMaxOrderNoAsync(int projectId, CancellationToken ct)
     {
-        var sql = $"SELECT ISNULL(MAX([OrderNo]), 0) FROM {_taskTable} WHERE [ProjectId]=@P AND [IsActive]=1;";
+        var sql = $"SELECT ISNULL(MAX([OrderNo]), 0) FROM {_taskTable} WHERE [ProjectId]=@P AND [IsActive]=1 AND [CompanyId]=@Company;";
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@P", projectId));
+        cmd.Parameters.Add(new SqlParameter("@Company", _connectionFactory.ResolveEffectiveCompanyId()));
         var result = await cmd.ExecuteScalarAsync(ct);
         return Convert.ToInt32(result);
     }
@@ -308,8 +315,9 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
                      [LinkedEntityKind],[LinkedEntityId],[TemplateLineId],[CreatedById],[Created],[CompanyId])
                 VALUES
                     (@P,@Title,@Desc,@Order,@Status,@Assigned,@Target,@LinkKind,@LinkId,@TplLine,@Cre,SYSUTCDATETIME(),
-                     (SELECT d.[CompanyId] FROM {_docTable} d WHERE d.[Id] = @P));
+                     (SELECT d.[CompanyId] FROM {_docTable} d WHERE d.[Id] = @P AND d.[CompanyId] = @Company));
                 """;
+            var companyId = _connectionFactory.ResolveEffectiveCompanyId();
             foreach (var task in tasks)
             {
                 await using var cmd = conn.CreateCommand();
@@ -317,6 +325,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
                 cmd.CommandText = sql;
                 AddTaskParams(cmd, task);
                 cmd.Parameters.Add(new SqlParameter("@Cre", (object?)task.CreatedById ?? DBNull.Value));
+                cmd.Parameters.Add(new SqlParameter("@Company", companyId));
                 await cmd.ExecuteNonQueryAsync(ct);
             }
             await tx.CommitAsync(ct);
@@ -344,7 +353,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
             FROM {_taskTable} t
             INNER JOIN {_argeTable} a ON a.[DocumentId] = t.[ProjectId]
             INNER JOIN {_docTable} d ON d.[Id] = t.[ProjectId] AND d.[IsActive] = 1
-            WHERE t.[AssignedUserId] = @U AND t.[IsActive] = 1
+            WHERE t.[AssignedUserId] = @U AND t.[IsActive] = 1 AND t.[CompanyId] = @Company
             ORDER BY CASE WHEN t.[Status] = 0 THEN 0 ELSE 1 END, t.[TargetDate], t.[OrderNo], t.[Id];
             """;
         var list = new List<MyProjectTaskItem>();
@@ -352,6 +361,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@U", userId));
+        cmd.Parameters.Add(new SqlParameter("@Company", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
         {
@@ -392,11 +402,12 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
 
     public async Task<bool> GetSequentialFlagAsync(int projectId, CancellationToken ct)
     {
-        var sql = $"SELECT [SequentialTasks] FROM {_argeTable} WHERE [DocumentId]=@P;";
+        var sql = $"SELECT [SequentialTasks] FROM {_argeTable} WHERE [DocumentId]=@P AND [CompanyId]=@Company;";
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@P", projectId));
+        cmd.Parameters.Add(new SqlParameter("@Company", _connectionFactory.ResolveEffectiveCompanyId()));
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is not null && result != DBNull.Value && Convert.ToBoolean(result);
     }
@@ -425,7 +436,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
             DECLARE @done INT, @denom INT;
             SELECT @done  = SUM(CASE WHEN [Status] = 1 THEN 1 ELSE 0 END),
                    @denom = SUM(CASE WHEN [Status] IN (0, 1) THEN 1 ELSE 0 END)
-            FROM {_taskTable} WHERE [ProjectId] = @P AND [IsActive] = 1;
+            FROM {_taskTable} WHERE [ProjectId] = @P AND [IsActive] = 1 AND [CompanyId] = @CompanyId;
             IF (@denom IS NULL OR @denom = 0)
                 SELECT CAST(NULL AS DECIMAL(5,2));
             ELSE
@@ -452,10 +463,10 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
     {
         var sql = $"""
             SELECT [Id],[Name],[Description],[IsSequentialDefault] FROM {_tplTable}
-            WHERE [IsActive]=1 ORDER BY [Name];
+            WHERE [IsActive]=1 AND [CompanyId]=@Company ORDER BY [Name];
             SELECT l.[Id], l.[TemplateId], l.[Title], l.[Description], l.[OrderNo]
             FROM {_tplLineTable} l
-            INNER JOIN {_tplTable} t ON t.[Id] = l.[TemplateId] AND t.[IsActive] = 1
+            INNER JOIN {_tplTable} t ON t.[Id] = l.[TemplateId] AND t.[IsActive] = 1 AND t.[CompanyId] = @Company
             WHERE l.[IsActive]=1 ORDER BY l.[TemplateId], l.[OrderNo], l.[Id];
             """;
         var heads = new List<(int Id, string Name, string? Desc, bool Seq)>();
@@ -463,6 +474,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
+        cmd.Parameters.Add(new SqlParameter("@Company", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
         {

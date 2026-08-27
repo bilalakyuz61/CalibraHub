@@ -1342,15 +1342,19 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         var map = new Dictionary<int, (int Count, decimal QtySum)>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
+        // Kiraci suzgeci: documentId istemciden gelir; hem kaynak belgenin hem de
+        // turev belgenin CompanyId'si dogrulanir.
         cmd.CommandText = $"""
             SELECT src.[Id], COUNT(dl.[Id]) AS Cnt, SUM(dl.[Quantity]) AS QtySum
             FROM {_lineTable} src
+            INNER JOIN {_quoteTable} srcDoc ON srcDoc.[Id] = src.[DocumentId] AND srcDoc.[CompanyId] = @CompanyId
             INNER JOIN {_lineTable} dl ON dl.[SourceLineId] = src.[Id]
-            INNER JOIN {_quoteTable} d ON d.[Id] = dl.[DocumentId] AND d.[IsActive] = 1
+            INNER JOIN {_quoteTable} d ON d.[Id] = dl.[DocumentId] AND d.[IsActive] = 1 AND d.[CompanyId] = @CompanyId
             WHERE src.[DocumentId] = @DocId
             GROUP BY src.[Id];
             """;
         cmd.Parameters.Add(new SqlParameter("@DocId", documentId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
             map[r.GetInt32(0)] = (r.GetInt32(1), r.IsDBNull(2) ? 0m : r.GetDecimal(2));
@@ -1364,11 +1368,14 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         var list = new List<DocumentLineDetail>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // Kiraci suzgeci: documentLineId istemciden gelir; detay tablosu kendi
+        // CompanyId kolonunu tasir (bkz. SaveLineDetailsAsync INSERT).
         cmd.CommandText = $"""
             SELECT [Id],[QuoteLineId],[FeatureName],[ValueCode],[ValueName],[Description],[LineOrder]
-            FROM {_detailTable} WHERE [QuoteLineId] = @LineId ORDER BY [LineOrder];
+            FROM {_detailTable} WHERE [QuoteLineId] = @LineId AND [CompanyId] = @CompanyId ORDER BY [LineOrder];
             """;
         cmd.Parameters.Add(new SqlParameter("@LineId", documentLineId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
             list.Add(new DocumentLineDetail

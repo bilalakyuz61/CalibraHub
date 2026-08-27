@@ -52,9 +52,10 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                    [PostProcedureName],[PostProcedureParamsJson],
                    [SourceFilterJson],[AllowAsCascadeTarget]
             FROM {_integrationTable}
-            {(includeInactive ? "" : "WHERE [IsActive] = 1")}
+            WHERE [CompanyId] = @CompanyId {(includeInactive ? "" : "AND [IsActive] = 1")}
             ORDER BY [Name];
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
             list.Add(MapIntegration(reader));
@@ -68,6 +69,8 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         Integration? integration = null;
         await using (var cmd = conn.CreateCommand())
         {
+            // Kiraci suzgeci: id istemciden gelir; suzgec olmadan baska sirketin
+            // entegrasyonu (+ asagida aggregate cocuklari) okunabilirdi.
             cmd.CommandText = $"""
                 SELECT [Id],[Name],[Description],[SourceFormCode],[TargetEndpointId],
                        [ErrorBehavior],[RetryCount],[IsActive],[VersionNo],
@@ -76,9 +79,10 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                        [PostProcedureName],[PostProcedureParamsJson],
                        [SourceFilterJson]
                 FROM {_integrationTable}
-                WHERE [Id] = @Id;
+                WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
                 """;
             cmd.Parameters.Add(new SqlParameter("@Id", id));
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
             await using var reader = await cmd.ExecuteReaderAsync(ct);
             if (await reader.ReadAsync(ct)) integration = MapIntegration(reader);
         }
@@ -110,6 +114,7 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
             FROM {_integrationTable} i
             INNER JOIN {_triggerTable} t ON t.[IntegrationId] = i.[Id]
             WHERE i.[SourceFormCode] = @FormCode
+              AND i.[CompanyId] = @CompanyId
               AND i.[IsActive] = 1
               AND t.[IsActive] = 1
               AND t.[TriggerType] = @TriggerType
@@ -117,6 +122,7 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
             """;
         cmd.Parameters.Add(new SqlParameter("@FormCode", formCode));
         cmd.Parameters.Add(new SqlParameter("@TriggerType", triggerType.ToString()));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
             list.Add(MapIntegration(reader));
@@ -142,12 +148,14 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
             SELECT i.[Id], i.[Name], i.[Description], i.[TargetEndpointId], i.[SourceFormCode], t.[Config]
             FROM {_integrationTable} i
             INNER JOIN {_triggerTable} t ON t.[IntegrationId] = i.[Id]
-            WHERE i.[IsActive] = 1
+            WHERE i.[CompanyId] = @CompanyId
+              AND i.[IsActive] = 1
               AND t.[IsActive] = 1
               AND t.[TriggerType] = 'Manual'
               {whereFormCode}
             ORDER BY i.[Name];
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         if (formCode is not null)
             cmd.Parameters.Add(new SqlParameter("@FormCode", formCode));
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -188,12 +196,14 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                    i.[SourceFilterJson],i.[AllowAsCascadeTarget]
             FROM {_integrationTable} i
             INNER JOIN {_triggerTable} t ON t.[IntegrationId] = i.[Id]
-            WHERE i.[IsActive] = 1
+            WHERE i.[CompanyId] = @CompanyId
+              AND i.[IsActive] = 1
               AND t.[IsActive] = 1
               AND t.[TriggerType] = @TriggerType
             ORDER BY i.[Name];
             """;
         cmd.Parameters.Add(new SqlParameter("@TriggerType", triggerType.ToString()));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
             list.Add(MapIntegration(reader));
@@ -279,7 +289,8 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         var list = new List<Integration>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        var where = "[IsActive] = 1 AND [AllowAsCascadeTarget] = 1";
+        var where = "[CompanyId] = @CompanyId AND [IsActive] = 1 AND [AllowAsCascadeTarget] = 1";
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         if (!string.IsNullOrWhiteSpace(sourceFormCode))
         {
             where += " AND [SourceFormCode] = @FormCode";
@@ -309,6 +320,8 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         var list = new List<IntegrationMapping>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // Kiraci suzgeci: integrationId istemciden gelir (public API); tabloda kendi
+        // CompanyId kolonu var (bkz. ReplaceMappingsAsync INSERT).
         cmd.CommandText = $"""
             SELECT [Id],[IntegrationId],[TargetPath],[TargetDataType],[SourceType],
                    [SourceValue],[LookupSourceField],[DefaultValue],[FormatPattern],
@@ -316,10 +329,11 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                    [LookupFiltersJson],[LookupReturnColumn],[LookupParam],
                    [CascadeToIntegrationId]
             FROM {_mappingTable}
-            WHERE [IntegrationId] = @IntegrationId
+            WHERE [IntegrationId] = @IntegrationId AND [CompanyId] = @CompanyId
             ORDER BY [SortOrder], [Id];
             """;
         cmd.Parameters.Add(new SqlParameter("@IntegrationId", integrationId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
             list.Add(MapMapping(reader));
@@ -397,13 +411,16 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         var list = new List<IntegrationTrigger>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // Kiraci suzgeci: integrationId istemciden gelir (public API); tabloda kendi
+        // CompanyId kolonu var (bkz. ReplaceTriggersAsync INSERT).
         cmd.CommandText = $"""
             SELECT [Id],[IntegrationId],[TriggerType],[Config],[IsActive],[Created]
             FROM {_triggerTable}
-            WHERE [IntegrationId] = @IntegrationId
+            WHERE [IntegrationId] = @IntegrationId AND [CompanyId] = @CompanyId
             ORDER BY [Id];
             """;
         cmd.Parameters.Add(new SqlParameter("@IntegrationId", integrationId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
             list.Add(MapTrigger(reader));
@@ -464,9 +481,10 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
             SELECT [Id],[ApiProfileId],[Name],[HttpMethod],[UrlTemplate],[BodySchema],
                    [Description],[IsActive],[CreatedById],[Created],[UpdatedById],[Updated]
             FROM {_endpointTable}
-            {(includeInactive ? "" : "WHERE [IsActive] = 1")}
+            WHERE [CompanyId] = @CompanyId {(includeInactive ? "" : "AND [IsActive] = 1")}
             ORDER BY [Name];
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
             list.Add(MapEndpoint(reader));
@@ -482,10 +500,11 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
             SELECT [Id],[ApiProfileId],[Name],[HttpMethod],[UrlTemplate],[BodySchema],
                    [Description],[IsActive],[CreatedById],[Created],[UpdatedById],[Updated]
             FROM {_endpointTable}
-            WHERE [ApiProfileId] = @ApiProfileId AND [IsActive] = 1
+            WHERE [ApiProfileId] = @ApiProfileId AND [CompanyId] = @CompanyId AND [IsActive] = 1
             ORDER BY [Name];
             """;
         cmd.Parameters.Add(new SqlParameter("@ApiProfileId", apiProfileId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
             list.Add(MapEndpoint(reader));
@@ -496,13 +515,15 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // Kiraci suzgeci: id istemciden gelir (bkz. Integration.TargetEndpointId cozumu).
         cmd.CommandText = $"""
             SELECT [Id],[ApiProfileId],[Name],[HttpMethod],[UrlTemplate],[BodySchema],
                    [Description],[IsActive],[CreatedById],[Created],[UpdatedById],[Updated]
             FROM {_endpointTable}
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? MapEndpoint(reader) : null;
     }
@@ -613,11 +634,12 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                    [DurationMs],[Status],[HttpStatusCode],[RequestBody],[ResponseBody],
                    [ErrorMessage],[RetryAttempt],[TriggeredBy],[ParentRunId]
             FROM {_runTable}
-            WHERE [IntegrationId] = @IntegrationId
+            WHERE [IntegrationId] = @IntegrationId AND [CompanyId] = @CompanyId
             ORDER BY [StartedAt] DESC, [Id] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@IntegrationId", integrationId));
         cmd.Parameters.Add(new SqlParameter("@Limit", Math.Clamp(limit, 1, 1000)));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
             list.Add(MapRun(reader));
@@ -634,11 +656,12 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                    [DurationMs],[Status],[HttpStatusCode],[RequestBody],[ResponseBody],
                    [ErrorMessage],[RetryAttempt],[TriggeredBy],[ParentRunId]
             FROM {_runTable}
-            WHERE [IntegrationId] = @IntegrationId AND [SourceRecordId] = @SourceRecordId
+            WHERE [IntegrationId] = @IntegrationId AND [SourceRecordId] = @SourceRecordId AND [CompanyId] = @CompanyId
             ORDER BY [StartedAt] DESC, [Id] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@IntegrationId", integrationId));
         cmd.Parameters.Add(new SqlParameter("@SourceRecordId", sourceRecordId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? MapRun(reader) : null;
     }
@@ -660,7 +683,8 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
 
-        var where = "[StartedAt] >= @Since";
+        var where = "[CompanyId] = @CompanyId AND [StartedAt] >= @Since";
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@Since", DateTime.UtcNow.AddDays(-Math.Max(1, sinceDays))));
 
         if (integrationId.HasValue && integrationId.Value > 0)
@@ -694,14 +718,16 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // Kiraci suzgeci: id istemciden gelir (bkz. GetRunByIdAsync cagrisi).
         cmd.CommandText = $"""
             SELECT [Id],[IntegrationId],[TriggerType],[SourceRecordId],[StartedAt],[FinishedAt],
                    [DurationMs],[Status],[HttpStatusCode],[RequestBody],[ResponseBody],
                    [ErrorMessage],[RetryAttempt],[TriggeredBy],[ParentRunId]
             FROM {_runTable}
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? MapRun(reader) : null;
     }

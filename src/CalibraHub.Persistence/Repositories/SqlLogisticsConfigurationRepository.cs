@@ -1964,6 +1964,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     public async Task<IReadOnlyCollection<int>> GetUsedFeatureIdsInCombinationsAsync(int itemId, CancellationToken cancellationToken)
     {
         var results = new List<int>();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
@@ -1972,11 +1973,13 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             JOIN {_itemConfigurationTableName} child ON child.[ParentId] = parent.[Id]
             JOIN [{_schema}].[FeatureValue] fv ON fv.[Id] = TRY_CAST(child.[RecordName] AS INT)
             WHERE parent.[ItemId] = @ItemId
+              AND parent.[CompanyId] = @CompanyId
               AND parent.[IsActive] = 1
               AND parent.[RecordType] = N'CONFIG'
               AND child.[RecordType] = N'CONFIG';
             """;
         cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -1993,6 +1996,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         int itemId, CancellationToken cancellationToken)
     {
         var results = new List<(int, int)>();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
@@ -2001,11 +2005,13 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             JOIN {_itemConfigurationTableName} child ON child.[ParentId] = parent.[Id]
             JOIN [{_schema}].[FeatureValue] fv ON fv.[Id] = TRY_CAST(child.[RecordName] AS INT)
             WHERE parent.[ItemId] = @ItemId
+              AND parent.[CompanyId] = @CompanyId
               AND parent.[IsActive] = 1
               AND parent.[RecordType] = N'CONFIG'
               AND child.[RecordType] = N'CONFIG';
             """;
         cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -2020,17 +2026,20 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     /// </summary>
     public async Task<int> GetCombinationCountForItemAsync(int itemId, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
             SELECT COUNT(*)
             FROM {_itemConfigurationTableName}
             WHERE [ItemId] = @ItemId
+              AND [CompanyId] = @CompanyId
               AND [IsActive] = 1
               AND [RecordType] = N'CONFIG'
               AND [ParentId] IS NULL;
             """;
         cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         var raw = await cmd.ExecuteScalarAsync(cancellationToken);
         return raw == null || raw == DBNull.Value ? 0 : Convert.ToInt32(raw);
     }
@@ -2197,16 +2206,18 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     public async Task<IReadOnlyCollection<ItemLocation>> GetItemLocationsAsync(int itemId, CancellationToken cancellationToken)
     {
         var results = new List<ItemLocation>();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await EnsureItemLocationsTableAsync(connection, cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
             SELECT [Id],[ItemId],[LocationId],[IsDefault],[SortOrder],[MinStock]
             FROM {_itemLocationsTableName}
-            WHERE [ItemId] = @ItemId
+            WHERE [ItemId] = @ItemId AND [CompanyId] = @CompanyId
             ORDER BY [SortOrder], [Id];
             """;
         cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -2582,14 +2593,17 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     public async Task<IReadOnlyCollection<LocationType>> GetLocationTypesAsync(CancellationToken cancellationToken)
     {
         var results = new List<LocationType>();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await EnsureLocationTypesTableAsync(connection, cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
             SELECT [Id],[Code],[Name],[SortOrder],[IsActive]
             FROM {_locationTypesTableName}
+            WHERE [CompanyId] = @CompanyId
             ORDER BY [SortOrder], [Name];
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -2652,10 +2666,12 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task<int> CountLocationsOfTypeAsync(string code, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"SELECT COUNT(*) FROM {_warehouseLocationsTableName} WHERE [LocationTypeCode] = @Code;";
+        cmd.CommandText = $"SELECT COUNT(*) FROM {_warehouseLocationsTableName} WHERE [LocationTypeCode] = @Code AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Code", code));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         var result = await cmd.ExecuteScalarAsync(cancellationToken);
         return Convert.ToInt32(result);
     }
@@ -2849,6 +2865,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         
     public async Task<IReadOnlyCollection<BOM>> GetBOMsAsync(CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         var dv = await _dvFilter.BuildAsync(FormCodes.BomEdit, "t", "Id", cancellationToken);
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -2869,11 +2886,12 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             FROM {_productTreesTableName} t
             LEFT JOIN {_productTreeLinesTableName} l ON l.[BOMId] = t.[Id]
             LEFT JOIN [{_schema}].[Routing] r ON r.[Id] = t.[RoutingId]
-            WHERE t.[IsActive] = 1
+            WHERE t.[IsActive] = 1 AND t.[CompanyId] = @CompanyId
             {dv.Sql}
             ORDER BY t.[Id], l.[Id];
             """;
 
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         foreach (var prm in dv.Parameters) command.Parameters.Add(new SqlParameter(prm.Name, prm.Value));
         var treesById = new Dictionary<int, BOM>();
         var linesByTreeId = new Dictionary<int, List<BOMLine>>();
@@ -2940,19 +2958,24 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         // artik UX_BOM_Base unique index'i ile DB garantili. Belirli bir versiyonu okumak
         // icin GetBOMByIdWithNamesAsync(bomId) kullanilir.
         var configFilter = configId.HasValue ? "t.[ConfigId] = @ConfigId" : "t.[ConfigId] IS NULL";
-        var where = $"t.[ItemId] = @ItemId AND t.[IsActive] = 1 AND {configFilter} AND t.[VersionCode] IS NULL";
+        var where = $"t.[ItemId] = @ItemId AND t.[IsActive] = 1 AND {configFilter} AND t.[VersionCode] IS NULL AND t.[CompanyId] = @CompanyId";
         return QueryBomWithNamesAsync(where, cmd =>
         {
             cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
             if (configId.HasValue)
                 cmd.Parameters.Add(new SqlParameter("@ConfigId", configId.Value));
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         }, cancellationToken);
     }
 
     /// <summary>2026-08-06: belirli bir recete/versiyonu Id ile oku (baz veya versiyon farketmez).</summary>
     public Task<BOMWithNames?> GetBOMByIdWithNamesAsync(int bomId, CancellationToken cancellationToken)
-        => QueryBomWithNamesAsync("t.[Id] = @BomId AND t.[IsActive] = 1",
-            cmd => cmd.Parameters.Add(new SqlParameter("@BomId", bomId)), cancellationToken);
+        => QueryBomWithNamesAsync("t.[Id] = @BomId AND t.[IsActive] = 1 AND t.[CompanyId] = @CompanyId",
+            cmd =>
+            {
+                cmd.Parameters.Add(new SqlParameter("@BomId", bomId));
+                cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
+            }, cancellationToken);
 
     private async Task<BOMWithNames?> QueryBomWithNamesAsync(
         string whereClause, Action<Microsoft.Data.SqlClient.SqlCommand> bindParams, CancellationToken cancellationToken)
@@ -3054,6 +3077,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     public async Task<IReadOnlyCollection<BomVersionSummaryDto>> GetBomVersionsAsync(
         int itemId, int? configId, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         var configFilter = configId.HasValue ? "t.[ConfigId] = @ConfigId" : "t.[ConfigId] IS NULL";
@@ -3062,10 +3086,11 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                    (SELECT COUNT(*) FROM {_productTreeLinesTableName} l WHERE l.[BOMId] = t.[Id]) AS LineCount,
                    t.[Created], t.[Updated], t.[ParentBomId]
             FROM {_productTreesTableName} t
-            WHERE t.[ItemId] = @ItemId AND t.[IsActive] = 1 AND {configFilter}
+            WHERE t.[ItemId] = @ItemId AND t.[IsActive] = 1 AND t.[CompanyId] = @CompanyId AND {configFilter}
             ORDER BY CASE WHEN t.[VersionCode] IS NULL THEN 0 ELSE 1 END, t.[VersionCode];
             """;
         command.Parameters.Add(new SqlParameter("@ItemId", itemId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         if (configId.HasValue)
             command.Parameters.Add(new SqlParameter("@ConfigId", configId.Value));
 
@@ -3274,6 +3299,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task<ItemKitDto?> GetKitByItemAsync(int itemId, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
 
@@ -3304,13 +3330,15 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             LEFT  JOIN [{_schema}].[Unit] lu ON lu.[Id] = l.[UnitId]
             WHERE k.[ItemId] = @ItemId
               AND k.[IsActive] = 1
+              AND k.[CompanyId] = @CompanyId
               AND k.[Id] = (
                   SELECT MAX([Id]) FROM [{_schema}].[ItemKit]
-                  WHERE [ItemId] = @ItemId AND [IsActive] = 1
+                  WHERE [ItemId] = @ItemId AND [IsActive] = 1 AND [CompanyId] = @CompanyId
               )
             ORDER BY l.[Id];
             """;
         command.Parameters.Add(new SqlParameter("@ItemId", itemId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         ItemKitDto? result = null;
         var lines = new List<ItemKitLineDto>();
@@ -3706,6 +3734,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         // daha genis ve daha guvenli).
         if (parentItemId <= 0) return Array.Empty<int>();
 
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
@@ -3713,9 +3742,11 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             FROM {_productTreeLinesTableName} l
             INNER JOIN {_productTreesTableName} t ON t.[Id] = l.[BOMId]
             WHERE t.[ItemId] = @ParentItemId
+              AND t.[CompanyId] = @CompanyId
               AND t.[IsActive] = 1;
             """;
         command.Parameters.Add(new SqlParameter("@ParentItemId", parentItemId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         var ids = new List<int>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -3736,6 +3767,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         // aggregate eder.
         if (parentItemId <= 0) return Array.Empty<BOMComponentLineRow>();
 
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         // 2026-08-06 versiyonlama: eski MAX(Id) yerine BAZ recete (VersionCode IS NULL) —
@@ -3747,12 +3779,14 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             FROM {_productTreeLinesTableName} l
             INNER JOIN {_productTreesTableName} t ON t.[Id] = l.[BOMId]
             WHERE t.[ItemId] = @ParentItemId
+              AND t.[CompanyId] = @CompanyId
               AND t.[IsActive] = 1
               AND t.[VersionCode] IS NULL
               AND l.[ItemId] IS NOT NULL
               AND l.[ItemId] > 0;
             """;
         command.Parameters.Add(new SqlParameter("@ParentItemId", parentItemId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         return await ReadComponentLineRowsAsync(command, cancellationToken);
     }
 
@@ -3764,16 +3798,18 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         int bomId, CancellationToken cancellationToken)
     {
         if (bomId <= 0) return Array.Empty<BOMComponentLineRow>();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             SELECT l.[ItemId], l.[ConfigId], l.[Quantity], l.[ScrapRatio], l.[ComponentBomId]
             FROM {_productTreeLinesTableName} l
             INNER JOIN {_productTreesTableName} t ON t.[Id] = l.[BOMId]
-            WHERE t.[Id] = @BomId AND t.[IsActive] = 1
+            WHERE t.[Id] = @BomId AND t.[IsActive] = 1 AND t.[CompanyId] = @CompanyId
               AND l.[ItemId] IS NOT NULL AND l.[ItemId] > 0;
             """;
         command.Parameters.Add(new SqlParameter("@BomId", bomId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         return await ReadComponentLineRowsAsync(command, cancellationToken);
     }
 
@@ -3802,6 +3838,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         // display field'lari da gelir — UI single-call ile listeyi gosterebilir.
         if (componentItemId <= 0) return Array.Empty<WhereUsedItemDto>();
 
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
@@ -3819,9 +3856,11 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             LEFT  JOIN [{_schema}].[ItemConfiguration] pcfg ON pcfg.[Id] = t.[ConfigId]
             WHERE l.[ItemId]  = @ComponentItemId
               AND t.[IsActive] = 1
+              AND t.[CompanyId] = @CompanyId
             ORDER BY pi.[code];
             """;
         command.Parameters.Add(new SqlParameter("@ComponentItemId", componentItemId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         var rows = new List<WhereUsedItemDto>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -3846,6 +3885,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     {
         // Adım 1: Kök CONFIG kayıtlarını çek (ParentId IS NULL)
         var combos = new Dictionary<int, CombinationLookupRow>();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd1 = connection.CreateCommand();
@@ -3856,10 +3896,13 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
               AND [ParentId] IS NULL
               AND [RelatedMaterialCode] = @mc
               AND [IsActive] = 1
+              AND [CompanyId] = @CompanyId
             ORDER BY [RecordCode];
             """;
         var p1 = cmd1.CreateParameter(); p1.ParameterName = "@mc"; p1.Value = materialCode;
         cmd1.Parameters.Add(p1);
+        var pc1 = cmd1.CreateParameter(); pc1.ParameterName = "@CompanyId"; pc1.Value = companyId;
+        cmd1.Parameters.Add(pc1);
 
         await using (var r1 = await cmd1.ExecuteReaderAsync(cancellationToken))
         {
@@ -3928,6 +3971,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     public async Task<IReadOnlyCollection<CombinationListItemDto>> GetAllCombinationsAsync(CancellationToken cancellationToken)
     {
         var rows = new Dictionary<int, (string Code, string? Name, int? ItemId, string? ItemCode, string? ItemName, bool IsActive, DateTime Created, List<CombinationFeatureValueDto> Features)>();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
 
@@ -3942,8 +3986,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 WHERE cfg.[RecordType] = 'CONFIG'
                   AND cfg.[ParentId] IS NULL
                   AND cfg.[IsActive] = 1
+                  AND cfg.[CompanyId] = @CompanyId
                 ORDER BY i.[Code], cfg.[RecordCode];
                 """;
+            cmd1.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await using var r1 = await cmd1.ExecuteReaderAsync(cancellationToken);
             while (await r1.ReadAsync(cancellationToken))
             {
@@ -4009,13 +4055,15 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task<IReadOnlyCollection<MaterialGroup>> GetMaterialGroupsAsync(int? category, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = category.HasValue
-            ? $"SELECT [Id],[GroupCategory],[GroupCode],[GroupDescription] FROM {_materialGroupsTableName} WHERE [GroupCategory]=@Cat ORDER BY [GroupCode];"
-            : $"SELECT [Id],[GroupCategory],[GroupCode],[GroupDescription] FROM {_materialGroupsTableName} ORDER BY [GroupCategory],[GroupCode];";
+            ? $"SELECT [Id],[GroupCategory],[GroupCode],[GroupDescription] FROM {_materialGroupsTableName} WHERE [GroupCategory]=@Cat AND [CompanyId]=@CompanyId ORDER BY [GroupCode];"
+            : $"SELECT [Id],[GroupCategory],[GroupCode],[GroupDescription] FROM {_materialGroupsTableName} WHERE [CompanyId]=@CompanyId ORDER BY [GroupCategory],[GroupCode];";
         if (category.HasValue)
             command.Parameters.Add(new SqlParameter("@Cat", category.Value));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         var result = new List<MaterialGroup>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -4069,16 +4117,18 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task<IReadOnlyCollection<MaterialGroupMappingDto>> GetMaterialGroupMappingsAsync(int stockCardId, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             SELECT m.[SlotOrder], m.[GroupCode], g.[GroupDescription]
             FROM {_materialGroupMappingsTableName} m
             LEFT JOIN {_materialGroupsTableName} g ON g.[GroupCode] = m.[GroupCode] AND g.[GroupCategory] = m.[SlotOrder]
-            WHERE m.[ItemId] = @ItemId
+            WHERE m.[ItemId] = @ItemId AND m.[CompanyId] = @CompanyId
             ORDER BY m.[SlotOrder];
             """;
         command.Parameters.Add(new SqlParameter("@ItemId", stockCardId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         var result = new List<MaterialGroupMappingDto>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -4097,6 +4147,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
         var ids = itemIds.Distinct().ToArray();
         var paramNames = new string[ids.Length];
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await EnsureItemUnitsTableAsync(connection, cancellationToken);
         await using var cmd = connection.CreateCommand();
@@ -4106,10 +4157,11 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             paramNames[i] = p;
             cmd.Parameters.Add(new SqlParameter(p, ids[i]));
         }
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         cmd.CommandText = $"""
             SELECT [Id],[ItemId],[LineNo],[UnitId],[Multiplier]
             FROM {_itemUnitsTableName}
-            WHERE [ItemId] IN ({string.Join(",", paramNames)})
+            WHERE [ItemId] IN ({string.Join(",", paramNames)}) AND [CompanyId] = @CompanyId
             ORDER BY [ItemId], [LineNo];
             """;
         var bucket = new Dictionary<int, List<ItemUnit>>();
@@ -4146,6 +4198,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
         var ids = itemIds.Distinct().ToArray();
         var paramNames = new string[ids.Length];
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         for (int i = 0; i < ids.Length; i++)
@@ -4154,11 +4207,12 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             paramNames[i] = p;
             cmd.Parameters.Add(new SqlParameter(p, ids[i]));
         }
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         cmd.CommandText = $"""
             SELECT [Id], [ItemId], [FeatureId], [FeatureValueId], [IsActive], [Created],
                    ISNULL([PrintDescriptionInDesign], 1) AS [PrintDescriptionInDesign]
             FROM {_itemFeatureMappingsTableName}
-            WHERE [ItemId] IN ({string.Join(",", paramNames)})
+            WHERE [ItemId] IN ({string.Join(",", paramNames)}) AND [CompanyId] = @CompanyId
             ORDER BY [ItemId], [Id];
             """;
         var bucket = new Dictionary<int, List<ItemFeatureMapping>>();

@@ -48,9 +48,10 @@ public sealed class SqlLocationSectionRepository : ILocationSectionRepository
             SELECT s.[Id], s.[Code], s.[Name], s.[IsActive],
                    (SELECT COUNT(*) FROM {_sub} x WHERE x.[SectionId] = s.[Id]) AS SubCount
             FROM {_section} s
-            WHERE s.[IsActive] = 1
+            WHERE s.[IsActive] = 1 AND s.[CompanyId] = @Company
             ORDER BY s.[Name];
             """;
+        cmd.Parameters.AddWithValue("@Company", _factory.ResolveEffectiveCompanyId());
         var list = new List<LocationSectionDto>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
@@ -65,9 +66,10 @@ public sealed class SqlLocationSectionRepository : ILocationSectionRepository
         cmd.CommandText = $"""
             SELECT s.[Id], s.[Code], s.[Name], s.[IsActive],
                    (SELECT COUNT(*) FROM {_sub} x WHERE x.[SectionId] = s.[Id]) AS SubCount
-            FROM {_section} s WHERE s.[Id]=@Id;
+            FROM {_section} s WHERE s.[Id]=@Id AND s.[CompanyId]=@Company;
             """;
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@Company", _factory.ResolveEffectiveCompanyId());
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct)
             ? new LocationSectionDto(r.GetInt32(0), r.IsDBNull(1) ? null : r.GetString(1), r.GetString(2), r.GetBoolean(3), r.GetInt32(4))
@@ -81,9 +83,10 @@ public sealed class SqlLocationSectionRepository : ILocationSectionRepository
 
         await using (var dup = conn.CreateCommand())
         {
-            dup.CommandText = $"SELECT COUNT(*) FROM {_section} WHERE [Name]=@N AND [Id]!=@Id AND [IsActive]=1;";
+            dup.CommandText = $"SELECT COUNT(*) FROM {_section} WHERE [Name]=@N AND [Id]!=@Id AND [IsActive]=1 AND [CompanyId]=@Company;";
             dup.Parameters.AddWithValue("@N", n);
             dup.Parameters.AddWithValue("@Id", id ?? 0);
+            dup.Parameters.AddWithValue("@Company", _factory.ResolveEffectiveCompanyId());
             if (Convert.ToInt32(await dup.ExecuteScalarAsync(ct)) > 0)
                 throw new InvalidOperationException($"Aynı isimde başka bir bölüm zaten tanımlı: '{n}'");
         }
@@ -117,8 +120,9 @@ public sealed class SqlLocationSectionRepository : ILocationSectionRepository
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using (var chk = conn.CreateCommand())
         {
-            chk.CommandText = $"SELECT COUNT(*) FROM {_sub} WHERE [SectionId]=@Id;";
+            chk.CommandText = $"SELECT COUNT(*) FROM {_sub} WHERE [SectionId]=@Id AND [CompanyId]=@Company;";
             chk.Parameters.AddWithValue("@Id", id);
+            chk.Parameters.AddWithValue("@Company", _factory.ResolveEffectiveCompanyId());
             if (Convert.ToInt32(await chk.ExecuteScalarAsync(ct)) > 0)
                 throw new InvalidOperationException("Bu bölüme bağlı alt bölümler var — önce alt bölümleri silin.");
         }
@@ -137,10 +141,11 @@ public sealed class SqlLocationSectionRepository : ILocationSectionRepository
         cmd.CommandText = $"""
             SELECT [Id], [SectionId], [Code], [Name], [IsActive]
             FROM {_sub}
-            WHERE [SectionId]=@S AND [IsActive]=1
+            WHERE [SectionId]=@S AND [IsActive]=1 AND [CompanyId]=@Company
             ORDER BY [Name];
             """;
         cmd.Parameters.AddWithValue("@S", sectionId);
+        cmd.Parameters.AddWithValue("@Company", _factory.ResolveEffectiveCompanyId());
         var list = new List<LocationSubSectionDto>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
@@ -156,9 +161,10 @@ public sealed class SqlLocationSectionRepository : ILocationSectionRepository
             SELECT x.[Id], x.[SectionId], s.[Name] AS SectionName, x.[Name]
             FROM {_sub} x
             INNER JOIN {_section} s ON s.[Id] = x.[SectionId]
-            WHERE x.[IsActive] = 1
+            WHERE x.[IsActive] = 1 AND x.[CompanyId] = @Company
             ORDER BY s.[Name], x.[Name];
             """;
+        cmd.Parameters.AddWithValue("@Company", _factory.ResolveEffectiveCompanyId());
         var list = new List<LocationSubSectionListDto>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
@@ -170,8 +176,9 @@ public sealed class SqlLocationSectionRepository : ILocationSectionRepository
     {
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT [Id],[SectionId],[Code],[Name],[IsActive] FROM {_sub} WHERE [Id]=@Id;";
+        cmd.CommandText = $"SELECT [Id],[SectionId],[Code],[Name],[IsActive] FROM {_sub} WHERE [Id]=@Id AND [CompanyId]=@Company;";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@Company", _factory.ResolveEffectiveCompanyId());
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct)
             ? new LocationSubSectionDto(r.GetInt32(0), r.GetInt32(1), r.IsDBNull(2) ? null : r.GetString(2), r.GetString(3), r.GetBoolean(4))
@@ -186,10 +193,11 @@ public sealed class SqlLocationSectionRepository : ILocationSectionRepository
 
         await using (var dup = conn.CreateCommand())
         {
-            dup.CommandText = $"SELECT COUNT(*) FROM {_sub} WHERE [SectionId]=@P AND [Name]=@N AND [Id]!=@Id AND [IsActive]=1;";
+            dup.CommandText = $"SELECT COUNT(*) FROM {_sub} WHERE [SectionId]=@P AND [Name]=@N AND [Id]!=@Id AND [IsActive]=1 AND [CompanyId]=@Company;";
             dup.Parameters.AddWithValue("@P", sectionId);
             dup.Parameters.AddWithValue("@N", n);
             dup.Parameters.AddWithValue("@Id", id ?? 0);
+            dup.Parameters.AddWithValue("@Company", _factory.ResolveEffectiveCompanyId());
             if (Convert.ToInt32(await dup.ExecuteScalarAsync(ct)) > 0)
                 throw new InvalidOperationException($"Bu bölümde aynı isimde başka bir alt bölüm zaten tanımlı: '{n}'");
         }

@@ -412,10 +412,12 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
         cmd.CommandText = $@"
             SELECT s.[Id], s.[WorkOrderId], s.[SourceDocumentId], d.[DocumentNumber], s.[SourceLineId], s.[AllocatedQuantity]
             FROM {_srcTable} s
+            INNER JOIN {_woTable} w ON w.[Id] = s.[WorkOrderId]
             LEFT JOIN [{_schema}].[Document] d ON d.[Id] = s.[SourceDocumentId]
-            WHERE s.[WorkOrderId] = @WorkOrderId
+            WHERE s.[WorkOrderId] = @WorkOrderId AND w.[CompanyId] = @CompanyId
             ORDER BY s.[Id];";
         cmd.Parameters.AddWithValue("@WorkOrderId", workOrderId);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         var list = new List<WorkOrderSourceDto>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
@@ -653,9 +655,10 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
             LEFT JOIN [{_schema}].[Items] i ON i.[Id] = l.[ItemId]
             LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = l.[UnitId]
             LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = l.[LocationId]
-            WHERE l.[MovementType] IS NOT NULL
+            WHERE l.[MovementType] IS NOT NULL AND w.[CompanyId] = @CompanyId
             ORDER BY d.[Id], l.[LineNo], l.[Id];";
         cmd.Parameters.AddWithValue("@WorkOrderId", workOrderId);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
 
         var list = new List<WorkOrderMovementDto>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -728,9 +731,10 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
             LEFT JOIN [{_schema}].[Items] i ON i.[Id] = l.[ItemId]
             LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = l.[UnitId]
             LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = l.[LocationId]
-            WHERE d.[Id] = @VoucherId
+            WHERE d.[Id] = @VoucherId AND d.[CompanyId] = @CompanyId
             ORDER BY l.[LineNo], l.[Id];";
         cmd.Parameters.AddWithValue("@VoucherId", voucherId);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
 
         string? no = null; var date = DateTime.MinValue; var woId = 0; string? woNo = null;
         var lines = new List<WorkOrderMovementDto>();

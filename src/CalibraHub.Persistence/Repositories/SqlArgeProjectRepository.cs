@@ -50,7 +50,7 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
 
     public async Task<IReadOnlyCollection<ArgeProjectListItem>> ListAsync(string? search, byte? status, CancellationToken ct)
     {
-        var where = "d.[IsActive] = 1";
+        var where = "d.[IsActive] = 1 AND a.[CompanyId] = @CompanyId";
         if (status.HasValue) where += " AND a.[Status] = @Status";
         if (!string.IsNullOrWhiteSpace(search)) where += " AND (d.[DocumentNumber] LIKE @S OR a.[Name] LIKE @S OR p.[FullName] LIKE @S)";
 
@@ -70,6 +70,7 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         if (status.HasValue) cmd.Parameters.Add(new SqlParameter("@Status", status.Value));
         if (!string.IsNullOrWhiteSpace(search)) cmd.Parameters.Add(new SqlParameter("@S", $"%{search.Trim()}%"));
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -97,12 +98,13 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
         var sql = $"""
             SELECT [Id],[DocumentId],[Name],[Status],[ProjectType],[OwnerPersonnelId],[TargetDate],
                    [ProgressPercent],[Description],[CreatedById],[Created],[UpdatedById],[Updated]
-            FROM {_argeTable} WHERE [DocumentId] = @Doc;
+            FROM {_argeTable} WHERE [DocumentId] = @Doc AND [CompanyId] = @CompanyId;
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@Doc", documentId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct)) return null;
         return new ArgeProject
@@ -177,7 +179,8 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
         var list = new List<ArgePersonnelOption>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT [Id],[FullName] FROM {_personnelTable} WHERE [IsActive] = 1 ORDER BY [FullName];";
+        cmd.CommandText = $"SELECT [Id],[FullName] FROM {_personnelTable} WHERE [IsActive] = 1 AND [CompanyId] = @CompanyId ORDER BY [FullName];";
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
             list.Add(new ArgePersonnelOption(r.GetInt32(0), r.GetString(1)));
@@ -188,8 +191,9 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT TOP 1 1 FROM {_linkTable} WHERE [ArgeProjectId] = @Doc;";
+        cmd.CommandText = $"SELECT TOP 1 1 FROM {_linkTable} WHERE [ArgeProjectId] = @Doc AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Doc", documentId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var r = await cmd.ExecuteScalarAsync(ct);
         return r != null && r != DBNull.Value;
     }
@@ -226,7 +230,7 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
                    pr.[Created]
             FROM {_protoTable} pr
             LEFT JOIN {_itemsTable} it ON it.[Id] = pr.[ItemId]
-            WHERE pr.[ProjectId] = @Proj AND pr.[IsActive] = 1
+            WHERE pr.[ProjectId] = @Proj AND pr.[IsActive] = 1 AND pr.[CompanyId] = @CompanyId
             ORDER BY pr.[IsApproved] DESC, pr.[Created] DESC;
             """;
         var list = new List<ArgePrototypeDto>();
@@ -234,6 +238,7 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@Proj", projectId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
         {
@@ -259,12 +264,13 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
         var sql = $"""
             SELECT [Id],[ProjectId],[Name],[Description],[VersionLabel],[ItemId],[IsApproved],[IsActive],
                    [CreatedById],[Created],[UpdatedById],[Updated]
-            FROM {_protoTable} WHERE [Id] = @Id;
+            FROM {_protoTable} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@Id", prototypeId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct)) return null;
         return new ArgePrototype
@@ -378,14 +384,15 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
         // Once seri Item (ArgeProductionLink), yoksa prototip Item (ArgePrototype, en guncel aktif).
         var sql = $"""
             SELECT COALESCE(
-                (SELECT TOP 1 [ArgeProjectId] FROM {_linkTable} WHERE [ItemId] = @Item),
-                (SELECT TOP 1 [ProjectId] FROM {_protoTable} WHERE [ItemId] = @Item AND [IsActive] = 1 ORDER BY [Id] DESC)
+                (SELECT TOP 1 [ArgeProjectId] FROM {_linkTable} WHERE [ItemId] = @Item AND [CompanyId] = @CompanyId),
+                (SELECT TOP 1 [ProjectId] FROM {_protoTable} WHERE [ItemId] = @Item AND [IsActive] = 1 AND [CompanyId] = @CompanyId ORDER BY [Id] DESC)
             );
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@Item", itemId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var r = await cmd.ExecuteScalarAsync(ct);
         return r != null && r != DBNull.Value ? Convert.ToInt32(r) : null;
     }
@@ -409,12 +416,13 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
             FROM {_woTable} wo
             INNER JOIN {_woOpTable} woo ON woo.[WorkOrderId] = wo.[Id]
             INNER JOIN {_operationTable} op ON op.[Id] = woo.[OperationId]
-            WHERE wo.[ArgeProjectId] = @Proj AND wo.[IsActive] = 1;
+            WHERE wo.[ArgeProjectId] = @Proj AND wo.[IsActive] = 1 AND wo.[CompanyId] = @CompanyId;
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@Proj", projectId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct))
             return new ArgeProjectLaborDto(0m, 0m, 0, 0);
@@ -439,12 +447,14 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
             INNER JOIN {_lineTable} dl ON dl.[DocumentId] = d.[Id]
             WHERE d.[ParentDocumentId] = @Proj
               AND dl.[MovementType] = 1 /* Issue */
-              AND d.[IsActive] = 1;
+              AND d.[IsActive] = 1
+              AND d.[CompanyId] = @CompanyId;
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@Proj", projectId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct))
             return new ArgeProjectMaterialDto(0m, 0, 0);

@@ -22,10 +22,11 @@ public sealed class SqlWorkflowInstanceRepository(SqlServerConnectionFactory con
                    win.Action, win.ActionBy, win.Note, win.CreatedById, win.Created
             FROM [WorkflowInstance] wi
             LEFT JOIN [WorkflowInstanceNode] win ON win.InstanceId = wi.Id
-            WHERE wi.Id = @Id
+            WHERE wi.Id = @Id AND wi.CompanyId = @CompanyId
             ORDER BY win.Id;
             """;
         cmd.Parameters.AddWithValue("@Id", instanceId);
+        cmd.Parameters.AddWithValue("@CompanyId", connectionFactory.ResolveEffectiveCompanyId());
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         WorkflowInstance? instance = null;
@@ -48,10 +49,12 @@ public sealed class SqlWorkflowInstanceRepository(SqlServerConnectionFactory con
                          CreatedById, Created, UpdatedById, Updated
             FROM [WorkflowInstance]
             WHERE SourceType = @SourceType AND SourceId = @SourceId AND Status IN ('Pending','Active')
+              AND CompanyId = @CompanyId
             ORDER BY Id DESC;
             """;
         cmd.Parameters.AddWithValue("@SourceType", sourceType);
         cmd.Parameters.AddWithValue("@SourceId",   sourceId);
+        cmd.Parameters.AddWithValue("@CompanyId",  connectionFactory.ResolveEffectiveCompanyId());
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? ReadInstance(reader) : null;
     }
@@ -102,9 +105,10 @@ public sealed class SqlWorkflowInstanceRepository(SqlServerConnectionFactory con
         cmd.CommandText = """
             SELECT Id, InstanceId, NodeId, Status, AssignedUserId,
                    EnteredAt, CompletedAt, Action, ActionBy, Note, CreatedById, Created
-            FROM [WorkflowInstanceNode] WHERE Id = @Id;
+            FROM [WorkflowInstanceNode] WHERE Id = @Id AND CompanyId = @CompanyId;
             """;
         cmd.Parameters.AddWithValue("@Id", instanceNodeId);
+        cmd.Parameters.AddWithValue("@CompanyId", connectionFactory.ResolveEffectiveCompanyId());
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? ReadInstanceNode(reader, 0) : null;
     }
@@ -206,9 +210,11 @@ public sealed class SqlWorkflowInstanceRepository(SqlServerConnectionFactory con
             FROM [WorkflowInstanceNode] win
             INNER JOIN [WorkflowInstance] wi ON wi.Id = win.InstanceId
             WHERE win.AssignedUserId = @UserId AND win.Status = 'Active' AND wi.Status = 'Active'
+              AND wi.CompanyId = @CompanyId
             ORDER BY win.EnteredAt DESC;
             """;
         cmd.Parameters.AddWithValue("@UserId", userId);
+        cmd.Parameters.AddWithValue("@CompanyId", connectionFactory.ResolveEffectiveCompanyId());
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         var result = new List<(WorkflowInstanceNode, WorkflowInstance)>();
         while (await reader.ReadAsync(ct))
@@ -235,8 +241,10 @@ public sealed class SqlWorkflowInstanceRepository(SqlServerConnectionFactory con
               AND wn.TimeoutHours IS NOT NULL
               AND win.EnteredAt IS NOT NULL
               AND wi.Status = 'Active'
+              AND wi.CompanyId = @CompanyId
               AND DATEADD(HOUR, wn.TimeoutHours, win.EnteredAt) < SYSUTCDATETIME();
             """;
+        cmd.Parameters.AddWithValue("@CompanyId", connectionFactory.ResolveEffectiveCompanyId());
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         var result = new List<WorkflowInstanceNode>();
         while (await reader.ReadAsync(ct))

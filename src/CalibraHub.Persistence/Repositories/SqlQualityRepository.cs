@@ -50,7 +50,7 @@ public sealed class SqlQualityRepository : IQualityRepository
 
     public async Task<IReadOnlyCollection<QualityInspectionPlanListItem>> ListPlansAsync(string? search, byte? inspectionType, CancellationToken ct)
     {
-        var where = "p.[IsActive] = 1";
+        var where = "p.[IsActive] = 1 AND p.[CompanyId] = @CompanyId";
         if (inspectionType.HasValue) where += " AND p.[InspectionType] = @Type";
         if (!string.IsNullOrWhiteSpace(search)) where += " AND (p.[Name] LIKE @S OR it.[Name] LIKE @S)";
         var sql = $"""
@@ -68,6 +68,7 @@ public sealed class SqlQualityRepository : IQualityRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         if (inspectionType.HasValue) cmd.Parameters.Add(new SqlParameter("@Type", inspectionType.Value));
         if (!string.IsNullOrWhiteSpace(search)) cmd.Parameters.Add(new SqlParameter("@S", $"%{search.Trim()}%"));
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -93,7 +94,7 @@ public sealed class SqlQualityRepository : IQualityRepository
     public async Task<QualityInspectionPlanDetail?> GetPlanAsync(int planId, CancellationToken ct)
     {
         var sql = $"""
-            SELECT [Id],[ItemId],[MaterialGroupId],[InspectionType],[Name],[IsActive] FROM {_planTable} WHERE [Id]=@P;
+            SELECT [Id],[ItemId],[MaterialGroupId],[InspectionType],[Name],[IsActive] FROM {_planTable} WHERE [Id]=@P AND [CompanyId]=@CompanyId;
             SELECT [Id],[CharacteristicName],[Nominal],[LowerTol],[UpperTol],[UnitId],[Method],[GaugeName],[IsNumeric],[OrderNo]
             FROM {_planLineTable} WHERE [PlanId]=@P ORDER BY [OrderNo],[Id];
             """;
@@ -101,6 +102,7 @@ public sealed class SqlQualityRepository : IQualityRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@P", planId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct)) return null;
         var head = (Id: r.GetInt32(0), ItemId: r.IsDBNull(1) ? (int?)null : r.GetInt32(1),
@@ -211,9 +213,9 @@ public sealed class SqlQualityRepository : IQualityRepository
         // 2) Yoksa item'ın CardGroup (CardType=1) üyeliklerine tanımlı grup planına düş.
         var sql = $"""
             SELECT TOP 1 [Id],[Name] FROM {_planTable}
-            WHERE [IsActive]=1 AND [InspectionType]=@Type AND [ItemId]=@Item ORDER BY [Created] DESC;
+            WHERE [IsActive]=1 AND [InspectionType]=@Type AND [ItemId]=@Item AND [CompanyId]=@CompanyId ORDER BY [Created] DESC;
             SELECT TOP 1 [Id],[Name] FROM {_planTable}
-            WHERE [IsActive]=1 AND [InspectionType]=@Type AND [ItemId] IS NULL
+            WHERE [IsActive]=1 AND [InspectionType]=@Type AND [ItemId] IS NULL AND [CompanyId]=@CompanyId
               AND [MaterialGroupId] IN (
                   SELECT [CardGroupId] FROM {_cardGroupMappingTable}
                   WHERE [EntityType]=1 AND [EntityId]=@ItemStr)
@@ -227,6 +229,7 @@ public sealed class SqlQualityRepository : IQualityRepository
             cmd.Parameters.Add(new SqlParameter("@Type", inspectionType));
             cmd.Parameters.Add(new SqlParameter("@Item", itemId));
             cmd.Parameters.Add(new SqlParameter("@ItemStr", itemId.ToString()));
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
             await using var r = await cmd.ExecuteReaderAsync(ct);
             if (await r.ReadAsync(ct))
             {
@@ -256,7 +259,7 @@ public sealed class SqlQualityRepository : IQualityRepository
 
     public async Task<IReadOnlyCollection<QualityInspectionListItem>> ListInspectionsAsync(string? search, byte? status, byte? verdict, CancellationToken ct)
     {
-        var where = "d.[IsActive] = 1";
+        var where = "d.[IsActive] = 1 AND q.[CompanyId] = @CompanyId";
         if (status.HasValue) where += " AND q.[Status] = @Status";
         if (verdict.HasValue) where += " AND q.[Verdict] = @Verdict";
         if (!string.IsNullOrWhiteSpace(search)) where += " AND (d.[DocumentNumber] LIKE @S OR it.[Name] LIKE @S)";
@@ -273,6 +276,7 @@ public sealed class SqlQualityRepository : IQualityRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         if (status.HasValue) cmd.Parameters.Add(new SqlParameter("@Status", status.Value));
         if (verdict.HasValue) cmd.Parameters.Add(new SqlParameter("@Verdict", verdict.Value));
         if (!string.IsNullOrWhiteSpace(search)) cmd.Parameters.Add(new SqlParameter("@S", $"%{search.Trim()}%"));
@@ -307,12 +311,13 @@ public sealed class SqlQualityRepository : IQualityRepository
             SELECT [Id],[DocumentId],[PlanId],[ItemId],[InspectionType],[Status],[Verdict],[Disposition],
                    [SourceKind],[SourceId],[Quantity],[InspectedByPersonnelId],[InspectedAt],[Notes],
                    [CreatedById],[Created],[UpdatedById],[Updated]
-            FROM {_inspTable} WHERE [DocumentId]=@Doc;
+            FROM {_inspTable} WHERE [DocumentId]=@Doc AND [CompanyId]=@CompanyId;
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@Doc", documentId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct)) return null;
         return new QualityInspection
@@ -345,18 +350,19 @@ public sealed class SqlQualityRepository : IQualityRepository
                    q.[Verdict], q.[Disposition], q.[SourceKind], q.[SourceId], q.[Quantity],
                    q.[InspectedByPersonnelId], q.[InspectedAt], q.[Notes]
             FROM {_inspTable} q INNER JOIN {_docTable} d ON d.[id]=q.[DocumentId]
-            WHERE q.[DocumentId]=@Doc;
+            WHERE q.[DocumentId]=@Doc AND q.[CompanyId]=@CompanyId;
             SELECT l.[Id],l.[PlanLineId],l.[CharacteristicName],l.[Nominal],l.[LowerTol],l.[UpperTol],
                    l.[Measured],l.[IsNumeric],l.[Result],l.[DefectCodeId],dc.[Name],l.[OrderNo],l.[Notes]
             FROM {_inspLineTable} l
             LEFT JOIN {_defectTable} dc ON dc.[Id]=l.[DefectCodeId]
-            WHERE l.[InspectionId]=(SELECT [Id] FROM {_inspTable} WHERE [DocumentId]=@Doc)
+            WHERE l.[InspectionId]=(SELECT [Id] FROM {_inspTable} WHERE [DocumentId]=@Doc AND [CompanyId]=@CompanyId)
             ORDER BY l.[OrderNo],l.[Id];
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@Doc", documentId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct)) return null;
         var head = new QualityInspectionDetail(
@@ -494,7 +500,8 @@ public sealed class SqlQualityRepository : IQualityRepository
         var list = new List<QualityDefectCodeOption>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT [Id],[Name],[ColorHex] FROM {_defectTable} WHERE [IsActive]=1 ORDER BY [Category],[SortOrder],[Name];";
+        cmd.CommandText = $"SELECT [Id],[Name],[ColorHex] FROM {_defectTable} WHERE [IsActive]=1 AND [CompanyId]=@CompanyId ORDER BY [Category],[SortOrder],[Name];";
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
             list.Add(new QualityDefectCodeOption(r.GetInt32(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetString(2)));
@@ -512,9 +519,10 @@ public sealed class SqlQualityRepository : IQualityRepository
         cmd.CommandText = $"""
             SELECT [Id],[ParentId],[Level],[Code],[Description]
             FROM {_cardGroupTable}
-            WHERE [CardType]=1
+            WHERE [CardType]=1 AND [CompanyId]=@CompanyId
             ORDER BY [Level],[Code];
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using (var r = await cmd.ExecuteReaderAsync(ct))
         {
             while (await r.ReadAsync(ct))

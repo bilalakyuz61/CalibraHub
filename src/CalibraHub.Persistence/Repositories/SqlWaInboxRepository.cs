@@ -32,7 +32,7 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         // IF NOT EXISTS ile guvenli upsert.
         cmd.CommandText = $"""
             IF @BridgeMsgId IS NOT NULL
-               AND EXISTS (SELECT 1 FROM {_table} WHERE [BridgeMsgId] = @BridgeMsgId)
+               AND EXISTS (SELECT 1 FROM {_table} WHERE [BridgeMsgId] = @BridgeMsgId AND [CompanyId] = @CompanyId)
             BEGIN
                 SELECT NULL;
                 RETURN;
@@ -93,12 +93,13 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
                 WHERE [IsActive] = 1
                   AND [WaPhone] IS NOT NULL
                   AND LEN([WaPhone]) > 0
+                  AND [CompanyId] = @CompanyId
             ),
             has_incoming_cte AS (
                 -- Gelen mesaji olan telefon numaralari — LID dedup icin (correlated subquery yerine)
                 SELECT DISTINCT [ContactPhone]
                 FROM {_table}
-                WHERE [Direction] = 0
+                WHERE [Direction] = 0 AND [CompanyId] = @CompanyId
             ),
             last_msg AS (
                 SELECT
@@ -108,6 +109,7 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
                     ISNULL([is_lid], 0) AS [is_lid],
                     ROW_NUMBER() OVER (PARTITION BY [ContactPhone] ORDER BY [ReceivedAt] DESC, [Id] DESC) AS rn
                 FROM {_table}
+                WHERE [CompanyId] = @CompanyId
             ),
             last_incoming_name AS (
                 SELECT
@@ -118,11 +120,12 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
                 WHERE [Direction] = 0
                   AND [ContactName] IS NOT NULL
                   AND LEN(LTRIM(RTRIM([ContactName]))) > 0
+                  AND [CompanyId] = @CompanyId
             ),
             unread AS (
                 SELECT [ContactPhone], COUNT(1) AS unread_count
                 FROM {_table}
-                WHERE [Direction] = 0 AND [ReadAt] IS NULL
+                WHERE [Direction] = 0 AND [ReadAt] IS NULL AND [CompanyId] = @CompanyId
                 GROUP BY [ContactPhone]
             )
             SELECT TOP (@N)
@@ -158,6 +161,7 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
             ORDER BY lm.[ReceivedAt] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@N", limit));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         var list = new List<WaConversationSummary>();
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
@@ -238,13 +242,14 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
                     [quoted_msg_id],[reaction_emoji],[delivery_status],
                     [group_jid],[sender_jid],[SenderName]
                 FROM {_table}
-                WHERE [ContactPhone] = @Phone
+                WHERE [ContactPhone] = @Phone AND [CompanyId] = @CompanyId
                 ORDER BY [ReceivedAt] DESC, [Id] DESC
             )
             SELECT * FROM recent ORDER BY [ReceivedAt] ASC, [Id] ASC;
             """;
         cmd.Parameters.Add(new SqlParameter("@Phone", contactPhone));
         cmd.Parameters.Add(new SqlParameter("@N", limit));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         var list = new List<WaInboxMessage>();
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
@@ -302,7 +307,8 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT MAX([ReceivedAt]) FROM {_table};";
+        cmd.CommandText = $"SELECT MAX([ReceivedAt]) FROM {_table} WHERE [CompanyId] = @CompanyId;";
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var v = await cmd.ExecuteScalarAsync(cancellationToken);
         return v is null || v is DBNull ? null : (DateTime)v;
     }
@@ -330,9 +336,11 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
              WHERE [HasMedia] = 1
                AND [MediaPath] IS NULL
                AND [BridgeMsgId] IS NOT NULL
+               AND [CompanyId] = @CompanyId
              ORDER BY [ReceivedAt] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@N", limit));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var list = new List<(long, string)>();
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await r.ReadAsync(cancellationToken))
@@ -373,9 +381,10 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
                    [MediaPath],[MediaMime],[MediaFilename],[MediaSize],
                    ISNULL([is_deleted],0),[quoted_msg_id],[reaction_emoji],[delivery_status]
             FROM {_table}
-            WHERE [BridgeMsgId] = @Id;
+            WHERE [BridgeMsgId] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", bridgeMsgId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
         if (!await r.ReadAsync(cancellationToken)) return null;
         return new WaInboxMessage
@@ -462,11 +471,13 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
             WHERE [ContactPhone] = @Phone
               AND [Body] LIKE @Query
               AND ISNULL([is_deleted],0) = 0
+              AND [CompanyId] = @CompanyId
             ORDER BY [ReceivedAt] DESC, [Id] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@Phone", contactPhone));
         cmd.Parameters.Add(new SqlParameter("@Query", "%" + query.Replace("%","[%]").Replace("_","[_]") + "%"));
         cmd.Parameters.Add(new SqlParameter("@N",     limit));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         var list = new List<WaInboxMessage>();
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);

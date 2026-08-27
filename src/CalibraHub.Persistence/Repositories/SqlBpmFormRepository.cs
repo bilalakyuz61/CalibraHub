@@ -20,9 +20,10 @@ public sealed class SqlBpmFormRepository(SqlServerConnectionFactory connectionFa
                    wd.Name AS WorkflowName, fd.IsActive
             FROM   [BpmFormDefinition] fd
             LEFT JOIN [WorkflowDefinition] wd ON wd.Id = fd.WorkflowDefinitionId
-            WHERE  fd.IsActive = 1
+            WHERE  fd.IsActive = 1 AND fd.CompanyId = @CompanyId
             ORDER  BY fd.Name;
             """;
+        cmd.Parameters.AddWithValue("@CompanyId", connectionFactory.ResolveEffectiveCompanyId());
         await using var r = await cmd.ExecuteReaderAsync(ct);
         var result = new List<BpmFormDefinitionDto>();
         while (await r.ReadAsync(ct))
@@ -39,7 +40,7 @@ public sealed class SqlBpmFormRepository(SqlServerConnectionFactory connectionFa
                    wd.Name AS WorkflowName, fd.IsActive
             FROM   [BpmFormDefinition] fd
             LEFT JOIN [WorkflowDefinition] wd ON wd.Id = fd.WorkflowDefinitionId
-            WHERE  fd.Id = @Id;
+            WHERE  fd.Id = @Id AND fd.CompanyId = @CompanyId;
 
             SELECT Id, FormDefinitionId, [Key], Label, FieldType, IsRequired,
                    SortOrder, OptionsJson, Placeholder, DefaultValue,
@@ -49,6 +50,7 @@ public sealed class SqlBpmFormRepository(SqlServerConnectionFactory connectionFa
             ORDER  BY SortOrder, Id;
             """;
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@CompanyId", connectionFactory.ResolveEffectiveCompanyId());
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct)) return null;
         var def = ReadDefinitionDto(r);
@@ -182,10 +184,11 @@ public sealed class SqlBpmFormRepository(SqlServerConnectionFactory connectionFa
                    s.SubmittedAt, s.Status, s.WorkflowInstanceId
             FROM   [BpmFormSubmission] s
             JOIN   [BpmFormDefinition] fd ON fd.Id = s.FormDefinitionId
-            WHERE  s.FormDefinitionId = @FormId
+            WHERE  s.FormDefinitionId = @FormId AND s.CompanyId = @CompanyId
             ORDER  BY s.SubmittedAt DESC;
             """;
         cmd.Parameters.AddWithValue("@FormId", formDefinitionId);
+        cmd.Parameters.AddWithValue("@CompanyId", connectionFactory.ResolveEffectiveCompanyId());
         return await ReadSubmissionListAsync(cmd, ct);
     }
 
@@ -199,10 +202,11 @@ public sealed class SqlBpmFormRepository(SqlServerConnectionFactory connectionFa
                    s.SubmittedAt, s.Status, s.WorkflowInstanceId
             FROM   [BpmFormSubmission] s
             JOIN   [BpmFormDefinition] fd ON fd.Id = s.FormDefinitionId
-            WHERE  s.SubmittedBy = @UserId
+            WHERE  s.SubmittedBy = @UserId AND s.CompanyId = @CompanyId
             ORDER  BY s.SubmittedAt DESC;
             """;
         cmd.Parameters.AddWithValue("@UserId", userId);
+        cmd.Parameters.AddWithValue("@CompanyId", connectionFactory.ResolveEffectiveCompanyId());
         return await ReadSubmissionListAsync(cmd, ct);
     }
 
@@ -216,13 +220,13 @@ public sealed class SqlBpmFormRepository(SqlServerConnectionFactory connectionFa
                    s.SubmittedAt, s.Status, s.WorkflowInstanceId
             FROM   [BpmFormSubmission] s
             JOIN   [BpmFormDefinition] fd ON fd.Id = s.FormDefinitionId
-            WHERE  s.Id = @Id;
+            WHERE  s.Id = @Id AND s.CompanyId = @CompanyId;
 
             SELECT Id, FormDefinitionId, [Key], Label, FieldType, IsRequired,
                    SortOrder, OptionsJson, Placeholder, DefaultValue,
                    LayoutRow, LayoutCol, LayoutColSpan
             FROM   [BpmFormField]
-            WHERE  FormDefinitionId = (SELECT FormDefinitionId FROM [BpmFormSubmission] WHERE Id = @Id)
+            WHERE  FormDefinitionId = (SELECT FormDefinitionId FROM [BpmFormSubmission] WHERE Id = @Id AND CompanyId = @CompanyId)
             ORDER  BY SortOrder, Id;
 
             SELECT Id, SubmissionId, FieldKey, Value
@@ -230,6 +234,7 @@ public sealed class SqlBpmFormRepository(SqlServerConnectionFactory connectionFa
             WHERE  SubmissionId = @Id;
             """;
         cmd.Parameters.AddWithValue("@Id", submissionId);
+        cmd.Parameters.AddWithValue("@CompanyId", connectionFactory.ResolveEffectiveCompanyId());
         await using var r = await cmd.ExecuteReaderAsync(ct);
 
         if (!await r.ReadAsync(ct)) return null;

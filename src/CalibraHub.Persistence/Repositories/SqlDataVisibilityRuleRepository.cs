@@ -38,8 +38,9 @@ public sealed class SqlDataVisibilityRuleRepository : IDataVisibilityRuleReposit
         var rules = new List<DataVisibilityRule>();
         await using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = $"SELECT {RuleCols} FROM {_ruleTable} WHERE [FormCode]=@F AND [IsActive]=1 ORDER BY [Id];";
+            cmd.CommandText = $"SELECT {RuleCols} FROM {_ruleTable} WHERE [FormCode]=@F AND [IsActive]=1 AND [CompanyId]=@CompanyId ORDER BY [Id];";
             cmd.Parameters.AddWithValue("@F", formCode);
+            cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
             await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct)) rules.Add(MapRule(r));
         }
@@ -54,8 +55,9 @@ public sealed class SqlDataVisibilityRuleRepository : IDataVisibilityRuleReposit
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = includeInactive
-                ? $"SELECT {RuleCols} FROM {_ruleTable} ORDER BY [FormCode],[Id];"
-                : $"SELECT {RuleCols} FROM {_ruleTable} WHERE [IsActive]=1 ORDER BY [FormCode],[Id];";
+                ? $"SELECT {RuleCols} FROM {_ruleTable} WHERE [CompanyId]=@CompanyId ORDER BY [FormCode],[Id];"
+                : $"SELECT {RuleCols} FROM {_ruleTable} WHERE [IsActive]=1 AND [CompanyId]=@CompanyId ORDER BY [FormCode],[Id];";
+            cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
             await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct)) rules.Add(MapRule(r));
         }
@@ -69,8 +71,9 @@ public sealed class SqlDataVisibilityRuleRepository : IDataVisibilityRuleReposit
         DataVisibilityRule? rule = null;
         await using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = $"SELECT {RuleCols} FROM {_ruleTable} WHERE [Id]=@Id;";
+            cmd.CommandText = $"SELECT {RuleCols} FROM {_ruleTable} WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
             cmd.Parameters.AddWithValue("@Id", id);
+            cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
             await using var r = await cmd.ExecuteReaderAsync(ct);
             if (await r.ReadAsync(ct)) rule = MapRule(r);
         }
@@ -79,7 +82,11 @@ public sealed class SqlDataVisibilityRuleRepository : IDataVisibilityRuleReposit
         return rule;
     }
 
-    /// <summary>Verilen kuralların Values + Grants child'larını tek IN sorgusuyla yükler.</summary>
+    /// <summary>
+    /// Verilen kuralların Values + Grants child'larını tek IN sorgusuyla yükler.
+    /// tenant-ok: rules listesi buraya girmeden önce çağıran metodlarda (ListActiveByFormAsync/
+    /// ListAllAsync/GetByIdAsync) [CompanyId] ile süzülmüş — RuleId IN (...) zaten o kapsamda.
+    /// </summary>
     private async Task HydrateAsync(SqlConnection conn, IReadOnlyList<DataVisibilityRule> rules, CancellationToken ct)
     {
         if (rules.Count == 0) return;

@@ -37,9 +37,10 @@ public sealed class SqlRptViewRepository : IRptViewRepository
         cmd.CommandText = $@"
             SELECT [Id],[Code],[Name],[SqlObjectName],[Description],[IsActive],[Created],[Updated]
             FROM {_rptView}
-            WHERE (@IncludeInactive = 1 OR [IsActive] = 1)
+            WHERE (@IncludeInactive = 1 OR [IsActive] = 1) AND [CompanyId] = @Company
             ORDER BY [Code];";
         cmd.Parameters.AddWithValue("@IncludeInactive", includeInactive);
+        cmd.Parameters.AddWithValue("@Company", _connectionFactory.ResolveEffectiveCompanyId());
 
         var list = new List<RptView>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -54,8 +55,9 @@ public sealed class SqlRptViewRepository : IRptViewRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
             SELECT [Id],[Code],[Name],[SqlObjectName],[Description],[IsActive],[Created],[Updated]
-            FROM {_rptView} WHERE [Id] = @Id;";
+            FROM {_rptView} WHERE [Id] = @Id AND [CompanyId] = @Company;";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@Company", _connectionFactory.ResolveEffectiveCompanyId());
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? MapView(reader) : null;
     }
@@ -66,8 +68,9 @@ public sealed class SqlRptViewRepository : IRptViewRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
             SELECT [Id],[Code],[Name],[SqlObjectName],[Description],[IsActive],[Created],[Updated]
-            FROM {_rptView} WHERE [Code] = @Code;";
+            FROM {_rptView} WHERE [Code] = @Code AND [CompanyId] = @Company;";
         cmd.Parameters.AddWithValue("@Code", code);
+        cmd.Parameters.AddWithValue("@Company", _connectionFactory.ResolveEffectiveCompanyId());
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? MapView(reader) : null;
     }
@@ -80,9 +83,10 @@ public sealed class SqlRptViewRepository : IRptViewRepository
             SELECT [Id],[ViewId],[ColName],[DisplayName],[DataType],[IsFilterable],[IsGroupable],
                    [IsAggregatable],[DefaultAggregate],[Ordinal],[ContextBinding]
             FROM {_rptViewCol}
-            WHERE [ViewId] = @ViewId
+            WHERE [ViewId] = @ViewId AND [CompanyId] = @Company
             ORDER BY [Ordinal], [ColName];";
         cmd.Parameters.AddWithValue("@ViewId", viewId);
+        cmd.Parameters.AddWithValue("@Company", _connectionFactory.ResolveEffectiveCompanyId());
 
         var list = new List<RptViewColumn>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -113,9 +117,10 @@ public sealed class SqlRptViewRepository : IRptViewRepository
         cmd.CommandText = $@"
             SELECT [Id],[ViewId],[Role],[CanQuery],[CanDesign]
             FROM {_rptViewRole}
-            WHERE [ViewId] = @ViewId
+            WHERE [ViewId] = @ViewId AND [CompanyId] = @Company
             ORDER BY [Role];";
         cmd.Parameters.AddWithValue("@ViewId", viewId);
+        cmd.Parameters.AddWithValue("@Company", _connectionFactory.ResolveEffectiveCompanyId());
 
         var list = new List<RptViewRole>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -263,8 +268,9 @@ public sealed class SqlRptViewRepository : IRptViewRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
 
         await using var nameCmd = conn.CreateCommand();
-        nameCmd.CommandText = $"SELECT [SqlObjectName] FROM {_rptView} WHERE [Id] = @Id;";
+        nameCmd.CommandText = $"SELECT [SqlObjectName] FROM {_rptView} WHERE [Id] = @Id AND [CompanyId] = @Company;";
         nameCmd.Parameters.AddWithValue("@Id", viewId);
+        nameCmd.Parameters.AddWithValue("@Company", _connectionFactory.ResolveEffectiveCompanyId());
         var sqlObjectName = await nameCmd.ExecuteScalarAsync(ct) as string;
         if (string.IsNullOrWhiteSpace(sqlObjectName))
             return Array.Empty<DiscoveredColumnDto>();

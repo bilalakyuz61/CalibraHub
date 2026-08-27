@@ -299,10 +299,12 @@ public sealed class SqlWidgetRepository : IWidgetRepository
 
     public async Task<int> CountChildrenByParentIdAsync(int parentId, CancellationToken ct)
     {
+        var companyId = GetCurrentCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT COUNT(*) FROM {_widgetMasTable} WHERE [ParentId] = @Pid;";
+        cmd.CommandText = $"SELECT COUNT(*) FROM {_widgetMasTable} WHERE [ParentId] = @Pid AND (@CompanyId = 0 OR [CompanyId] = @CompanyId);";
         cmd.Parameters.Add(new SqlParameter("@Pid", parentId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         var scalar = await cmd.ExecuteScalarAsync(ct);
         return scalar == null || scalar == DBNull.Value ? 0 : Convert.ToInt32(scalar);
     }
@@ -359,6 +361,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
 
     public async Task<IReadOnlyCollection<WidgetValue>> GetValuesAsync(int formId, string recordId, CancellationToken ct)
     {
+        var companyId = GetCurrentCompanyId();
         var list = new List<WidgetValue>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
@@ -366,10 +369,11 @@ public sealed class SqlWidgetRepository : IWidgetRepository
             SELECT t.[Id], t.[WidgetId], t.[RecordId], t.[ParentRecordId], t.[Value], t.[CreatedAt], t.[UpdatedAt]
             FROM {_widgetTraTable} t
             INNER JOIN {_widgetMasTable} m ON m.[Id] = t.[WidgetId]
-            WHERE m.[FormId] = @FormId AND t.[RecordId] = @RecordId;
+            WHERE m.[FormId] = @FormId AND t.[RecordId] = @RecordId AND (@CompanyId = 0 OR m.[CompanyId] = @CompanyId);
             """;
         cmd.Parameters.Add(new SqlParameter("@FormId", formId));
         cmd.Parameters.Add(new SqlParameter("@RecordId", recordId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
             list.Add(MapValue(r));
@@ -384,6 +388,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         if (recordIds.Count == 0)
             return Enumerable.Empty<WidgetValue>().ToLookup(v => v.RecordId);
 
+        var companyId = GetCurrentCompanyId();
         var pairs = new List<(string RecordId, WidgetValue Value)>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
@@ -404,9 +409,11 @@ public sealed class SqlWidgetRepository : IWidgetRepository
             INNER JOIN {_widgetMasTable} m ON m.[Id] = t.[WidgetId]
             WHERE m.[FormId] = @FormId
               AND t.[RecordId] IN ({string.Join(",", paramNames)})
-              AND t.[ParentRecordId] IS NULL;
+              AND t.[ParentRecordId] IS NULL
+              AND (@CompanyId = 0 OR m.[CompanyId] = @CompanyId);
             """;
         cmd.Parameters.Add(new SqlParameter("@FormId", formId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
@@ -450,10 +457,11 @@ public sealed class SqlWidgetRepository : IWidgetRepository
                     FROM {_widgetMasTable} m
                     LEFT JOIN {_widgetTraTable} t
                            ON t.[WidgetId] = m.[Id] AND t.[RecordId] = @RecordId
-                    WHERE m.[FormId] = @FormId;
+                    WHERE m.[FormId] = @FormId AND (@CompanyId = 0 OR m.[CompanyId] = @CompanyId);
                     """;
                 snap.Parameters.Add(new SqlParameter("@FormId", formId));
                 snap.Parameters.Add(new SqlParameter("@RecordId", recordId));
+                snap.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
                 await using var r = await snap.ExecuteReaderAsync(ct);
                 while (await r.ReadAsync(ct))
                 {
@@ -621,19 +629,22 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         if (!await HasValueAuditAsync(conn, ct)) return Array.Empty<WidgetValueLog>();
 
         if (top <= 0) top = 200;
+        var companyId = GetCurrentCompanyId();
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT TOP (@Top)
                    [Id],[FormId],[WidgetId],[WidgetCode],[RecordId],[ParentRecordId],
                    [OldValue],[NewValue],[ChangedBy],[ChangedAt]
             FROM {_widgetTraLogTable}
-            WHERE ([FormId] = @FormId AND [RecordId] = @RecordId)
-               OR [ParentRecordId] = @RecordId
+            WHERE (([FormId] = @FormId AND [RecordId] = @RecordId)
+               OR [ParentRecordId] = @RecordId)
+              AND (@CompanyId = 0 OR [CompanyId] = @CompanyId)
             ORDER BY [ChangedAt] DESC, [Id] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@Top", top));
         cmd.Parameters.Add(new SqlParameter("@FormId", formId));
         cmd.Parameters.Add(new SqlParameter("@RecordId", recordId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         var list = new List<WidgetValueLog>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -665,6 +676,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         string parentRecordId,
         CancellationToken ct)
     {
+        var companyId = GetCurrentCompanyId();
         var list = new List<string>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
@@ -672,10 +684,11 @@ public sealed class SqlWidgetRepository : IWidgetRepository
             SELECT DISTINCT t.[RecordId]
             FROM {_widgetTraTable} t
             INNER JOIN {_widgetMasTable} m ON m.[Id] = t.[WidgetId]
-            WHERE m.[FormId] = @FormId AND t.[ParentRecordId] = @ParentId;
+            WHERE m.[FormId] = @FormId AND t.[ParentRecordId] = @ParentId AND (@CompanyId = 0 OR m.[CompanyId] = @CompanyId);
             """;
         cmd.Parameters.Add(new SqlParameter("@FormId", childFormId));
         cmd.Parameters.Add(new SqlParameter("@ParentId", parentRecordId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
             list.Add(r.GetString(0));
