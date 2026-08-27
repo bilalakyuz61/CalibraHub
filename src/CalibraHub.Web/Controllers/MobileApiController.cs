@@ -45,18 +45,46 @@ public sealed class MobileApiController : ControllerBase
 
     private readonly IUserAuthenticationService _userAuth;
     private readonly ICompanyRepository _companyRepo;
+    private readonly IPermissionService _permService;
 
     public MobileApiController(
         IUserAuthenticationService userAuth,
         ICompanyRepository companyRepo,
         CalibraHub.Application.Services.LoginLockoutTracker loginLockout,
+        IPermissionService permService,
         ILogger<MobileApiController> logger)
     {
         _userAuth = userAuth;
         _companyRepo = companyRepo;
         _loginLockout = loginLockout;
+        _permService = permService;
         _logger = logger;
     }
+
+    /// <summary>
+    /// Mobil uygulamanin menusunde yer alan ekranlarin form kodlari — /session yanitindaki
+    /// `permissions` listesi BU kumeden suzulur. Mobil menu ekledikce buraya da eklenir;
+    /// eksik birakilan kod istemcide "yetkisiz" gorunur (fail-safe yon: sizdirmaz, gizler).
+    ///
+    /// DIKKAT: bu liste yalniz MENU GORUNURLUGU icindir. Gercek yetki kontrolu her zaman
+    /// ilgili endpoint'te (MobileWarehouseApiController / MobileProductionApiController
+    /// icindeki RequirePermissionAsync) yapilir — buraya bir kod eklemek/cikarmak erisim
+    /// vermez veya almaz, yalnizca karti gosterir/gizler.
+    /// </summary>
+    private static readonly string[] MobileMenuFormCodes =
+    {
+        CalibraHub.Application.Constants.FormCodes.StockIn,
+        CalibraHub.Application.Constants.FormCodes.StockOut,
+        CalibraHub.Application.Constants.FormCodes.Transfer,
+        CalibraHub.Application.Constants.FormCodes.InventoryCount,
+        CalibraHub.Application.Constants.FormCodes.SalesDelivery,
+        CalibraHub.Application.Constants.FormCodes.PurchaseDelivery,
+        CalibraHub.Application.Constants.FormCodes.WorkOrders,
+        CalibraHub.Application.Constants.FormCodes.ShopFloor,
+    };
+
+    /// <summary>GET kapilariyla ayni aday aksiyonlar (PermissionEnforcementFilter GET seti).</summary>
+    private static readonly string[] MenuViewActions = { "VIEW", "VIEW_OWN" };
 
     // 2026-08-24 (Y8): web login'deki hesap kilidi mobilde YOKTU — web'de 5 hatali
     // denemede kilitlenen hesap /api/mobile/login uzerinden kilitsiz denenebiliyordu
@@ -277,7 +305,7 @@ public sealed class MobileApiController : ControllerBase
     /// </summary>
     [AllowAnonymous]
     [HttpGet("session")]
-    public IActionResult Session()
+    public async Task<IActionResult> Session(CancellationToken ct)
     {
         if (User.Identity?.IsAuthenticated != true)
             return Unauthorized();
@@ -293,7 +321,49 @@ public sealed class MobileApiController : ControllerBase
             email = User.FindFirstValue(ClaimTypes.Email) ?? string.Empty,
             companyId,
             companyName = User.FindFirstValue("company_name") ?? string.Empty,
+            permissions = await GetMenuPermissionsAsync(ct),
         });
+    }
+
+    /// <summary>
+    /// Kullanicinin GOREBILECEGI mobil ekranlarin form kodlari — mobil menu/ana ekran
+    /// kartlarini suzmek icin. Web'de menu gorunurlugu zaten sunucu tarafinda suzuluyor;
+    /// mobilde bu bilgi hic gonderilmedigi icin yetkisiz kullaniciya kart gosterilip
+    /// dokununca 403 aliniyordu (kapali kapiya goturen buton).
+    ///
+    /// Rol/departman claim cozumu MobileWarehouseApiController.GetCurrentUser ile BIREBIR
+    /// ayni (TryParseRole; bilinmeyen rol -> Operator fail-safe). SystemAdmin/DepartmentManager
+    /// bypass'lari PermissionService icindedir, burada tekrarlanmaz.
+    ///
+    /// Hata durumunda BOS liste DEGIL, tam katalog doner (fail-open): izin sorgusu gecici
+    /// olarak patlarsa kullanici bos bir menuyle kilitlenmemeli — sunucu tarafi asil kapi
+    /// zaten endpoint'lerde, menu yalnizca gorunurluk katmani.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> GetMenuPermissionsAsync(CancellationToken ct)
+    {
+        try
+        {
+            int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId);
+
+            var roleStr = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+            if (!CalibraHub.Application.Security.UserAuthorizationCatalog.TryParseRole(roleStr, out var role))
+                role = UserRole.Operator;
+
+            int? departmentId = int.TryParse(User.FindFirstValue("department_id"), out var d) && d > 0 ? d : null;
+
+            var allowed = new List<string>(MobileMenuFormCodes.Length);
+            foreach (var formCode in MobileMenuFormCodes)
+            {
+                if (await _permService.CheckAnyAsync(userId, role, departmentId, formCode, MenuViewActions, ct))
+                    allowed.Add(formCode);
+            }
+            return allowed;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Mobil menu izinleri cozulemedi — tam katalog donuluyor (fail-open).");
+            return MobileMenuFormCodes;
+        }
     }
 
     // ──────────────────────────────────────────────────────────────────────
