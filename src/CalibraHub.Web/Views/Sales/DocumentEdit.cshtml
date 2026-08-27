@@ -5180,6 +5180,9 @@
             if (!data || !data.quote) throw new Error('GetQuote bos veya gecersiz yanit dondu.');
             var q = data.quote;
             currentQuoteId = q.id;
+            // Iyimser eszamanlilik damgasi (2026-08-27): belgeyi actigimiz andaki surum.
+            // Kaydederken geri gonderilir; arada baskasi kaydettiyse sunucu reddeder.
+            window.__CALIBRA_ROW_VERSION__ = q.rowVersion || null;
             document.getElementById('sqQuoteNumber').value = q.documentNumber || '';
             var docDate = q.documentDate || q.quoteDate;
             window.sqSetDateValue('sqQuoteDate', docDate ? docDate.split('T')[0] : '');
@@ -5799,6 +5802,8 @@
 
         var payload  = {
             id: currentQuoteId,
+            // Belgeyi actigimizda okunan surum damgasi — sunucu UPDATE'i bununla sartlar.
+            rowVersion: window.__CALIBRA_ROW_VERSION__ || null,
             // Belge tipi: yeni belge ise server-side resolved id (window.__CALIBRA_DOC_TYPE__),
             // mevcut belgede null gonderilir (server existing.DocumentTypeId'i korur).
             documentTypeId:  (window.__CALIBRA_DOC_TYPE__ && window.__CALIBRA_DOC_TYPE__.id) || null,

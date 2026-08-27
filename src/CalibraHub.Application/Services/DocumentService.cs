@@ -1303,7 +1303,23 @@ public sealed class DocumentService : IDocumentService
             catch { /* audit yazımı belge kaydını asla bozmaz */ }
         }
 
-        return (true, null, MapDto(quote), approvalStarted);
+        // Damgayi TAZELE: kaydettikten sonra ROWVERSION degisti. Elimizdeki entity hala
+        // istemciden gelen (eski) damgayi tasiyor; yenilemezsek ayni ekrandan yapilan
+        // IKINCI kayit her seferinde "baskasi degistirdi" hatasi verirdi.
+        var savedDto = MapDto(quote);
+        try
+        {
+            var fresh = await _repo.GetByIdAsync(quote.Id, ct);
+            if (fresh?.RowVersion is { Length: > 0 } freshRv)
+                savedDto = savedDto with { RowVersion = Convert.ToBase64String(freshRv) };
+        }
+        catch (Exception rvEx)
+        {
+            // Damga tazelenemezse kayit yine de basarilidir; istemci sayfayi yenileyince duzelir.
+            _logger?.LogWarning(rvEx, "Kayit sonrasi surum damgasi tazelenemedi (belge {Id}).", quote.Id);
+        }
+
+        return (true, null, savedDto, approvalStarted);
     }
 
     /// <summary>

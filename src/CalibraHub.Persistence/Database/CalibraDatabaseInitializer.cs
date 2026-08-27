@@ -1574,6 +1574,15 @@ END;";
         ("FK_WorkflowInstanceNode_Company",             "WorkflowInstanceNode",       "CompanyId",              "Company"),
         ("FK_WorkflowNode_Company",                     "WorkflowNode",               "CompanyId",              "Company"),
         ("FK_WorkflowTransition_Company",               "WorkflowTransition",         "CompanyId",              "Company"),
+        // Oksuz veri temizlendikten SONRA kurulabilir hale gelen alti iliski
+        // (2026-08-27). Oncesinde silinmis sirketlere/malzemelere isaret eden satirlar
+        // vardi ve EnsureInferredForeignKeysAsync kisiti hakli olarak kurmuyordu.
+        ("FK_Users_Company",                            "Users",                      "CompanyId",              "Company"),
+        ("FK_Department_Company",                       "Department",                 "CompanyId",              "Company"),
+        ("FK_ItemKit_Items",                            "ItemKit",                    "ItemId",                 "Items"),
+        ("FK_ItemKitLine_Items",                        "ItemKitLine",                "ItemId",                 "Items"),
+        ("FK_InventoryCountLine_Items",                 "InventoryCountLine",         "ItemId",                 "Items"),
+        ("FK_ArgePrototype_Items",                      "ArgePrototype",              "ItemId",                 "Items"),
     };
 
     /// <summary>
