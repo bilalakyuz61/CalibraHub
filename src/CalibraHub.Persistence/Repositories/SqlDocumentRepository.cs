@@ -636,7 +636,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                             [SourceLineId]  = @SourceLineId,
                             [DeliveryDate]  = @DeliveryDate,
                             [DeliveryDays]  = @DeliveryDays
-                        WHERE [Id] = @Id AND [DocumentId] = @DocumentId;
+                        WHERE [Id] = @Id AND [DocumentId] = @DocumentId
+                          AND [CompanyId] = (SELECT d.[CompanyId] FROM {_quoteTable} d WHERE d.[Id] = @DocumentId);
                         """;
                     cmd.Parameters.Add(new SqlParameter("@Id", ln.Id));
                 }
@@ -679,7 +680,10 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             {
                 await using var delCmd = conn.CreateCommand();
                 delCmd.Transaction = tx;
-                delCmd.CommandText = $"DELETE FROM {_lineTable} WHERE [DocumentId] = @DocumentId AND [Id] IN ({string.Join(",", toDelete)});";
+                delCmd.CommandText = $"""
+                    DELETE FROM {_lineTable} WHERE [DocumentId] = @DocumentId AND [Id] IN ({string.Join(",", toDelete)})
+                      AND [CompanyId] = (SELECT d.[CompanyId] FROM {_quoteTable} d WHERE d.[Id] = @DocumentId);
+                    """;
                 delCmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
                 await delCmd.ExecuteNonQueryAsync(ct);
             }
@@ -934,8 +938,9 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 copyDetails.Transaction = tx;
                 copyDetails.CommandText = $"""
                     INSERT INTO {_detailTable}
-                        ([QuoteLineId],[FeatureName],[ValueCode],[ValueName],[Description],[LineOrder])
-                    SELECT @NewId, [FeatureName], [ValueCode], [ValueName], [Description], [LineOrder]
+                        ([QuoteLineId],[FeatureName],[ValueCode],[ValueName],[Description],[LineOrder],[CompanyId])
+                    SELECT @NewId, [FeatureName], [ValueCode], [ValueName], [Description], [LineOrder],
+                           (SELECT dl.[CompanyId] FROM {_lineTable} dl WHERE dl.[Id] = @NewId)
                     FROM {_detailTable}
                     WHERE [QuoteLineId] = @ParentId;
                     """;

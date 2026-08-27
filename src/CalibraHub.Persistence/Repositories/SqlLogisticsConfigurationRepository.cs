@@ -451,6 +451,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         IReadOnlyCollection<MaterialCardFieldOption> options,
         CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(cancellationToken);
 
@@ -512,7 +513,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             await using var optionCommand = connection.CreateCommand();
             optionCommand.Transaction = transaction;
             optionCommand.CommandText = $"""
-                IF EXISTS (SELECT 1 FROM {_materialCardFieldOptionsTableName} WHERE [id] = @Id)
+                IF EXISTS (SELECT 1 FROM {_materialCardFieldOptionsTableName} WHERE [id] = @Id AND [CompanyId] = @CompanyId)
                 BEGIN
                     UPDATE {_materialCardFieldOptionsTableName}
                     SET
@@ -521,18 +522,19 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                         [SortOrder] = @SortOrder,
                         [IsActive] = @IsActive,
                         [Updated] = @UpdatedAt
-                    WHERE [id] = @Id;
+                    WHERE [id] = @Id AND [CompanyId] = @CompanyId;
                 END
                 ELSE
                 BEGIN
                     INSERT INTO {_materialCardFieldOptionsTableName}
-                        ([id], [FieldDefinitionId], [OptionKey], [OptionLabel], [SortOrder], [IsActive], [Created], [Updated])
+                        ([id], [CompanyId], [FieldDefinitionId], [OptionKey], [OptionLabel], [SortOrder], [IsActive], [Created], [Updated])
                     VALUES
-                        (@Id, @FieldDefinitionId, @OptionKey, @OptionLabel, @SortOrder, @IsActive, @CreatedAt, @UpdatedAt);
+                        (@Id, @CompanyId, @FieldDefinitionId, @OptionKey, @OptionLabel, @SortOrder, @IsActive, @CreatedAt, @UpdatedAt);
                 END;
                 """;
 
             optionCommand.Parameters.Add(new SqlParameter("@Id", option.Id));
+            optionCommand.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             optionCommand.Parameters.Add(new SqlParameter("@FieldDefinitionId", option.FieldDefinitionId));
             optionCommand.Parameters.Add(new SqlParameter("@OptionKey", option.OptionKey));
             optionCommand.Parameters.Add(new SqlParameter("@OptionLabel", option.OptionLabel));
@@ -851,6 +853,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         bool visibleInDesign,
         CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
@@ -863,14 +866,15 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             SELECT @NextNo = ISNULL(MAX(TRY_CAST(RIGHT([RecordCode], 3) AS INT)), 0) + 1
             FROM {_itemConfigurationTableName} WITH (UPDLOCK, HOLDLOCK)
             WHERE [RecordType] = N'FEATURE'
+              AND [CompanyId] = @CompanyId
               AND [RecordCode] LIKE N'OZ[0-9][0-9][0-9]';
 
             SET @GeneratedCode = N'OZ' + RIGHT(N'000' + CAST(@NextNo AS NVARCHAR(3)), 3);
 
             INSERT INTO {_itemConfigurationTableName}
-                ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [VisibleInDesign], [Created])
+                ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [VisibleInDesign], [CompanyId], [Created])
             VALUES
-                (NULL, N'FEATURE', @GeneratedCode, @RecordName, @DataType, @UnitOfMeasure, @IsActive, @VisibleInDesign, GETDATE());
+                (NULL, N'FEATURE', @GeneratedCode, @RecordName, @DataType, @UnitOfMeasure, @IsActive, @VisibleInDesign, @CompanyId, GETDATE());
 
             SELECT CAST(SCOPE_IDENTITY() AS INT) AS [Id], @GeneratedCode AS [Code];
 
@@ -882,6 +886,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@IsActive", isActive));
         command.Parameters.Add(new SqlParameter("@UnitOfMeasure", (object?)unitOfMeasure ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@VisibleInDesign", visibleInDesign));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
@@ -917,9 +922,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             SET @GeneratedCode = N'DG' + RIGHT(N'000' + CAST(@NextNo AS NVARCHAR(3)), 3);
 
             INSERT INTO {_itemConfigurationTableName}
-                ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [Created])
+                ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CompanyId], [Created])
             VALUES
-                (@FeatureId, N'VALUE', @GeneratedCode, @RecordName, NULL, @Aciklama, @IsActive, GETDATE());
+                (@FeatureId, N'VALUE', @GeneratedCode, @RecordName, NULL, @Aciklama, @IsActive,
+                 (SELECT [CompanyId] FROM {_itemConfigurationTableName} WHERE [Id] = @FeatureId), GETDATE());
 
             SELECT CAST(SCOPE_IDENTITY() AS INT) AS [Id], @GeneratedCode AS [Code];
 
@@ -965,9 +971,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             SET @GeneratedCode = @RelatedMaterialCode + N'-' + RIGHT(N'000' + CAST(@NextNo AS NVARCHAR(3)), 3);
 
             INSERT INTO {_itemConfigurationTableName}
-                ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [Created])
+                ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CompanyId], [Created])
             VALUES
-                (@ValueId, N'CONFIG', @GeneratedCode, @RecordName, NULL, @RelatedMaterialCode, @IsActive, GETDATE());
+                (@ValueId, N'CONFIG', @GeneratedCode, @RecordName, NULL, @RelatedMaterialCode, @IsActive,
+                 (SELECT [CompanyId] FROM {_itemConfigurationTableName} WHERE [Id] = @ValueId), GETDATE());
 
             SELECT CAST(SCOPE_IDENTITY() AS INT) AS [Id], @GeneratedCode AS [Code];
 
@@ -995,6 +1002,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         bool isActive,
         CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         var sql = new StringBuilder();
@@ -1005,13 +1013,14 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         // Global sayac: CMB + 12 haneli sifir-dolgulu sira no (toplam 15 karakter)
         sql.AppendLine($"SELECT @NextNo = ISNULL(MAX(TRY_CAST(SUBSTRING([RecordCode], 4, 12) AS INT)), 0) + 1 FROM {_itemConfigurationTableName} WITH (UPDLOCK, HOLDLOCK) WHERE [RecordType] = N'CONFIG' AND LEFT([RecordCode], 3) = N'CMB' AND LEN([RecordCode]) = 15;");
         sql.AppendLine("SET @GeneratedCode = N'CMB' + RIGHT(REPLICATE(N'0', 12) + CAST(@NextNo AS NVARCHAR(12)), 12);");
-        sql.AppendLine($"INSERT INTO {_itemConfigurationTableName} ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [Created]) VALUES (NULL, N'CONFIG', @GeneratedCode, @RecordName, NULL, @RelatedMaterialCode, @IsActive, GETDATE());");
+        sql.AppendLine($"INSERT INTO {_itemConfigurationTableName} ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CompanyId], [Created]) VALUES (NULL, N'CONFIG', @GeneratedCode, @RecordName, NULL, @RelatedMaterialCode, @IsActive, @CompanyId, GETDATE());");
         sql.AppendLine("DECLARE @ConfigId INT = SCOPE_IDENTITY();");
 
         var pIndex = 0;
         foreach (var valId in valueIds)
         {
-            sql.AppendLine($"INSERT INTO {_itemConfigurationTableName} ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [Created]) VALUES (@ConfigId, N'CONFIG', CAST(NEWID() AS NVARCHAR(100)), CAST(@ValueId{pIndex} AS NVARCHAR(255)), NULL, @RelatedMaterialCode, 1, GETDATE());");
+            // Ust seviye @ConfigId ayni transaction icinde ayni CompanyId ile olusturuldu; tutarlilik icin aynisi kullanilir.
+            sql.AppendLine($"INSERT INTO {_itemConfigurationTableName} ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CompanyId], [Created]) VALUES (@ConfigId, N'CONFIG', CAST(NEWID() AS NVARCHAR(100)), CAST(@ValueId{pIndex} AS NVARCHAR(255)), NULL, @RelatedMaterialCode, 1, @CompanyId, GETDATE());");
             command.Parameters.Add(new SqlParameter($"@ValueId{pIndex}", valId));
             pIndex++;
         }
@@ -1023,6 +1032,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@RelatedMaterialCode", relatedMaterialCode));
         command.Parameters.Add(new SqlParameter("@RecordName", configName));
         command.Parameters.Add(new SqlParameter("@IsActive", isActive));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))

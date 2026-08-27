@@ -89,10 +89,11 @@ public sealed class SqlLocationSectionRepository : ILocationSectionRepository
         }
 
         await using var cmd = conn.CreateCommand();
+        var companyId = _factory.ResolveEffectiveCompanyId();
         if (id is > 0)
         {
             cmd.CommandText = $"""
-                UPDATE {_section} SET [Name]=@N, [UpdatedById]=@U, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Id;
+                UPDATE {_section} SET [Name]=@N, [UpdatedById]=@U, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Id AND [CompanyId]=@Company;
                 SELECT @Id;
                 """;
             cmd.Parameters.AddWithValue("@Id", id.Value);
@@ -100,13 +101,14 @@ public sealed class SqlLocationSectionRepository : ILocationSectionRepository
         else
         {
             cmd.CommandText = $"""
-                INSERT INTO {_section} ([Code],[Name],[CreatedById]) VALUES (@C,@N,@U);
+                INSERT INTO {_section} ([Code],[Name],[CreatedById],[CompanyId]) VALUES (@C,@N,@U,@Company);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;
             cmd.Parameters.AddWithValue("@C", DeriveCode(n));
         }
         cmd.Parameters.AddWithValue("@N", n);
         cmd.Parameters.AddWithValue("@U", (object?)userId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Company", companyId);
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
     }
 
@@ -121,8 +123,9 @@ public sealed class SqlLocationSectionRepository : ILocationSectionRepository
                 throw new InvalidOperationException("Bu bölüme bağlı alt bölümler var — önce alt bölümleri silin.");
         }
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_section} WHERE [Id]=@Id;";
+        cmd.CommandText = $"DELETE FROM {_section} WHERE [Id]=@Id AND [CompanyId]=@Company;";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@Company", _factory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -195,7 +198,7 @@ public sealed class SqlLocationSectionRepository : ILocationSectionRepository
         if (id is > 0)
         {
             cmd.CommandText = $"""
-                UPDATE {_sub} SET [Name]=@N, [SectionId]=@P, [UpdatedById]=@U, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Id;
+                UPDATE {_sub} SET [Name]=@N, [SectionId]=@P, [UpdatedById]=@U, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Id AND [CompanyId]=@Company;
                 SELECT @Id;
                 """;
             cmd.Parameters.AddWithValue("@Id", id.Value);
@@ -203,7 +206,8 @@ public sealed class SqlLocationSectionRepository : ILocationSectionRepository
         else
         {
             cmd.CommandText = $"""
-                INSERT INTO {_sub} ([SectionId],[Code],[Name],[CreatedById]) VALUES (@P,@C,@N,@U);
+                INSERT INTO {_sub} ([SectionId],[Code],[Name],[CreatedById],[CompanyId])
+                VALUES (@P,@C,@N,@U,(SELECT p.[CompanyId] FROM {_section} p WHERE p.[Id]=@P));
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;
             cmd.Parameters.AddWithValue("@C", DeriveCode(n));
@@ -211,6 +215,7 @@ public sealed class SqlLocationSectionRepository : ILocationSectionRepository
         cmd.Parameters.AddWithValue("@P", sectionId);
         cmd.Parameters.AddWithValue("@N", n);
         cmd.Parameters.AddWithValue("@U", (object?)userId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Company", _factory.ResolveEffectiveCompanyId());
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
     }
 
@@ -218,8 +223,9 @@ public sealed class SqlLocationSectionRepository : ILocationSectionRepository
     {
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_sub} WHERE [Id]=@Id;";
+        cmd.CommandText = $"DELETE FROM {_sub} WHERE [Id]=@Id AND [CompanyId]=@Company;";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@Company", _factory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 }

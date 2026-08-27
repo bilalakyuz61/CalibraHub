@@ -39,16 +39,17 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
             END;
 
             INSERT INTO {_table}
-                ([BridgeMsgId],[Direction],[ContactPhone],[ContactId],[ContactName],
+                ([BridgeMsgId],[Direction],[ContactPhone],[ContactId],[ContactName],[CompanyId],
                  [Body],[MediaType],[HasMedia],[ReceivedAt],[Created],[ReadAt],
                  [MediaPath],[MediaMime],[MediaFilename],[MediaSize],[is_lid],[wa_contact_id],
                  [group_jid],[sender_jid],[SenderName],[quoted_msg_id])
             OUTPUT INSERTED.[Id]
-            VALUES (@BridgeMsgId,@Direction,@Phone,@ContactId,@Name,
+            VALUES (@BridgeMsgId,@Direction,@Phone,@ContactId,@Name,@CompanyId,
                     @Body,@MediaType,@HasMedia,@ReceivedAt,@CreatedAt,NULL,
                     @MediaPath,@MediaMime,@MediaFileName,@MediaSize,@IsLid,@WaContactId,
                     @GroupJid,@SenderJid,@SenderName,@QuotedMsgId);
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId",     _connectionFactory.ResolveEffectiveCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@BridgeMsgId",   (object?)m.BridgeMsgId    ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Direction",     m.Direction));
         cmd.Parameters.Add(new SqlParameter("@Phone",         m.ContactPhone));
@@ -288,10 +289,12 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
                SET [ReadAt] = @ReadAt
              WHERE [ContactPhone] = @Phone
                AND [Direction] = 0
-               AND [ReadAt] IS NULL;
+               AND [ReadAt] IS NULL
+               AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Phone",  contactPhone));
         cmd.Parameters.Add(new SqlParameter("@ReadAt", readAt));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         return await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -310,9 +313,10 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             DELETE FROM {_table}
-            WHERE [ContactPhone] = @Phone;
+            WHERE [ContactPhone] = @Phone AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Phone", contactPhone));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         return await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -346,13 +350,14 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
                    [MediaMime]     = @Mime,
                    [MediaFilename] = @FileName,
                    [MediaSize]     = @Size
-             WHERE [Id] = @Id;
+             WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Path",     mediaPath));
         cmd.Parameters.Add(new SqlParameter("@Mime",     (object?)mediaMime     ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@FileName", (object?)mediaFileName ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Size",     (object?)mediaSize     ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Id",       id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         return await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -405,9 +410,10 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         cmd.CommandText = $"""
             UPDATE {_table}
                SET [is_deleted] = 1, [Body] = NULL
-             WHERE [BridgeMsgId] = @Id;
+             WHERE [BridgeMsgId] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", bridgeMsgId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         return await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -418,10 +424,11 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         cmd.CommandText = $"""
             UPDATE {_table}
                SET [reaction_emoji] = @Emoji
-             WHERE [BridgeMsgId] = @Id;
+             WHERE [BridgeMsgId] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Emoji", (object?)emoji ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Id",    bridgeMsgId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         return await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -432,10 +439,11 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         cmd.CommandText = $"""
             UPDATE {_table}
                SET [delivery_status] = @Status
-             WHERE [BridgeMsgId] = @Id;
+             WHERE [BridgeMsgId] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Status", status));
         cmd.Parameters.Add(new SqlParameter("@Id",     bridgeMsgId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         return await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -504,10 +512,13 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
                    FROM {_table}
                   WHERE [ContactPhone] = @Phone
                     AND [Direction] = 0
+                    AND [CompanyId] = @CompanyId
                   ORDER BY [ReceivedAt] DESC, [Id] DESC
-             );
+             )
+             AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Phone", contactPhone));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         return await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 }

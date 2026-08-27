@@ -377,9 +377,9 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         command.Transaction = transaction;
         command.CommandText = $"""
             INSERT INTO {_tableName}
-                ([Id], [IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [SenderName], [RecipientTaxNumber], [PayloadRaw], [ApprovalStatus], [ImportedAt])
+                ([Id], [IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [SenderName], [RecipientTaxNumber], [PayloadRaw], [ApprovalStatus], [ImportedAt], [CompanyId])
             VALUES
-                (@Id, @IntegratorSettingsId, @EnvelopeId, @DocumentNumber, @Kind, @IssueDate, @SenderTaxNumber, @SenderName, @RecipientTaxNumber, @PayloadRaw, @ApprovalStatus, @ImportedAt);
+                (@Id, @IntegratorSettingsId, @EnvelopeId, @DocumentNumber, @Kind, @IssueDate, @SenderTaxNumber, @SenderName, @RecipientTaxNumber, @PayloadRaw, @ApprovalStatus, @ImportedAt, @CompanyId);
             """;
 
         command.Parameters.Add(CreateParameter("@Id", document.Id));
@@ -394,6 +394,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         command.Parameters.Add(CreateParameter("@PayloadRaw", document.PayloadRaw));
         command.Parameters.Add(CreateParameter("@ApprovalStatus", document.ApprovalStatus.ToString()));
         command.Parameters.Add(CreateParameter("@ImportedAt", document.ImportedAt));
+        command.Parameters.Add(CreateParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -1642,9 +1643,10 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
             if (hasProcessedColumn)
             {
                 await using var command = connection.CreateCommand();
-                command.CommandText = $"UPDATE {_tableName} SET [IsProcessed] = @IsProcessed WHERE [Id] = @Id";
+                command.CommandText = $"UPDATE {_tableName} SET [IsProcessed] = @IsProcessed WHERE [Id] = @Id AND [CompanyId] = @CompanyId";
                 command.Parameters.Add(CreateParameter("@IsProcessed", isProcessed ? 1 : 0));
                 command.Parameters.Add(CreateParameter("@Id", id));
+                command.Parameters.Add(CreateParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
                 await command.ExecuteNonQueryAsync(cancellationToken);
             }
         }

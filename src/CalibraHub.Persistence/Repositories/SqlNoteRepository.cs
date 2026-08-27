@@ -494,6 +494,7 @@ public sealed class SqlNoteRepository : INoteRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         // Upsert: mevcut paylaşımın can_edit değerini güncelle, yoksa yeni satır ekle
+        // CompanyId ebeveyn Note'tan alınır — oturumdan değil, çocuk ile ebeveynin şirketi asla ayrışamaz.
         command.CommandText = $"""
             MERGE {_sharesTable} AS target
             USING (VALUES (@NoteId, @SharedWithUserId)) AS src ([NoteId], [SharedWithUserId])
@@ -501,8 +502,8 @@ public sealed class SqlNoteRepository : INoteRepository
             WHEN MATCHED THEN
                 UPDATE SET [CanEdit] = @CanEdit, [SharedAt] = @SharedAt
             WHEN NOT MATCHED THEN
-                INSERT ([Id], [NoteId], [SharedWithUserId], [SharedAt], [CanEdit])
-                VALUES (@Id, @NoteId, @SharedWithUserId, @SharedAt, @CanEdit);
+                INSERT ([Id], [NoteId], [CompanyId], [SharedWithUserId], [SharedAt], [CanEdit])
+                VALUES (@Id, @NoteId, (SELECT n.[CompanyId] FROM {_notesTable} n WHERE n.[Id] = @NoteId), @SharedWithUserId, @SharedAt, @CanEdit);
             """;
         command.Parameters.Add(new SqlParameter("@Id", share.Id));
         command.Parameters.Add(new SqlParameter("@NoteId", share.NoteId));

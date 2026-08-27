@@ -34,6 +34,7 @@ public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
 {
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _table;
+    private readonly string _docTable;
 
     public SqlDocumentLineLinkRepository(SqlServerConnectionFactory factory, CalibraDatabaseOptions options)
     {
@@ -41,6 +42,7 @@ public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         var s = schema.Replace("]", "]]");
         _table = $"[{s}].[DocumentLineLink]";
+        _docTable = $"[{s}].[Document]";
     }
 
     public async Task InsertAsync(DocumentLineLinkEntry entry, int? userId, CancellationToken ct)

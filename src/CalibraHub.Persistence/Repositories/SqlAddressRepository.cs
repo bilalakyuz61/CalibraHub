@@ -179,13 +179,12 @@ public sealed class SqlAddressRepository : IAddressRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
-        // tenant-ok: ContactAddress'te CompanyId kolonu yok; izolasyon ContactId FK'sıyla Contact'tan
-        // miras alınır. a.ContactId çağıran serviste zaten şirket bazlı okunan bir Contact'a bağlıdır.
+        // CompanyId ebeveyn Contact'tan alınır — oturumdan değil, çocuk ile ebeveynin şirketi asla ayrışamaz.
         cmd.CommandText = $"""
             INSERT INTO {_addressTable}
-                ([ContactId],[Name],[CountryCode],[CityName],[DistrictName],[NeighborhoodName],[PostalCode],[AddressLine],[IsDefault],[Created])
+                ([ContactId],[CompanyId],[Name],[CountryCode],[CityName],[DistrictName],[NeighborhoodName],[PostalCode],[AddressLine],[IsDefault],[Created])
             VALUES
-                (@ContactId,@Name,@Cc,@City,@Dist,@Ng,@Pk,@Addr,@Def,@At);
+                (@ContactId,(SELECT c.[CompanyId] FROM {_contactTable} c WHERE c.[Id] = @ContactId),@Name,@Cc,@City,@Dist,@Ng,@Pk,@Addr,@Def,@At);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         AddAddressParams(cmd, a);

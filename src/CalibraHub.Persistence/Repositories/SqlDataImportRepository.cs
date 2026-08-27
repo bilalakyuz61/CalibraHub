@@ -125,21 +125,23 @@ public sealed class SqlDataImportRepository : IDataImportRepository
             await using (var cmd = conn.CreateCommand())
             {
                 cmd.Transaction = tx;
+                var companyId = _connectionFactory.ResolveEffectiveCompanyId();
                 if (job.Id <= 0)
                 {
                     cmd.CommandText = $"""
                         INSERT INTO {_jobTable}
                           ([Name],[ConnectionId],[TargetEntity],[SourceSchema],[SourceObject],[MatchKeyField],
                            [MaxRows],[ErrorBehavior],[PreProcedureName],[PreProcedureTarget],[PreProcedureParamsJson],
-                           [PostProcedureName],[PostProcedureTarget],[PostProcedureParamsJson],[IsActive],[CreatedById],[SourceFilterJson],[DeactivateAbsent],[UpdateExisting],[InsertNew])
+                           [PostProcedureName],[PostProcedureTarget],[PostProcedureParamsJson],[IsActive],[CreatedById],[CompanyId],[SourceFilterJson],[DeactivateAbsent],[UpdateExisting],[InsertNew])
                         OUTPUT INSERTED.[Id]
                         VALUES
                           (@Name,@ConnectionId,@TargetEntity,@SourceSchema,@SourceObject,@MatchKeyField,
                            @MaxRows,@ErrorBehavior,@PreProcedureName,@PreProcedureTarget,@PreProcedureParamsJson,
-                           @PostProcedureName,@PostProcedureTarget,@PostProcedureParamsJson,@IsActive,@CreatedById,@SourceFilterJson,@DeactivateAbsent,@UpdateExisting,@InsertNew);
+                           @PostProcedureName,@PostProcedureTarget,@PostProcedureParamsJson,@IsActive,@CreatedById,@CompanyId,@SourceFilterJson,@DeactivateAbsent,@UpdateExisting,@InsertNew);
                         """;
                     BindJob(cmd, job);
                     cmd.Parameters.Add(new SqlParameter("@CreatedById", (object?)job.CreatedById ?? DBNull.Value));
+                    cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
                     id = (int)(await cmd.ExecuteScalarAsync(ct) ?? 0);
                 }
                 else
@@ -167,11 +169,12 @@ public sealed class SqlDataImportRepository : IDataImportRepository
                             [IsActive] = @IsActive,
                             [UpdatedById] = @UpdatedById,
                             [Updated] = SYSUTCDATETIME()
-                        WHERE [Id] = @Id;
+                        WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
                         """;
                     cmd.Parameters.Add(new SqlParameter("@Id", job.Id));
                     BindJob(cmd, job);
                     cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)job.UpdatedById ?? DBNull.Value));
+                    cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
                     await cmd.ExecuteNonQueryAsync(ct);
                     id = job.Id;
                 }
@@ -180,8 +183,9 @@ public sealed class SqlDataImportRepository : IDataImportRepository
             await using (var del = conn.CreateCommand())
             {
                 del.Transaction = tx;
-                del.CommandText = $"DELETE FROM {_columnTable} WHERE [JobId] = @JobId;";
+                del.CommandText = $"DELETE FROM {_columnTable} WHERE [JobId] = @JobId AND [CompanyId] = @CompanyId;";
                 del.Parameters.Add(new SqlParameter("@JobId", id));
+                del.Parameters.Add(new SqlParameter("@CompanyId", companyId));
                 await del.ExecuteNonQueryAsync(ct);
             }
 
@@ -190,9 +194,10 @@ public sealed class SqlDataImportRepository : IDataImportRepository
             {
                 await using var ins = conn.CreateCommand();
                 ins.Transaction = tx;
+                // CompanyId ebeveyn DataImportJob'tan alınır.
                 ins.CommandText = $"""
-                    INSERT INTO {_columnTable} ([JobId],[SourceColumn],[TargetKey],[SortOrder])
-                    VALUES (@JobId,@SourceColumn,@TargetKey,@SortOrder);
+                    INSERT INTO {_columnTable} ([JobId],[CompanyId],[SourceColumn],[TargetKey],[SortOrder])
+                    VALUES (@JobId,(SELECT j.[CompanyId] FROM {_jobTable} j WHERE j.[Id] = @JobId),@SourceColumn,@TargetKey,@SortOrder);
                     """;
                 ins.Parameters.Add(new SqlParameter("@JobId", id));
                 ins.Parameters.Add(new SqlParameter("@SourceColumn", col.SourceColumn));
@@ -216,8 +221,9 @@ public sealed class SqlDataImportRepository : IDataImportRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         // Kolonlar FK ON DELETE CASCADE ile gider; çalıştırma logu tarihçe olarak KALIR.
-        cmd.CommandText = $"DELETE FROM {_jobTable} WHERE [Id] = @Id;";
+        cmd.CommandText = $"DELETE FROM {_jobTable} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -229,9 +235,10 @@ public sealed class SqlDataImportRepository : IDataImportRepository
             UPDATE {_jobTable} SET [IsActive] = CASE WHEN [IsActive] = 1 THEN 0 ELSE 1 END,
                                    [Updated] = SYSUTCDATETIME()
             OUTPUT INSERTED.[IsActive]
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var res = await cmd.ExecuteScalarAsync(ct);
         return res is bool b && b;
     }
@@ -242,10 +249,11 @@ public sealed class SqlDataImportRepository : IDataImportRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // CompanyId ebeveyn DataImportJob'tan alınır.
         cmd.CommandText = $"""
-            INSERT INTO {_runTable} ([JobId],[TriggerType],[StartedAt],[Status],[TriggeredBy])
+            INSERT INTO {_runTable} ([JobId],[CompanyId],[TriggerType],[StartedAt],[Status],[TriggeredBy])
             OUTPUT INSERTED.[Id]
-            VALUES (@JobId,@TriggerType,@StartedAt,@Status,@TriggeredBy);
+            VALUES (@JobId,(SELECT j.[CompanyId] FROM {_jobTable} j WHERE j.[Id] = @JobId),@TriggerType,@StartedAt,@Status,@TriggeredBy);
             """;
         cmd.Parameters.Add(new SqlParameter("@JobId", run.JobId));
         cmd.Parameters.Add(new SqlParameter("@TriggerType", (int)run.TriggerType));

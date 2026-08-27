@@ -233,21 +233,22 @@ public sealed class SqlCapaRepository : ICapaRepository
             await using (var cmd = conn.CreateCommand())
             {
                 cmd.Transaction = tx;
+                var companyId = _connectionFactory.ResolveEffectiveCompanyId();
                 cmd.CommandText = $"""
-                    IF EXISTS (SELECT 1 FROM {_capaTable} WHERE [DocumentId]=@Doc)
+                    IF EXISTS (SELECT 1 FROM {_capaTable} WHERE [DocumentId]=@Doc AND [CompanyId]=@Company)
                         UPDATE {_capaTable} SET [CapaType]=@Type,[SourceKind]=@SrcK,[SourceId]=@SrcId,
                             [Title]=@Title,[ProblemDescription]=@Problem,[DefectCodeId]=@Defect,[Severity]=@Sev,
                             [RootCauseMethod]=@RcMethod,[RootCause]=@RootCause,[ResponsiblePersonnelId]=@Resp,
                             [DueDate]=@Due,[Status]=@Status,[EffectivenessVerified]=@EffVer,
                             [VerifiedByPersonnelId]=@VerBy,[VerifiedAt]=@VerAt,[EffectivenessNote]=@EffNote,
-                            [ClosedAt]=@Closed,[UpdatedById]=@Upd,[Updated]=SYSUTCDATETIME() WHERE [DocumentId]=@Doc;
-                    ELSE
+                            [ClosedAt]=@Closed,[UpdatedById]=@Upd,[Updated]=SYSUTCDATETIME() WHERE [DocumentId]=@Doc AND [CompanyId]=@Company;
+                    ELSE IF NOT EXISTS (SELECT 1 FROM {_capaTable} WHERE [DocumentId]=@Doc)
                         INSERT INTO {_capaTable} ([DocumentId],[CapaType],[SourceKind],[SourceId],[Title],[ProblemDescription],
                             [DefectCodeId],[Severity],[RootCauseMethod],[RootCause],[ResponsiblePersonnelId],[DueDate],[Status],
-                            [EffectivenessVerified],[VerifiedByPersonnelId],[VerifiedAt],[EffectivenessNote],[ClosedAt],[CreatedById],[Created])
+                            [EffectivenessVerified],[VerifiedByPersonnelId],[VerifiedAt],[EffectivenessNote],[ClosedAt],[CreatedById],[Created],[CompanyId])
                         VALUES (@Doc,@Type,@SrcK,@SrcId,@Title,@Problem,@Defect,@Sev,@RcMethod,@RootCause,@Resp,@Due,@Status,
-                            @EffVer,@VerBy,@VerAt,@EffNote,@Closed,@Cre,SYSUTCDATETIME());
-                    SELECT [Id] FROM {_capaTable} WHERE [DocumentId]=@Doc;
+                            @EffVer,@VerBy,@VerAt,@EffNote,@Closed,@Cre,SYSUTCDATETIME(),@Company);
+                    SELECT [Id] FROM {_capaTable} WHERE [DocumentId]=@Doc AND [CompanyId]=@Company;
                     """;
                 cmd.Parameters.Add(new SqlParameter("@Doc", c.DocumentId));
                 cmd.Parameters.Add(new SqlParameter("@Type", (byte)c.CapaType));
@@ -269,8 +270,10 @@ public sealed class SqlCapaRepository : ICapaRepository
                 cmd.Parameters.Add(new SqlParameter("@Closed", (object?)c.ClosedAt ?? DBNull.Value));
                 cmd.Parameters.Add(new SqlParameter("@Cre", (object?)c.CreatedById ?? DBNull.Value));
                 cmd.Parameters.Add(new SqlParameter("@Upd", (object?)c.UpdatedById ?? DBNull.Value));
+                cmd.Parameters.Add(new SqlParameter("@Company", companyId));
                 capaId = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
             }
+            // tenant-ok: capaId yukarida [CompanyId]=@Company ile dogrulanmis satirdan geldi.
             await using (var del = conn.CreateCommand())
             {
                 del.Transaction = tx;
@@ -282,6 +285,7 @@ public sealed class SqlCapaRepository : ICapaRepository
             {
                 await using var cmd = conn.CreateCommand();
                 cmd.Transaction = tx;
+                // tenant-ok: CapaId (@C) yukarida dogrulanan capaId — bkz. yukaridaki not.
                 cmd.CommandText = $"""
                     INSERT INTO {_actionTable} ([CapaId],[ActionType],[Description],[ResponsiblePersonnelId],[DueDate],
                         [Status],[CompletedAt],[OrderNo],[CreatedById],[Created])
@@ -298,6 +302,7 @@ public sealed class SqlCapaRepository : ICapaRepository
                 cmd.Parameters.Add(new SqlParameter("@Cre", (object?)a.CreatedById ?? DBNull.Value));
                 await cmd.ExecuteNonQueryAsync(ct);
             }
+            // tenant-ok: capaId yukarida [CompanyId]=@Company ile dogrulanmis satirdan geldi.
             await using (var delRc = conn.CreateCommand())
             {
                 delRc.Transaction = tx;
@@ -309,6 +314,7 @@ public sealed class SqlCapaRepository : ICapaRepository
             {
                 await using var cmd = conn.CreateCommand();
                 cmd.Transaction = tx;
+                // tenant-ok: CapaId (@C) yukarida dogrulanan capaId — bkz. yukaridaki not.
                 cmd.CommandText = $"""
                     INSERT INTO {_rootCauseTable} ([CapaId],[Method],[Category],[Sequence],[Text],[CreatedById],[Created])
                     VALUES (@C,@Method,@Category,@Seq,@Text,@Cre,SYSUTCDATETIME());
@@ -330,7 +336,7 @@ public sealed class SqlCapaRepository : ICapaRepository
     {
         var sql = $"""
             UPDATE {_capaTable} SET [Status]=@Status,[ClosedAt]=@Closed,
-                [UpdatedById]=@Upd,[Updated]=SYSUTCDATETIME() WHERE [DocumentId]=@Doc;
+                [UpdatedById]=@Upd,[Updated]=SYSUTCDATETIME() WHERE [DocumentId]=@Doc AND [CompanyId]=@Company;
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
@@ -339,6 +345,7 @@ public sealed class SqlCapaRepository : ICapaRepository
         cmd.Parameters.Add(new SqlParameter("@Status", status));
         cmd.Parameters.Add(new SqlParameter("@Closed", (object?)closedAt ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Upd", (object?)userId ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@Company", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

@@ -68,6 +68,7 @@ public sealed class SqlCodeRuleRepository : ICodeRuleRepository
         try
         {
             int ruleId;
+            var companyId = _connectionFactory.ResolveEffectiveCompanyId();
             await using (var cmd = conn.CreateCommand())
             {
                 cmd.Transaction = tx;
@@ -78,7 +79,7 @@ public sealed class SqlCodeRuleRepository : ICodeRuleRepository
                           [EntityType]=@EntityType,[Name]=@Name,[Template]=@Template,
                           [Priority]=@Priority,[ResetPeriod]=@ResetPeriod,[IsActive]=@IsActive,
                           [UpdatedById]=@UpdatedById,[Updated]=SYSUTCDATETIME()
-                        WHERE [Id]=@Id;
+                        WHERE [Id]=@Id AND [CompanyId]=@CompanyId;
                         SELECT @Id;
                         """;
                     cmd.Parameters.Add(new SqlParameter("@Id", rule.Id));
@@ -87,9 +88,9 @@ public sealed class SqlCodeRuleRepository : ICodeRuleRepository
                 {
                     cmd.CommandText = $"""
                         INSERT INTO {_ruleTable}
-                          ([EntityType],[Name],[Template],[Priority],[ResetPeriod],[IsActive],[CreatedById])
+                          ([EntityType],[Name],[Template],[Priority],[ResetPeriod],[IsActive],[CreatedById],[CompanyId])
                         OUTPUT INSERTED.[Id]
-                        VALUES (@EntityType,@Name,@Template,@Priority,@ResetPeriod,@IsActive,@CreatedById);
+                        VALUES (@EntityType,@Name,@Template,@Priority,@ResetPeriod,@IsActive,@CreatedById,@CompanyId);
                         """;
                 }
                 cmd.Parameters.Add(new SqlParameter("@EntityType",  rule.EntityType));
@@ -100,6 +101,7 @@ public sealed class SqlCodeRuleRepository : ICodeRuleRepository
                 cmd.Parameters.Add(new SqlParameter("@IsActive",    rule.IsActive));
                 cmd.Parameters.Add(new SqlParameter("@CreatedById", (object?)rule.CreatedById ?? DBNull.Value));
                 cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)rule.UpdatedById ?? DBNull.Value));
+                cmd.Parameters.Add(new SqlParameter("@CompanyId",   companyId));
                 ruleId = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
             }
 
@@ -107,8 +109,9 @@ public sealed class SqlCodeRuleRepository : ICodeRuleRepository
             await using (var delCmd = conn.CreateCommand())
             {
                 delCmd.Transaction = tx;
-                delCmd.CommandText = $"DELETE FROM {_condTable} WHERE [RuleId]=@Rid;";
+                delCmd.CommandText = $"DELETE FROM {_condTable} WHERE [RuleId]=@Rid AND [CompanyId]=@CompanyId;";
                 delCmd.Parameters.Add(new SqlParameter("@Rid", ruleId));
+                delCmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
                 await delCmd.ExecuteNonQueryAsync(ct);
             }
             foreach (var cond in rule.Conditions ?? Array.Empty<CodeRuleCondition>())
@@ -116,14 +119,15 @@ public sealed class SqlCodeRuleRepository : ICodeRuleRepository
                 await using var insCmd = conn.CreateCommand();
                 insCmd.Transaction = tx;
                 insCmd.CommandText = $"""
-                    INSERT INTO {_condTable} ([RuleId],[FieldType],[FieldName],[Operator],[Value])
-                    VALUES (@Rid,@FieldType,@FieldName,@Operator,@Value);
+                    INSERT INTO {_condTable} ([RuleId],[FieldType],[FieldName],[Operator],[Value],[CompanyId])
+                    VALUES (@Rid,@FieldType,@FieldName,@Operator,@Value,@CompanyId);
                     """;
                 insCmd.Parameters.Add(new SqlParameter("@Rid",       ruleId));
                 insCmd.Parameters.Add(new SqlParameter("@FieldType", cond.FieldType));
                 insCmd.Parameters.Add(new SqlParameter("@FieldName", cond.FieldName));
                 insCmd.Parameters.Add(new SqlParameter("@Operator",  cond.Operator));
                 insCmd.Parameters.Add(new SqlParameter("@Value",     (object?)cond.Value ?? DBNull.Value));
+                insCmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
                 await insCmd.ExecuteNonQueryAsync(ct);
             }
 
@@ -141,8 +145,9 @@ public sealed class SqlCodeRuleRepository : ICodeRuleRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_ruleTable} WHERE [Id]=@Id;"; // condition/counter CASCADE
+        cmd.CommandText = $"DELETE FROM {_ruleTable} WHERE [Id]=@Id AND [CompanyId]=@CompanyId;"; // condition/counter CASCADE
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -162,8 +167,9 @@ public sealed class SqlCodeRuleRepository : ICodeRuleRepository
                 IF NOT EXISTS (SELECT 1 FROM {_counterTable} WHERE [RuleId]=@Rid AND [ResetKey]=@Key)
                 BEGIN
                     BEGIN TRY
-                        INSERT INTO {_counterTable} ([RuleId],[ResetKey],[CurrentValue],[LastUpdated])
-                        VALUES (@Rid,@Key,@Start,SYSUTCDATETIME());
+                        INSERT INTO {_counterTable} ([RuleId],[ResetKey],[CurrentValue],[LastUpdated],[CompanyId])
+                        VALUES (@Rid,@Key,@Start,SYSUTCDATETIME(),
+                            (SELECT cr.[CompanyId] FROM {_ruleTable} cr WHERE cr.[Id] = @Rid));
                     END TRY
                     BEGIN CATCH
                         IF ERROR_NUMBER() NOT IN (2601, 2627) THROW;  -- duplicate key — başka thread eklemiş
@@ -182,10 +188,11 @@ public sealed class SqlCodeRuleRepository : ICodeRuleRepository
             UPDATE {_counterTable}
             SET [CurrentValue] = [CurrentValue] + 1, [LastUpdated] = SYSUTCDATETIME()
             OUTPUT INSERTED.[CurrentValue]
-            WHERE [RuleId]=@Rid AND [ResetKey]=@Key;
+            WHERE [RuleId]=@Rid AND [ResetKey]=@Key AND [CompanyId]=@CompanyId;
             """;
         upd.Parameters.Add(new SqlParameter("@Rid", ruleId));
         upd.Parameters.Add(new SqlParameter("@Key", resetKey));
+        upd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var result = await upd.ExecuteScalarAsync(ct);
         return Convert.ToInt64(result);
     }
@@ -222,10 +229,11 @@ public sealed class SqlCodeRuleRepository : ICodeRuleRepository
         cmd.CommandText = $"""
             UPDATE {_counterTable}
             SET [CurrentValue]=0, [LastUpdated]=SYSUTCDATETIME()
-            WHERE [RuleId]=@Rid AND [ResetKey]=@Key;
+            WHERE [RuleId]=@Rid AND [ResetKey]=@Key AND [CompanyId]=@CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Rid", ruleId));
         cmd.Parameters.Add(new SqlParameter("@Key", resetKey ?? string.Empty));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

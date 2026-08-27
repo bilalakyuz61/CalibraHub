@@ -118,10 +118,11 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
             cmd.CommandText = $@"
                 INSERT INTO {_table}
                     ([WorkOrderId],[Sequence],[OperationId],[MachineId],
-                     [PlannedDuration],[DurationUnit],[Status],[Notes])
+                     [PlannedDuration],[DurationUnit],[Status],[Notes],[CompanyId])
                 VALUES
                     (@WorkOrderId,@Sequence,@OperationId,@MachineId,
-                     @PlannedDuration,@DurationUnit,0,@Notes);
+                     @PlannedDuration,@DurationUnit,0,@Notes,
+                     (SELECT w.[CompanyId] FROM [{_schema}].[WorkOrder] w WHERE w.[Id] = @WorkOrderId));
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
         }
         else
@@ -131,9 +132,10 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                 SET [Sequence]=@Sequence, [OperationId]=@OperationId,
                     [MachineId]=@MachineId, [PlannedDuration]=@PlannedDuration,
                     [DurationUnit]=@DurationUnit, [Notes]=@Notes
-                WHERE [Id]=@Id;
+                WHERE [Id]=@Id AND [CompanyId]=@CompanyId;
                 SELECT @Id;";
             cmd.Parameters.AddWithValue("@Id", e.Id);
+            cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         }
         cmd.Parameters.AddWithValue("@WorkOrderId", e.WorkOrderId);
         cmd.Parameters.AddWithValue("@Sequence", e.Sequence);
@@ -150,8 +152,9 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id]=@Id;";
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -165,8 +168,9 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
             await using (var del = conn.CreateCommand())
             {
                 del.Transaction = tx;
-                del.CommandText = $"DELETE FROM {_table} WHERE [WorkOrderId] = @WorkOrderId;";
+                del.CommandText = $"DELETE FROM {_table} WHERE [WorkOrderId] = @WorkOrderId AND [CompanyId] = @CompanyId;";
                 del.Parameters.AddWithValue("@WorkOrderId", workOrderId);
+                del.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
                 await del.ExecuteNonQueryAsync(ct);
             }
 
@@ -180,12 +184,12 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                 ins.CommandText = $@"
                     INSERT INTO {_table}
                         ([WorkOrderId],[Sequence],[OperationId],[MachineId],
-                         [PlannedDuration],[DurationUnit],[Status],[Notes])
+                         [PlannedDuration],[DurationUnit],[Status],[Notes],[CompanyId])
                     SELECT @WorkOrderId, ro.[Sequence], ro.[OperationId],
                            COALESCE(ro.[MachineId], wo.[DefaultMachineId]),
-                           ro.[OverrideDuration], ro.[DurationUnit], 0, ro.[Notes]
+                           ro.[OverrideDuration], ro.[DurationUnit], 0, ro.[Notes], wo.[CompanyId]
                     FROM {_routingOpTable} ro
-                    CROSS JOIN (SELECT [DefaultMachineId]
+                    CROSS JOIN (SELECT [DefaultMachineId], [CompanyId]
                                 FROM [{_schema}].[WorkOrder]
                                 WHERE [Id] = @WorkOrderId) wo
                     WHERE ro.[RoutingId] = @RoutingId
@@ -214,9 +218,10 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
             SET [Status] = 1,
                 [StartedByPersonnelId] = COALESCE([StartedByPersonnelId], @PersonnelId),
                 [StartedAt] = COALESCE([StartedAt], GETUTCDATE())
-            WHERE [Id] = @Id AND [Status] IN (0, 1);";
+            WHERE [Id] = @Id AND [Status] IN (0, 1) AND [CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
         cmd.Parameters.AddWithValue("@PersonnelId", personnelId);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -231,11 +236,12 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                 [Status] = CASE WHEN [Status] = 0 THEN 1 ELSE [Status] END,
                 [StartedByPersonnelId] = COALESCE([StartedByPersonnelId], @PersonnelId),
                 [StartedAt]            = COALESCE([StartedAt], GETUTCDATE())
-            WHERE [Id] = @Id;";
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
         cmd.Parameters.AddWithValue("@PersonnelId", personnelId);
         cmd.Parameters.AddWithValue("@Qty", quantity);
         cmd.Parameters.AddWithValue("@Scrap", scrap ?? 0m);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -256,10 +262,11 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                         [CompletedAt] = GETUTCDATE(),
                         [StartedByPersonnelId] = COALESCE([StartedByPersonnelId], @PersonnelId),
                         [StartedAt]            = COALESCE([StartedAt], GETUTCDATE())
-                    WHERE [Id] = @Id;";
+                    WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
                 cmd.Parameters.AddWithValue("@Id", id);
                 cmd.Parameters.AddWithValue("@PersonnelId", personnelId);
                 cmd.Parameters.AddWithValue("@FinalQty", (object?)finalQuantity ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
                 await cmd.ExecuteNonQueryAsync(ct);
             }
 

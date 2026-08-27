@@ -141,10 +141,11 @@ public sealed class SqlDataVisibilityRuleRepository : IDataVisibilityRuleReposit
                             [FormCode]=@FormCode,[FieldKind]=@FieldKind,[FieldKey]=@FieldKey,[Operator]=@Operator,
                             [WidgetId]=@WidgetId,[Name]=@Name,[IsActive]=@IsActive,
                             [Updated]=SYSUTCDATETIME(),[UpdatedById]=@UpdatedById
-                        WHERE [Id]=@Id;";
+                        WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
                     cmd.Parameters.AddWithValue("@Id", ruleId);
                     BindRuleParams(cmd, rule);
                     cmd.Parameters.AddWithValue("@UpdatedById", (object?)rule.UpdatedById ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
                     await cmd.ExecuteNonQueryAsync(ct);
                 }
 
@@ -152,8 +153,14 @@ public sealed class SqlDataVisibilityRuleRepository : IDataVisibilityRuleReposit
                 await using (var del = conn.CreateCommand())
                 {
                     del.Transaction = tx;
-                    del.CommandText = $"DELETE FROM {_valueTable} WHERE [RuleId]=@R; DELETE FROM {_grantTable} WHERE [RuleId]=@R;";
+                    del.CommandText = $"""
+                        DELETE FROM {_valueTable} WHERE [RuleId]=@R
+                          AND EXISTS (SELECT 1 FROM {_ruleTable} p WHERE p.[Id]=@R AND p.[CompanyId]=@CompanyId);
+                        DELETE FROM {_grantTable} WHERE [RuleId]=@R
+                          AND EXISTS (SELECT 1 FROM {_ruleTable} p WHERE p.[Id]=@R AND p.[CompanyId]=@CompanyId);
+                        """;
                     del.Parameters.AddWithValue("@R", ruleId);
+                    del.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
                     await del.ExecuteNonQueryAsync(ct);
                 }
             }
@@ -163,11 +170,12 @@ public sealed class SqlDataVisibilityRuleRepository : IDataVisibilityRuleReposit
                 cmd.Transaction = tx;
                 cmd.CommandText = $@"
                     INSERT INTO {_ruleTable}
-                        ([FormCode],[FieldKind],[FieldKey],[Operator],[WidgetId],[Name],[IsActive],[CreatedById])
-                    VALUES (@FormCode,@FieldKind,@FieldKey,@Operator,@WidgetId,@Name,@IsActive,@CreatedById);
+                        ([FormCode],[FieldKind],[FieldKey],[Operator],[WidgetId],[Name],[IsActive],[CreatedById],[CompanyId])
+                    VALUES (@FormCode,@FieldKind,@FieldKey,@Operator,@WidgetId,@Name,@IsActive,@CreatedById,@CompanyId);
                     SELECT CAST(SCOPE_IDENTITY() AS INT);";
                 BindRuleParams(cmd, rule);
                 cmd.Parameters.AddWithValue("@CreatedById", (object?)rule.CreatedById ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
                 ruleId = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
             }
 
@@ -175,7 +183,10 @@ public sealed class SqlDataVisibilityRuleRepository : IDataVisibilityRuleReposit
             {
                 await using var ins = conn.CreateCommand();
                 ins.Transaction = tx;
-                ins.CommandText = $"INSERT INTO {_valueTable} ([RuleId],[ValueId],[ValueText]) VALUES (@R,@VId,@VTxt);";
+                ins.CommandText = $"""
+                    INSERT INTO {_valueTable} ([RuleId],[ValueId],[ValueText],[CompanyId])
+                    VALUES (@R,@VId,@VTxt,(SELECT p.[CompanyId] FROM {_ruleTable} p WHERE p.[Id]=@R));
+                    """;
                 ins.Parameters.AddWithValue("@R", ruleId);
                 ins.Parameters.AddWithValue("@VId", (object?)v.ValueId ?? DBNull.Value);
                 ins.Parameters.AddWithValue("@VTxt", (object?)v.ValueText ?? DBNull.Value);
@@ -187,7 +198,10 @@ public sealed class SqlDataVisibilityRuleRepository : IDataVisibilityRuleReposit
                 g.EnsureValid();
                 await using var ins = conn.CreateCommand();
                 ins.Transaction = tx;
-                ins.CommandText = $"INSERT INTO {_grantTable} ([RuleId],[UserId],[DepartmentId]) VALUES (@R,@U,@D);";
+                ins.CommandText = $"""
+                    INSERT INTO {_grantTable} ([RuleId],[UserId],[DepartmentId],[CompanyId])
+                    VALUES (@R,@U,@D,(SELECT p.[CompanyId] FROM {_ruleTable} p WHERE p.[Id]=@R));
+                    """;
                 ins.Parameters.AddWithValue("@R", ruleId);
                 ins.Parameters.AddWithValue("@U", (object?)g.UserId ?? DBNull.Value);
                 ins.Parameters.AddWithValue("@D", (object?)g.DepartmentId ?? DBNull.Value);
@@ -208,8 +222,9 @@ public sealed class SqlDataVisibilityRuleRepository : IDataVisibilityRuleReposit
     {
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_ruleTable} WHERE [Id]=@Id;";
+        cmd.CommandText = $"DELETE FROM {_ruleTable} WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -217,10 +232,11 @@ public sealed class SqlDataVisibilityRuleRepository : IDataVisibilityRuleReposit
     {
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE {_ruleTable} SET [IsActive]=@A,[Updated]=SYSUTCDATETIME(),[UpdatedById]=@U WHERE [Id]=@Id;";
+        cmd.CommandText = $"UPDATE {_ruleTable} SET [IsActive]=@A,[Updated]=SYSUTCDATETIME(),[UpdatedById]=@U WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
         cmd.Parameters.AddWithValue("@A", isActive);
         cmd.Parameters.AddWithValue("@U", (object?)updatedById ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

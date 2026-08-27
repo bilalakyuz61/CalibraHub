@@ -136,10 +136,11 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
                 [GridPreferencesJson] = @GridPreferencesJson,
                 [IsActive] = @IsActive,
                 [PhoneNumber] = @PhoneNumber
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @FilterCompanyId;
             """;
 
         AddUserParameters(command, userProfile, includeId: true);
+        command.Parameters.Add(new SqlParameter("@FilterCompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

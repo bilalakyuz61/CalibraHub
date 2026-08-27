@@ -88,16 +88,17 @@ public sealed class SqlExternalDbConnectionRepository : IExternalDbConnectionRep
                 INSERT INTO {_table}
                   ([Name],[ServerName],[DatabaseName],[AuthMode],[Username],[PasswordEncrypted],
                    [Encrypt],[TrustServerCertificate],[ConnectTimeoutSeconds],[CommandTimeoutSeconds],
-                   [IsActive],[CreatedById],[UseHostServer])
+                   [IsActive],[CreatedById],[UseHostServer],[CompanyId])
                 OUTPUT INSERTED.[Id]
                 VALUES
                   (@Name,@ServerName,@DatabaseName,@AuthMode,@Username,@PasswordEncrypted,
                    @Encrypt,@TrustServerCertificate,@ConnectTimeoutSeconds,@CommandTimeoutSeconds,
-                   @IsActive,@CreatedById,@UseHostServer);
+                   @IsActive,@CreatedById,@UseHostServer,@CompanyId);
                 """;
             Bind(cmd, entity);
             cmd.Parameters.Add(new SqlParameter("@PasswordEncrypted", (object?)encrypted ?? DBNull.Value));
             cmd.Parameters.Add(new SqlParameter("@CreatedById", (object?)entity.CreatedById ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
             return (int)(await cmd.ExecuteScalarAsync(ct) ?? 0);
         }
 
@@ -119,12 +120,13 @@ public sealed class SqlExternalDbConnectionRepository : IExternalDbConnectionRep
                 [IsActive] = @IsActive,
                 [UpdatedById] = @UpdatedById,
                 [Updated] = SYSUTCDATETIME()
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", entity.Id));
         Bind(cmd, entity);
         if (hasNewPassword) cmd.Parameters.Add(new SqlParameter("@PasswordEncrypted", encrypted));
         cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)entity.UpdatedById ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
         return entity.Id;
     }
@@ -133,8 +135,9 @@ public sealed class SqlExternalDbConnectionRepository : IExternalDbConnectionRep
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id;";
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -146,9 +149,10 @@ public sealed class SqlExternalDbConnectionRepository : IExternalDbConnectionRep
             UPDATE {_table} SET [IsActive] = CASE WHEN [IsActive] = 1 THEN 0 ELSE 1 END,
                                 [Updated] = SYSUTCDATETIME()
             OUTPUT INSERTED.[IsActive]
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var res = await cmd.ExecuteScalarAsync(ct);
         return res is bool b && b;
     }

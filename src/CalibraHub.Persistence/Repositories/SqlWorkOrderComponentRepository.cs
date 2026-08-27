@@ -133,8 +133,9 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
             await using (var del = conn.CreateCommand())
             {
                 del.Transaction = tx;
-                del.CommandText = $"DELETE FROM {_table} WHERE [WorkOrderId] = @WorkOrderId;";
+                del.CommandText = $"DELETE FROM {_table} WHERE [WorkOrderId] = @WorkOrderId AND [CompanyId] = @CompanyId;";
                 del.Parameters.AddWithValue("@WorkOrderId", workOrderId);
+                del.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
                 await del.ExecuteNonQueryAsync(ct);
             }
 
@@ -146,10 +147,11 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                 ins.CommandText = $@"
                     INSERT INTO {_table}
                         ([WorkOrderId],[ItemId],[ConfigId],[RequiredQuantity],
-                         [IssuedQuantity],[ScrapRate],[UnitId],[FromLocationId],[Notes],[Created])
+                         [IssuedQuantity],[ScrapRate],[UnitId],[FromLocationId],[Notes],[Created],[CompanyId])
                     VALUES
                         (@WorkOrderId,@ItemId,@ConfigId,@RequiredQuantity,
-                         @IssuedQuantity,@ScrapRate,@UnitId,@FromLocationId,@Notes,SYSUTCDATETIME());";
+                         @IssuedQuantity,@ScrapRate,@UnitId,@FromLocationId,@Notes,SYSUTCDATETIME(),
+                         (SELECT p.[CompanyId] FROM [{_schema}].[WorkOrder] p WHERE p.[Id] = @WorkOrderId));";
                 ins.Parameters.AddWithValue("@WorkOrderId", workOrderId);
                 ins.Parameters.AddWithValue("@ItemId", c.ItemId);
                 ins.Parameters.AddWithValue("@ConfigId", (object?)c.ConfigId ?? DBNull.Value);
@@ -175,8 +177,9 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [WorkOrderId] = @WorkOrderId;";
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [WorkOrderId] = @WorkOrderId AND [CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@WorkOrderId", workOrderId);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -189,10 +192,11 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
         cmd.CommandText = $@"
             INSERT INTO {_table}
                 ([WorkOrderId],[ItemId],[ConfigId],[RequiredQuantity],
-                 [IssuedQuantity],[ScrapRate],[UnitId],[FromLocationId],[Notes],[Created])
+                 [IssuedQuantity],[ScrapRate],[UnitId],[FromLocationId],[Notes],[Created],[CompanyId])
             VALUES
                 (@WorkOrderId,@ItemId,@ConfigId,@RequiredQuantity,
-                 0,@ScrapRate,@UnitId,@FromLocationId,@Notes,SYSUTCDATETIME());
+                 0,@ScrapRate,@UnitId,@FromLocationId,@Notes,SYSUTCDATETIME(),
+                 (SELECT p.[CompanyId] FROM [{_schema}].[WorkOrder] p WHERE p.[Id] = @WorkOrderId));
             SELECT CAST(SCOPE_IDENTITY() AS INT);";
         cmd.Parameters.AddWithValue("@WorkOrderId", c.WorkOrderId);
         cmd.Parameters.AddWithValue("@ItemId", c.ItemId);
@@ -213,11 +217,12 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
             UPDATE {_table}
             SET [RequiredQuantity] = @Qty, [ScrapRate] = @Scrap, [Notes] = @Notes,
                 [Updated] = SYSUTCDATETIME()
-            WHERE [Id] = @Id;";
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Id", componentId);
         cmd.Parameters.AddWithValue("@Qty", requiredQuantity);
         cmd.Parameters.AddWithValue("@Scrap", scrapRate);
         cmd.Parameters.AddWithValue("@Notes", (object?)notes ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -225,8 +230,9 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id;";
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Id", componentId);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -242,9 +248,10 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
         cmd.CommandText = $@"
             UPDATE {_table}
             SET [FromLocationId] = @Loc, [Updated] = SYSUTCDATETIME()
-            WHERE [Id] = @Id;";
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Id", componentId);
         cmd.Parameters.AddWithValue("@Loc", (object?)locationId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -299,9 +306,10 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                 updCmd.CommandText = $@"
                     UPDATE {_table}
                     SET [IssuedQuantity] = [IssuedQuantity] + @Qty, [Updated] = SYSUTCDATETIME()
-                    WHERE [Id] = @Id;";
+                    WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
                 updCmd.Parameters.AddWithValue("@Id", componentId);
                 updCmd.Parameters.AddWithValue("@Qty", quantity);
+                updCmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
                 await updCmd.ExecuteNonQueryAsync(ct);
             }
 

@@ -114,8 +114,8 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(ct);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            INSERT INTO {_table} ([CardType], [Level], [ParentId], [Code], [Description])
-            VALUES (@CardType, @Level, @ParentId, @Code, @Description);
+            INSERT INTO {_table} ([CardType], [Level], [ParentId], [Code], [Description], [CompanyId])
+            VALUES (@CardType, @Level, @ParentId, @Code, @Description, @CompanyId);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         command.Parameters.Add(new SqlParameter("@CardType", group.CardType));
@@ -123,6 +123,7 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
         command.Parameters.Add(new SqlParameter("@ParentId", (object?)group.ParentId ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@Code", group.Code));
         command.Parameters.Add(new SqlParameter("@Description", (object?)group.Description ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var result = await command.ExecuteScalarAsync(ct);
         return Convert.ToInt32(result);
     }
@@ -134,17 +135,19 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
         command.CommandText = $"""
             UPDATE {_table}
             SET [Code] = @Code, [Description] = @Description
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@Id", group.Id));
         command.Parameters.Add(new SqlParameter("@Code", group.Code));
         command.Parameters.Add(new SqlParameter("@Description", (object?)group.Description ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await command.ExecuteNonQueryAsync(ct);
     }
 
     public async Task DeleteAsync(int id, CancellationToken ct)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(ct);
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
         // 2026-08-26: grup silinirken CardGroupMapping satirlari daha once temizlenmiyordu
         // (bu yuzden FK_CardGroupMapping_CardGroup bilinclli olarak eklenmedi — bkz. rapor
         // Seq 1118 istege bagli madde 5). Once bagli mapping'leri sil, sonra grubu sil —
@@ -152,13 +155,18 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
         // yeterli: ikinci komut basarisiz olsa da yalnizca oksuz mapping kalmaz, grup kalir).
         await using (var mappingCmd = connection.CreateCommand())
         {
-            mappingCmd.CommandText = $"DELETE FROM {_mappingTable} WHERE [CardGroupId] = @Id;";
+            mappingCmd.CommandText = $"""
+                DELETE FROM {_mappingTable} WHERE [CardGroupId] = @Id
+                  AND EXISTS (SELECT 1 FROM {_table} g WHERE g.[Id] = @Id AND g.[CompanyId] = @CompanyId);
+                """;
             mappingCmd.Parameters.Add(new SqlParameter("@Id", id));
+            mappingCmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await mappingCmd.ExecuteNonQueryAsync(ct);
         }
         await using var command = connection.CreateCommand();
-        command.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id;";
+        command.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await command.ExecuteNonQueryAsync(ct);
     }
 
@@ -208,15 +216,18 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
         await using var tx = (Microsoft.Data.SqlClient.SqlTransaction)await connection.BeginTransactionAsync(ct);
         try
         {
+            var companyId = _connectionFactory.ResolveEffectiveCompanyId();
+
             // Delete existing mappings for levels being updated
             await using var delCmd = connection.CreateCommand();
             delCmd.Transaction = tx;
             delCmd.CommandText = $"""
                 DELETE FROM {_mappingTable}
-                WHERE [EntityType] = @EntityType AND [EntityId] = @EntityId;
+                WHERE [EntityType] = @EntityType AND [EntityId] = @EntityId AND [CompanyId] = @CompanyId;
                 """;
             delCmd.Parameters.Add(new SqlParameter("@EntityType", entityType));
             delCmd.Parameters.Add(new SqlParameter("@EntityId", entityId));
+            delCmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await delCmd.ExecuteNonQueryAsync(ct);
 
             // Insert new mappings (skip null cardGroupId)
@@ -226,8 +237,9 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
                 await using var insCmd = connection.CreateCommand();
                 insCmd.Transaction = tx;
                 insCmd.CommandText = $"""
-                    INSERT INTO {_mappingTable} ([EntityType], [EntityId], [Level], [CardGroupId])
-                    VALUES (@EntityType, @EntityId, @Level, @CardGroupId);
+                    INSERT INTO {_mappingTable} ([EntityType], [EntityId], [Level], [CardGroupId], [CompanyId])
+                    VALUES (@EntityType, @EntityId, @Level, @CardGroupId,
+                        (SELECT g.[CompanyId] FROM {_table} g WHERE g.[Id] = @CardGroupId));
                     """;
                 insCmd.Parameters.Add(new SqlParameter("@EntityType", entityType));
                 insCmd.Parameters.Add(new SqlParameter("@EntityId", entityId));

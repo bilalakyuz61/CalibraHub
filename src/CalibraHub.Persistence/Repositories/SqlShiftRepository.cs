@@ -301,20 +301,21 @@ public sealed class SqlShiftAssignmentRepository : IShiftAssignmentRepository
     {
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        var companyId = _factory.ResolveEffectiveCompanyId();
         if (entity.Id <= 0)
         {
             // Aynı personel+gün için varsa eski kaydı pasif yap (yeni vardiyaya geçiş)
             cmd.CommandText = $@"
                 UPDATE {_table}
                 SET [IsActive] = 0, [UpdatedById] = @CreatedById, [Updated] = SYSUTCDATETIME()
-                WHERE [PersonnelId] = @PersonnelId AND [DayOfWeek] = @Day AND [IsActive] = 1;
+                WHERE [PersonnelId] = @PersonnelId AND [DayOfWeek] = @Day AND [IsActive] = 1 AND [CompanyId] = @CompanyId;
 
                 INSERT INTO {_table}
                     ([PersonnelId],[ShiftId],[DayOfWeek],[EffectiveFrom],[EffectiveTo],
-                     [IsActive],[CreatedById],[Created])
+                     [IsActive],[CreatedById],[Created],[CompanyId])
                 VALUES
                     (@PersonnelId,@ShiftId,@Day,@From,@To,
-                     @Active,@CreatedById,SYSUTCDATETIME());
+                     @Active,@CreatedById,SYSUTCDATETIME(),@CompanyId);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
         }
         else
@@ -324,7 +325,7 @@ public sealed class SqlShiftAssignmentRepository : IShiftAssignmentRepository
                 SET [PersonnelId]=@PersonnelId,[ShiftId]=@ShiftId,[DayOfWeek]=@Day,
                     [EffectiveFrom]=@From,[EffectiveTo]=@To,[IsActive]=@Active,
                     [UpdatedById]=@CreatedById,[Updated]=SYSUTCDATETIME()
-                WHERE [Id]=@Id;
+                WHERE [Id]=@Id AND [CompanyId]=@CompanyId;
                 SELECT @Id;";
             cmd.Parameters.AddWithValue("@Id", entity.Id);
         }
@@ -335,6 +336,7 @@ public sealed class SqlShiftAssignmentRepository : IShiftAssignmentRepository
         cmd.Parameters.AddWithValue("@To",          (object?)(entity.EffectiveTo?.ToDateTime(TimeOnly.MinValue))   ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Active",      entity.IsActive);
         cmd.Parameters.AddWithValue("@CreatedById",  (object?)entity.CreatedById ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CompanyId",   companyId);
         var result = await cmd.ExecuteScalarAsync(ct);
         return result != null && result != DBNull.Value ? Convert.ToInt32(result) : 0;
     }
@@ -346,9 +348,10 @@ public sealed class SqlShiftAssignmentRepository : IShiftAssignmentRepository
         cmd.CommandText = $@"
             UPDATE {_table}
             SET [IsActive] = 0, [UpdatedById] = @UpdatedById, [Updated] = SYSUTCDATETIME()
-            WHERE [Id] = @Id;";
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
         cmd.Parameters.AddWithValue("@UpdatedById", (object?)userId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CompanyId", _factory.ResolveEffectiveCompanyId());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
