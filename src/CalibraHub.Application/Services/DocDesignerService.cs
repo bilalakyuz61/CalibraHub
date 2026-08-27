@@ -183,6 +183,40 @@ public sealed partial class DocDesignerService : IDocDesignerService
         // aktif belgeyi fallback olarak kullan ki kullanıcı boş preview yerine gerçek
         // veriyle tasarımı görebilsin. Print akışı her zaman gerçek id verir.
         int? effectiveDocId = req.DocumentId;
+
+        // SAHIPLIK KONTROLU (2026-08-27) — req.DocumentId istemci GOVDESINDEN gelir ve
+        // veri kaynagi SQL'ine @DocumentId olarak dogrudan aktarilir. Kontrol olmadan bir
+        // sirketin kullanicisi baska sirketin belge Id'sini deneyerek o belgenin PDF/HTML
+        // ciktisini uretebiliyordu — capraz kiraci BELGE ICERIGI sizintisi.
+        //
+        // Suzgec neden SQL sablonuna konmadi: veri kaynagi SQL'i kullanici tarafindan
+        // duzenlenebilir ve hedef view'lar (ornegin vw_AssetAssignment) CompanyId kolonu
+        // TASIMIYOR — sablona kosul eklemek "Invalid column name" ile kirardi. Sahiplik
+        // burada, tek noktada dogrulanir.
+        if (effectiveDocId is > 0)
+        {
+            // Her duzen Document satiri basmaz (ornegin vw_AssetAssignment baska bir
+            // varligi basar ve oradaki @DocumentId bir AssignmentId'dir). Bu yuzden once
+            // "bu id GERCEKTEN bir belge mi" sorulur; belge DEGILSE kontrol atlanir —
+            // aksi halde varlik tabanli duzenler hakiz yere reddedilirdi.
+            var ownerCheck = await _executor.ExecuteAsync(
+                "SELECT [CompanyId] FROM [dbo].[Document] WHERE [id] = @DocumentId",
+                new[] { new ReportSqlParameter("@DocumentId", null, effectiveDocId.Value) }, ct);
+
+            var isDocument = ownerCheck.Rows.Count > 0 && ownerCheck.Rows[0].Count > 0;
+            var ownerCompanyId = isDocument && ownerCheck.Rows[0][0] is not null
+                ? Convert.ToInt32(ownerCheck.Rows[0][0])
+                : (int?)null;
+
+            if (isDocument && ownerCompanyId != _company.GetCurrentCompanyId())
+            {
+                _logger.LogWarning(
+                    "[DocDesigner] Baska sirketin belgesi istendi, reddedildi. DocumentId={DocumentId} CompanyId={CompanyId}",
+                    effectiveDocId, _company.GetCurrentCompanyId());
+                throw new InvalidOperationException("Bu belgeye erişim yetkiniz yok.");
+            }
+        }
+
         if (!effectiveDocId.HasValue)
         {
             try

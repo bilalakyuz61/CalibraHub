@@ -63,16 +63,20 @@ public sealed class SqlRptRunLogRepository : IRptRunLogRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // Kiraci suzgeci: LogEndAsync ile ayni desen — legacy NULL CompanyId satirlari
+        // (eski kayitlar) da gorunsun diye OR [CompanyId] IS NULL korunur.
         cmd.CommandText = $@"
             SELECT TOP (@Top) [Id],[DefId],[ViewId],[UserId],[CompanyId],[StartedAt],
                    [DurationMs],[RowCount],[Error],[SqlHash]
             FROM {_table}
             WHERE (@DefId IS NULL OR [DefId] = @DefId)
               AND (@UserId IS NULL OR [UserId] = @UserId)
+              AND ([CompanyId] = @CompanyId OR [CompanyId] IS NULL)
             ORDER BY [Id] DESC;";
         cmd.Parameters.AddWithValue("@Top", top);
         cmd.Parameters.AddWithValue("@DefId", (object?)defId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@UserId", (object?)userId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
 
         var list = new List<RptRunLog>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);

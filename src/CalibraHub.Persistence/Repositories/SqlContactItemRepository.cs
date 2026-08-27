@@ -32,6 +32,8 @@ public sealed class SqlContactItemRepository : IContactItemRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // Kiraci suzgeci: contactId istemciden gelir; ContactItem kendi CompanyId
+        // kolonunu tasir (bkz. AddAsync INSERT).
         cmd.CommandText = $"""
             SELECT ci.[Id], ci.[ContactId], ci.[ItemId],
                    i.[Code]  AS ItemCode,
@@ -40,10 +42,11 @@ public sealed class SqlContactItemRepository : IContactItemRepository
                    ci.[IsActive], ci.[Created], ci.[Updated]
             FROM {_table} ci
             INNER JOIN {_itemsTable} i ON i.[Id] = ci.[ItemId]
-            WHERE ci.[ContactId] = @ContactId
+            WHERE ci.[ContactId] = @ContactId AND ci.[CompanyId] = @CompanyId
             ORDER BY i.[Code];
             """;
         cmd.Parameters.Add(new SqlParameter("@ContactId", contactId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         var list = new List<ContactItemListRow>();
         await using var r = await cmd.ExecuteReaderAsync(ct);

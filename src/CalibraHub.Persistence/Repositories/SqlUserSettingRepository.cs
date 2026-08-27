@@ -21,6 +21,8 @@ public sealed class SqlUserSettingRepository : IUserSettingRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
+        // tenant-ok: per-company DB fiziksel ayrimi zaten yeterli — bu DB'de yalnizca
+        // bu sirketin kullanicilarina ait UserSettings satirlari bulunur (Users de per-company).
         command.CommandText = $"SELECT [SettingValue] FROM {_table} WHERE [UserId] = @UserId AND [SettingKey] = @Key;";
         command.Parameters.Add(new SqlParameter("@UserId", userId));
         command.Parameters.Add(new SqlParameter("@Key", settingKey));

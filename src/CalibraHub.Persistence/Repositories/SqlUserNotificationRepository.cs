@@ -54,11 +54,12 @@ public sealed class SqlUserNotificationRepository : IUserNotificationRepository
                    [Id],[CompanyId],[UserId],[Created],[Title],[Body],
                    [SourceType],[SourceId],[Link],[IsRead],[ReadAt],[IsPinned]
             FROM {_table}
-            WHERE [UserId] = @UserId
+            WHERE [UserId] = @UserId AND [CompanyId] = @CompanyId
             ORDER BY [IsPinned] DESC, [IsRead] ASC, [Created] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@Take",   take));
         cmd.Parameters.Add(new SqlParameter("@UserId", userId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await r.ReadAsync(cancellationToken)) list.Add(Map(r));
         return list;
@@ -68,8 +69,9 @@ public sealed class SqlUserNotificationRepository : IUserNotificationRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"SELECT COUNT(*) FROM {_table} WHERE [UserId] = @UserId AND [IsRead] = 0;";
+        cmd.CommandText = $"SELECT COUNT(*) FROM {_table} WHERE [UserId] = @UserId AND [IsRead] = 0 AND [CompanyId] = @CompanyId;";
         cmd.Parameters.Add(new SqlParameter("@UserId", userId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         var v = await cmd.ExecuteScalarAsync(cancellationToken);
         return Convert.ToInt32(v);
     }

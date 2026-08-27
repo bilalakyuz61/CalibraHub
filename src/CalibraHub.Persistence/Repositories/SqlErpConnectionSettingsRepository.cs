@@ -26,11 +26,15 @@ public sealed class SqlErpConnectionSettingsRepository : IErpConnectionSettingsR
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
+        // Kiraci suzgeci: bu tablo ERP baglanti sifresini (duz metin) tasir — suzgec
+        // olmadan baska sirketin ERP kimlik bilgileri dondurulurdu.
         command.CommandText = $"""
             SELECT [Id], [CompanyId], [Provider], [Company], [Business], [Branch], [Username], [Password], [IsActive], [Created]
             FROM {_tableName}
+            WHERE [CompanyId] = @CompanyId
             ORDER BY [Company], [Business], [Branch];
             """;
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -48,9 +52,10 @@ public sealed class SqlErpConnectionSettingsRepository : IErpConnectionSettingsR
         command.CommandText = $"""
             SELECT [Id], [CompanyId], [Provider], [Company], [Business], [Branch], [Username], [Password], [IsActive], [Created]
             FROM {_tableName}
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))

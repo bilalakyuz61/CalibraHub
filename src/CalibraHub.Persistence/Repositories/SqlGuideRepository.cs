@@ -671,6 +671,9 @@ public sealed class SqlGuideRepository : IGuideRepository
         var viewList = new List<(string SchemaName, string ViewName, bool IsStandard, string? Tags)>();
         await using (var cmd = conn.CreateCommand())
         {
+            // tenant-ok: sys.views + ViewMeta salt DB-yerel katalog metadata'sidir (view/kolon
+            // adlari) — per-company DB mimarisinde baglanti zaten tek sirketin DB'sine acilir,
+            // satir verisi degil sema bilgisi dondurulur.
             cmd.CommandText = @"
                 SELECT s.[name] AS SchemaName, v.[name] AS ViewName,
                        ISNULL(vm.[IsStandard], 0) AS IsStandard,
