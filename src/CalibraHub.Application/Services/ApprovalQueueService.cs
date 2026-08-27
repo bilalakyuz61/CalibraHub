@@ -34,7 +34,7 @@ public sealed class ApprovalQueueService : IApprovalQueueService
             .ToArray();
     }
 
-    public async Task ToggleProcessingStatusAsync(Guid documentId, bool isProcessed, CancellationToken cancellationToken)
+    public async Task ToggleProcessingStatusAsync(int documentId, bool isProcessed, CancellationToken cancellationToken)
     {
         await _incomingDocumentRepository.UpdateIsProcessedAsync(documentId, isProcessed, cancellationToken);
     }

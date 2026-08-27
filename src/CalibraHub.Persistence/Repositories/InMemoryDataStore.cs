@@ -158,14 +158,14 @@ public sealed class InMemoryDataStore
                 })
         });
 
-    public ConcurrentDictionary<Guid, IncomingDocument> IncomingDocuments { get; } = new(
+    public ConcurrentDictionary<int, IncomingDocument> IncomingDocuments { get; } = new(
         new[]
         {
-            new KeyValuePair<Guid, IncomingDocument>(
-                Guid.Parse("e4e49b33-2575-4407-8704-4dff117ac4d8"),
+            new KeyValuePair<int, IncomingDocument>(
+                1,
                 new IncomingDocument
                 {
-                    Id = Guid.Parse("e4e49b33-2575-4407-8704-4dff117ac4d8"),
+                    Id = 1,
                     IntegratorSettingsId = IntegratorId,
                     EnvelopeId = "ENV-INIT-0001",
                     DocumentNumber = "FTR-2026-0001",

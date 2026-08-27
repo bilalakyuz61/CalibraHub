@@ -55,13 +55,13 @@ public sealed class InMemoryIncomingDocumentRepository : IIncomingDocumentReposi
         return Task.FromResult(result);
     }
 
-    public Task<IncomingDocument?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    public Task<IncomingDocument?> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
         _dataStore.IncomingDocuments.TryGetValue(id, out var document);
         return Task.FromResult(document);
     }
 
-    public Task UpdateIsProcessedAsync(Guid id, bool isProcessed, CancellationToken cancellationToken)
+    public Task UpdateIsProcessedAsync(int id, bool isProcessed, CancellationToken cancellationToken)
     {
         if (_dataStore.IncomingDocuments.TryGetValue(id, out var document))
         {

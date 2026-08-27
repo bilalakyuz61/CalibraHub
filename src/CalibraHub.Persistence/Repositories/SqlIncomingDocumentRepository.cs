@@ -243,7 +243,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         return documents;
     }
 
-    public async Task<IncomingDocument?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<IncomingDocument?> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
 
@@ -263,20 +263,15 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
             await using var legacyCommand = connection.CreateCommand();
             legacyCommand.CommandText = $"""
                 SELECT [INCKEYNO], [FATIRS_NO], [FTIRSIP], [TIPI], {belgeTipiSelectSql}, [UUID], [SENDERVNO], [CARI_VERGINUMARASI], [CARI_TCKIMLIKNO], [TARIH], [DURUM], ISNULL([SENDERNAME], N'') AS [SENDERNAME], ISNULL([CARI_ISIM], N'') AS [CARI_ISIM], {payloadRawSelectSql}, ISNULL([ISLENDI], 0) AS [ISLENDI]
-                FROM {_ebelgeMasTableName};
+                FROM {_ebelgeMasTableName}
+                WHERE [INCKEYNO] = @Id;
                 """;
+            legacyCommand.Parameters.Add(CreateParameter("@Id", id));
 
             await using var legacyReader = await legacyCommand.ExecuteReaderAsync(cancellationToken);
-            while (await legacyReader.ReadAsync(cancellationToken))
-            {
-                var doc = MapLegacyIncomingDocument(legacyReader);
-                if (doc.Id == id)
-                {
-                    return doc;
-                }
-            }
-
-            return null;
+            return await legacyReader.ReadAsync(cancellationToken)
+                ? MapLegacyIncomingDocument(legacyReader)
+                : null;
         }
 
         if (!await TableExistsAsync(connection, "IncomingDocument", cancellationToken))
@@ -1524,7 +1519,11 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
 
         var document = new IncomingDocument
         {
-            Id = BuildDeterministicGuid($"CBT_EBELGEMAS:{incKeyNo}"),
+            // Kimlik dis sistemin kendi PK'si (INCKEYNO). Eskiden buradan deterministik bir
+            // GUID uretiliyordu; GUID geri cevrilemedigi icin GetByIdAsync TUM tabloyu tarayip
+            // "doc.Id == id" karsilastirmasi yapmak zorunda kaliyordu. INT kimlikle tekil
+            // sorgu WHERE [INCKEYNO] = @Id ile indeksten donuyor.
+            Id = incKeyNo,
             IntegratorSettingsId = 0,
             EnvelopeId = envelopeId,
             DocumentNumber = documentNumber,
@@ -1580,14 +1579,6 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         return DocumentKind.EInvoice;
     }
 
-    private static Guid BuildDeterministicGuid(string input)
-    {
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(input));
-        var bytes = new byte[16];
-        Array.Copy(hash, bytes, 16);
-        return new Guid(bytes);
-    }
-
     private static IncomingDocument MapIncomingDocument(SqlDataReader reader)
     {
         var kindRaw = reader.GetString(4);
@@ -1607,7 +1598,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
 
         var document = new IncomingDocument
         {
-            Id = reader.GetGuid(0),
+            Id = reader.GetInt32(0),
             IntegratorSettingsId = reader.GetInt32(1),
             EnvelopeId = reader.GetString(2),
             DocumentNumber = reader.GetString(3),
@@ -1633,7 +1624,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         return document;
     }
 
-    public async Task UpdateIsProcessedAsync(Guid id, bool isProcessed, CancellationToken cancellationToken)
+    public async Task UpdateIsProcessedAsync(int id, bool isProcessed, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         if (await LegacyTablesExistAsync(connection, cancellationToken))

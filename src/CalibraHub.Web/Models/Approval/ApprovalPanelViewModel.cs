@@ -4,7 +4,7 @@ namespace CalibraHub.Web.Models.Approval;
 
 public sealed class ApprovalPanelViewModel
 {
-    public Guid DocumentId { get; init; }
+    public int DocumentId { get; init; }
     public required string DocumentNumber { get; init; }
     public required string DocumentKind { get; init; }
     public ApprovalInstanceDto? Instance { get; init; }

@@ -92,7 +92,7 @@ public sealed class ApprovalController : Controller
         RenderQueuePageAsync("EDispatch", page, pageSize, dateFrom, dateTo, isProcessed, cancellationToken);
 
     [HttpGet]
-    public async Task<IActionResult> ViewPayload(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> ViewPayload(int id, CancellationToken cancellationToken)
     {
         var document = await _incomingDocumentRepository.GetByIdAsync(id, cancellationToken);
         if (document is null)
@@ -129,7 +129,7 @@ public sealed class ApprovalController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> DocumentLines(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> DocumentLines(int id, CancellationToken cancellationToken)
     {
         // 1. Sağ tıklanan belgenin XML/Veritabanı dökümanı bulunur
         var document = await _incomingDocumentRepository.GetByIdAsync(id, cancellationToken);
@@ -266,7 +266,7 @@ public sealed class ApprovalController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> DownloadPayload(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> DownloadPayload(int id, CancellationToken cancellationToken)
     {
         var document = await _incomingDocumentRepository.GetByIdAsync(id, cancellationToken);
         if (document is null)
@@ -293,7 +293,7 @@ public sealed class ApprovalController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> ViewHtml(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> ViewHtml(int id, CancellationToken cancellationToken)
     {
         var document = await _incomingDocumentRepository.GetByIdAsync(id, cancellationToken);
         if (document is null || string.IsNullOrWhiteSpace(document.PayloadRaw))
@@ -646,7 +646,7 @@ public sealed class ApprovalController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ToggleProcessed(Guid id, bool isProcessed, CancellationToken cancellationToken)
+    public async Task<IActionResult> ToggleProcessed(int id, bool isProcessed, CancellationToken cancellationToken)
     {
         try
         {
@@ -662,15 +662,17 @@ public sealed class ApprovalController : Controller
 
     // ── Onay Paneli — modal içeriği (HTML partial) ────────────────────────────
     [HttpGet]
-    public async Task<IActionResult> ApprovalPanel(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> ApprovalPanel(int id, CancellationToken cancellationToken)
     {
         var document = await _incomingDocumentRepository.GetByIdAsync(id, cancellationToken);
         if (document is null) return Content("<div class='p-3 text-danger'>Belge bulunamadı.</div>", "text/html");
 
-        // IncomingDocument (e-fatura/e-arşiv) artık ApprovalInstance.DocumentId (INT) ile doğrudan
-        // ilişkilendirilemiyor — Guid PK uyumsuzluğu. IncomingDocument tabanlı onay akışları ileride
-        // IncomingDocument'a özel bir FK sütunu (IncomingDocumentId UNIQUEIDENTIFIER) eklenerek desteklenecek.
-        // Şimdilik instance bulunamadı (null) olarak devam edilir.
+        // 2026-08-28 — ENGEL KALKTI, DAVRANIŞ BİLİNÇLİ OLARAK DEĞİŞTİRİLMEDİ:
+        // IncomingDocument.Id artık INT (tablo PK'si ile aynı tip), yani ApprovalInstance.DocumentId
+        // (INT) ile doğrudan ilişkilendirilebilir; eski "Guid PK uyumsuzluğu" gerekçesi geçersiz.
+        // Bu ucu yeniden etkinleştirmek KULLANICI KARARI (görünür davranış değişikliği) — tip
+        // düzeltmesinin yan etkisi olarak sessizce açılmadı. Açılacaksa: DocumentId üzerinden
+        // ApprovalInstance sorgusu geri eklenir.
         ApprovalInstanceDto? instance = null;
         var allFlows = await _approvalFlowService.GetAllAsync(cancellationToken);
         // 'Document' = "Tüm Belgeler" wildcard (yeni standart), 'All' = legacy. Spesifik tip
@@ -697,12 +699,13 @@ public sealed class ApprovalController : Controller
 
     // ── Onay Akışı — belgenin mevcut onay örneğini getir ──────────────────────
     [HttpGet]
-    public async Task<IActionResult> ApprovalInstance(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> ApprovalInstance(int id, CancellationToken cancellationToken)
     {
         try
         {
-            // IncomingDocument (Guid PK) üzerinden ApprovalInstance araması artık desteklenmiyor —
-            // DocumentId kolonu INT FK'ya dönüştürüldü. Bu endpoint geçici olarak boş döner.
+            // 2026-08-28 — ENGEL KALKTI (IncomingDocument.Id artık INT), ama uç bilinçli olarak
+            // boş dönmeye devam ediyor: yeniden etkinleştirmek görünür davranış değişikliğidir ve
+            // kullanıcı kararına bırakıldı. Bkz. ApprovalPanel'deki not.
             ApprovalInstanceDto? instance = null;
             if (instance is null) return Json(new { found = false });
             return Json(new

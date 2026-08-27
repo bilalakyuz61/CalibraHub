@@ -1,7 +1,7 @@
 namespace CalibraHub.Application.Contracts;
 
 public sealed record PendingApprovalDocumentDto(
-    Guid Id,
+    int Id,
     string EnvelopeId,
     string DocumentNumber,
     string Kind,

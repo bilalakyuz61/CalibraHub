@@ -5,7 +5,8 @@ namespace CalibraHub.Domain.Entities;
 
 public sealed class DocumentApproval : Entity
 {
-    public Guid IncomingDocumentId { get; init; }
+    // INT: IncomingDocument PK'si INT IDENTITY (bkz. IncomingDocument ozeti).
+    public int IncomingDocumentId { get; init; }
     public int ApproverUserId { get; init; }
     public int StepOrder { get; init; }
     public ApprovalStatus Status { get; private set; } = ApprovalStatus.Pending;

@@ -13,6 +13,6 @@ public interface IIncomingDocumentRepository
         CancellationToken cancellationToken);
     Task AddAsync(IncomingDocument document, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<IncomingDocument>> GetPendingApprovalsAsync(bool? isProcessed, CancellationToken cancellationToken);
-    Task<IncomingDocument?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
-    Task UpdateIsProcessedAsync(Guid id, bool isProcessed, CancellationToken cancellationToken);
+    Task<IncomingDocument?> GetByIdAsync(int id, CancellationToken cancellationToken);
+    Task UpdateIsProcessedAsync(int id, bool isProcessed, CancellationToken cancellationToken);
 }
