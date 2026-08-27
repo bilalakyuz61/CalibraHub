@@ -2303,6 +2303,36 @@ END;";
             }
         }
 
+        // ── ANA TABLO UYARLAMASI: IKI KAYNAKLI ICE AKTARIM (2026-08-28 kullanici karari) ──
+        // E-belgeler iki yoldan gelir:
+        //   ONLINE  : entegrator (Logo vb.) -> API'den okunur
+        //   OFFLINE : ERP veritabani (TBLEFATZARF.XMLVERI, TBLEFATMAS, TBLEIRSMAS...) -> okunur
+        // Her ikisi de AYNI hedefe (IncomingDocument ailesi) yazar. Bu yuzden:
+        //  1) IntegratorSettingsId NULL olabilmeli — OFFLINE aktarimda entegrator YOKTUR.
+        //     Kolon NOT NULL kaldigi surece ERP kaynakli her belge FK ihlaliyle reddedilirdi.
+        //  2) IngestSource kolonu, kaydin hangi yoldan geldigini kalici olarak isaretler
+        //     (tesbis/raporlama icin: "bu fatura entegratorden mi ERP'den mi geldi").
+        try
+        {
+            await using var alter = connection.CreateCommand();
+            alter.CommandText = $@"
+IF COL_LENGTH(N'[{s}].[IncomingDocument]', N'IngestSource') IS NULL
+    ALTER TABLE [{s}].[IncomingDocument]
+        ADD [IngestSource] NVARCHAR(20) NOT NULL
+            CONSTRAINT [DF_IncomingDocument_IngestSource] DEFAULT(N'Online');
+
+IF EXISTS (SELECT 1 FROM sys.columns
+            WHERE object_id = OBJECT_ID(N'[{s}].[IncomingDocument]')
+              AND name = 'IntegratorSettingsId' AND is_nullable = 0)
+    ALTER TABLE [{s}].[IncomingDocument] ALTER COLUMN [IntegratorSettingsId] INT NULL;
+";
+            await alter.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[DB INIT WARN] IncomingDocument iki-kaynak uyarlamasi yapilamadi: {ex.Message}");
+        }
+
         try
         {
             await using var cmd = connection.CreateCommand();

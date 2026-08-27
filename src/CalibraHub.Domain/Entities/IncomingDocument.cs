@@ -23,7 +23,12 @@ namespace CalibraHub.Domain.Entities;
 public sealed class IncomingDocument
 {
     public int Id { get; init; }
-    public int IntegratorSettingsId { get; init; }
+
+    /// <summary>OFFLINE (ERP) aktarimda entegrator yoktur -> null.</summary>
+    public int? IntegratorSettingsId { get; init; }
+
+    /// <summary>Kaydin hangi yoldan geldigi. Varsayilan Online (mevcut davranis korunur).</summary>
+    public EDocumentIngestSource IngestSource { get; init; } = EDocumentIngestSource.Online;
     public required string EnvelopeId { get; init; }
     public required string DocumentNumber { get; init; }
     public DocumentKind Kind { get; init; }

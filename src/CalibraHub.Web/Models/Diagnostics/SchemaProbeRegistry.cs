@@ -1,4 +1,4 @@
-namespace CalibraHub.Web.Models.Diagnostics;
+﻿namespace CalibraHub.Web.Models.Diagnostics;
 
 /// <summary>
 /// Bir tablo için INSERT testinin tanımı.
@@ -19,12 +19,21 @@ public sealed record SchemaProbeDefinition(
 ///   2) Default'u olmayan NOT NULL kolonlar için SqlValue gir (Code, Name, FK ID, ...)
 ///   3) ScreenPaths array'ine ekranın liste/edit URL'lerini koy
 ///
-/// FK gereken yerlerde 0 veya hardcoded ID kullan — ROLLBACK olduğu için sorun yok,
-/// ama FK constraint check edilirken hata vermesin diye **var olan** bir ID ver
-/// (örn. Department için CompanyId=1 koy; CompanyId=0 zaten DEFAULT'tan kabul edilir).
+/// FK'li kolonlarda SABİT ID YAZMA — <see cref="FirstCompanyId"/> / <see cref="FirstUserId"/>
+/// gibi "var olan ilk kaydı seçen" alt sorguları kullan. Sabit 0 yazılmıştı ve Company/Users
+/// FK'leri eklenince probe'ların kendisi FK ihlali vermeye başladı (2026-08-28).
 /// </summary>
 public static class SchemaProbeRegistry
 {
+    /// <summary>
+    /// FK'li kolonlar icin VAR OLAN bir kaydi secen alt sorgular (2026-08-28).
+    /// Sabit <c>0</c> yaziliyordu; Company/Users tablolarina yabanci anahtar eklendiginde
+    /// probe'un KENDISI FK ihlali verdi ve saglik kontrolu ekrani saglikli oldugu halde
+    /// "sema hatasi" gosterdi. <c>{schema}</c> yer tutucusunu SchemaProbeService cozer.
+    /// </summary>
+    private const string FirstCompanyId = "(SELECT TOP 1 [Id] FROM [{schema}].[Company] ORDER BY [Id])";
+    private const string FirstUserId    = "(SELECT TOP 1 [Id] FROM [{schema}].[Users] ORDER BY [Id])";
+
     public static readonly IReadOnlyList<SchemaProbeDefinition> Definitions = new[]
     {
         // ── Items (Malzeme Kartı) ────────────────────────────────────────────
@@ -34,7 +43,7 @@ public static class SchemaProbeRegistry
             {
                 ("Code",      "N'HCTEST'"),
                 ("Name",      "N'HCTEST'"),
-                ("CompanyId", "0"),
+                ("CompanyId", FirstCompanyId),
                 // TypeId/UnitId NULL kabul, TaxRate/Combinations/IsActive/Created/Updated DEFAULT'lu
             },
             ScreenPaths: new[]
@@ -47,7 +56,7 @@ public static class SchemaProbeRegistry
             Table: "Contact",
             Columns: new[]
             {
-                ("CompanyId",    "0"),
+                ("CompanyId",    FirstCompanyId),
                 ("AccountCode",  "N'HCTEST'"),
                 ("AccountTitle", "N'HCTEST'"),
                 ("CreatedAt",    "SYSUTCDATETIME()"),
@@ -63,7 +72,7 @@ public static class SchemaProbeRegistry
             Table: "Department",
             Columns: new[]
             {
-                ("CompanyId", "0"),
+                ("CompanyId", FirstCompanyId),
                 ("Name",      "N'HCTEST'"),
             },
             ScreenPaths: new[]
@@ -76,7 +85,7 @@ public static class SchemaProbeRegistry
             Table: "Machine",
             Columns: new[]
             {
-                ("CompanyId",   "0"),
+                ("CompanyId",   FirstCompanyId),
                 ("LocationId",  "1"),     // FK: Location.Id — 1 yoksa bu test FK violation atar (beklenen)
                 ("Code", "N'HCTEST'"),
             },
@@ -90,7 +99,7 @@ public static class SchemaProbeRegistry
             Table: "Personnel",
             Columns: new[]
             {
-                ("CompanyId", "0"),
+                ("CompanyId", FirstCompanyId),
                 ("Code",      "N'HCTEST'"),
                 ("FullName",  "N'HCTEST'"),
             },
@@ -99,14 +108,19 @@ public static class SchemaProbeRegistry
                 "/Production/Definitions",
             }),
 
-        // ── notes (legacy snake_case tablo, PascalCase kolonlu) ─────────────
+        // ── Note (Notlar) ───────────────────────────────────────────────────
+        // 2026-08-28: tablo adi "notes" olarak kalmisti. Tablo, snake_case →
+        // PascalCase gecisinde (MigrateTableRenamesAsync) "Note" olarak yeniden
+        // adlandirildigi icin saglik kontrolu her calistiginda
+        // "Invalid object name 'dbo.notes'" veriyordu — yani probe'un kendisi
+        // bozuktu, Notlar ekraninda bir sorun yoktu (ekran zaten 200 donuyordu).
         new SchemaProbeDefinition(
-            Table: "notes",
+            Table: "Note",
             Columns: new[]
             {
                 ("Id",        "NEWID()"),
-                ("CompanyId", "0"),
-                ("UserId",    "0"),
+                ("CompanyId", FirstCompanyId),
+                ("UserId",    FirstUserId),
                 ("Title",     "N'HCTEST'"),
                 ("Created",   "SYSUTCDATETIME()"),
                 ("Updated",   "SYSUTCDATETIME()"),

@@ -1214,7 +1214,7 @@ export default function SmartBoard(props) {
           <button
             onClick={runFilterScan}
             className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-semibold text-indigo-600 hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-400/10"
-          >Devam et</button>
+          >Yeniden tara</button>
         )}
       </span>
     </div>

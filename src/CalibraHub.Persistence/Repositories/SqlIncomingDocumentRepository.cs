@@ -388,13 +388,14 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         // SCOPE_IDENTITY() ayrica cocuk satirlar (kalem/vergi/tasima) icin de gereklidir.
         command.CommandText = $"""
             INSERT INTO {_tableName}
-                ([IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [SenderName], [RecipientTaxNumber], [PayloadRaw], [ApprovalStatus], [ImportedAt], [CompanyId])
+                ([IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [SenderName], [RecipientTaxNumber], [PayloadRaw], [ApprovalStatus], [ImportedAt], [CompanyId], [IngestSource])
             VALUES
-                (@IntegratorSettingsId, @EnvelopeId, @DocumentNumber, @Kind, @IssueDate, @SenderTaxNumber, @SenderName, @RecipientTaxNumber, @PayloadRaw, @ApprovalStatus, @ImportedAt, @CompanyId);
+                (@IntegratorSettingsId, @EnvelopeId, @DocumentNumber, @Kind, @IssueDate, @SenderTaxNumber, @SenderName, @RecipientTaxNumber, @PayloadRaw, @ApprovalStatus, @ImportedAt, @CompanyId, @IngestSource);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
 
-        command.Parameters.Add(CreateParameter("@IntegratorSettingsId", document.IntegratorSettingsId));
+        // OFFLINE (ERP) aktarimda entegrator yoktur -> NULL yazilir.
+        command.Parameters.Add(CreateParameter("@IntegratorSettingsId", (object?)document.IntegratorSettingsId ?? DBNull.Value));
         command.Parameters.Add(CreateParameter("@EnvelopeId", document.EnvelopeId));
         command.Parameters.Add(CreateParameter("@DocumentNumber", document.DocumentNumber));
         command.Parameters.Add(CreateParameter("@Kind", document.Kind.ToString()));
@@ -406,6 +407,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         command.Parameters.Add(CreateParameter("@ApprovalStatus", document.ApprovalStatus.ToString()));
         command.Parameters.Add(CreateParameter("@ImportedAt", document.ImportedAt));
         command.Parameters.Add(CreateParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
+        command.Parameters.Add(CreateParameter("@IngestSource", document.IngestSource.ToString()));
 
         var newId = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
         await InsertIncomingDocumentDetailsAsync(connection, transaction, newId, document.PayloadRaw, cancellationToken);
@@ -446,7 +448,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
             var shipTable = $"[{_schema}].[IncomingDocumentShipment]";
 
             // Detay tablolari eski kurulumlarda henuz olmayabilir -> varsa yaz, yoksa atla.
-            if (!await TableExistsAsync(connection, "IncomingDocumentLine", cancellationToken)) return;
+            if (!await TableExistsAsync(connection, "IncomingDocumentLine", cancellationToken, transaction)) return;
 
             const string parentCompany =
                 "(SELECT p.[CompanyId] FROM {0} p WHERE p.[Id] = @DocId)";
@@ -496,7 +498,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
                                      incomingDocumentId, null, tax, cancellationToken);
 
             if (details.Shipment is { } ship
-                && await TableExistsAsync(connection, "IncomingDocumentShipment", cancellationToken))
+                && await TableExistsAsync(connection, "IncomingDocumentShipment", cancellationToken, transaction))
             {
                 await using var cmd = connection.CreateCommand();
                 cmd.Transaction = transaction;
@@ -1495,15 +1497,23 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _schemaCache = new();
 
+    /// <param name="transaction">
+    /// Bağlantıda açık bir yerel transaction varsa ZORUNLU. Verilmezse SQL Server
+    /// "BeginExecuteReader requires the command to have a transaction..." hatasi verir —
+    /// bu tam olarak yasandi: detay satirlarini yazan kod transaction icinden cagirinca
+    /// kontrol patliyor, hata yakalanip loglaniyor ve kalemler SESSIZCE yazilmiyordu.
+    /// </param>
     private async Task<bool> TableExistsAsync(
         SqlConnection connection,
         string tableName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        SqlTransaction? transaction = null)
     {
         var cacheKey = $"TABLE_{_schema}_{tableName}";
         if (_schemaCache.TryGetValue(cacheKey, out var exists)) return exists;
 
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = """
             SELECT CASE WHEN OBJECT_ID(@QualifiedName, 'U') IS NULL THEN 0 ELSE 1 END;
             """;
@@ -1715,7 +1725,11 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
             // "doc.Id == id" karsilastirmasi yapmak zorunda kaliyordu. INT kimlikle tekil
             // sorgu WHERE [INCKEYNO] = @Id ile indeksten donuyor.
             Id = incKeyNo,
-            IntegratorSettingsId = 0,
+            // ERP (offline) kaynakli kayitta entegrator YOKTUR. Eskiden 0 yaziliyordu —
+            // 0 var olmayan bir IntegratorSetting'e isaret eder (CompanyId=0 yigininin
+            // ayni hatasi). Dogrusu null + IngestSource=Offline.
+            IntegratorSettingsId = null,
+            IngestSource = EDocumentIngestSource.Offline,
             EnvelopeId = envelopeId,
             DocumentNumber = documentNumber,
             Kind = kind,
@@ -1790,7 +1804,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         var document = new IncomingDocument
         {
             Id = reader.GetInt32(0),
-            IntegratorSettingsId = reader.GetInt32(1),
+            IntegratorSettingsId = reader.IsDBNull(1) ? null : reader.GetInt32(1),
             EnvelopeId = reader.GetString(2),
             DocumentNumber = reader.GetString(3),
             Kind = kind,

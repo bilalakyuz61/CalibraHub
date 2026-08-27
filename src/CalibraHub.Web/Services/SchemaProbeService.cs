@@ -1,4 +1,4 @@
-using CalibraHub.Persistence.Database;
+﻿using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
 using CalibraHub.Web.Models.Diagnostics;
 using Microsoft.Data.SqlClient;
@@ -32,7 +32,11 @@ public sealed class SchemaProbeService
     {
         var schema = _schema.Replace("]", "]]");
         var cols = string.Join(", ", def.Columns.Select(c => $"[{c.Column}]"));
-        var vals = string.Join(", ", def.Columns.Select(c => c.SqlValue));
+        // SqlValue icinde {schema} yer tutucusu desteklenir (2026-08-28): FK'li kolonlar
+        // icin "(SELECT TOP 1 [Id] FROM [{schema}].[Company] ORDER BY [Id])" gibi VAR OLAN
+        // bir kaydi secen alt sorgu yazilabilsin diye. Sabit 0/1 vermek, FK eklendigi anda
+        // probe'u kirmisti — probe'un kendisi hata uretirse saglik kontrolu yanlis alarm verir.
+        var vals = string.Join(", ", def.Columns.Select(c => c.SqlValue.Replace("{schema}", schema)));
 
         var sql = $@"
 SET XACT_ABORT ON;
