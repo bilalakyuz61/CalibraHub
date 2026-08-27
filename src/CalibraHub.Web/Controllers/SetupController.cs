@@ -28,6 +28,7 @@ public sealed class SetupController : Controller
     private readonly IAdminManagementService _adminManagementService;
     private readonly IAdminReadService _adminReadService;
     private readonly CompanyConnectionRegistry _companyConnectionRegistry;
+    private readonly ILogger<SetupController> _logger;
 
     public SetupController(
         ICompanyRepository companyDefinitionRepository,
@@ -35,7 +36,8 @@ public sealed class SetupController : Controller
         IUserProfileRepository userProfileRepository,
         IAdminManagementService adminManagementService,
         IAdminReadService adminReadService,
-        CompanyConnectionRegistry companyConnectionRegistry)
+        CompanyConnectionRegistry companyConnectionRegistry,
+        ILogger<SetupController> logger)
     {
         _companyDefinitionRepository = companyDefinitionRepository;
         _departmentRepository = departmentRepository;
@@ -43,6 +45,7 @@ public sealed class SetupController : Controller
         _adminManagementService = adminManagementService;
         _adminReadService = adminReadService;
         _companyConnectionRegistry = companyConnectionRegistry;
+        _logger = logger;
     }
 
     // ── İlk kurulum ──────────────────────────────────────────────────────────
@@ -108,6 +111,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Setup] Initialize başarısız.");
             ModelState.AddModelError(string.Empty, "Islem sirasinda bir hata olustu.");
             return View(nameof(Index), model);
         }
@@ -203,6 +207,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Setup] SaveCompany başarısız.");
             ModelState.AddModelError(string.Empty, "Islem sirasinda bir hata olustu.");
             var vm = await BuildDefinitionsViewModelAsync(
                 input, new SetupUserInput(), "companies",
@@ -257,6 +262,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Setup] SaveUserDefinition başarısız.");
             ModelState.AddModelError(string.Empty, "Islem sirasinda bir hata olustu.");
             var vm = await BuildDefinitionsViewModelAsync(
                 new SetupCompanyInput(), input, "users",
@@ -362,6 +368,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Setup] SaveCompanyClassic başarısız.");
             ModelState.AddModelError(string.Empty, "Islem sirasinda bir hata olustu.");
             return View(nameof(Companies), await BuildSetupCompanyViewModelAsync(input, page, pageSize, cancellationToken));
         }
@@ -408,7 +415,8 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = $"Bağlantı kurulamadı: {"Islem sirasinda bir hata olustu."}" });
+            _logger.LogError(ex, "[Setup] TestCompanyConnection başarısız.");
+            return Json(new { success = false, message = "Bağlantı kurulamadı: Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -465,6 +473,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Setup] SaveUser başarısız.");
             ModelState.AddModelError(string.Empty, "Islem sirasinda bir hata olustu.");
             return View(nameof(Users), await BuildSetupUserViewModelAsync(input, page, pageSize, cancellationToken));
         }
@@ -678,6 +687,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Setup] SaveUserJson başarısız.");
             return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -870,6 +880,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Setup] DeleteCompanyPost başarısız.");
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -957,6 +968,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Setup] SaveCompanyJson başarısız.");
             return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -982,6 +994,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Setup] DeleteCompanyJson başarısız.");
             return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }

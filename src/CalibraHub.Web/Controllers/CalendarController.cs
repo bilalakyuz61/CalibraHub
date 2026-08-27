@@ -12,10 +12,12 @@ namespace CalibraHub.Web.Controllers;
 public sealed class CalendarController : Controller
 {
     private readonly CalendarService _calendarService;
+    private readonly ILogger<CalendarController> _logger;
 
-    public CalendarController(CalendarService calendarService)
+    public CalendarController(CalendarService calendarService, ILogger<CalendarController> logger)
     {
         _calendarService = calendarService;
+        _logger = logger;
     }
 
     /// <summary>GET /Calendar/Index — Tam sayfa takvim (sol menü "Genel → Takvim").</summary>
@@ -56,6 +58,7 @@ public sealed class CalendarController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Calendar] SaveEvent başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -76,6 +79,7 @@ public sealed class CalendarController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Calendar] DeleteEvent başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }

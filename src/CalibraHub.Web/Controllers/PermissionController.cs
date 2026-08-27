@@ -27,17 +27,20 @@ public sealed class PermissionController : Controller
     private readonly IPermissionGrantRepository _grantRepo;
     private readonly IUserProfileRepository _userRepo;
     private readonly IPermissionGroupRepository _groupRepo;
+    private readonly ILogger<PermissionController> _logger;
 
     public PermissionController(
         IPermissionService permService,
         IPermissionGrantRepository grantRepo,
         IUserProfileRepository userRepo,
-        IPermissionGroupRepository groupRepo)
+        IPermissionGroupRepository groupRepo,
+        ILogger<PermissionController> logger)
     {
         _permService = permService;
         _grantRepo = grantRepo;
         _userRepo = userRepo;
         _groupRepo = groupRepo;
+        _logger = logger;
     }
 
     // ── Current user — client-side gate'leri için ─────────────────────────

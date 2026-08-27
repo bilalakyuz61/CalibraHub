@@ -109,7 +109,8 @@ public sealed class WhatsAppAdminController : Controller
     public async Task<IActionResult> GetWhatsAppPairingCode(
         [FromServices] IWhatsAppConfigRepository configRepo,
         [FromServices] IHttpClientFactory httpClientFactory,
-        string phone, CancellationToken ct)
+        string phone, CancellationToken ct,
+        [FromServices] ILogger<WhatsAppAdminController> logger)
     {
         if (string.IsNullOrWhiteSpace(phone))
             return Json(new { success = false, message = "Telefon zorunlu (orn: 905338168150)" });
@@ -136,6 +137,7 @@ public sealed class WhatsAppAdminController : Controller
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "[WhatsAppAdmin] GetWhatsAppPairingCode başarısız.");
             return Json(new { success = false, message = $"Bridge hatasi: {"Islem sirasinda bir hata olustu."}" });
         }
     }

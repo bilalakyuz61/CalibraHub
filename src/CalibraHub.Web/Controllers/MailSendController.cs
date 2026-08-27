@@ -31,6 +31,7 @@ public sealed class MailSendController : Controller
     private readonly SqlServerConnectionFactory _connFactory;
     private readonly IMailSendBatchRepository _batchRepo;
     private readonly string _schema;
+    private readonly ILogger<MailSendController> _logger;
 
     public MailSendController(
         IDocDesignerService docDesignerService,
@@ -39,7 +40,8 @@ public sealed class MailSendController : Controller
         IEmailSender emailSender,
         SqlServerConnectionFactory connFactory,
         IMailSendBatchRepository batchRepo,
-        CalibraDatabaseOptions options)
+        CalibraDatabaseOptions options,
+        ILogger<MailSendController> logger)
     {
         _docDesignerService = docDesignerService;
         _docLayoutRepo = docLayoutRepo;
@@ -48,6 +50,7 @@ public sealed class MailSendController : Controller
         _connFactory = connFactory;
         _batchRepo = batchRepo;
         _schema = (string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim()).Replace("]", "]]");
+        _logger = logger;
     }
 
     // ── Page ──────────────────────────────────────────────────────────────────
@@ -91,6 +94,7 @@ public sealed class MailSendController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[MailSend] PreviewPage başarısız.");
             var msg = System.Net.WebUtility.HtmlEncode("İşlem sırasında bir hata oluştu.");
             return Content(
                 "<!doctype html><html><head><meta charset=\"utf-8\"><title>Önizleme Hatası</title>"
@@ -352,6 +356,7 @@ public sealed class MailSendController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[MailSend] ResolveDefaults başarısız.");
             return Json(new { ok = false, error = "View sorgusu hatası: " + "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -579,6 +584,7 @@ public sealed class MailSendController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[MailSend] DeleteBatch başarısız.");
             return Json(new { ok = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -763,6 +769,7 @@ public sealed class MailSendController : Controller
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "[MailSend] SendBulk başarısız.");
                 return Json(new { ok = false, message = "Belge PDF üretilemedi: " + "İşlem sırasında bir hata oluştu." });
             }
         }
@@ -843,8 +850,9 @@ public sealed class MailSendController : Controller
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "[MailSend] SendBulk başarısız.");
                 fail++;
-                errors.Add($"{rcp.Email}: LogItem olusturulamadi: {"İşlem sırasında bir hata oluştu."}");
+                errors.Add("{rcp.Email}: LogItem olusturulamadi: İşlem sırasında bir hata oluştu.");
                 continue;
             }
 
@@ -905,9 +913,10 @@ public sealed class MailSendController : Controller
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "[MailSend] SendBulk başarısız.");
                 fail++;
                 errMsg = "İşlem sırasında bir hata oluştu.";
-                errors.Add($"{rcp.Email}: {"İşlem sırasında bir hata oluştu."}");
+                errors.Add("{rcp.Email}: İşlem sırasında bir hata oluştu.");
             }
 
             // 4) LogItem status guncelle (Sent / Failed + sentAt + error)

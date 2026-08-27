@@ -17,11 +17,13 @@ public sealed class DocDesignerApiController : ControllerBase
 {
     private readonly IDocDesignerService _svc;
     private readonly IDocumentTypeRepository _docTypeRepo;
+    private readonly ILogger<DocDesignerApiController> _logger;
 
-    public DocDesignerApiController(IDocDesignerService svc, IDocumentTypeRepository docTypeRepo)
+    public DocDesignerApiController(IDocDesignerService svc, IDocumentTypeRepository docTypeRepo, ILogger<DocDesignerApiController> logger)
     {
         _svc = svc;
         _docTypeRepo = docTypeRepo;
+        _logger = logger;
     }
 
     // ── CRUD ─────────────────────────────────────────────────────────────────
@@ -34,7 +36,11 @@ public sealed class DocDesignerApiController : ControllerBase
         {
             return Ok(await _svc.ListAsync(docType, ct));
         }
-        catch (Exception ex) { return StatusCode(500, new { message = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[DocDesignerApi] List başarısız.");
+            return StatusCode(500, new { message = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpGet("layouts/{id:int}")]
@@ -52,7 +58,11 @@ public sealed class DocDesignerApiController : ControllerBase
             var id = await _svc.SaveAsync(req, BuildCaller(), ct);
             return Ok(id);
         }
-        catch (Exception ex) { return BadRequest(new { message = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[DocDesignerApi] Save başarısız.");
+            return BadRequest(new { message = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpDelete("layouts/{id:int}")]
@@ -72,7 +82,11 @@ public sealed class DocDesignerApiController : ControllerBase
             var html = await _svc.RenderHtmlPreviewAsync(req, ct);
             return Ok(new { html });
         }
-        catch (Exception ex) { return BadRequest(new { message = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[DocDesignerApi] Preview başarısız.");
+            return BadRequest(new { message = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpPost("render-pdf")]
@@ -83,7 +97,11 @@ public sealed class DocDesignerApiController : ControllerBase
             var bytes = await _svc.RenderPdfAsync(req, ct);
             return File(bytes, "application/pdf", $"belge_{req.LayoutId}.pdf");
         }
-        catch (Exception ex) { return BadRequest(new { message = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[DocDesignerApi] RenderPdf başarısız.");
+            return BadRequest(new { message = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     // ── Meta ─────────────────────────────────────────────────────────────────

@@ -19,11 +19,13 @@ public sealed class ArgeController : Controller
 {
     private readonly IArgeProjectService _arge;
     private readonly IProjectTaskService _tasks;
+    private readonly ILogger<ArgeController> _logger;
 
-    public ArgeController(IArgeProjectService arge, IProjectTaskService tasks)
+    public ArgeController(IArgeProjectService arge, IProjectTaskService tasks, ILogger<ArgeController> logger)
     {
         _arge = arge;
         _tasks = tasks;
+        _logger = logger;
     }
 
     // GET /Arge/Projects → "Komuta Güvertesi" bespoke board (view: Views/Arge/Projects.cshtml)
@@ -66,6 +68,7 @@ public sealed class ArgeController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Arge] DeleteProjectJson başarısız.");
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -144,6 +147,7 @@ public sealed class ArgeController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Arge] DeletePrototypeJson başarısız.");
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }

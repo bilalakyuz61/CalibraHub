@@ -45,19 +45,22 @@ public sealed class SetupUserController : Controller
     private readonly IDepartmentRepository _deptRepo;
     private readonly IAdminManagementService _adminService;
     private readonly IPasswordHashService _passwordHashService;
+    private readonly ILogger<SetupUserController> _logger;
 
     public SetupUserController(
         IUserProfileRepository userRepo,
         ICompanyRepository companyRepo,
         IDepartmentRepository deptRepo,
         IAdminManagementService adminService,
-        IPasswordHashService passwordHashService)
+        IPasswordHashService passwordHashService,
+        ILogger<SetupUserController> logger)
     {
         _userRepo = userRepo;
         _companyRepo = companyRepo;
         _deptRepo = deptRepo;
         _adminService = adminService;
         _passwordHashService = passwordHashService;
+        _logger = logger;
     }
 
     // 2026-05-26: RequireAuth() devre disi — [GateProtected] TOTP zaten yetkilendirmeyi
@@ -419,6 +422,7 @@ public sealed class SetupUserController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[SetupUser] Save başarısız.");
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -447,6 +451,7 @@ public sealed class SetupUserController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[SetupUser] Delete başarısız.");
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -474,6 +479,7 @@ public sealed class SetupUserController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[SetupUser] ResetPassword başarısız.");
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }

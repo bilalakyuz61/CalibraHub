@@ -29,7 +29,8 @@ public sealed class IntegrationTestSeedController : Controller
     public async Task<IActionResult> SeedHttpBinEcho(
         [FromServices] IIntegrationRepository integrationRepo,
         [FromServices] IIntegrationApiProfileRepository apiProfileRepo,
-        CancellationToken ct)
+        CancellationToken ct,
+        [FromServices] ILogger<IntegrationTestSeedController> logger)
     {
         try
         {
@@ -135,6 +136,7 @@ public sealed class IntegrationTestSeedController : Controller
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "[IntegrationTestSeed] SeedHttpBinEcho başarısız.");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }

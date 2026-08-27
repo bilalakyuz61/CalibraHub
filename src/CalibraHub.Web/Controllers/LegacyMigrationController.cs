@@ -21,10 +21,12 @@ namespace CalibraHub.Web.Controllers;
 public sealed class LegacyMigrationController : ControllerBase
 {
     private readonly ILegacyMigrationService _migrationService;
+    private readonly ILogger<LegacyMigrationController> _logger;
 
-    public LegacyMigrationController(ILegacyMigrationService migrationService)
+    public LegacyMigrationController(ILegacyMigrationService migrationService, ILogger<LegacyMigrationController> logger)
     {
         _migrationService = migrationService;
+        _logger = logger;
     }
 
     // POST /api/legacy-migration/run

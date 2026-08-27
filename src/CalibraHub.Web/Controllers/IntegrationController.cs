@@ -45,7 +45,8 @@ public sealed class IntegrationController : Controller
         [FromServices] IPermissionService permService,
         [FromServices] IPermissionDefRepository permDefRepo,
         [FromServices] IIntegrationRepository integrationRepo,
-        CancellationToken ct)
+        CancellationToken ct,
+        [FromServices] ILogger<IntegrationController> logger)
     {
         if (integrationId <= 0)
             return Json(new { success = false, error = "integrationId zorunlu" });
@@ -96,6 +97,7 @@ public sealed class IntegrationController : Controller
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "[Integration] Run başarısız.");
             // Runner zaten try/catch ile sariliydi ama her ihtimale karsi controller-level
             // catch ile JSON error don. Aksi takdirde HTML error page doner (5xx).
             return Json(new

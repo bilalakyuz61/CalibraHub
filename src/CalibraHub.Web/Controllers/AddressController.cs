@@ -17,11 +17,13 @@ public sealed class AddressController : Controller
 {
     private readonly IAddressRepository _repo;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<AddressController> _logger;
 
-    public AddressController(IAddressRepository repo, IHttpClientFactory httpClientFactory)
+    public AddressController(IAddressRepository repo, IHttpClientFactory httpClientFactory, ILogger<AddressController> logger)
     {
         _repo = repo;
         _httpClientFactory = httpClientFactory;
+        _logger = logger;
     }
 
     // ── Katalog durumu (PTT veri yuklu mu?) ─────────────────────────
@@ -160,7 +162,11 @@ public sealed class AddressController : Controller
         }
         catch (HttpRequestException ex) { return Json(new { success = false, message = "URL erisilemedi: " + ex.Message }); }
         catch (JsonException ex)        { return Json(new { success = false, message = "JSON ayristirilamadi: " + ex.Message }); }
-        catch (Exception ex)            { return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Address] ImportFromUrl başarısız.");
+            return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     private static string? Pick(JsonElement el, params string[] names)
@@ -303,7 +309,11 @@ public sealed class AddressController : Controller
         }
         catch (HttpRequestException ex) { return Json(new { success = false, message = "URL erisilemedi: " + ex.Message }); }
         catch (JsonException ex)        { return Json(new { success = false, message = "JSON ayristirilamadi: " + ex.Message }); }
-        catch (Exception ex)            { return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Address] PreviewUrl başarısız.");
+            return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpPost]
@@ -331,6 +341,7 @@ public sealed class AddressController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Address] ImportPtt başarısız.");
             return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -391,7 +402,11 @@ public sealed class AddressController : Controller
             if (input.IsDefault) await _repo.SetDefaultAddressAsync(input.ContactId, id, ct);
             return Json(new { success = true, id });
         }
-        catch (Exception ex) { return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Address] SaveAddress başarısız.");
+            return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     public sealed class DeleteAddressBody { public int Id { get; set; } }
@@ -404,7 +419,11 @@ public sealed class AddressController : Controller
             await _repo.DeleteAddressAsync(body.Id, ct);
             return Json(new { success = true });
         }
-        catch (Exception ex) { return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Address] DeleteAddress başarısız.");
+            return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     public sealed class SetDefaultBody { public int ContactId { get; set; } public int AddressId { get; set; } }

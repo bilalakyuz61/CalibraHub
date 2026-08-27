@@ -27,15 +27,18 @@ public sealed class IntegratorSettingsJsonController : Controller
     private readonly IAdminReadService _adminReadService;
     private readonly IAdminManagementService _adminManagementService;
     private readonly IDocumentImportService _documentImportService;
+    private readonly ILogger<IntegratorSettingsJsonController> _logger;
 
     public IntegratorSettingsJsonController(
         IAdminReadService adminReadService,
         IAdminManagementService adminManagementService,
-        IDocumentImportService documentImportService)
+        IDocumentImportService documentImportService,
+        ILogger<IntegratorSettingsJsonController> logger)
     {
         _adminReadService = adminReadService;
         _adminManagementService = adminManagementService;
         _documentImportService = documentImportService;
+        _logger = logger;
     }
 
     private int GetCompanyId()
@@ -125,7 +128,11 @@ public sealed class IntegratorSettingsJsonController : Controller
             return Json(new { success = true, message = "Entegrator ayari kaydedildi.", id = savedId });
         }
         catch (ArgumentException ex) { return Json(new { success = false, message = ex.Message }); }
-        catch (Exception ex) { return Json(new { success = false, message = "Kayit hatasi: " + "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[IntegratorSettingsJson] SaveIntegratorSettingsJson başarısız.");
+            return Json(new { success = false, message = "Kayit hatasi: " + "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpPost("/Admin/DeleteIntegratorSettingsJson")]
@@ -162,7 +169,11 @@ public sealed class IntegratorSettingsJsonController : Controller
             return Json(new { success = result.IsSuccess, message = result.Message });
         }
         catch (ArgumentException ex) { return Json(new { success = false, message = ex.Message }); }
-        catch (Exception ex) { return Json(new { success = false, message = "Baglanti hatasi: " + "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[IntegratorSettingsJson] TestIntegratorConnectionJson başarısız.");
+            return Json(new { success = false, message = "Baglanti hatasi: " + "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpPost("/Admin/PullIntegratorDataJson")]
@@ -175,6 +186,10 @@ public sealed class IntegratorSettingsJsonController : Controller
             if (result.Notes.Count > 0) msg += " " + string.Join(" ", result.Notes.Take(2));
             return Json(new { success = true, message = msg });
         }
-        catch (Exception ex) { return Json(new { success = false, message = $"Veri cekme islemi basarisiz: {"İşlem sırasında bir hata oluştu."}" }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[IntegratorSettingsJson] PullIntegratorDataJson başarısız.");
+            return Json(new { success = false, message = "Veri cekme islemi basarisiz: İşlem sırasında bir hata oluştu." });
+        }
     }
 }

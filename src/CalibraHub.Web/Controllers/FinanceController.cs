@@ -23,6 +23,7 @@ public sealed class FinanceController : Controller
     private readonly IPermissionDefRepository _permDefRepo;
     private readonly IPermissionService _permService;
     private readonly ICompanyParameterService _companyParameters;
+    private readonly ILogger<FinanceController> _logger;
 
     private const int DefaultPageSize = 50;
 
@@ -35,7 +36,8 @@ public sealed class FinanceController : Controller
         IIntegrationRepository integrationRepo,
         IPermissionDefRepository permDefRepo,
         IPermissionService permService,
-        ICompanyParameterService companyParameters)
+        ICompanyParameterService companyParameters,
+        ILogger<FinanceController> logger)
     {
         _financeService = financeService;
         _widgetService = widgetService;
@@ -46,6 +48,7 @@ public sealed class FinanceController : Controller
         _permDefRepo = permDefRepo;
         _permService = permService;
         _companyParameters = companyParameters;
+        _logger = logger;
     }
 
     // GET /Finance/GetContactQuotes?contactId=X — cariye ait verilen teklifler
@@ -284,6 +287,7 @@ public sealed class FinanceController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Finance] GetContactsPage başarısız.");
             return Json(new { error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -476,6 +480,7 @@ public sealed class FinanceController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Finance] GetContacts başarısız.");
             return Json(new { error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -497,6 +502,7 @@ public sealed class FinanceController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Finance] UpsertContact başarısız.");
             return Json(new { success = false, message = "Sunucu hatası: " + "Islem sirasinda bir hata olustu." });
         }
     }
@@ -518,6 +524,7 @@ public sealed class FinanceController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Finance] DeleteContact başarısız.");
             return Json(new { success = false, message = "Sunucu hatası: " + "Islem sirasinda bir hata olustu." });
         }
     }
@@ -538,6 +545,7 @@ public sealed class FinanceController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Finance] DeleteContactJson başarısız.");
             return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }

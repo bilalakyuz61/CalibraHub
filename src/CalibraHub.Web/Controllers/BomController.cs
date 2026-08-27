@@ -38,19 +38,22 @@ public sealed class BomController : Controller
     private readonly IPriceListService _priceListService;
     private readonly ICurrencyService _currencyService;
     private readonly ICompanyParameterService _companyParameters;
+    private readonly ILogger<BomController> _logger;
 
     public BomController(
         ILogisticsConfigurationService logisticsConfigurationService,
         IWidgetService widgetService,
         IPriceListService priceListService,
         ICurrencyService currencyService,
-        ICompanyParameterService companyParameters)
+        ICompanyParameterService companyParameters,
+        ILogger<BomController> logger)
     {
         _logisticsConfigurationService = logisticsConfigurationService;
         _widgetService = widgetService;
         _priceListService = priceListService;
         _currencyService = currencyService;
         _companyParameters = companyParameters;
+        _logger = logger;
     }
 
     /// <summary>

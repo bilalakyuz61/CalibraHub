@@ -32,17 +32,20 @@ public sealed class HomeDashboardController : Controller
     private readonly IPermissionService _permissions;
     private readonly IMenuService _menuService;
     private readonly IUiTextService _uiText;
+    private readonly ILogger<HomeDashboardController> _logger;
 
     public HomeDashboardController(
         IDashboardService dashboard,
         IPermissionService permissions,
         IMenuService menuService,
-        IUiTextService uiText)
+        IUiTextService uiText,
+        ILogger<HomeDashboardController> logger)
     {
         _dashboard = dashboard;
         _permissions = permissions;
         _menuService = menuService;
         _uiText = uiText;
+        _logger = logger;
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -82,6 +85,7 @@ public sealed class HomeDashboardController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[HomeDashboard] SavePages başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }

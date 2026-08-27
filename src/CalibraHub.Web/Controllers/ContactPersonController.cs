@@ -18,11 +18,13 @@ public sealed class ContactPersonController : Controller
 {
     private readonly IContactPersonRepository _repo;
     private readonly IContactPersonTitleRepository _titleRepo;
+    private readonly ILogger<ContactPersonController> _logger;
 
-    public ContactPersonController(IContactPersonRepository repo, IContactPersonTitleRepository titleRepo)
+    public ContactPersonController(IContactPersonRepository repo, IContactPersonTitleRepository titleRepo, ILogger<ContactPersonController> logger)
     {
         _repo = repo;
         _titleRepo = titleRepo;
+        _logger = logger;
     }
 
     private int? CurrentUserId()
@@ -96,6 +98,7 @@ public sealed class ContactPersonController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ContactPerson] AddTitle başarısız.");
             return Json(new { ok = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -206,6 +209,7 @@ public sealed class ContactPersonController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ContactPerson] Save başarısız.");
             return Json(new { ok = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -223,6 +227,7 @@ public sealed class ContactPersonController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ContactPerson] Delete başarısız.");
             return Json(new { ok = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -250,6 +255,7 @@ public sealed class ContactPersonController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ContactPerson] DeleteTitle başarısız.");
             return Json(new { ok = false, message = "Islem sirasinda bir hata olustu." });
         }
     }

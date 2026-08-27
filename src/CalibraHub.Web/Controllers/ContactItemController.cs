@@ -15,10 +15,12 @@ namespace CalibraHub.Web.Controllers;
 public sealed class ContactItemController : Controller
 {
     private readonly IContactItemRepository _repo;
+    private readonly ILogger<ContactItemController> _logger;
 
-    public ContactItemController(IContactItemRepository repo)
+    public ContactItemController(IContactItemRepository repo, ILogger<ContactItemController> logger)
     {
         _repo = repo;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -79,6 +81,7 @@ public sealed class ContactItemController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ContactItem] Save başarısız.");
             return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -96,7 +99,11 @@ public sealed class ContactItemController : Controller
             await _repo.DeleteAsync(body.Id, ct);
             return Json(new { success = true });
         }
-        catch (Exception ex) { return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ContactItem] Delete başarısız.");
+            return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     private static string? NullIfBlank(string? s) =>

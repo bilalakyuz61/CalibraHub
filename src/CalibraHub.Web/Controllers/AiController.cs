@@ -30,6 +30,7 @@ public sealed class AiController : Controller
     private readonly CalibroItemTools _itemTools;
     private readonly CalibroDocumentTools _documentTools;
     private readonly IAiToolInvocationRepository _auditLog;
+    private readonly ILogger<AiController> _logger;
 
     public AiController(
         IAiChatService chat,
@@ -38,7 +39,8 @@ public sealed class AiController : Controller
         CalibroContactTools contactTools,
         CalibroItemTools itemTools,
         CalibroDocumentTools documentTools,
-        IAiToolInvocationRepository auditLog)
+        IAiToolInvocationRepository auditLog,
+        ILogger<AiController> logger)
     {
         _chat = chat;
         _factory = factory;
@@ -47,6 +49,7 @@ public sealed class AiController : Controller
         _itemTools = itemTools;
         _documentTools = documentTools;
         _auditLog = auditLog;
+        _logger = logger;
     }
 
     [HttpGet("/Ai/Providers")]
@@ -90,6 +93,7 @@ public sealed class AiController : Controller
         catch (OperationCanceledException) { /* client kapadı */ }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Ai] Chat başarısız.");
             await WriteSseAsync($"(AI hatası: {"İşlem sırasında bir hata oluştu."})", ct);
         }
         finally
@@ -151,6 +155,7 @@ public sealed class AiController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Ai] ConfirmAction başarısız.");
             status = "error";
             errorMsg = "İşlem sırasında bir hata oluştu.";
             result = new { success = false, error = "Calistirma hatasi: " + "İşlem sırasında bir hata oluştu." };

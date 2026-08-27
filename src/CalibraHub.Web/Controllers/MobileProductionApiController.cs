@@ -67,6 +67,7 @@ public sealed class MobileProductionApiController : ControllerBase
     private readonly ShopFloorLockoutTracker _shopFloorLockout;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly IPermissionService _permService;
+    private readonly ILogger<MobileProductionApiController> _logger;
 
     public MobileProductionApiController(
         IWorkOrderService workOrderService,
@@ -77,7 +78,8 @@ public sealed class MobileProductionApiController : ControllerBase
         ICompanyParameterService companyParameters,
         ShopFloorLockoutTracker shopFloorLockout,
         SqlServerConnectionFactory connectionFactory,
-        IPermissionService permService)
+        IPermissionService permService,
+        ILogger<MobileProductionApiController> logger)
     {
         _workOrderService = workOrderService;
         _workOrderOperations = workOrderOperations;
@@ -88,6 +90,7 @@ public sealed class MobileProductionApiController : ControllerBase
         _shopFloorLockout = shopFloorLockout;
         _connectionFactory = connectionFactory;
         _permService = permService;
+        _logger = logger;
     }
 
     // ──────────────────────────────────────────────────────────────────────

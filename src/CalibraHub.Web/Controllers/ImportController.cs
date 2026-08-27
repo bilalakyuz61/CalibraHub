@@ -33,8 +33,13 @@ public sealed class ImportController : Controller
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     private readonly IImportService _service;
+    private readonly ILogger<ImportController> _logger;
 
-    public ImportController(IImportService service) => _service = service;
+    public ImportController(IImportService service, ILogger<ImportController> logger)
+    {
+        _service = service;
+        _logger = logger;
+    }
 
     // ── Razor ──────────────────────────────────────────────────────────
     [HttpGet("/Import")]
@@ -135,7 +140,11 @@ public sealed class ImportController : Controller
             var items = await _service.ListTemplatesAsync(includeInactive, ct);
             return Json(new { success = true, items });
         }
-        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Import] ListTemplates başarısız.");
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpGet("/Import/api/templates/{id:int}")]
@@ -148,7 +157,11 @@ public sealed class ImportController : Controller
                 ? Json(new { success = false, error = "Şablon bulunamadı." })
                 : Json(new { success = true, template = dto });
         }
-        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Import] GetTemplate başarısız.");
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpPost("/Import/api/templates/save")]
@@ -162,21 +175,33 @@ public sealed class ImportController : Controller
                 ? Json(new { success = true, id })
                 : Json(new { success = false, error });
         }
-        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Import] SaveTemplate başarısız.");
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpPost("/Import/api/templates/delete/{id:int}")]
     public async Task<IActionResult> DeleteTemplate(int id, CancellationToken ct)
     {
         try { await _service.DeleteTemplateAsync(id, ct); return Json(new { success = true }); }
-        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Import] DeleteTemplate başarısız.");
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpPost("/Import/api/templates/toggle/{id:int}")]
     public async Task<IActionResult> ToggleTemplate(int id, CancellationToken ct)
     {
         try { var active = await _service.ToggleTemplateAsync(id, ct); return Json(new { success = true, isActive = active }); }
-        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Import] ToggleTemplate başarısız.");
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     // ── Dosya işlemleri ────────────────────────────────────────────────
@@ -241,7 +266,12 @@ public sealed class ImportController : Controller
             if (template is null) { error = "Şablon tanımı çözümlenemedi."; return false; }
             return true;
         }
-        catch (Exception ex) { error = "Şablon tanımı geçersiz: " + "İşlem sırasında bir hata oluştu."; return false; }
+        // Statik yardimci — logger yok. Yutma DEGIL: hata `error` ile cagirana doner
+        // ve kullaniciya gosterilir, dolayisiyla sessizce kaybolmuyor.
+        catch (Exception)
+        {
+            error = "Şablon tanımı geçerli JSON değil."; return false;
+        }
     }
 
     /// <summary>Önizlemede elle düzeltilen hücreler: { "satırNo": { "alanKey": "yeniDeğer" } }.</summary>

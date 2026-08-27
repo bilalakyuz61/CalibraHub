@@ -26,6 +26,7 @@ public sealed class NotesController : Controller
     private readonly INoteEncryptionService _noteEncryption;
     private readonly INoteOcrService _noteOcr;
     private readonly string _schema;
+    private readonly ILogger<NotesController> _logger;
     private const long MaxAttachmentBytes = 20L * 1024 * 1024; // 20 MB
 
     public NotesController(
@@ -34,7 +35,8 @@ public sealed class NotesController : Controller
         SqlServerConnectionFactory connectionFactory,
         INoteEncryptionService noteEncryption,
         INoteOcrService noteOcr,
-        CalibraDatabaseOptions dbOptions)
+        CalibraDatabaseOptions dbOptions,
+        ILogger<NotesController> logger)
     {
         _noteRepository = noteRepository;
         _userProfileRepository = userProfileRepository;
@@ -42,6 +44,7 @@ public sealed class NotesController : Controller
         _noteEncryption = noteEncryption;
         _noteOcr = noteOcr;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
+        _logger = logger;
     }
 
     // -- Not ekleri — NoteAttachment (company DB) -------------------------------
@@ -1041,7 +1044,8 @@ public sealed class NotesController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = $"Dosya okunamadı: {"Islem sirasinda bir hata olustu."}" });
+            _logger.LogError(ex, "[Notes] ImportEvernote başarısız.");
+            return Json(new { success = false, error = "Dosya okunamadı: Islem sirasinda bir hata olustu." });
         }
 
         if (enexNotes.Count == 0)
@@ -1322,6 +1326,7 @@ public sealed class NotesController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Notes] CloneNoteJson başarısız.");
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }

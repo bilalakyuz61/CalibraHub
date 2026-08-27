@@ -25,17 +25,19 @@ public sealed class AssetsController : Controller
     private readonly IWidgetService _widgetService;
     private readonly IPrintDispatcher _printDispatcher;
     private readonly IAttachmentRepository _attachments;
+    private readonly ILogger<AssetsController> _logger;
 
     private const int AttFormDoc       = AttachmentFormIds.Asset;           // evraklar (çoklu)
     private const int AttFormImage     = AttachmentFormIds.AssetImage;      // kapak görseli (tek)
     private const int AttFormSignature = AttachmentFormIds.AssetAssignment; // zimmet/iade imzası
 
-    public AssetsController(IAssetService assetService, IWidgetService widgetService, IPrintDispatcher printDispatcher, IAttachmentRepository attachments)
+    public AssetsController(IAssetService assetService, IWidgetService widgetService, IPrintDispatcher printDispatcher, IAttachmentRepository attachments, ILogger<AssetsController> logger)
     {
         _assetService = assetService;
         _widgetService = widgetService;
         _printDispatcher = printDispatcher;
         _attachments = attachments;
+        _logger = logger;
     }
 
     private int? CurrentUserId()

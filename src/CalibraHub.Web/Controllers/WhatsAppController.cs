@@ -178,7 +178,8 @@ public sealed class WhatsAppController : Controller
         [FromForm] string phone,
         [FromForm] string? caption,
         IFormFile file,
-        CancellationToken ct)
+        CancellationToken ct,
+        [FromServices] ILogger<WhatsAppController> logger)
     {
         if (string.IsNullOrWhiteSpace(phone) || file is null || file.Length == 0)
             return Json(new { success = false, message = "Telefon ve dosya zorunlu." });
@@ -280,6 +281,7 @@ public sealed class WhatsAppController : Controller
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "[WhatsApp] İşlem başarısız.");
             return Json(new { success = false, message = $"Bridge hatasi: {"Islem sirasinda bir hata olustu."}" });
         }
     }
@@ -378,7 +380,8 @@ public sealed class WhatsAppController : Controller
         [FromServices] CalibraHub.Application.Abstractions.Persistence.IWhatsAppConfigRepository configRepo,
         [FromServices] IHttpClientFactory httpClientFactory,
         [FromBody] SendReplyBody body,
-        CancellationToken ct)
+        CancellationToken ct,
+        [FromServices] ILogger<WhatsAppController> logger)
     {
         if (body is null || string.IsNullOrWhiteSpace(body.Phone) || string.IsNullOrWhiteSpace(body.Text))
             return Json(new { success = false, message = "Phone, text zorunlu." });
@@ -405,7 +408,11 @@ public sealed class WhatsAppController : Controller
             var msgId = doc.RootElement.TryGetProperty("messageId", out var mid) ? mid.GetString() : null;
             return Json(new { success = ok, messageId = msgId });
         }
-        catch (Exception ex) { return Json(new { success = false, message = "Islem sirasinda bir hata olustu." }); }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "[WhatsApp] Mesaj işlemi başarısız.");
+            return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
+        }
     }
 
     /// <summary>Mesaja emoji reaksiyonu gönderir. Boş emoji = reaksiyonu kaldır.</summary>
@@ -416,7 +423,8 @@ public sealed class WhatsAppController : Controller
         [FromServices] IHttpClientFactory httpClientFactory,
         [FromServices] IWaInboxRepository inbox,
         [FromBody] SendReactionBody body,
-        CancellationToken ct)
+        CancellationToken ct,
+        [FromServices] ILogger<WhatsAppController> logger)
     {
         if (body is null || string.IsNullOrWhiteSpace(body.Phone) || string.IsNullOrWhiteSpace(body.MessageId))
             return Json(new { success = false });
@@ -442,7 +450,11 @@ public sealed class WhatsAppController : Controller
 
             return Json(new { success = resp.IsSuccessStatusCode });
         }
-        catch (Exception ex) { return Json(new { success = false, message = "Islem sirasinda bir hata olustu." }); }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "[WhatsApp] Mesaj işlemi başarısız.");
+            return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
+        }
     }
 
     /// <summary>Mesajı her iki yönde siler. DB'de is_deleted=1 yapılır.</summary>
@@ -453,7 +465,8 @@ public sealed class WhatsAppController : Controller
         [FromServices] IHttpClientFactory httpClientFactory,
         [FromServices] IWaInboxRepository inbox,
         [FromBody] DeleteMessageBody body,
-        CancellationToken ct)
+        CancellationToken ct,
+        [FromServices] ILogger<WhatsAppController> logger)
     {
         if (body is null || string.IsNullOrWhiteSpace(body.Phone) || string.IsNullOrWhiteSpace(body.MessageId))
             return Json(new { success = false });
@@ -476,7 +489,11 @@ public sealed class WhatsAppController : Controller
             await inbox.MarkDeletedAsync(body.MessageId, ct);
             return Json(new { success = true });
         }
-        catch (Exception ex) { return Json(new { success = false, message = "Islem sirasinda bir hata olustu." }); }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "[WhatsApp] Mesaj işlemi başarısız.");
+            return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
+        }
     }
 
     /// <summary>Sohbet içi metin arama.</summary>
@@ -571,7 +588,8 @@ public sealed class WhatsAppController : Controller
     public async Task<IActionResult> SyncGroups(
         [FromServices] IWaGroupRepository groupRepo,
         [FromServices] IWhatsAppConfigRepository configRepo,
-        CancellationToken ct)
+        CancellationToken ct,
+        [FromServices] ILogger<WhatsAppController> logger)
     {
         var cfg = await configRepo.GetAsync(ct);
         if (cfg is null || !cfg.IsEnabled || string.IsNullOrWhiteSpace(cfg.WebQrBridgeUrl))
@@ -601,6 +619,7 @@ public sealed class WhatsAppController : Controller
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "[WhatsApp] İşlem başarısız.");
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }

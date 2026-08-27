@@ -35,19 +35,22 @@ public sealed class DataVisibilityRuleController : Controller
     private readonly IFormRepository _formRepo;
     private readonly IWidgetRepository _widgetRepo;
     private readonly SqlServerConnectionFactory _connFactory;
+    private readonly ILogger<DataVisibilityRuleController> _logger;
 
     public DataVisibilityRuleController(
         IDataVisibilityRuleRepository ruleRepo,
         IDataVisibilityFilter dvFilter,
         IFormRepository formRepo,
         IWidgetRepository widgetRepo,
-        SqlServerConnectionFactory connFactory)
+        SqlServerConnectionFactory connFactory,
+        ILogger<DataVisibilityRuleController> logger)
     {
         _ruleRepo = ruleRepo;
         _dvFilter = dvFilter;
         _formRepo = formRepo;
         _widgetRepo = widgetRepo;
         _connFactory = connFactory;
+        _logger = logger;
     }
 
     // ── Operatör meta (UI etiketleri) ──────────────────────────────────────────
@@ -480,6 +483,7 @@ public sealed class DataVisibilityRuleController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[DataVisibilityRule] Save başarısız.");
             return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }

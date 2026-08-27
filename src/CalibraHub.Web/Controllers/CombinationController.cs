@@ -29,10 +29,12 @@ namespace CalibraHub.Web.Controllers;
 public sealed class CombinationController : Controller
 {
     private readonly ILogisticsConfigurationService _logisticsConfigurationService;
+    private readonly ILogger<CombinationController> _logger;
 
-    public CombinationController(ILogisticsConfigurationService logisticsConfigurationService)
+    public CombinationController(ILogisticsConfigurationService logisticsConfigurationService, ILogger<CombinationController> logger)
     {
         _logisticsConfigurationService = logisticsConfigurationService;
+        _logger = logger;
     }
 
     // ── Kombinasyon kart silme (SmartBoard kart icin) ───────────────────────
@@ -46,6 +48,7 @@ public sealed class CombinationController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Combination] DeleteCombinationJson başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -276,6 +279,7 @@ public sealed class CombinationController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Combination] UpdateCombinationDescriptionJson başarısız.");
             return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -344,6 +348,7 @@ public sealed class CombinationController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Combination] AddSingleCombinationJson başarısız.");
             return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }

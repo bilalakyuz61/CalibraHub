@@ -23,6 +23,7 @@ namespace CalibraHub.Web.Controllers;
 public sealed class FormManagementController : Controller
 {
     private readonly IFormRepository _formRepository;
+    private readonly ILogger<FormManagementController> _logger;
 
     private static readonly JsonSerializerOptions BoardConfigJsonOptions = new()
     {
@@ -31,9 +32,10 @@ public sealed class FormManagementController : Controller
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public FormManagementController(IFormRepository formRepository)
+    public FormManagementController(IFormRepository formRepository, ILogger<FormManagementController> logger)
     {
         _formRepository = formRepository;
+        _logger = logger;
     }
 
     [HttpGet("/Admin/FormManagement")]
@@ -60,6 +62,7 @@ public sealed class FormManagementController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[FormManagement] DeleteFormJson başarısız.");
             return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }

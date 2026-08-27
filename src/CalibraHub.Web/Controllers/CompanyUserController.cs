@@ -38,6 +38,7 @@ public sealed class CompanyUserController : Controller
     private readonly ICompanyRepository _companyRepo;
     private readonly IPasswordHashService _passwordHashService;
     private readonly IAuditTrailService _audit;
+    private readonly ILogger<CompanyUserController> _logger;
 
     public CompanyUserController(
         IUserProfileRepository userRepo,
@@ -45,7 +46,8 @@ public sealed class CompanyUserController : Controller
         IDepartmentRepository deptRepo,
         ICompanyRepository companyRepo,
         IPasswordHashService passwordHashService,
-        IAuditTrailService audit)
+        IAuditTrailService audit,
+        ILogger<CompanyUserController> logger)
     {
         _userRepo = userRepo;
         _adminService = adminService;
@@ -53,6 +55,7 @@ public sealed class CompanyUserController : Controller
         _companyRepo = companyRepo;
         _passwordHashService = passwordHashService;
         _audit = audit;
+        _logger = logger;
     }
 
     private (int CompanyId, int UserId) GetCurrentUser()
@@ -474,6 +477,7 @@ public sealed class CompanyUserController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[CompanyUser] Save başarısız.");
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -511,6 +515,7 @@ public sealed class CompanyUserController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[CompanyUser] Delete başarısız.");
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -537,6 +542,7 @@ public sealed class CompanyUserController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[CompanyUser] ResetPassword başarısız.");
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }

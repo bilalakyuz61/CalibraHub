@@ -21,10 +21,12 @@ namespace CalibraHub.Web.Controllers;
 public sealed class DecimalSettingsController : Controller
 {
     private readonly IDecimalSettingService _decimals;
+    private readonly ILogger<DecimalSettingsController> _logger;
 
-    public DecimalSettingsController(IDecimalSettingService decimals)
+    public DecimalSettingsController(IDecimalSettingService decimals, ILogger<DecimalSettingsController> logger)
     {
         _decimals = decimals;
+        _logger = logger;
     }
 
     private int? GetUserId() =>

@@ -20,17 +20,20 @@ public sealed class DashboardController : Controller
     private readonly IReportDesignRepository _designs;
     private readonly IPermissionService      _permService;
     private readonly PermissionDefDiscoveryService _permDiscovery;
+    private readonly ILogger<DashboardController> _logger;
 
     public DashboardController(
         IDbSchemaRepository dbSchema,
         IReportDesignRepository designs,
         IPermissionService permService,
-        PermissionDefDiscoveryService permDiscovery)
+        PermissionDefDiscoveryService permDiscovery,
+        ILogger<DashboardController> logger)
     {
         _dbSchema      = dbSchema;
         _designs       = designs;
         _permService   = permService;
         _permDiscovery = permDiscovery;
+        _logger = logger;
     }
 
     // ── Rapor Panoları ────────────────────────────────────────────────────────────
@@ -150,6 +153,7 @@ public sealed class DashboardController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Dashboard] SaveDesigned başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -170,6 +174,7 @@ public sealed class DashboardController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Dashboard] DeleteDesign başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }

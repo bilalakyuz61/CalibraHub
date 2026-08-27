@@ -20,11 +20,13 @@ public sealed class GeneralDefsController : Controller
 {
     private readonly IAddressDefinitionRepository _repo;
     private readonly ILocationSectionRepository _sections;
+    private readonly ILogger<GeneralDefsController> _logger;
 
-    public GeneralDefsController(IAddressDefinitionRepository repo, ILocationSectionRepository sections)
+    public GeneralDefsController(IAddressDefinitionRepository repo, ILocationSectionRepository sections, ILogger<GeneralDefsController> logger)
     {
         _repo = repo;
         _sections = sections;
+        _logger = logger;
     }
 
     private int? GetUserId() =>

@@ -29,15 +29,18 @@ public sealed class DocumentNumberRuleController : Controller
     private readonly IDocumentNumberRuleRepository _repo;
     private readonly IDocumentTypeRepository _docTypeRepo;
     private readonly IDocumentNumberService _generatorSvc;
+    private readonly ILogger<DocumentNumberRuleController> _logger;
 
     public DocumentNumberRuleController(
         IDocumentNumberRuleRepository repo,
         IDocumentTypeRepository docTypeRepo,
-        IDocumentNumberService generatorSvc)
+        IDocumentNumberService generatorSvc,
+        ILogger<DocumentNumberRuleController> logger)
     {
         _repo = repo;
         _docTypeRepo = docTypeRepo;
         _generatorSvc = generatorSvc;
+        _logger = logger;
     }
 
     // ── Sayfalar ────────────────────────────────────────────────────────────
@@ -101,6 +104,7 @@ public sealed class DocumentNumberRuleController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[DocumentNumberRule] SaveJson başarısız.");
             return StatusCode(500, new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -116,6 +120,7 @@ public sealed class DocumentNumberRuleController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[DocumentNumberRule] DeleteJson başarısız.");
             return StatusCode(500, new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }

@@ -91,6 +91,7 @@ public sealed class MobileWarehouseApiController : ControllerBase
     private readonly IIntegrationOnSaveDispatcher _onSaveDispatcher;
     private readonly IWidgetService _widgetService;
     private readonly string _schema;
+    private readonly ILogger<MobileWarehouseApiController> _logger;
 
     public MobileWarehouseApiController(
         ILogisticsConfigurationService logisticsService,
@@ -107,7 +108,8 @@ public sealed class MobileWarehouseApiController : ControllerBase
         IDocumentSourceRepository docSourceRepo,
         IIntegrationOnSaveDispatcher onSaveDispatcher,
         IWidgetService widgetService,
-        CalibraDatabaseOptions dbOptions)
+        CalibraDatabaseOptions dbOptions,
+        ILogger<MobileWarehouseApiController> logger)
     {
         _logisticsService   = logisticsService;
         _logisticsRepo      = logisticsRepo;
@@ -124,6 +126,7 @@ public sealed class MobileWarehouseApiController : ControllerBase
         _onSaveDispatcher   = onSaveDispatcher;
         _widgetService      = widgetService;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
+        _logger = logger;
     }
 
     // ──────────────────────────────────────────────────────────────────────

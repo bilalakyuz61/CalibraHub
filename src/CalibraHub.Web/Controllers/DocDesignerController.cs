@@ -12,8 +12,13 @@ namespace CalibraHub.Web.Controllers;
 public sealed class DocDesignerController : Controller
 {
     private readonly IDocDesignerService _svc;
+    private readonly ILogger<DocDesignerController> _logger;
 
-    public DocDesignerController(IDocDesignerService svc) => _svc = svc;
+    public DocDesignerController(IDocDesignerService svc, ILogger<DocDesignerController> logger)
+    {
+        _svc = svc;
+        _logger = logger;
+    }
 
     // 2026-06-03: Eski İngilizce kodlar (sales_quote vb.) backward-compat için tutulur;
     // canlı DocType.code değerleri Türkçe snake_case (satis_teklifi, alis_*, vb.).
@@ -108,6 +113,7 @@ public sealed class DocDesignerController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[DocDesigner] Preview başarısız.");
             var msg = System.Net.WebUtility.HtmlEncode("İşlem sırasında bir hata oluştu.");
             var errorHtml = "<!doctype html><html><head><meta charset=\"utf-8\"><title>Önizleme Hatası</title>"
                           + "<style>body{font-family:system-ui,sans-serif;padding:40px;color:#dc2626;background:#fef2f2;}"
@@ -128,6 +134,7 @@ public sealed class DocDesignerController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[DocDesigner] DeleteJson başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -164,6 +171,7 @@ public sealed class DocDesignerController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[DocDesigner] SetDefaultJson başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }

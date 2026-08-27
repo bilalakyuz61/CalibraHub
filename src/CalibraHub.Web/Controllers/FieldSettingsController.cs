@@ -22,10 +22,12 @@ namespace CalibraHub.Web.Controllers;
 public sealed class FieldSettingsController : ControllerBase
 {
     private readonly IFieldSettingRepository _repo;
+    private readonly ILogger<FieldSettingsController> _logger;
 
-    public FieldSettingsController(IFieldSettingRepository repo)
+    public FieldSettingsController(IFieldSettingRepository repo, ILogger<FieldSettingsController> logger)
     {
         _repo = repo;
+        _logger = logger;
     }
 
     [HttpGet("form/{formId:int}")]
@@ -73,6 +75,7 @@ public sealed class FieldSettingsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[FieldSettings] Upsert başarısız.");
             return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -95,6 +98,7 @@ public sealed class FieldSettingsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[FieldSettings] UpsertByFormCode başarısız.");
             return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -117,6 +121,7 @@ public sealed class FieldSettingsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[FieldSettings] BulkMap başarısız.");
             return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -134,6 +139,7 @@ public sealed class FieldSettingsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[FieldSettings] Delete başarısız.");
             return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -163,6 +169,7 @@ public sealed class FieldSettingsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[FieldSettings] DiscoverFields başarısız.");
             return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }

@@ -34,6 +34,7 @@ public sealed class WidgetsController : ControllerBase
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly CalibraHub.Application.Abstractions.Services.IPermissionService _permService;
     private readonly IAttachmentRepository _attachments;
+    private readonly ILogger<WidgetsController> _logger;
 
     // Not: Faz B-D'de kullanilan AdminFormWhitelist HashSet'i kaldirildi.
     // Tek dogruluk kaynagi artik dbo.Forms tablosu. Yeni form eklemek icin sadece
@@ -45,13 +46,15 @@ public sealed class WidgetsController : ControllerBase
         IIntegrationRepository integrationRepo,
         IServiceScopeFactory scopeFactory,
         CalibraHub.Application.Abstractions.Services.IPermissionService permService,
-        IAttachmentRepository attachments)
+        IAttachmentRepository attachments,
+        ILogger<WidgetsController> logger)
     {
         _widgetService = widgetService;
         _integrationRepo = integrationRepo;
         _scopeFactory = scopeFactory;
         _permService = permService;
         _attachments = attachments;
+        _logger = logger;
     }
 
     /// <summary>
@@ -279,6 +282,7 @@ public sealed class WidgetsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Widgets] SaveRecord başarısız.");
             return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -385,6 +389,7 @@ public sealed class WidgetsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Widgets] SaveRecordByCode başarısız.");
             return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -421,6 +426,7 @@ public sealed class WidgetsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Widgets] UpsertWidget başarısız.");
             return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -440,6 +446,7 @@ public sealed class WidgetsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Widgets] DeleteWidget başarısız.");
             return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -462,6 +469,7 @@ public sealed class WidgetsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Widgets] PatchIsPlainField başarısız.");
             return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -488,6 +496,7 @@ public sealed class WidgetsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Widgets] PatchSortOrders başarısız.");
             return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -512,6 +521,7 @@ public sealed class WidgetsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Widgets] PatchActive başarısız.");
             return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }

@@ -30,11 +30,13 @@ public sealed class CodeRuleController : Controller
 {
     private readonly ICodeRuleRepository _repo;
     private readonly ICodeGeneratorService _generator;
+    private readonly ILogger<CodeRuleController> _logger;
 
-    public CodeRuleController(ICodeRuleRepository repo, ICodeGeneratorService generator)
+    public CodeRuleController(ICodeRuleRepository repo, ICodeGeneratorService generator, ILogger<CodeRuleController> logger)
     {
         _repo = repo;
         _generator = generator;
+        _logger = logger;
     }
 
     // ── Sayfalar ────────────────────────────────────────────────────────────
@@ -121,6 +123,7 @@ public sealed class CodeRuleController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[CodeRule] SaveJson başarısız.");
             return StatusCode(500, new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -136,6 +139,7 @@ public sealed class CodeRuleController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[CodeRule] DeleteJson başarısız.");
             return StatusCode(500, new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }

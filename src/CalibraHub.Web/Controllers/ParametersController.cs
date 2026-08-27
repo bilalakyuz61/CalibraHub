@@ -24,15 +24,18 @@ public sealed class ParametersController : Controller
     private readonly IAdminReadService _adminReadService;
     private readonly IAdminManagementService _adminManagementService;
     private readonly ICompanyParameterService _companyParameters;
+    private readonly ILogger<ParametersController> _logger;
 
     public ParametersController(
         IAdminReadService adminReadService,
         IAdminManagementService adminManagementService,
-        ICompanyParameterService companyParameters)
+        ICompanyParameterService companyParameters,
+        ILogger<ParametersController> logger)
     {
         _adminReadService = adminReadService;
         _adminManagementService = adminManagementService;
         _companyParameters = companyParameters;
+        _logger = logger;
     }
 
     private int GetCompanyId()
@@ -247,6 +250,7 @@ public sealed class ParametersController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Parameters] SaveGeneralParametersJson başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -269,6 +273,7 @@ public sealed class ParametersController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Parameters] SaveParameter başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -284,6 +289,7 @@ public sealed class ParametersController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Parameters] DeleteParameter başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -333,6 +339,7 @@ public sealed class ParametersController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Parameters] SaveApprovalParametersJson başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -372,6 +379,7 @@ public sealed class ParametersController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Parameters] SaveProductionParametersJson başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -432,6 +440,7 @@ public sealed class ParametersController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Parameters] SaveStockParametersJson başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }

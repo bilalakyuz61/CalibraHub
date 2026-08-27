@@ -19,10 +19,12 @@ namespace CalibraHub.Web.Controllers;
 public sealed class ApprovalSqlQueryController : Controller
 {
     private readonly IApprovalSqlQueryService _service;
+    private readonly ILogger<ApprovalSqlQueryController> _logger;
 
-    public ApprovalSqlQueryController(IApprovalSqlQueryService service)
+    public ApprovalSqlQueryController(IApprovalSqlQueryService service, ILogger<ApprovalSqlQueryController> logger)
     {
         _service = service;
+        _logger = logger;
     }
 
     // ── React board sayfası ──────────────────────────────────────────────────
@@ -58,6 +60,7 @@ public sealed class ApprovalSqlQueryController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ApprovalSqlQuery] Save başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -74,6 +77,7 @@ public sealed class ApprovalSqlQueryController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ApprovalSqlQuery] Delete başarısız.");
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
