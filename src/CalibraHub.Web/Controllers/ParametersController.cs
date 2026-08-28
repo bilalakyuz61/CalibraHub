@@ -225,7 +225,18 @@ public sealed class ParametersController : Controller
 
         ViewData["EDocIngestMethod"] = edocMethod.ToString();
         ViewData["EDocIngestProvider"] = edocProvider.ToString();
-        ViewData["EDocProfiles"] = CalibraHub.Application.Constants.EDocumentSourceCatalog.Profiles;
+        // Profil listesi JSON'u BURADA uretilir, view'da DEGIL: bu projede Razor gorunumleri
+        // yalnizca CALISMA ZAMANINDA derlenir (RuntimeCompilation), yani view icindeki bir
+        // LINQ/serialize ifadesinin hatasi `dotnet build` ciktisinda GORUNMEZ — ancak sayfa
+        // acildiginda patlar. Controller'a tasiyinca ayni mantik derleyici denetimine girer.
+        ViewData["EDocProfilesJson"] = System.Text.Json.JsonSerializer.Serialize(
+            CalibraHub.Application.Constants.EDocumentSourceCatalog.Profiles.Select(p => new
+            {
+                provider = p.Provider.ToString(),
+                method = p.Method.ToString(),
+                label = p.Label,
+                description = p.Description
+            }));
 
         return View("~/Views/Admin/Parameters.cshtml");
     }

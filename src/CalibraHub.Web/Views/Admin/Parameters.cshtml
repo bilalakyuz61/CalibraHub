@@ -1939,10 +1939,7 @@ body.app-theme-dark .ap-tab.is-active::before {
 // yazmak, yeni bir ERP eklendiginde ekranin sessizce eski listeyi gostermesine yol
 // acardi — katalog TEK kayit yeridir.
 (function () {
-    var PROFILES = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
-        ((IEnumerable<CalibraHub.Application.Constants.EDocumentSourceProfile>)ViewData["EDocProfiles"]
-            ?? Array.Empty<CalibraHub.Application.Constants.EDocumentSourceProfile>())
-        .Select(p => new { provider = p.Provider.ToString(), method = p.Method.ToString(), label = p.Label, description = p.Description })));
+    var PROFILES = @Html.Raw(ViewData["EDocProfilesJson"] ?? "[]");
 
     var CURRENT_METHOD   = '@(ViewData["EDocIngestMethod"] ?? "Online")';
     var CURRENT_PROVIDER = '@(ViewData["EDocIngestProvider"] ?? "Logo")';
