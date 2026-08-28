@@ -452,6 +452,7 @@ body.app-theme-dark .ap-tab.is-active::before {
             <button type="button" class="ap-tab"           data-pane="stok"      data-label="Stok">Stok</button>
             <button type="button" class="ap-tab"           data-pane="guvenlik"  data-label="Güvenlik">Güvenlik</button>
             <button type="button" class="ap-tab"           data-pane="kalite"    data-label="Kalite">Kalite</button>
+            <button type="button" class="ap-tab"           data-pane="ebelge"    data-label="E-Belge">E-Belge</button>
         </aside>
 
         <main class="ap-content">
@@ -1110,6 +1111,41 @@ body.app-theme-dark .ap-tab.is-active::before {
                (Seri No Benzersizliği) yukarıdaki Stok sekmesine taşındı. *@
 
             @* ── Güvenlik ───────────────────────────────── *@
+            <section class="ap-pane" id="ap-pane-ebelge">
+                <h2>E-Belge</h2>
+                <div class="ap-hint">
+                    Gelen e-belgelerin (e-Fatura / e-Arşiv / e-İrsaliye) hangi kaynaktan okunacağını belirler.
+                    Önce <strong>yöntem</strong>, ardından o yönteme ait <strong>sağlayıcı</strong> seçilir.
+                    Her iki yöntem de kayıtları aynı e-belge tablolarına yazar; fark yalnızca okuma kaynağındadır.
+                </div>
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Alma Yöntemi</div>
+                        <div class="ap-row-desc">
+                            <strong>Çevrimiçi</strong>: entegratör API'sinden çekilir.
+                            <strong>Çevrimdışı</strong>: ERP veritabanından aktarılır (entegratör kullanılmaz).
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <select id="ap-edoc-method" class="form-select form-select-sm" style="width:170px;">
+                            <option value="Online">Çevrimiçi</option>
+                            <option value="Offline">Çevrimdışı</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Kaynak Sağlayıcı</div>
+                        <div class="ap-row-desc" id="ap-edoc-provider-desc">
+                            Seçili yönteme ait sağlayıcı. Liste yönteme göre filtrelenir.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <select id="ap-edoc-provider" class="form-select form-select-sm" style="width:170px;"></select>
+                    </div>
+                </div>
+            </section>
+
             <section class="ap-pane" id="ap-pane-guvenlik">
                 <h2>Güvenlik</h2>
                 <div class="ap-hint">
@@ -1609,6 +1645,19 @@ body.app-theme-dark .ap-tab.is-active::before {
                 ok = !!drt.ok;   // onay + TL: ortak kaydedicide
                 if (ok) flash('Kaydedildi.', true);
                 else    flash(drt.error || 'Kaydetme basarisiz.', false);
+            } else if (activePane === 'ebelge') {
+                var mEl = document.getElementById('ap-edoc-method');
+                var pEl = document.getElementById('ap-edoc-provider');
+                var redoc = await fetch('/Admin/SaveEDocumentParametersJson', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({ method: mEl ? mEl.value : '', provider: pEl ? pEl.value : '' })
+                });
+                var dedoc = await redoc.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
+                ok = !!dedoc.ok;
+                if (ok) flash('Kaydedildi.', true);
+                else    flash(dedoc.error || 'Kaydetme basarisiz.', false);
             } else if (activePane === 'guvenlik') {
                 var idleEl = document.getElementById('ap-session-idle');
                 var idleVal = parseInt(idleEl && idleEl.value, 10);
@@ -1882,6 +1931,52 @@ body.app-theme-dark .ap-tab.is-active::before {
             t.addEventListener('click', function() { fcLoadConfig(); });
         }
     });
+})();
+</script>
+<script>
+// ── E-Belge sekmesi: yontem -> saglayici filtreleme ─────────────────────────────
+// Saglayici listesi SUNUCUDAN gelir (EDocumentSourceCatalog). Listeyi burada sabit
+// yazmak, yeni bir ERP eklendiginde ekranin sessizce eski listeyi gostermesine yol
+// acardi — katalog TEK kayit yeridir.
+(function () {
+    var PROFILES = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        ((IEnumerable<CalibraHub.Application.Constants.EDocumentSourceProfile>)ViewData["EDocProfiles"]
+            ?? Array.Empty<CalibraHub.Application.Constants.EDocumentSourceProfile>())
+        .Select(p => new { provider = p.Provider.ToString(), method = p.Method.ToString(), label = p.Label, description = p.Description })));
+
+    var CURRENT_METHOD   = '@(ViewData["EDocIngestMethod"] ?? "Online")';
+    var CURRENT_PROVIDER = '@(ViewData["EDocIngestProvider"] ?? "Logo")';
+
+    var methodEl = document.getElementById('ap-edoc-method');
+    var provEl   = document.getElementById('ap-edoc-provider');
+    var descEl   = document.getElementById('ap-edoc-provider-desc');
+    if (!methodEl || !provEl) return;
+
+    function renderProviders(method, preferred) {
+        var list = PROFILES.filter(function (p) { return p.method === method; });
+        provEl.innerHTML = '';
+        list.forEach(function (p) {
+            var o = document.createElement('option');
+            o.value = p.provider;
+            o.textContent = p.label;
+            provEl.appendChild(o);
+        });
+        // Yontem degisince onceki saglayici artik gecerli olmayabilir -> ilkine dus.
+        var match = list.some(function (p) { return p.provider === preferred; });
+        provEl.value = match ? preferred : (list.length ? list[0].provider : '');
+        updateDesc();
+    }
+
+    function updateDesc() {
+        var sel = PROFILES.filter(function (p) { return p.provider === provEl.value; })[0];
+        if (descEl && sel) descEl.textContent = sel.description;
+    }
+
+    methodEl.value = CURRENT_METHOD;
+    renderProviders(CURRENT_METHOD, CURRENT_PROVIDER);
+
+    methodEl.addEventListener('change', function () { renderProviders(methodEl.value, provEl.value); });
+    provEl.addEventListener('change', updateDesc);
 })();
 </script>
 }

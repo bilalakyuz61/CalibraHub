@@ -206,6 +206,27 @@ public sealed class ParametersController : Controller
             CalibraHub.Application.Constants.QualityParameters.ContactCapaEnabledKey, cancellationToken)
             ?? CalibraHub.Application.Constants.QualityParameters.DefaultContactCapaEnabled;
 
+        // E-Belge tab: alma yontemi (Online/Offline) + o yonteme ait kaynak saglayici.
+        // Tanimsiz/bozuk deger -> varsayilan (Online + Logo), yani MEVCUT davranis korunur.
+        var edocMethodRaw = await _companyParameters.GetStringAsync(
+            CalibraHub.Application.Constants.EDocumentParameters.FormCode,
+            CalibraHub.Application.Constants.EDocumentParameters.IngestMethodKey, cancellationToken);
+        var edocProviderRaw = await _companyParameters.GetStringAsync(
+            CalibraHub.Application.Constants.EDocumentParameters.FormCode,
+            CalibraHub.Application.Constants.EDocumentParameters.IngestProviderKey, cancellationToken);
+
+        if (!Enum.TryParse<CalibraHub.Domain.Enums.EDocumentIngestSource>(edocMethodRaw, true, out var edocMethod)
+            || !Enum.IsDefined(edocMethod))
+            edocMethod = CalibraHub.Application.Constants.EDocumentParameters.DefaultMethod;
+
+        if (!Enum.TryParse<CalibraHub.Domain.Enums.EDocumentSourceProvider>(edocProviderRaw, true, out var edocProvider)
+            || !CalibraHub.Application.Constants.EDocumentSourceCatalog.IsValid(edocMethod, edocProvider))
+            edocProvider = CalibraHub.Application.Constants.EDocumentSourceCatalog.DefaultFor(edocMethod);
+
+        ViewData["EDocIngestMethod"] = edocMethod.ToString();
+        ViewData["EDocIngestProvider"] = edocProvider.ToString();
+        ViewData["EDocProfiles"] = CalibraHub.Application.Constants.EDocumentSourceCatalog.Profiles;
+
         return View("~/Views/Admin/Parameters.cshtml");
     }
 
@@ -476,6 +497,53 @@ public sealed class ParametersController : Controller
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
+
+    /// <summary>
+    /// E-Belge sekmesi: alma yontemi + kaynak saglayici.
+    ///
+    /// <para>Cift SUNUCUDA dogrulanir. Ekran saglayici listesini yonteme gore filtreler ama
+    /// buna GUVENILMEZ: istemciden gelen (Offline + Logo) gibi tutarsiz bir cift sessizce
+    /// kaydedilirse ice aktarim calisma zamaninda YANLIS kaynaktan okumaya calisirdi.</para>
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveEDocumentParametersJson(
+        [FromBody] EDocumentParametersInput input, CancellationToken ct)
+    {
+        try
+        {
+            if (!Enum.TryParse<CalibraHub.Domain.Enums.EDocumentIngestSource>(input.Method, true, out var method)
+                || !Enum.IsDefined(method))
+                return Json(new { ok = false, error = "Geçersiz e-belge alma yöntemi." });
+
+            if (!Enum.TryParse<CalibraHub.Domain.Enums.EDocumentSourceProvider>(input.Provider, true, out var provider))
+                return Json(new { ok = false, error = "Geçersiz kaynak sağlayıcı." });
+
+            if (!CalibraHub.Application.Constants.EDocumentSourceCatalog.IsValid(method, provider))
+                return Json(new { ok = false, error = $"'{provider}' sağlayıcısı '{method}' yöntemiyle kullanılamaz." });
+
+            await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                CalibraHub.Application.Constants.EDocumentParameters.FormCode,
+                CalibraHub.Application.Constants.EDocumentParameters.IngestMethodKey,
+                method.ToString(),
+                CalibraHub.Domain.Enums.CompanyParameterDataType.String), ct);
+
+            await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                CalibraHub.Application.Constants.EDocumentParameters.FormCode,
+                CalibraHub.Application.Constants.EDocumentParameters.IngestProviderKey,
+                provider.ToString(),
+                CalibraHub.Domain.Enums.CompanyParameterDataType.String), ct);
+
+            return Json(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Parametreler] E-Belge parametreleri kaydedilemedi.");
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
+        }
+    }
+
+    public sealed record EDocumentParametersInput(string Method, string Provider);
 
     public sealed record SecurityParametersInput(
         int SessionIdleMinutes,
