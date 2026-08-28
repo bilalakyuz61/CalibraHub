@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using System.Text;
+using System.Globalization;
 using System.Xml.Linq;
 using System.Xml.Xsl;
 using System.Xml;
@@ -136,10 +137,37 @@ public sealed class ApprovalController : Controller
         if (document is null) 
             return Content("<div class='p-3 text-center text-danger fw-medium'>Belge veritabanında bulunamadı.</div>", "text/html");
 
-        // 2. Anlık olarak (Payload Parser ile) XML parçalanır ve satır dizileri bulunur
+        // 2. Kalemler ONCE YERLI TABLODAN okunur (IncomingDocumentLine).
+        //
+        // Eskiden her istekte PayloadRaw icindeki UBL XML'i bastan ayristiriliyordu. Bu,
+        // OFFLINE (ERP/Netsis) kayitlarda HIC calismaz: o kayitlarda ayristirilacak UBL
+        // YOKTUR (ERP zarf tablosundaki XMLVERI olculdu — 14.382 satirin tamaminda bos),
+        // veri iliskisel tablolardan gelir ve ice aktarimda yerli tablolara yazilir.
+        //
+        // XML ayristirma GERI DUSUS olarak korunur: detay tablolari eklenmeden ONCE
+        // aktarilmis online kayitlarin kalemleri hala gorunsun (yoksa gecmis belgeler
+        // bir anda bos gorunurdu).
+        var dbLines = await _incomingDocumentRepository.GetLinesAsync(id, cancellationToken);
+        if (dbLines.Count > 0)
+        {
+            var mapped = dbLines.Select(l => new Web.Models.Approval.InvoiceLineItem
+            {
+                LineNo     = l.LineNumber.ToString(CultureInfo.InvariantCulture),
+                ItemName   = l.ItemName ?? l.ItemCode,
+                Quantity   = l.Quantity.ToString(CultureInfo.InvariantCulture),
+                UnitCode   = l.UnitCode,
+                UnitPrice  = l.UnitPrice.ToString(CultureInfo.InvariantCulture),
+                LineAmount = l.LineAmount?.ToString(CultureInfo.InvariantCulture),
+                TaxRate    = l.VatRate?.ToString(CultureInfo.InvariantCulture),
+                TaxAmount  = l.Taxes.FirstOrDefault(t => t.TaxAmount.HasValue)?.TaxAmount?
+                                .ToString(CultureInfo.InvariantCulture),
+            }).ToList();
+            return PartialView("_DocumentLines", mapped);
+        }
+
         var xmlContent = document.PayloadRaw ?? string.Empty;
         var rd = ParseInvoiceRenderData(xmlContent);
-        
+
         if (rd is null || rd.Lines.Count == 0) 
             return Content("<div class='p-4 text-center text-muted'><svg viewBox='0 0 24 24' width='24' height='24' stroke='currentColor' stroke-width='2' fill='none' class='mb-2 opacity-50'><circle cx='12' cy='12' r='10'></circle><line x1='12' y1='8' x2='12' y2='12'></line><line x1='12' y1='16' x2='12.01' y2='16'></line></svg><br>Bu belgede okunabilir bir kalem (satır) verisine ulaşılamadı.</div>", "text/html");
 

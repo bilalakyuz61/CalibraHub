@@ -47,17 +47,33 @@ public sealed class DocumentImportWorker : BackgroundService
             try
             {
                 var result = await importService.ImportFromActiveIntegratorsAsync(stoppingToken);
+
+                // CEVRIMDISI (ERP) yol AYNI zamanlayiciya bagli — ikinci bir worker/dongu
+                // kurulmadi. Sirket parametresi Offline degilse bu cagri hicbir sey yapmaz
+                // ve bos sonuc doner, yani her turda guvenle cagrilir.
+                var offline = await importService.ImportFromOfflineSourceAsync(stoppingToken);
+
                 var activeIntegrators = await integratorSettingsRepository.GetActiveAsync(stoppingToken);
                 var nextDelay = GetNextPollingDelay(activeIntegrators);
 
+                var imported = result.ImportedCount + offline.ImportedCount;
+                var skipped  = result.SkippedCount + offline.SkippedCount;
+
+                // Cevrimdisi tarafin notlari (baglanti secilmemis, kaynak okunamadi vb.)
+                // SESSIZ KALMAZ — yoksa "hic belge gelmiyor" sikayeti teshis edilemezdi.
+                foreach (var note in offline.Notes)
+                    _logger.LogWarning("[E-Belge/Offline] {Note}", note);
+
                 _logger.LogInformation(
-                    "Import sonucu: {Imported} eklendi, {Skipped} atlandi. Sonraki calisma: {Delay} sn",
-                    result.ImportedCount,
-                    result.SkippedCount,
+                    "Import sonucu: {Imported} eklendi, {Skipped} atlandi (cevrimdisi: {OffIn}/{OffSkip}). Sonraki calisma: {Delay} sn",
+                    imported,
+                    skipped,
+                    offline.ImportedCount,
+                    offline.SkippedCount,
                     (int)nextDelay.TotalSeconds);
 
                 await BuiltinTaskRunReporter.ReportAsync(_scopeFactory, _logger, TaskName, 0,
-                    $"{result.ImportedCount} eklendi, {result.SkippedCount} atlandi.",
+                    $"{imported} eklendi, {skipped} atlandi.",
                     null, DateTime.UtcNow.Add(nextDelay), stoppingToken);
 
                 await Task.Delay(nextDelay, stoppingToken);

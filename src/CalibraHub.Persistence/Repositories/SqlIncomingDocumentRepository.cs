@@ -431,6 +431,114 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
     /// <para>CompanyId OTURUMDAN DEGIL EBEVEYNDEN turetilir (CLAUDE.md cocuk kurali) — cocuk ile
     /// ebeveyninin sirketi dogdugu anda ayrisamaz.</para>
     /// </summary>
+
+    /// <summary>
+    /// Belgenin YERLI tablolardaki kalemleri + her kalemin vergi kirilimi.
+    ///
+    /// <para>Kiraci suzgeci: documentId istemciden gelir. Suzgec olmadan baska sirketin
+    /// belgesinin kalemleri okunabilirdi.</para>
+    ///
+    /// <para>Detay tablolari eski kurulumlarda henuz olmayabilir -> bos liste doner
+    /// (cagiran taraf XML ayristirmaya geri duser), acilis/istek KIRILMAZ.</para>
+    /// </summary>
+    public async Task<IReadOnlyList<EDocumentLineData>> GetLinesAsync(
+        int documentId, CancellationToken cancellationToken)
+    {
+        if (documentId <= 0) return Array.Empty<EDocumentLineData>();
+
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        if (!await TableExistsAsync(connection, "IncomingDocumentLine", cancellationToken))
+            return Array.Empty<EDocumentLineData>();
+
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
+        var lineTable = $"[{_schema}].[IncomingDocumentLine]";
+        var taxTable = $"[{_schema}].[IncomingDocumentTax]";
+
+        // Kalem basina vergileri tek sorguda topla: satir sayisi kadar sorgu acmak
+        // (N+1) buyuk belgelerde gereksiz gidip gelme uretirdi.
+        var taxesByLine = new Dictionary<int, List<EDocumentTaxData>>();
+        await using (var taxCmd = connection.CreateCommand())
+        {
+            taxCmd.CommandText = $"""
+                SELECT [IncomingDocumentLineId],[TaxTypeCode],[Name],[TaxableAmount],[TaxAmount],
+                       [TaxPercent],[CurrencyTaxAmount],[ExemptionReason],[ExemptionReasonCode]
+                  FROM {taxTable}
+                 WHERE [IncomingDocumentId] = @DocId AND [CompanyId] = @CompanyId
+                   AND [IncomingDocumentLineId] IS NOT NULL;
+                """;
+            taxCmd.Parameters.Add(CreateParameter("@DocId", documentId));
+            taxCmd.Parameters.Add(CreateParameter("@CompanyId", companyId));
+
+            await using var tr = await taxCmd.ExecuteReaderAsync(cancellationToken);
+            while (await tr.ReadAsync(cancellationToken))
+            {
+                var lineId = Convert.ToInt32(tr["IncomingDocumentLineId"]);
+                if (!taxesByLine.TryGetValue(lineId, out var list))
+                    taxesByLine[lineId] = list = new List<EDocumentTaxData>();
+
+                list.Add(new EDocumentTaxData(
+                    TaxTypeCode: NullableString(tr["TaxTypeCode"]),
+                    Name: NullableString(tr["Name"]),
+                    TaxableAmount: NullableDecimal(tr["TaxableAmount"]),
+                    TaxAmount: NullableDecimal(tr["TaxAmount"]),
+                    TaxPercent: NullableDecimal(tr["TaxPercent"]),
+                    CurrencyTaxAmount: NullableDecimal(tr["CurrencyTaxAmount"]),
+                    ExemptionReason: NullableString(tr["ExemptionReason"]),
+                    ExemptionReasonCode: tr["ExemptionReasonCode"] is int c ? c : null));
+            }
+        }
+
+        var lines = new List<EDocumentLineData>();
+        await using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = $"""
+                SELECT [Id],[LineNumber],[ItemCode],[ItemName],[BuyerItemCode],[ManufacturerCode],
+                       [Quantity],[UnitCode],[UnitPrice],[CurrencyCode],[DiscountAmount],
+                       [VatRate],[LineAmount],[Description]
+                  FROM {lineTable}
+                 WHERE [IncomingDocumentId] = @DocId AND [CompanyId] = @CompanyId
+                 ORDER BY [LineNumber];
+                """;
+            cmd.Parameters.Add(CreateParameter("@DocId", documentId));
+            cmd.Parameters.Add(CreateParameter("@CompanyId", companyId));
+
+            await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (await r.ReadAsync(cancellationToken))
+            {
+                var id = Convert.ToInt32(r["Id"]);
+                lines.Add(new EDocumentLineData(
+                    LineNumber: Convert.ToInt32(r["LineNumber"]),
+                    ItemCode: NullableString(r["ItemCode"]),
+                    ItemName: NullableString(r["ItemName"]),
+                    BuyerItemCode: NullableString(r["BuyerItemCode"]),
+                    ManufacturerCode: NullableString(r["ManufacturerCode"]),
+                    Quantity: Convert.ToDecimal(r["Quantity"]),
+                    UnitCode: NullableString(r["UnitCode"]),
+                    UnitPrice: Convert.ToDecimal(r["UnitPrice"]),
+                    CurrencyCode: NullableString(r["CurrencyCode"]),
+                    DiscountAmount: NullableDecimal(r["DiscountAmount"]),
+                    VatRate: NullableDecimal(r["VatRate"]),
+                    LineAmount: NullableDecimal(r["LineAmount"]),
+                    Description: NullableString(r["Description"]),
+                    Taxes: taxesByLine.TryGetValue(id, out var tx)
+                        ? tx
+                        : (IReadOnlyList<EDocumentTaxData>)Array.Empty<EDocumentTaxData>()));
+            }
+        }
+
+        return lines;
+    }
+
+    private static string? NullableString(object? v)
+    {
+        if (v is null || v == DBNull.Value) return null;
+        var s = v.ToString();
+        return string.IsNullOrWhiteSpace(s) ? null : s;
+    }
+
+    private static decimal? NullableDecimal(object? v)
+        => v is null || v == DBNull.Value ? null : Convert.ToDecimal(v);
+
     private async Task InsertIncomingDocumentDetailsAsync(
         SqlConnection connection,
         SqlTransaction transaction,

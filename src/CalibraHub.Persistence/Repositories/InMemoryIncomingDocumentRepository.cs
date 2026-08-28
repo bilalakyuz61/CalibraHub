@@ -56,6 +56,11 @@ public sealed class InMemoryIncomingDocumentRepository : IIncomingDocumentReposi
         return Task.FromResult(result);
     }
 
+    public Task<IReadOnlyList<CalibraHub.Application.Services.EDocument.EDocumentLineData>> GetLinesAsync(
+        int documentId, CancellationToken cancellationToken)
+        => Task.FromResult<IReadOnlyList<CalibraHub.Application.Services.EDocument.EDocumentLineData>>(
+            Array.Empty<CalibraHub.Application.Services.EDocument.EDocumentLineData>());
+
     public Task<IncomingDocument?> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
         _dataStore.IncomingDocuments.TryGetValue(id, out var document);

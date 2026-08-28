@@ -1,4 +1,5 @@
-﻿using CalibraHub.Application.Abstractions.Services;
+﻿using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -24,17 +25,20 @@ public sealed class ParametersController : Controller
     private readonly IAdminReadService _adminReadService;
     private readonly IAdminManagementService _adminManagementService;
     private readonly ICompanyParameterService _companyParameters;
+    private readonly IExternalDbConnectionRepository _externalDbConnections;
     private readonly ILogger<ParametersController> _logger;
 
     public ParametersController(
         IAdminReadService adminReadService,
         IAdminManagementService adminManagementService,
         ICompanyParameterService companyParameters,
+        IExternalDbConnectionRepository externalDbConnections,
         ILogger<ParametersController> logger)
     {
         _adminReadService = adminReadService;
         _adminManagementService = adminManagementService;
         _companyParameters = companyParameters;
+        _externalDbConnections = externalDbConnections;
         _logger = logger;
     }
 
@@ -229,6 +233,22 @@ public sealed class ParametersController : Controller
         // yalnizca CALISMA ZAMANINDA derlenir (RuntimeCompilation), yani view icindeki bir
         // LINQ/serialize ifadesinin hatasi `dotnet build` ciktisinda GORUNMEZ — ancak sayfa
         // acildiginda patlar. Controller'a tasiyinca ayni mantik derleyici denetimine girer.
+        var edocConnId = await _companyParameters.GetIntAsync(
+            CalibraHub.Application.Constants.EDocumentParameters.FormCode,
+            CalibraHub.Application.Constants.EDocumentParameters.ErpConnectionIdKey, cancellationToken) ?? 0;
+        ViewData["EDocErpConnectionId"] = edocConnId;
+
+        ViewData["EDocPollInterval"] = await _companyParameters.GetIntAsync(
+            CalibraHub.Application.Constants.EDocumentParameters.FormCode,
+            CalibraHub.Application.Constants.EDocumentParameters.PollIntervalSecondsKey, cancellationToken)
+            ?? CalibraHub.Application.Constants.EDocumentParameters.DefaultPollIntervalSeconds;
+
+        // Cevrimdisi yolda okunacak ERP veritabani baglantisi. Liste /DbImport ekraninda
+        // tanimlanan baglantilardan gelir — burada YENI baglanti kavrami uretilmez.
+        var erpConns = await _externalDbConnections.ListAsync(includeInactive: false, cancellationToken);
+        ViewData["EDocErpConnectionsJson"] = System.Text.Json.JsonSerializer.Serialize(
+            erpConns.Select(c => new { id = c.Id, name = c.Name, database = c.DatabaseName }));
+
         ViewData["EDocProfilesJson"] = System.Text.Json.JsonSerializer.Serialize(
             CalibraHub.Application.Constants.EDocumentSourceCatalog.Profiles.Select(p => new
             {
@@ -545,6 +565,33 @@ public sealed class ParametersController : Controller
                 provider.ToString(),
                 CalibraHub.Domain.Enums.CompanyParameterDataType.String), ct);
 
+            // ERP baglantisi YALNIZ cevrimdisi yolda anlamlidir. Cevrimici secilince 0 yazilir;
+            // aksi halde yontem degistirilip geri donuldugunde eski baglanti sessizce
+            // yeniden devreye girerdi.
+            var erpConnId = method == CalibraHub.Domain.Enums.EDocumentIngestSource.Offline
+                ? Math.Max(0, input.ErpConnectionId)
+                : 0;
+
+            if (method == CalibraHub.Domain.Enums.EDocumentIngestSource.Offline && erpConnId == 0)
+                return Json(new { ok = false, error = "Çevrimdışı yöntem için ERP veritabanı bağlantısı seçilmelidir." });
+
+            await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                CalibraHub.Application.Constants.EDocumentParameters.FormCode,
+                CalibraHub.Application.Constants.EDocumentParameters.ErpConnectionIdKey,
+                erpConnId.ToString(),
+                CalibraHub.Domain.Enums.CompanyParameterDataType.Int), ct);
+
+            // Tarama araligi: cok kisa deger ERP'yi gereksiz yorar, cok uzun belgeyi geciktirir.
+            var interval = input.PollIntervalSeconds <= 0
+                ? CalibraHub.Application.Constants.EDocumentParameters.DefaultPollIntervalSeconds
+                : Math.Clamp(input.PollIntervalSeconds, 30, 86400);
+
+            await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                CalibraHub.Application.Constants.EDocumentParameters.FormCode,
+                CalibraHub.Application.Constants.EDocumentParameters.PollIntervalSecondsKey,
+                interval.ToString(),
+                CalibraHub.Domain.Enums.CompanyParameterDataType.Int), ct);
+
             return Json(new { ok = true });
         }
         catch (Exception ex)
@@ -554,7 +601,8 @@ public sealed class ParametersController : Controller
         }
     }
 
-    public sealed record EDocumentParametersInput(string Method, string Provider);
+    public sealed record EDocumentParametersInput(
+        string Method, string Provider, int ErpConnectionId = 0, int PollIntervalSeconds = 0);
 
     public sealed record SecurityParametersInput(
         int SessionIdleMinutes,

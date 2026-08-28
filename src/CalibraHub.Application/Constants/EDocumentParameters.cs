@@ -27,6 +27,17 @@ public static class EDocumentParameters
     /// <summary>Secili kaynak saglayici: <c>Logo</c> | <c>Netsis</c> ... (<see cref="EDocumentSourceProvider"/>).</summary>
     public const string IngestProviderKey = "EDOC_INGEST_PROVIDER";
 
+    /// <summary>OFFLINE yolda okunacak ERP veritabani baglantisi (ExternalDbConnection.Id).</summary>
+    public const string ErpConnectionIdKey = "EDOC_ERP_CONNECTION_ID";
+
+    /// <summary>Cevrimdisi tarama araligi (saniye). Online yolda entegratorun kendi araligi kullanilir.</summary>
+    public const string PollIntervalSecondsKey = "EDOC_POLL_INTERVAL_SEC";
+
+    public const int DefaultPollIntervalSeconds = 300;
+
+    /// <summary>Tek taramada okunacak azami belge — guvenlik tavani.</summary>
+    public const int MaxDocumentsPerPull = 200;
+
     public const EDocumentIngestSource DefaultMethod = EDocumentIngestSource.Online;
     public const EDocumentSourceProvider DefaultProvider = EDocumentSourceProvider.Logo;
 }

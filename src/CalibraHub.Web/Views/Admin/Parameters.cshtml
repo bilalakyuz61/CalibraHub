@@ -1144,6 +1144,31 @@ body.app-theme-dark .ap-tab.is-active::before {
                         <select id="ap-edoc-provider" class="form-select form-select-sm" style="width:170px;"></select>
                     </div>
                 </div>
+                <div class="ap-row" id="ap-edoc-conn-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">ERP Veritabanı Bağlantısı</div>
+                        <div class="ap-row-desc">
+                            Belgelerin okunacağı ERP veritabanı. Liste <strong>Veritabanı Aktarımı</strong>
+                            ekranında tanımlanan bağlantılardan gelir. Yalnızca çevrimdışı yöntemde kullanılır.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <select id="ap-edoc-conn" class="form-select form-select-sm" style="width:220px;"></select>
+                    </div>
+                </div>
+                <div class="ap-row" id="ap-edoc-interval-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Tarama Aralığı (saniye)</div>
+                        <div class="ap-row-desc">
+                            Çevrimdışı kaynağın ne sıklıkla taranacağı. Çok kısa değer ERP'yi gereksiz yorar,
+                            çok uzun değer belgenin sisteme girişini geciktirir. Önerilen: 300.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <input type="number" id="ap-edoc-interval" class="form-control form-control-sm"
+                               min="30" max="86400" step="30" style="width:110px;text-align:right;" />
+                    </div>
+                </div>
             </section>
 
             <section class="ap-pane" id="ap-pane-guvenlik">
@@ -1652,7 +1677,12 @@ body.app-theme-dark .ap-tab.is-active::before {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-                    body: JSON.stringify({ method: mEl ? mEl.value : '', provider: pEl ? pEl.value : '' })
+                    body: JSON.stringify({
+                        method: mEl ? mEl.value : '',
+                        provider: pEl ? pEl.value : '',
+                        erpConnectionId: parseInt((document.getElementById('ap-edoc-conn') || {}).value, 10) || 0,
+                        pollIntervalSeconds: parseInt((document.getElementById('ap-edoc-interval') || {}).value, 10) || 0
+                    })
                 });
                 var dedoc = await redoc.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
                 ok = !!dedoc.ok;
@@ -1969,10 +1999,44 @@ body.app-theme-dark .ap-tab.is-active::before {
         if (descEl && sel) descEl.textContent = sel.description;
     }
 
+    // ERP baglanti listesi de SUNUCUDAN gelir (Veritabani Aktarimi ekranindaki tanimlar).
+    var CONNS = @Html.Raw(ViewData["EDocErpConnectionsJson"] ?? "[]");
+    var CURRENT_CONN = @(ViewData["EDocErpConnectionId"] ?? 0);
+    var connEl = document.getElementById('ap-edoc-conn');
+    var connRow = document.getElementById('ap-edoc-conn-row');
+    var intervalEl = document.getElementById('ap-edoc-interval');
+    var intervalRow = document.getElementById('ap-edoc-interval-row');
+
+    if (connEl) {
+        var empty = document.createElement('option');
+        empty.value = '0';
+        empty.textContent = CONNS.length ? '— seçiniz —' : '(tanımlı bağlantı yok)';
+        connEl.appendChild(empty);
+        CONNS.forEach(function (c) {
+            var o = document.createElement('option');
+            o.value = String(c.id);
+            o.textContent = c.name + (c.database ? ' (' + c.database + ')' : '');
+            connEl.appendChild(o);
+        });
+        connEl.value = String(CURRENT_CONN || 0);
+    }
+    if (intervalEl) intervalEl.value = @(ViewData["EDocPollInterval"] ?? 300);
+
+    // ERP baglantisi ve tarama araligi YALNIZ cevrimdisi yontemde anlamlidir.
+    function syncOfflineRows() {
+        var offline = methodEl.value === 'Offline';
+        if (connRow) connRow.style.display = offline ? '' : 'none';
+        if (intervalRow) intervalRow.style.display = offline ? '' : 'none';
+    }
+
     methodEl.value = CURRENT_METHOD;
     renderProviders(CURRENT_METHOD, CURRENT_PROVIDER);
+    syncOfflineRows();
 
-    methodEl.addEventListener('change', function () { renderProviders(methodEl.value, provEl.value); });
+    methodEl.addEventListener('change', function () {
+        renderProviders(methodEl.value, provEl.value);
+        syncOfflineRows();
+    });
     provEl.addEventListener('change', updateDesc);
 })();
 </script>

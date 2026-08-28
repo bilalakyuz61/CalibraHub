@@ -24,4 +24,15 @@ public interface IIncomingDocumentRepository
     Task<IReadOnlyCollection<IncomingDocument>> GetPendingApprovalsAsync(bool? isProcessed, CancellationToken cancellationToken);
     Task<IncomingDocument?> GetByIdAsync(int id, CancellationToken cancellationToken);
     Task UpdateIsProcessedAsync(int id, bool isProcessed, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Belgenin YERLI tablolardaki kalemleri (kalem vergileri dahil).
+    ///
+    /// <para>Ekran eskiden kalemleri her istekte PayloadRaw icindeki UBL XML'ini ayristirarak
+    /// uretiyordu. OFFLINE (ERP) kayitlarda ayristirilacak XML YOKTUR — kalemler yalniz bu
+    /// tablolarda durur, dolayisiyla okuma buradan yapilmalidir. Kayit yoksa bos liste doner
+    /// ve cagiran taraf XML'e geri dusebilir (detay tablolari eklenmeden ONCE aktarilmis
+    /// online kayitlar icin).</para>
+    /// </summary>
+    Task<IReadOnlyList<EDocumentLineData>> GetLinesAsync(int documentId, CancellationToken cancellationToken);
 }
