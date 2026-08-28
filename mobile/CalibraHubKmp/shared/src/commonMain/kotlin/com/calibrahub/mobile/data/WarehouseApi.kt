@@ -84,6 +84,17 @@ class WarehouseApi(
         }
 
     /** Musait seriler (FIFO sirali). locationId/q opsiyonel. */
+    // ── Kaydedilen belgeler ─────────────────────────────────────────────────
+    /** Kaydedilmis depo belgeleri. Yalniz gorme yetkisi olan tipler doner. */
+    suspend fun documents(docType: String? = null, days: Int = 30, take: Int = 50): HttpResponse =
+        client.get("${base}warehouse/documents") {
+            docType?.let { parameter("docType", it) }
+            parameter("days", days)
+            parameter("take", take)
+        }
+
+    suspend fun documentDetail(id: Int): HttpResponse = client.get("${base}warehouse/documents/$id")
+
     suspend fun itemSerials(itemId: Int, locationId: Int? = null, q: String? = null, take: Int = 50): HttpResponse =
         client.get("${base}warehouse/items/$itemId/serials") {
             locationId?.let { parameter("locationId", it) }

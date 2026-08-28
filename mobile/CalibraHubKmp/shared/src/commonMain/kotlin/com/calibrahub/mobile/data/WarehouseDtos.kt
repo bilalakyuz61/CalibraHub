@@ -75,6 +75,8 @@ data class StockDocRequest(
     val lines: List<StockDocLineRequest>,
     val note: String? = null,
     val extraFields: Map<String, String>? = null,
+    /** Belge tarihi "yyyy-MM-dd". null -> sunucu BUGUNu kullanir (geriye uyumlu). */
+    val docDate: String? = null,
 )
 
 /** [extraFieldsError] dolu ise belge YINE DE basarili sayilir (NON-ATOMIC, ok=true kalir). */
@@ -96,6 +98,7 @@ data class TransferRequest(
     val lines: List<StockDocLineRequest>,
     val note: String? = null,
     val extraFields: Map<String, String>? = null,
+    val docDate: String? = null,
 )
 
 /** Transfer yaniti — basari {ok:true, documentNumber} (stock-in/out'un `docNumber` alanindan
@@ -146,6 +149,7 @@ data class InventoryCountRequest(
     val lines: List<InventoryCountLineRequest>,
     val note: String? = null,
     val extraFields: Map<String, String>? = null,
+    val docDate: String? = null,
 )
 
 /** Sayim yaniti — {ok:true, documentNumber, applied, id}. `applied` false ise taslak/onay
@@ -320,4 +324,43 @@ data class WidgetFieldDto(
 data class WidgetOptionDto(
     val value: String = "",
     val label: String = "",
+)
+
+// ── Kaydedilen belgeler (mobilden gorunur) ──────────────────────────────────
+
+/** Kaydedilmis depo belgesi ozeti — GET warehouse/documents satiri. */
+@Serializable
+data class SavedDocRowDto(
+    val id: Int,
+    val docType: String = "",
+    val docTypeLabel: String = "",
+    val docNo: String = "",
+    val docDate: String? = null,
+    val locationName: String? = null,
+    val toLocationName: String? = null,
+    val lineCount: Int = 0,
+    val notes: String? = null,
+)
+
+@Serializable
+data class SavedDocLineDto(
+    val id: Int,
+    val itemId: Int = 0,
+    val materialCode: String? = null,
+    val materialName: String? = null,
+    val quantity: Double = 0.0,
+    val lotNo: String? = null,
+)
+
+@Serializable
+data class SavedDocDetailDto(
+    val id: Int,
+    val docType: String = "",
+    val docTypeLabel: String = "",
+    val docNo: String = "",
+    val docDate: String? = null,
+    val fromLocationName: String? = null,
+    val toLocationName: String? = null,
+    val notes: String? = null,
+    val lines: List<SavedDocLineDto> = emptyList(),
 )

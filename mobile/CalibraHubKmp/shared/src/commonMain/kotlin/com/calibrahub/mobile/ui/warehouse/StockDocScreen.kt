@@ -62,6 +62,7 @@ import com.calibrahub.mobile.data.StockQueryDto
 import com.calibrahub.mobile.data.WarehouseLocationDto
 import com.calibrahub.mobile.data.WidgetFieldDto
 import com.calibrahub.mobile.session.SessionManager
+import com.calibrahub.mobile.ui.common.DocumentDateField
 import com.calibrahub.mobile.ui.widgets.DynamicFieldsSection
 import com.calibrahub.mobile.ui.widgets.dynamicFieldsPayload
 import com.calibrahub.mobile.ui.widgets.validateDynamicFields
@@ -135,6 +136,8 @@ fun StockDocScreen(session: SessionManager, mode: StockDocMode, onBack: () -> Un
     var autoGenerateSerials by remember { mutableStateOf(false) }
     var showSerialPicker by remember { mutableStateOf(false) }
 
+    // Belge tarihi "yyyy-MM-dd"; bos -> sunucu BUGUNu kullanir.
+    var docDate by remember { mutableStateOf("") }
     var lines by remember { mutableStateOf(listOf<DocLineUi>()) }
     var note by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
@@ -217,8 +220,9 @@ fun StockDocScreen(session: SessionManager, mode: StockDocMode, onBack: () -> Un
             }
             val noteOrNull = note.trim().takeIf { it.isNotBlank() }
             val extraFields = dynamicFieldsPayload(widgetValues)
-            val result = if (isStockIn) repo.stockIn(loc.id, reqLines, noteOrNull, extraFields)
-                         else repo.stockOut(loc.id, reqLines, noteOrNull, extraFields)
+            val dateOrNull = docDate.takeIf { it.isNotBlank() }
+            val result = if (isStockIn) repo.stockIn(loc.id, reqLines, noteOrNull, extraFields, dateOrNull)
+                         else repo.stockOut(loc.id, reqLines, noteOrNull, extraFields, dateOrNull)
             result.fold(
                 onSuccess = { successResult = it },
                 onFailure = { saveError = it.message ?: "Kaydetme başarısız" },
@@ -290,7 +294,14 @@ fun StockDocScreen(session: SessionManager, mode: StockDocMode, onBack: () -> Un
                     )
                     Spacer(Modifier.height(10.dp))
 
-                    MaterialPickerField(
+                    DocumentDateField(
+                value = docDate,
+                onValueChange = { docDate = it },
+                enabled = !saving,
+            )
+            Spacer(Modifier.height(12.dp))
+
+            MaterialPickerField(
                         query = code,
                         onQueryChange = {
                             code = it

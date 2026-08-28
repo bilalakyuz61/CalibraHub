@@ -25,6 +25,20 @@ class WarehouseRepository(private val session: SessionManager) {
     }
 
     /** Rehber (malzeme) arama — debounce'lu cagri (ekran tarafinda uygulanir). */
+    // ── Kaydedilen belgeler ─────────────────────────────────────────────────
+
+    suspend fun savedDocuments(docType: String? = null, days: Int = 30): Result<List<SavedDocRowDto>> = runCatchingApi {
+        val resp = session.warehouseApi().documents(docType, days)
+        if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
+        resp.body<List<SavedDocRowDto>>()
+    }
+
+    suspend fun savedDocumentDetail(id: Int): Result<SavedDocDetailDto> = runCatchingApi {
+        val resp = session.warehouseApi().documentDetail(id)
+        if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
+        resp.body<SavedDocDetailDto>()
+    }
+
     suspend fun searchItems(query: String, take: Int = 20): Result<List<ItemSearchDto>> = runCatchingApi {
         val resp = session.warehouseApi().searchItems(query, take)
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
@@ -37,10 +51,11 @@ class WarehouseRepository(private val session: SessionManager) {
         lines: List<StockDocLineRequest>,
         note: String?,
         extraFields: Map<String, String>? = null,
+        docDate: String? = null,
     ): Result<StockDocResult> = runCatchingApi {
         unwrapStockDoc(
             session.warehouseApi().stockIn(
-                StockDocRequest(locationId = locationId, lines = lines, note = note, extraFields = extraFields),
+                StockDocRequest(locationId, lines, note, extraFields, docDate),
             ),
         )
     }
@@ -51,10 +66,11 @@ class WarehouseRepository(private val session: SessionManager) {
         lines: List<StockDocLineRequest>,
         note: String?,
         extraFields: Map<String, String>? = null,
+        docDate: String? = null,
     ): Result<StockDocResult> = runCatchingApi {
         unwrapStockDoc(
             session.warehouseApi().stockOut(
-                StockDocRequest(locationId = locationId, lines = lines, note = note, extraFields = extraFields),
+                StockDocRequest(locationId, lines, note, extraFields, docDate),
             ),
         )
     }
@@ -69,6 +85,7 @@ class WarehouseRepository(private val session: SessionManager) {
         lines: List<StockDocLineRequest>,
         note: String?,
         extraFields: Map<String, String>? = null,
+        docDate: String? = null,
     ): Result<TransferResult> = runCatchingApi {
         val resp = session.warehouseApi().transfer(
             TransferRequest(
@@ -77,6 +94,7 @@ class WarehouseRepository(private val session: SessionManager) {
                 lines = lines,
                 note = note,
                 extraFields = extraFields,
+                docDate = docDate,
             ),
         )
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
@@ -91,9 +109,10 @@ class WarehouseRepository(private val session: SessionManager) {
         lines: List<InventoryCountLineRequest>,
         note: String?,
         extraFields: Map<String, String>? = null,
+        docDate: String? = null,
     ): Result<InventoryCountResult> = runCatchingApi {
         val resp = session.warehouseApi().inventoryCount(
-            InventoryCountRequest(locationId = locationId, lines = lines, note = note, extraFields = extraFields),
+            InventoryCountRequest(locationId, lines, note, extraFields, docDate),
         )
         if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
         val body = resp.body<InventoryCountResponse>()

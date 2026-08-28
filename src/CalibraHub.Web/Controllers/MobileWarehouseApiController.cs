@@ -606,7 +606,8 @@ public sealed class MobileWarehouseApiController : ControllerBase
     /// { widgetCode: string deger } — bkz. SaveExtraFieldsAsync.</summary>
     public sealed record MobileStockDocRequest(
         int LocationId, IReadOnlyList<MobileStockDocLineRequest>? Lines, string? Note,
-        IReadOnlyDictionary<string, string>? ExtraFields = null);
+        IReadOnlyDictionary<string, string>? ExtraFields = null,
+        DateTime? DocDate = null);
 
     /// <summary>
     /// Seri listesini normalize eder: bos/whitespace elemanlar atilir, kirpilir, tekrar edenler
@@ -657,6 +658,134 @@ public sealed class MobileWarehouseApiController : ControllerBase
             .ToList();
         return cleaned.Count == 0 ? null : cleaned;
     }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // KAYDEDILEN BELGELER  (2026-08-28)
+    //
+    // Mobil bugune kadar belge YAZIYOR ama YAZDIGINI GERI GOSTERMIYORDU: kullanici fisi
+    // kaydettikten sonra "gercekten kaydoldu mu, ne yazdim" sorusunu ancak web'den
+    // cevaplayabiliyordu. Bu iki uc o boslugu kapatir.
+    //
+    // Yetki: her belge tipi KENDI form koduyla suzulur — yalniz gorme yetkisi olan tipler
+    // listelenir. Tek bir "hepsini gor" yetkisi YOK (fail-safe: yetkisi olmayan tip hic gelmez).
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>Mobil'den kaydedilebilen depo belge tipleri — liste bu kumeyle sinirlidir.</summary>
+    private static readonly (string DocType, string FormCode, string Label)[] StockDocKinds =
+    {
+        ("STOCK_IN",        FormCodes.StockIn,        "Depo Giriş"),
+        ("STOCK_OUT",       FormCodes.StockOut,       "Depo Çıkış"),
+        ("TRANSFER",        FormCodes.Transfer,       "Transfer"),
+        ("INVENTORY_COUNT", FormCodes.InventoryCount, "Sayım"),
+    };
+
+    /// <summary>
+    /// Kaydedilen depo belgeleri (giris/cikis/transfer/sayim). Varsayilan: son 30 gun.
+    ///
+    /// Yalniz kullanicinin GORME yetkisi olan tipler doner. Hicbirine yetkisi yoksa 403 DEGIL
+    /// BOS liste doner — ekran "belge yok" der; yetki sizintisi olmaz, kullanici da hata
+    /// ekraniyla karsilasmaz.
+    /// </summary>
+    [HttpGet("documents")]
+    public async Task<IActionResult> Documents(
+        [FromQuery] string? docType, [FromQuery] int? days, [FromQuery] int? take, CancellationToken ct)
+    {
+        var allowed = new List<(string DocType, string Label)>();
+        foreach (var k in StockDocKinds)
+        {
+            if (!string.IsNullOrWhiteSpace(docType) &&
+                !string.Equals(k.DocType, docType, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (await RequirePermissionAsync(new[] { k.FormCode }, ViewActions, ct) is null)
+                allowed.Add((k.DocType, k.Label));
+        }
+        if (allowed.Count == 0) return Ok(Array.Empty<object>());
+
+        var window = days.GetValueOrDefault(30);
+        if (window <= 0) window = 30;
+        if (window > 365) window = 365;
+        var since = DateTime.Now.Date.AddDays(-window);
+
+        var limit = take.GetValueOrDefault(50);
+        if (limit <= 0) limit = 50;
+        if (limit > 200) limit = 200;
+
+        var labels = allowed.ToDictionary(a => a.DocType, a => a.Label, StringComparer.OrdinalIgnoreCase);
+        var docs = await _stockDocRepo.GetByTypesAsync(allowed.Select(a => a.DocType), ct);
+
+        var rows = docs
+            .Where(d => d.IsActive && d.DocDate >= since)
+            .OrderByDescending(d => d.DocDate)
+            .ThenByDescending(d => d.Id)
+            .Take(limit)
+            .Select(d => new
+            {
+                id = d.Id,
+                docType = d.DocType,
+                docTypeLabel = labels.TryGetValue(d.DocType, out var lbl) ? lbl : d.DocType,
+                docNo = d.DocNo,
+                docDate = d.DocDate,
+                locationName = d.FromLocationName ?? d.ToLocationName,
+                toLocationName = d.ToLocationName,
+                lineCount = d.LineCount,
+                notes = d.Notes,
+                created = d.Created,
+            });
+
+        return Ok(rows);
+    }
+
+    /// <summary>Belge detayi — kalemleriyle. Tip yetkisi ayrica dogrulanir.</summary>
+    [HttpGet("documents/{id:int}")]
+    public async Task<IActionResult> DocumentDetail(int id, CancellationToken ct)
+    {
+        var doc = await _stockDocRepo.GetByIdAsync(id, ct);
+        if (doc is null || !doc.IsActive)
+            return NotFound(new { error = "Belge bulunamadı." });
+
+        // Belgenin KENDI tipinin yetkisi aranir — baska tipe yetkili olmak yetmez.
+        var kind = StockDocKinds.FirstOrDefault(k =>
+            string.Equals(k.DocType, doc.DocType, StringComparison.OrdinalIgnoreCase));
+        if (kind.DocType is null)
+            return NotFound(new { error = "Bu belge tipi mobilde görüntülenemiyor." });
+        if (await RequirePermissionAsync(new[] { kind.FormCode }, ViewActions, ct) is { } denied)
+            return denied;
+
+        var lines = await _stockDocRepo.GetLinesAsync(id, ct);
+
+        return Ok(new
+        {
+            id = doc.Id,
+            docType = doc.DocType,
+            docTypeLabel = kind.Label,
+            docNo = doc.DocNo,
+            docDate = doc.DocDate,
+            fromLocationName = doc.FromLocationName,
+            toLocationName = doc.ToLocationName,
+            notes = doc.Notes,
+            created = doc.Created,
+            lines = lines.Select(l => new
+            {
+                id = l.Id,
+                itemId = l.ItemId,
+                materialCode = l.MaterialCode,
+                materialName = l.MaterialName,
+                quantity = l.Qty,
+                lotNo = l.LotNo,
+            }),
+        });
+    }
+
+    /// <summary>
+    /// Belge tarihi. Istemci gondermezse BUGUN kullanilir (geriye uyum: eski mobil surumler
+    /// tarih gondermiyor, davranislari degismez).
+    ///
+    /// DateTime.Now (UTC DEGIL): belge tarihi bir TAKVIM GUNUDUR, an degil. UTC kullanmak
+    /// yerel saatle 03:00'te kaydedilen bir fisi bir onceki gune yazabilirdi. Repo zaten
+    /// .Date alir; web ekrani da kullanicinin sectigi yerel gunu gonderir.
+    /// </summary>
+    private static DateTime ResolveDocDate(DateTime? requested)
+        => (requested ?? DateTime.Now).Date;
 
     /// <summary>Yazma aksiyon seti — web SaveDocJson ile birebir ayni (CREATE veya kendi/tum kayit duzenleme).</summary>
     private static readonly string[] WriteActions = { "CREATE", "EDIT_OWN", "EDIT_ALL" };
@@ -731,7 +860,7 @@ public sealed class MobileWarehouseApiController : ControllerBase
             Id: null,
             DocType: docType,
             DocNo: null,                       // repo uretir (ResolveDocNoAsync)
-            DocDate: DateTime.UtcNow,          // repo .Date alir — web de UTC now gonderiyor
+            DocDate: ResolveDocDate(body.DocDate),
             FromLocationId: docType == "STOCK_OUT" ? body.LocationId : null,
             ToLocationId: docType == "STOCK_IN" ? body.LocationId : null,
             RefNo: null,
@@ -819,7 +948,8 @@ public sealed class MobileWarehouseApiController : ControllerBase
     /// ExtraFields (2026-07-17): opsiyonel ek saha header degerleri — bkz. SaveExtraFieldsAsync.</summary>
     public sealed record MobileTransferRequest(
         int FromLocationId, int ToLocationId, IReadOnlyList<MobileStockDocLineRequest>? Lines, string? Note,
-        IReadOnlyDictionary<string, string>? ExtraFields = null);
+        IReadOnlyDictionary<string, string>? ExtraFields = null,
+        DateTime? DocDate = null);
 
     /// <summary>Depo transferi (TRANSFER) — kalemler kaynaktan (-) dusup hedefe (+) yazilir; eksi bakiye guard'i kaynakta calisir.</summary>
     [HttpPost("transfer")]
@@ -854,7 +984,7 @@ public sealed class MobileWarehouseApiController : ControllerBase
             Id: null,
             DocType: "TRANSFER",
             DocNo: null,                       // repo uretir (ResolveDocNoAsync, prefix "TRF")
-            DocDate: DateTime.UtcNow,
+            DocDate: ResolveDocDate(body.DocDate),
             FromLocationId: body.FromLocationId,
             ToLocationId: body.ToLocationId,
             RefNo: null,
@@ -964,7 +1094,8 @@ public sealed class MobileWarehouseApiController : ControllerBase
     /// ExtraFields (2026-07-17): opsiyonel ek saha header degerleri — bkz. SaveExtraFieldsAsync.</summary>
     public sealed record MobileInventoryCountRequest(
         int LocationId, IReadOnlyList<MobileInventoryCountLineRequest>? Lines, string? Note,
-        IReadOnlyDictionary<string, string>? ExtraFields = null);
+        IReadOnlyDictionary<string, string>? ExtraFields = null,
+        DateTime? DocDate = null);
 
     /// <summary>Sayim belgesi (INVENTORY_COUNT) — daima TASLAK kaydedilir, stok bakiyesini etkilemez (yukaridaki yorum).</summary>
     [HttpPost("inventory-count")]
@@ -995,7 +1126,7 @@ public sealed class MobileWarehouseApiController : ControllerBase
             Id: null,
             DocType: "INVENTORY_COUNT",
             DocNo: null,                       // repo uretir (ResolveDocNoAsync, prefix "SAY")
-            DocDate: DateTime.UtcNow,
+            DocDate: ResolveDocDate(body.DocDate),
             FromLocationId: body.LocationId,   // sayim lokasyonu HER ZAMAN FromLocationId'de (repo sozlesmesi)
             ToLocationId: null,
             RefNo: null,

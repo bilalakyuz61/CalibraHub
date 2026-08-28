@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.automirrored.filled.FactCheck
 import androidx.compose.material.icons.automirrored.filled.ListAlt
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.ChevronRight
@@ -105,6 +106,9 @@ object AppRoutes {
 
     /** Kalite Muayene — saha girisi (bkz. InspectionScreen). */
     const val QUALITY_INSPECTION = "quality_inspection"
+
+    /** Kayitli Belgeler — mobilden/webden kaydedilmis depo belgeleri (bkz. SavedDocsScreen). */
+    const val SAVED_DOCS = "saved_docs"
 
     // İş emri detayı (Faz 2c EK) — drawer'da YOK, yalnız WorkOrderListScreen'den navigate edilir.
     // AYNI KISS gerekçesiyle PURCHASE/SALES_OPEN_ORDER_DETAIL ile AYNI desen: literal route +
@@ -240,6 +244,14 @@ val drawerEntries: List<DrawerEntry> = listOf(
                 DrawerLeaf(
                     AppRoutes.WAREHOUSE_DRAFT_COUNTS, "Taslak Sayımlar",
                     Icons.AutoMirrored.Filled.FactCheck, listOf(MenuFormCodes.INVENTORY_COUNT),
+                ),
+                DrawerLeaf(
+                    AppRoutes.SAVED_DOCS, "Kayıtlı Belgeler", Icons.AutoMirrored.Filled.ReceiptLong,
+                    // Herhangi bir depo belgesi yetkisi yeterli; sunucu listeyi yetkiye gore suzer.
+                    listOf(
+                        MenuFormCodes.STOCK_IN, MenuFormCodes.STOCK_OUT,
+                        MenuFormCodes.TRANSFER, MenuFormCodes.INVENTORY_COUNT,
+                    ),
                 ),
             ),
         ),

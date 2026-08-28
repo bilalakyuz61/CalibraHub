@@ -58,6 +58,7 @@ import com.calibrahub.mobile.data.StockQueryDto
 import com.calibrahub.mobile.data.WarehouseLocationDto
 import com.calibrahub.mobile.data.WidgetFieldDto
 import com.calibrahub.mobile.session.SessionManager
+import com.calibrahub.mobile.ui.common.DocumentDateField
 import com.calibrahub.mobile.ui.widgets.DynamicFieldsSection
 import com.calibrahub.mobile.ui.widgets.dynamicFieldsPayload
 import com.calibrahub.mobile.ui.widgets.validateDynamicFields
@@ -134,6 +135,8 @@ fun TransferScreen(session: SessionManager, onBack: () -> Unit) {
     var serials by remember { mutableStateOf(listOf<String>()) }
     var showSerialPicker by remember { mutableStateOf(false) }
 
+    // Belge tarihi "yyyy-MM-dd"; bos -> sunucu BUGUNu kullanir.
+    var docDate by remember { mutableStateOf("") }
     var lines by remember { mutableStateOf(listOf<TransferLineUi>()) }
     var note by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
@@ -221,7 +224,7 @@ fun TransferScreen(session: SessionManager, onBack: () -> Unit) {
             }
             val noteOrNull = note.trim().takeIf { it.isNotBlank() }
             val extraFields = dynamicFieldsPayload(widgetValues)
-            val result = repo.transfer(from.id, to.id, reqLines, noteOrNull, extraFields)
+            val result = repo.transfer(from.id, to.id, reqLines, noteOrNull, extraFields, docDate.takeIf { it.isNotBlank() })
             result.fold(
                 onSuccess = { res ->
                     resetForm()
@@ -307,7 +310,14 @@ fun TransferScreen(session: SessionManager, onBack: () -> Unit) {
                     )
                     Spacer(Modifier.height(10.dp))
 
-                    MaterialPickerField(
+                    DocumentDateField(
+                value = docDate,
+                onValueChange = { docDate = it },
+                enabled = !saving,
+            )
+            Spacer(Modifier.height(12.dp))
+
+            MaterialPickerField(
                         query = code,
                         onQueryChange = {
                             code = it

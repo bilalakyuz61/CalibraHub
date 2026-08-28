@@ -62,6 +62,7 @@ import com.calibrahub.mobile.data.StockQueryDto
 import com.calibrahub.mobile.data.WarehouseLocationDto
 import com.calibrahub.mobile.data.WidgetFieldDto
 import com.calibrahub.mobile.session.SessionManager
+import com.calibrahub.mobile.ui.common.DocumentDateField
 import com.calibrahub.mobile.ui.widgets.DynamicFieldsSection
 import com.calibrahub.mobile.ui.widgets.dynamicFieldsPayload
 import com.calibrahub.mobile.ui.widgets.validateDynamicFields
@@ -129,6 +130,8 @@ fun CountScreen(session: SessionManager, onBack: () -> Unit) {
     // Secili malzemenin lot/seri kirilimi — satir eklenince CountLineUi'ye tasinir.
     var breakdown by remember { mutableStateOf(listOf<CountBreakdownRow>()) }
 
+    // Belge tarihi "yyyy-MM-dd"; bos -> sunucu BUGUNu kullanir.
+    var docDate by remember { mutableStateOf("") }
     var lines by remember { mutableStateOf(listOf<CountLineUi>()) }
     var note by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
@@ -231,7 +234,7 @@ fun CountScreen(session: SessionManager, onBack: () -> Unit) {
             }
             val noteOrNull = note.trim().takeIf { it.isNotBlank() }
             val extraFields = dynamicFieldsPayload(widgetValues)
-            val result = repo.inventoryCount(loc.id, reqLines, noteOrNull, extraFields)
+            val result = repo.inventoryCount(loc.id, reqLines, noteOrNull, extraFields, docDate.takeIf { it.isNotBlank() })
             result.fold(
                 onSuccess = { res ->
                     resetForm()
@@ -332,7 +335,14 @@ fun CountScreen(session: SessionManager, onBack: () -> Unit) {
                     )
                     Spacer(Modifier.height(10.dp))
 
-                    MaterialPickerField(
+                    DocumentDateField(
+                value = docDate,
+                onValueChange = { docDate = it },
+                enabled = !saving,
+            )
+            Spacer(Modifier.height(12.dp))
+
+            MaterialPickerField(
                         query = code,
                         onQueryChange = {
                             code = it
