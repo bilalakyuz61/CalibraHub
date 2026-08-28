@@ -626,6 +626,38 @@ public sealed class MobileWarehouseApiController : ControllerBase
         return cleaned.Count == 0 ? null : cleaned;
     }
 
+    /// <summary>
+    /// Sayim lot kirilimi temizligi: lot no bos olan satirlar ve miktari sifir/negatif satirlar
+    /// ELENIR. Toplam-esitlik ve tekrar-eden-lot kurallari SUNUCUDA (SqlStockDocRepository) —
+    /// burada tekrarlanmaz; yalnizca anlamsiz satir gonderilmemesi saglanir.
+    /// </summary>
+    private static IReadOnlyList<StockLotBreakdownItem>? NormalizeLotBreakdown(
+        IReadOnlyList<MobileCountLotItem>? items)
+    {
+        if (items is null || items.Count == 0) return null;
+        var cleaned = items
+            .Where(i => i is not null && !string.IsNullOrWhiteSpace(i.LotNo) && i.Qty > 0m)
+            .Select(i => new StockLotBreakdownItem(
+                i.LotNo.Trim(), i.Qty, i.ExpiryDate,
+                string.IsNullOrWhiteSpace(i.Description) ? null : i.Description.Trim()))
+            .ToList();
+        return cleaned.Count == 0 ? null : cleaned;
+    }
+
+    /// <summary>Sayim seri kirilimi temizligi — [NormalizeLotBreakdown] ile ayni gerekce.</summary>
+    private static IReadOnlyList<CountSerialBreakdownItem>? NormalizeSerialBreakdown(
+        IReadOnlyList<MobileCountSerialItem>? items)
+    {
+        if (items is null || items.Count == 0) return null;
+        var cleaned = items
+            .Where(i => i is not null && !string.IsNullOrWhiteSpace(i.SerialNo) && i.Qty > 0m)
+            .Select(i => new CountSerialBreakdownItem(
+                i.SerialNo.Trim(), i.ExpiryDate,
+                string.IsNullOrWhiteSpace(i.Description) ? null : i.Description.Trim(), i.Qty))
+            .ToList();
+        return cleaned.Count == 0 ? null : cleaned;
+    }
+
     /// <summary>Yazma aksiyon seti — web SaveDocJson ile birebir ayni (CREATE veya kendi/tum kayit duzenleme).</summary>
     private static readonly string[] WriteActions = { "CREATE", "EDIT_OWN", "EDIT_ALL" };
 
@@ -906,7 +938,27 @@ public sealed class MobileWarehouseApiController : ControllerBase
     // repo yorumu: "Sifir sayim gecerli giristir"), yalnizca negatif reddedilir.
 
     /// <summary>Mobil sayim kalemi — itemId + sayilan miktar (0 gecerli: "hic yok" sayimi).</summary>
-    public sealed record MobileInventoryCountLineRequest(int ItemId, decimal CountedQuantity);
+    /// <summary>
+    /// Mobil sayim kalemi.
+    ///
+    /// LOT/SERI KIRILIMI (2026-08-28): sayim, giris/cikistan FARKLI bir model ister — bir
+    /// malzemenin rafta birden fazla lotu/partisi olabilir, bu yuzden tek deger degil KIRILIM
+    /// gonderilir ve kirilim toplami sayilan miktara ESIT olmalidir (kural sunucuda:
+    /// SqlStockDocRepository "Lot miktar toplami sayilan miktara esit olmali").
+    ///
+    /// Ikisi de OPSIYONEL: takipsiz malzemede null birakilir, davranis birebir eskisi gibi kalir.
+    /// </summary>
+    public sealed record MobileInventoryCountLineRequest(
+        int ItemId,
+        decimal CountedQuantity,
+        IReadOnlyList<MobileCountLotItem>? LotBreakdown = null,
+        IReadOnlyList<MobileCountSerialItem>? SerialBreakdown = null);
+
+    /// <summary>Sayim lot kirilimi satiri — lot no + miktar (+ opsiyonel SKT/aciklama).</summary>
+    public sealed record MobileCountLotItem(string LotNo, decimal Qty, DateTime? ExpiryDate = null, string? Description = null);
+
+    /// <summary>Sayim seri kirilimi satiri — seri = parti, miktar serbest.</summary>
+    public sealed record MobileCountSerialItem(string SerialNo, decimal Qty, DateTime? ExpiryDate = null, string? Description = null);
 
     /// <summary>Mobil sayim istegi — tek lokasyon + kalemler (+ opsiyonel not).
     /// ExtraFields (2026-07-17): opsiyonel ek saha header degerleri — bkz. SaveExtraFieldsAsync.</summary>
@@ -959,7 +1011,9 @@ public sealed class MobileWarehouseApiController : ControllerBase
                 Notes: null,
                 FromLocationId: null,          // null → header sayim lokasyonuna duser
                 ToLocationId: null,
-                UnitCost: null)).ToList(),
+                UnitCost: null,
+                LotBreakdown: NormalizeLotBreakdown(l.LotBreakdown),
+                SerialBreakdown: NormalizeSerialBreakdown(l.SerialBreakdown))).ToList(),
             ArgeProjectId: null);
 
         try
