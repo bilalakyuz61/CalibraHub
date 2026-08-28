@@ -134,7 +134,8 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
             cancellationToken);
     }
 
-    public async Task AddAsync(IncomingDocument document, CancellationToken cancellationToken)
+    public async Task AddAsync(IncomingDocument document, CancellationToken cancellationToken,
+                               EDocumentDetails? details = null)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         var hasLegacyTables = await LegacyTablesExistAsync(connection, cancellationToken);
@@ -164,7 +165,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         }
         else if (hasIncomingDocumentsTable)
         {
-            await InsertIncomingDocumentAsync(connection, transaction, document, cancellationToken);
+            await InsertIncomingDocumentAsync(connection, transaction, document, details, cancellationToken);
         }
         else
         {
@@ -378,6 +379,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         SqlConnection connection,
         SqlTransaction transaction,
         IncomingDocument document,
+        EDocumentDetails? details,
         CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
@@ -410,7 +412,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         command.Parameters.Add(CreateParameter("@IngestSource", document.IngestSource.ToString()));
 
         var newId = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
-        await InsertIncomingDocumentDetailsAsync(connection, transaction, newId, document.PayloadRaw, cancellationToken);
+        await InsertIncomingDocumentDetailsAsync(connection, transaction, newId, document.PayloadRaw, details, cancellationToken);
     }
 
 
@@ -434,11 +436,14 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         SqlTransaction transaction,
         int incomingDocumentId,
         string? payloadRaw,
+        EDocumentDetails? provided,
         CancellationToken cancellationToken)
     {
         if (incomingDocumentId <= 0) return;
 
-        var details = EDocumentPayloadParser.Parse(payloadRaw);
+        // OFFLINE yolda detaylar HAZIR gelir (ERP iliskisel tablolarindan); ONLINE yolda
+        // UBL payload'i ayristirilir. Ikisi de ayni yazma koduna duser.
+        var details = provided ?? EDocumentPayloadParser.Parse(payloadRaw);
         if (details is null) return;
 
         try

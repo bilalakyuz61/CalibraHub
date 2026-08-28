@@ -35,7 +35,8 @@ public sealed class InMemoryIncomingDocumentRepository : IIncomingDocumentReposi
         return Task.FromResult(exists);
     }
 
-    public Task AddAsync(IncomingDocument document, CancellationToken cancellationToken)
+    public Task AddAsync(IncomingDocument document, CancellationToken cancellationToken,
+                         CalibraHub.Application.Services.EDocument.EDocumentDetails? details = null)
     {
         _dataStore.IncomingDocuments.TryAdd(document.Id, document);
         return Task.CompletedTask;
