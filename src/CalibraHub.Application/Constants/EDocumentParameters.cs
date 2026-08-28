@@ -35,6 +35,18 @@ public static class EDocumentParameters
 
     public const int DefaultPollIntervalSeconds = 300;
 
+    /// <summary>
+    /// Cevrimdisi taramada kac gun geriye bakilacagi.
+    ///
+    /// <para>Sabit olamaz: ILK etkinlestirmede gecmis belgelerin de alinmasi gerekir. 30 gunluk
+    /// sabit pencere, arsivi yillar oncesine dayanan bir ERP'de HICBIR belge getirmez — bu tam
+    /// olarak yasandi (kaynak 2025 verisi, pencere son 30 gun -> bos liste, hata da yok).
+    /// Ilk yuklemede genis (or. 3650), duzene girdikten sonra kucuk bir deger uygundur.</para>
+    /// </summary>
+    public const string LookbackDaysKey = "EDOC_LOOKBACK_DAYS";
+
+    public const int DefaultLookbackDays = 30;
+
     /// <summary>Tek taramada okunacak azami belge — guvenlik tavani.</summary>
     public const int MaxDocumentsPerPull = 200;
 

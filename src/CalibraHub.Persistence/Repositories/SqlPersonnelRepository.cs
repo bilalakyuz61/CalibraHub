@@ -172,8 +172,15 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
         }
         else if (!string.IsNullOrWhiteSpace(personnelCode))
         {
-            // Code + PIN ikilisi (yeni guvenli yol)
-            filter = "AND p.[Code] = @PersonnelCode AND p.[PinCode] = @PinCode";
+            // Code + PIN ikilisi (yeni guvenli yol).
+            // Sicil no artik sifir dolgulu numerik ("0001"). Operator terminalde "1"
+            // yazdiginda da bulunmali; bu yuzden IKISI DE tamamen rakamsa sayisal
+            // karsilastirma yapilir (TRY_CONVERT NULL donerse esitlik saglanmaz, yani
+            // metinsel kodlar eski davranisla birebir ayni kalir). PIN kontrolu aynen durur.
+            filter = @"AND (p.[Code] = @PersonnelCode
+                            OR (p.[Code] <> '' AND p.[Code] NOT LIKE '%[^0-9]%' AND @PersonnelCode NOT LIKE '%[^0-9]%'
+                                AND TRY_CONVERT(BIGINT, p.[Code]) = TRY_CONVERT(BIGINT, @PersonnelCode)))
+                        AND p.[PinCode] = @PinCode";
         }
         else
         {

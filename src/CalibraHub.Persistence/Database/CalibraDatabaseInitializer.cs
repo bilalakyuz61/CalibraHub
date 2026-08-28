@@ -868,6 +868,7 @@ END;";
             await EnsureCalendarTablesAsync(connection, cancellationToken);
             await EnsurePersonnelBirthDateAsync(connection, cancellationToken);
             await EnsurePersonnelMobilePinFlagAsync(connection, cancellationToken);
+            await MigratePersonnelCodeToNumericAsync(connection, cancellationToken);
             await EnsureReportEngineTablesAsync(connection, cancellationToken);
             await EnsureFulfillmentLineExtrasViewAsync(connection, cancellationToken);
             await EnsureViewMetaTableAsync(connection, cancellationToken);
@@ -21739,6 +21740,51 @@ END;
                 ALTER TABLE dbo.Personnel
                     ADD [IsMobilePinRequired] BIT NOT NULL
                         CONSTRAINT [DF_Personnel_IsMobilePinRequired] DEFAULT 1;
+            END
+            """, ct);
+    }
+
+    /// <summary>
+    /// Sicil no'yu (Personnel.Code) KISA NUMERIK degere gecirir — 0001, 0002, ...
+    ///
+    /// <para><b>Neden (2026-08-28 kullanici karari):</b> sicil no addan turetiliyordu
+    /// ("Bilal Akyuz"). Bu deger terminal/mobil giris ekraninda ELLE yazilir; uzun ve
+    /// Turkce karakterli olmasi kiosk klavyesinde kullanilamaz haldeydi.</para>
+    ///
+    /// <para><b>Guvenli mi:</b> Code hicbir yerde YABANCI ANAHTAR degildir (tum iliskiler
+    /// Personnel.Id uzerinden); yalnizca terminal girisi ve gosterim icin kullanilir.
+    /// Bu yuzden yeniden numaralandirma veri butunlugunu bozmaz.</para>
+    ///
+    /// <para><b>Idempotent:</b> yalnizca NUMERIK OLMAYAN (veya bos) kodlar degistirilir;
+    /// zaten numerik olanlara dokunulmaz. Yeni numaralar mevcut en buyuk numerik kodun
+    /// ustunden, Id sirasina gore verilir → tekrar calistiginda degisiklik uretmez.</para>
+    /// </summary>
+    private static async Task MigratePersonnelCodeToNumericAsync(SqlConnection connection, CancellationToken ct)
+    {
+        await ExecAsync(connection, """
+            IF OBJECT_ID(N'dbo.Personnel', N'U') IS NOT NULL
+               AND EXISTS (SELECT 1 FROM dbo.Personnel
+                           WHERE [Code] IS NULL OR LTRIM(RTRIM([Code])) = '' OR [Code] LIKE '%[^0-9]%')
+            BEGIN
+                DECLARE @baslangic INT =
+                    ISNULL((SELECT MAX(TRY_CONVERT(INT, [Code]))
+                            FROM dbo.Personnel
+                            WHERE [Code] IS NOT NULL AND [Code] <> '' AND [Code] NOT LIKE '%[^0-9]%'), 0);
+
+                ;WITH yenilenecek AS (
+                    SELECT [Id], [Code],
+                           ROW_NUMBER() OVER (ORDER BY [Id]) AS sira
+                    FROM dbo.Personnel
+                    WHERE [Code] IS NULL OR LTRIM(RTRIM([Code])) = '' OR [Code] LIKE '%[^0-9]%'
+                )
+                UPDATE yenilenecek
+                   SET [Code] = CASE
+                       -- 4 haneyi asan numaralar KIRPILMAMALI: RIGHT(...,4) tek basina
+                       -- 10000'i "0000" yapardi (cakisma + anlamsiz sicil).
+                       WHEN LEN(CAST(@baslangic + sira AS NVARCHAR(20))) >= 4
+                           THEN CAST(@baslangic + sira AS NVARCHAR(20))
+                       ELSE RIGHT('0000' + CAST(@baslangic + sira AS NVARCHAR(20)), 4)
+                   END;
             END
             """, ct);
     }

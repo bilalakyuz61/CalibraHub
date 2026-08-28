@@ -18,9 +18,6 @@ public sealed class DocumentImportService : IDocumentImportService
     private readonly IExternalDbConnectionRepository _externalDbConnections;
     private readonly IOfflineEDocumentSource _offlineSource;
 
-    /// <summary>Cevrimdisi taramada geriye bakilacak gun sayisi (dedup kopya uretmez).</summary>
-    private const int OfflineLookbackDays = 30;
-
     public DocumentImportService(
         IIntegratorSettingsRepository integratorSettingsRepository,
         IIncomingDocumentRepository incomingDocumentRepository,
@@ -94,10 +91,16 @@ public sealed class DocumentImportService : IDocumentImportService
             return new ImportResultDto(0, 0, notes);
         }
 
-        // Pencere: son basarili okumadan degil, sabit bir geriye-bakis suresinden baslar.
-        // Dedup EnvelopeId ile yapildigi icin ortusen pencere kopya URETMEZ; buna karsilik
-        // "son calisma zamani" tutmak, bir tur atlandiginda belge KACIRMA riski dogururdu.
-        var since = DateTime.Today.AddDays(-OfflineLookbackDays);
+        // Pencere: son basarili okumadan degil, geriye-bakis suresinden baslar. Dedup
+        // EnvelopeId ile yapildigi icin ortusen pencere kopya URETMEZ; buna karsilik "son
+        // calisma zamani" tutmak, bir tur atlandiginda belge KACIRMA riski dogururdu.
+        //
+        // Sure PARAMETRIKTIR: sabit 30 gun, arsivi eskiye dayanan bir ERP'de hicbir belge
+        // getirmez (yasandi) ve ilk yuklemede gecmisi disarida birakir.
+        var lookbackDays = await _companyParameters.GetIntAsync(
+            EDocumentParameters.FormCode, EDocumentParameters.LookbackDaysKey, cancellationToken)
+            ?? EDocumentParameters.DefaultLookbackDays;
+        var since = DateTime.Today.AddDays(-Math.Clamp(lookbackDays, 1, 3650));
 
         IReadOnlyList<OfflineEDocument> documents;
         try

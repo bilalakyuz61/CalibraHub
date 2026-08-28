@@ -39,11 +39,13 @@ public sealed class PersonnelService : IPersonnelService
             throw new ArgumentException($"Aynı isimde başka bir personel zaten tanımlı: '{fullName}'");
         }
 
-        // Code DB'de var ama UI gostermez — auto-turetilir (mevcut record'sa onun kodunu koru)
+        // Sicil no (Code) — kullanicidan ISTENMEZ, sunucuda uretilir (CLAUDE.md kurali).
+        // Mevcut kaydin sicili KORUNUR: sicil terminale/mobile elle yazilan bir degerdir,
+        // kayit guncellendi diye degismesi operatorun ezberini bozardi.
         var existing = req.Id > 0 ? all.FirstOrDefault(p => p.Id == req.Id) : null;
-        var code = req.Id > 0
-            ? (!string.IsNullOrWhiteSpace(existing?.Code) ? existing!.Code : DeriveCode(fullName))
-            : DeriveCode(fullName);
+        var code = !string.IsNullOrWhiteSpace(existing?.Code)
+            ? existing!.Code
+            : NextNumericCode(all);
 
         var entity = new Personnel
         {
@@ -91,13 +93,29 @@ public sealed class PersonnelService : IPersonnelService
         return savedId;
     }
 
-    // Backward-compat: Code DB'de var ama UI'dan kaldirildi.
-    // Yeni kayit icin name'den turet (50 char ile sinirla).
-    private static string DeriveCode(string name)
+    /// <summary>Sicil no'nun basamak sayisi (0001, 0002...). 9999'u asinca dogal olarak buyur.</summary>
+    private const int CodeDigits = 4;
+
+    /// <summary>
+    /// Siradaki sicil no: mevcut NUMERIK kodlarin en buyugu + 1, sifir dolgulu.
+    ///
+    /// <para><b>Neden numerik (2026-08-28 kullanici karari):</b> sicil no daha once addan
+    /// turetiliyordu ("Bilal Akyuz"). Bu deger terminal/mobil giris ekraninda ELLE yazilan
+    /// bir alan; uzun ve Turkce karakterli olmasi kiosk klavyesinde pratik degildi.</para>
+    ///
+    /// <para>Numerik olmayan eski kodlar hesaba katilmaz (yalnizca numerikler taranir);
+    /// boylece gecis sirasinda karisik durumda da artan bir sira uretilir.</para>
+    /// </summary>
+    private static string NextNumericCode(IEnumerable<PersonnelDto> all)
     {
-        var t = (name ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(t)) t = "AUTO_" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
-        return t.Length > 50 ? t[..50] : t;
+        var max = 0;
+        foreach (var p in all)
+        {
+            var c = (p.Code ?? string.Empty).Trim();
+            if (c.Length > 0 && c.All(char.IsAsciiDigit) && int.TryParse(c, out var n) && n > max)
+                max = n;
+        }
+        return (max + 1).ToString(new string('0', CodeDigits));
     }
 
     public async Task DeleteAsync(int id, CancellationToken ct)

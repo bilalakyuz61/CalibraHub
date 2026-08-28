@@ -5858,6 +5858,9 @@
             if (!data.success) {
                 if (data.quote && data.quote.id) {
                     currentQuoteId = data.quote.id;
+                    // Belge DB'de guncellendi (yalnizca zorunlu ek alanlar eksik) →
+                    // damga degisti; tazelenmezse sonraki kayit sahte cakisma verir.
+                    window.__CALIBRA_ROW_VERSION__ = data.quote.rowVersion || null;
                     var sqNumEl = document.getElementById('sqQuoteNumber');
                     if (sqNumEl && data.quote.documentNumber) sqNumEl.value = data.quote.documentNumber;
                     var sqMetaErr = document.getElementById('sqMeta');
@@ -5975,6 +5978,11 @@
                 return;
             }
             currentQuoteId = data.quote.id;
+            // Surum damgasini TAZELE (2026-08-28): kayit sonrasi ROWVERSION degisti.
+            // Yenilenmezse ayni ekrandan yapilan IKINCI kayit (ozellikle malzeme secimi
+            // tetikledigi sessiz kayittan sonraki elle "Kaydet") sunucuya ESKI damgayi
+            // gonderir ve sahte "baskasi kaydetmis" cakismasi uretirdi.
+            window.__CALIBRA_ROW_VERSION__ = data.quote.rowVersion || null;
             // Kaydedilen satir Id'lerini grid'e geri yaz (yanittaki lines, LineNo sirasinda).
             // Ozellikle sessiz kayitta (malzeme secimi tetikler) grid satirlari Id'siz
             // kaliyordu; bir sonraki kayit Id'siz payload ile satirlari DELETE+INSERT
