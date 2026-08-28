@@ -76,6 +76,10 @@ private data class TransferLineUi(
     val itemName: String,
     val unit: String?,
     val quantity: Double,
+    /** Lot-takipli kalemde tasinacak lot; takipsizde null. */
+    val lotNo: String? = null,
+    /** Seri-takipli kalemde tasinacak seriler (kaynak lokasyondaki mevcut serilerden secilir). */
+    val serials: List<String> = emptyList(),
 )
 
 /**
@@ -125,6 +129,11 @@ fun TransferScreen(session: SessionManager, onBack: () -> Unit) {
     var resolveError by remember { mutableStateOf<String?>(null) }
     var qtyText by rememberSaveable { mutableStateOf("") }
 
+    // Lot/seri girisi — satir eklenince TransferLineUi'ye tasinir ve sifirlanir.
+    var lotNo by remember { mutableStateOf("") }
+    var serials by remember { mutableStateOf(listOf<String>()) }
+    var showSerialPicker by remember { mutableStateOf(false) }
+
     var lines by remember { mutableStateOf(listOf<TransferLineUi>()) }
     var note by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
@@ -147,17 +156,37 @@ fun TransferScreen(session: SessionManager, onBack: () -> Unit) {
         val item = resolved ?: return
         val qty = qtyValue
         if (qty == null || qty <= 0.0 || saving) return
+
+        // Erken geri bildirim — asil kural sunucuda (SqlStockDocRepository). Transfer bir
+        // CIKIS+GIRIS ciftidir: takipli malzemede hangi lot/serinin tasindigi bilinmeli.
+        val tracking = trackingTypeFromString(item.trackingType)
+        when {
+            tracking == ItemTrackingType.LOT && lotNo.isBlank() -> {
+                resolveError = "Bu malzeme lot takipli — taşınacak lot seçilmeli."
+                return
+            }
+            tracking == ItemTrackingType.SERIAL && serials.size != qty.toInt() -> {
+                resolveError = "Bu malzeme seri takipli — miktar kadar (${qty.toInt()}) seri seçilmeli, " +
+                    "şu an ${serials.size} adet."
+                return
+            }
+        }
+
         lines = lines + TransferLineUi(
             itemId = item.itemId,
             itemCode = item.itemCode,
             itemName = item.itemName,
             unit = item.unit,
             quantity = qty,
+            lotNo = lotNo.trim().takeIf { it.isNotBlank() },
+            serials = serials,
         )
         code = ""
         qtyText = ""
         resolved = null
         resolveError = null
+        lotNo = ""
+        serials = emptyList()
     }
 
     fun resetForm() {
@@ -182,7 +211,14 @@ fun TransferScreen(session: SessionManager, onBack: () -> Unit) {
         }
         scope.launch {
             saving = true
-            val reqLines = lines.map { StockDocLineRequest(itemId = it.itemId, quantity = it.quantity) }
+            val reqLines = lines.map {
+                StockDocLineRequest(
+                    itemId = it.itemId,
+                    quantity = it.quantity,
+                    lotNo = it.lotNo,
+                    serials = it.serials.takeIf { s -> s.isNotEmpty() },
+                )
+            }
             val noteOrNull = note.trim().takeIf { it.isNotBlank() }
             val extraFields = dynamicFieldsPayload(widgetValues)
             val result = repo.transfer(from.id, to.id, reqLines, noteOrNull, extraFields)
@@ -356,6 +392,27 @@ fun TransferScreen(session: SessionManager, onBack: () -> Unit) {
                                 Icon(Icons.Default.Add, contentDescription = "Satıra ekle")
                             }
                         }
+
+                        // ── Lot / Seri — transfer KAYNAK lokasyondan cikis gibidir:
+                        // mevcut lotlar onerilir, seriler stoktakilerden secilir.
+                        val trackingUi = trackingTypeFromString(item.trackingType)
+                        if (trackingUi == ItemTrackingType.LOT) {
+                            LotInputRow(
+                                itemId = item.itemId,
+                                value = lotNo,
+                                enabled = !saving,
+                                isSales = true,          // mevcut lotlari oner (kaynakta var olan)
+                                repo = repo,
+                                onValueChange = { lotNo = it },
+                            )
+                        } else if (trackingUi == ItemTrackingType.SERIAL) {
+                            SalesSerialTrackingRow(
+                                selectedSerials = serials,
+                                targetQuantity = qtyValue?.toInt() ?: 0,
+                                enabled = !saving,
+                                onOpenPicker = { showSerialPicker = true },
+                            )
+                        }
                     }
                 }
             }
@@ -425,6 +482,28 @@ fun TransferScreen(session: SessionManager, onBack: () -> Unit) {
             }
 
             Spacer(Modifier.height(8.dp))
+        }
+    }
+
+    // Kaynak lokasyondaki mevcut serilerden secim — giris/cikis ve irsaliyedeki AYNI diyalog.
+    if (showSerialPicker) {
+        val pickItem = resolved
+        if (pickItem == null) {
+            showSerialPicker = false
+        } else {
+            SerialSelectionDialog(
+                itemId = pickItem.itemId,
+                itemName = pickItem.itemName,
+                itemCode = pickItem.itemCode,
+                targetQuantity = qtyValue?.toInt() ?: 0,
+                initiallySelected = serials,
+                repo = repo,
+                onDismiss = { showSerialPicker = false },
+                onConfirm = { picked ->
+                    serials = picked
+                    showSerialPicker = false
+                },
+            )
         }
     }
 

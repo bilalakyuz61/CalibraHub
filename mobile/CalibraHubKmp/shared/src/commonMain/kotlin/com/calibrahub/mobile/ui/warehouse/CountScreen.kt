@@ -55,6 +55,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.calibrahub.mobile.data.CountLotItem
+import com.calibrahub.mobile.data.CountSerialItem
 import com.calibrahub.mobile.data.InventoryCountLineRequest
 import com.calibrahub.mobile.data.StockQueryDto
 import com.calibrahub.mobile.data.WarehouseLocationDto
@@ -76,6 +78,10 @@ private data class CountLineUi(
     val unit: String?,
     val systemQuantity: Double,
     val countedQuantity: Double,
+    /** "None" | "Lot" | "Serial" — gonderimde hangi kirilim alanina yazilacagini belirler. */
+    val trackingType: String = "None",
+    /** Lot/seri kirilimi (takipsizde bos). Toplami [countedQuantity]'ye esit olmali. */
+    val breakdown: List<CountBreakdownRow> = emptyList(),
 )
 
 /** Taslak (applied=false) kaydedilmiş sayım belgesinin Sayım Yansıt dialoğu için tuttuğu kimlik. */
@@ -120,6 +126,9 @@ fun CountScreen(session: SessionManager, onBack: () -> Unit) {
     var resolveError by remember { mutableStateOf<String?>(null) }
     var qtyText by rememberSaveable { mutableStateOf("") }
 
+    // Secili malzemenin lot/seri kirilimi — satir eklenince CountLineUi'ye tasinir.
+    var breakdown by remember { mutableStateOf(listOf<CountBreakdownRow>()) }
+
     var lines by remember { mutableStateOf(listOf<CountLineUi>()) }
     var note by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
@@ -151,6 +160,25 @@ fun CountScreen(session: SessionManager, onBack: () -> Unit) {
         val item = resolved ?: return
         val qty = qtyValue
         if (qty == null || qty < 0.0 || saving) return
+
+        // Erken geri bildirim — asil kural sunucuda. Sayimda kirilim TOPLAMI sayilan miktara
+        // ESIT olmali; "0 sayildi" (raf bos) durumunda kirilim beklenmez.
+        val tracking = trackingTypeFromString(item.trackingType)
+        if (tracking != ItemTrackingType.NONE && qty > 0.0) {
+            val total = breakdown.sumOf { it.qty }
+            if (breakdown.isEmpty()) {
+                resolveError = if (tracking == ItemTrackingType.LOT)
+                    "Bu malzeme lot takipli — lot kırılımı girilmeli."
+                else "Bu malzeme seri takipli — seri kırılımı girilmeli."
+                return
+            }
+            if (kotlin.math.abs(total - qty) > 0.0001) {
+                resolveError = "Kırılım toplamı (${formatQty(total)}) sayılan miktara " +
+                    "(${formatQty(qty)}) eşit olmalı."
+                return
+            }
+        }
+
         lines = lines + CountLineUi(
             itemId = item.itemId,
             itemCode = item.itemCode,
@@ -158,11 +186,14 @@ fun CountScreen(session: SessionManager, onBack: () -> Unit) {
             unit = item.unit,
             systemQuantity = systemQtyFor(item),
             countedQuantity = qty,
+            trackingType = item.trackingType,
+            breakdown = if (qty > 0.0) breakdown else emptyList(),
         )
         code = ""
         qtyText = ""
         resolved = null
         resolveError = null
+        breakdown = emptyList()
     }
 
     fun resetForm() {
@@ -187,7 +218,16 @@ fun CountScreen(session: SessionManager, onBack: () -> Unit) {
         scope.launch {
             saving = true
             val reqLines = lines.map {
-                InventoryCountLineRequest(itemId = it.itemId, countedQuantity = it.countedQuantity)
+                InventoryCountLineRequest(
+                    itemId = it.itemId,
+                    countedQuantity = it.countedQuantity,
+                    // Kirilim, takip tipine gore DOGRU alana yazilir — sunucu ikisini ayri
+                    // kurallarla isler (lot: Lot.ExpiryDate'e; seri: ItemSerial'a yansir).
+                    lotBreakdown = if (it.trackingType == "Lot" && it.breakdown.isNotEmpty())
+                        it.breakdown.map { b -> CountLotItem(lotNo = b.key, qty = b.qty) } else null,
+                    serialBreakdown = if (it.trackingType == "Serial" && it.breakdown.isNotEmpty())
+                        it.breakdown.map { b -> CountSerialItem(serialNo = b.key, qty = b.qty) } else null,
+                )
             }
             val noteOrNull = note.trim().takeIf { it.isNotBlank() }
             val extraFields = dynamicFieldsPayload(widgetValues)
@@ -373,6 +413,19 @@ fun CountScreen(session: SessionManager, onBack: () -> Unit) {
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = "Satıra ekle")
                             }
+                        }
+
+                        // ── Lot / Seri kirilimi — YALNIZ takipli malzemede ve sayilan miktar
+                        // sifirdan buyukse. "0 sayildi" (raf bos) durumunda kirilim anlamsizdir.
+                        val trackingUi = trackingTypeFromString(item.trackingType)
+                        if (trackingUi != ItemTrackingType.NONE && (qtyValue ?: 0.0) > 0.0) {
+                            CountBreakdownSection(
+                                isSerial = trackingUi == ItemTrackingType.SERIAL,
+                                rows = breakdown,
+                                countedQuantity = qtyValue ?: 0.0,
+                                enabled = !saving,
+                                onRowsChange = { breakdown = it },
+                            )
                         }
                         Spacer(Modifier.height(4.dp))
                         Text(

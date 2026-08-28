@@ -113,6 +113,31 @@ data class TransferResponse(
 data class InventoryCountLineRequest(
     val itemId: Int,
     val countedQuantity: Double,
+    /**
+     * Lot-takipli kalemde kirilim — bir malzemenin rafta birden fazla lotu olabilir.
+     * Toplami [countedQuantity]'ye ESIT olmali (kural sunucuda). Takipsizde null.
+     */
+    val lotBreakdown: List<CountLotItem>? = null,
+    /** Seri-takipli kalemde kirilim (seri = parti, miktar serbest). Ayni toplam kurali. */
+    val serialBreakdown: List<CountSerialItem>? = null,
+)
+
+/** Sayim lot kirilimi satiri. */
+@Serializable
+data class CountLotItem(
+    val lotNo: String,
+    val qty: Double,
+    val expiryDate: String? = null,
+    val description: String? = null,
+)
+
+/** Sayim seri kirilimi satiri. */
+@Serializable
+data class CountSerialItem(
+    val serialNo: String,
+    val qty: Double,
+    val expiryDate: String? = null,
+    val description: String? = null,
 )
 
 @Serializable
