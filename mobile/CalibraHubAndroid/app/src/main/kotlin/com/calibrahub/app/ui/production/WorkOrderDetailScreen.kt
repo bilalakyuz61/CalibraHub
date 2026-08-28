@@ -126,6 +126,22 @@ fun WorkOrderDetailScreen(workOrderId: Int, onBack: () -> Unit) {
         )
     }
 
+    /* Kişisel telefon senaryosu (2026-08-28) — personel kartında "Mobilde PIN Sor"
+       KAPALI ve personel giriş yapan kullanıcıya bağlıysa operatör kimliği zaten
+       bellidir; her başlat/tamamla adiminda sicil no + PIN sormak gereksizdir.
+       Bu uç daha önce hiç çağrılmıyordu: ayar kapalı olsa bile PIN ekranı çıkıyordu.
+       Sunucu tarafı da aynı kuralı bağımsız olarak uygular (MobileProductionApiController
+       operatör doğrulaması) — yani istemcinin PIN'i atlaması bir güvenlik boşluğu açmaz. */
+    LaunchedEffect(Unit) {
+        if (operatorId == null) {
+            val me = repo.myOperator()
+            if (me.linked && !me.pinRequired && me.operatorId != null) {
+                operatorId = me.operatorId
+                operatorName = me.name
+            }
+        }
+    }
+
     fun resetPendingFlow() {
         pendingAction = null
         showPinDialog = false

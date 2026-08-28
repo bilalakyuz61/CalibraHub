@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.automirrored.filled.FactCheck
+import androidx.compose.material.icons.automirrored.filled.ListAlt
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.ChevronRight
@@ -97,6 +98,9 @@ object AppRoutes {
     /** Cari Karti — arama + salt-okunur detay (bkz. ContactCardScreen). */
     const val CONTACT_CARD = "contact_card"
 
+    /** İhtiyaç Kaydı — talep listesi + yeni talep (bkz. PurchaseRequestScreen). */
+    const val PURCHASE_REQUESTS = "purchase_requests"
+
     // İş emri detayı (Faz 2c EK) — drawer'da YOK, yalnız WorkOrderListScreen'den navigate edilir.
     // AYNI KISS gerekçesiyle PURCHASE/SALES_OPEN_ORDER_DETAIL ile AYNI desen: literal route +
     // AppNavHost'ta hoisted `pendingWorkOrderId` Int state (navigation-compose Multiplatform
@@ -147,6 +151,7 @@ object MenuFormCodes {
     const val SHOP_FLOOR = "SHOP_FLOOR"
     const val APPROVAL_PENDING = "APPROVAL_PENDING"
     const val CONTACTS = "CONTACTS"
+    const val PURCHASE_REQUEST = "PURCHASE_REQUEST"
 }
 
 /**
@@ -255,6 +260,10 @@ val drawerEntries: List<DrawerEntry> = listOf(
             label = "Satın Alma",
             icon = Icons.Default.ShoppingCart,
             leaves = listOf(
+                DrawerLeaf(
+                    AppRoutes.PURCHASE_REQUESTS, "İhtiyaç Kaydı", Icons.AutoMirrored.Filled.ListAlt,
+                    listOf(MenuFormCodes.PURCHASE_REQUEST),
+                ),
                 DrawerLeaf(
                     AppRoutes.PURCHASE_DELIVERY, "Alış İrsaliyesi", Icons.Default.LocalShipping,
                     listOf(MenuFormCodes.PURCHASE_DELIVERY),

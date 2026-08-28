@@ -170,6 +170,17 @@
             <label for="pe-pin">PIN Kodu</label>
             <input id="pe-pin" type="text" maxlength="20"
                    value="@(Model?.PinCode ?? "")" placeholder="Vardiya/terminal girişi" />
+            @* Sicil No SALT OKUNUR gosterilir (2026-08-28). Kullanici kod GIRMEZ
+               (CLAUDE.md "kullanici tarafindan girilen kod alani yok" kurali) — kod
+               kayitta ad'dan turetilir. Ama terminal/mobil giris ekrani "Sicil No + PIN"
+               istedigi icin kullanicinin bu degeri GORMESI sart; gorunmediginde
+               operatore ne yazacagini soyleyemiyordu. *@
+            @if (!isNew && !string.IsNullOrWhiteSpace(Model!.Code))
+            {
+                <span class="ux-hint">
+                    Sicil No (terminal/mobil girişinde yazılacak): <strong>@Model.Code</strong>
+                </span>
+            }
           </div>
           <div class="ux-field">
             <label for="pe-card">Kart No</label>

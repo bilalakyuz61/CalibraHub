@@ -33,6 +33,7 @@ import com.calibrahub.mobile.session.SessionProbeResult
 import com.calibrahub.mobile.ui.approval.PendingApprovalScreen
 import com.calibrahub.mobile.ui.common.CalibrationIndicator
 import com.calibrahub.mobile.ui.contact.ContactCardScreen
+import com.calibrahub.mobile.ui.purchase.PurchaseRequestScreen
 import com.calibrahub.mobile.ui.common.PlaceholderScreen
 import com.calibrahub.mobile.ui.home.HomeScreen
 import com.calibrahub.mobile.ui.login.LoginScreen
@@ -277,6 +278,12 @@ fun AppNavHost(session: SessionManager) {
             }
             composable(AppRoutes.WAREHOUSE_DRAFT_COUNTS) {
                 DraftCountsScreen(session = session, onBack = { navController.popBackStack() })
+            }
+            composable(AppRoutes.PURCHASE_REQUESTS) {
+                PurchaseRequestScreen(
+                    session = session,
+                    onBack = { navController.popBackStack() },
+                )
             }
             composable(AppRoutes.CONTACT_CARD) {
                 ContactCardScreen(

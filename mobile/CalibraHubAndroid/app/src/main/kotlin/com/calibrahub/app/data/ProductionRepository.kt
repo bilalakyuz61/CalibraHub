@@ -29,6 +29,17 @@ class ProductionRepository(private val session: SessionManager) {
     }
 
     /**
+     * Giriş yapmış kullanıcıya bağlı personel kaydı + "Mobilde PIN Sor" ayarı.
+     * HATA DURUMUNDA fail-safe varsayılan döner (linked=false, pinRequired=true):
+     * ağ hatası yüzünden PIN adımını ATLAMAK, kimlik doğrulamasını zayıflatırdı.
+     */
+    suspend fun myOperator(): MyOperatorDto = runCatching {
+        val resp = session.buildApi(ProductionApi::class.java).myOperator()
+        if (!resp.isSuccessful) error("HTTP ${resp.code()}")
+        resp.body() ?: error("Boş yanıt")
+    }.getOrElse { MyOperatorDto(linked = false, pinRequired = true) }
+
+    /**
      * Sicil No + PIN doğrulama — başarıda operatorId+name döner, start/complete
      * çağrılarında kullanılır (2026-07-16: personnelCode zorunlu alan olarak eklendi).
      */

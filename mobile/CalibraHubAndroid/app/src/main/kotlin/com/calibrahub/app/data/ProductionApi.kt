@@ -32,6 +32,16 @@ interface ProductionApi {
     @GET("api/mobile/production/work-orders/{id}")
     suspend fun workOrderDetail(@Path("id") id: Int): Response<WorkOrderDetailDto>
 
+    /**
+     * Giriş yapmış kullanıcıya BAĞLI personel kaydı (Personnel.UserId) ve o kayıtta
+     * "Mobilde PIN Sor" ayarı. 2026-08-28'de eklendi: bu uç çağrılmadığı için personel
+     * kartında PIN sorma KAPALI olsa bile mobil her işlemde sicil no + PIN soruyordu.
+     *
+     * linked=false veya pinRequired=true → PIN yolu kullanılır (fail-safe).
+     */
+    @GET("api/mobile/production/me")
+    suspend fun myOperator(): Response<MyOperatorDto>
+
     // Yanlış sicil no/PIN veya kilitli personel → 400 {error} (mesaj kullanıcı-dostu, olduğu gibi gösterilir).
     @POST("api/mobile/production/auth-operator")
     suspend fun authOperator(@Body req: AuthOperatorRequest): Response<AuthOperatorResponse>
@@ -107,6 +117,18 @@ data class WorkOrderOperationDto(
 /** Operatör kimlik doğrulama isteği — sicil no (personnelCode) + PIN birlikte zorunlu (2026-07-16 sözleşme güncellemesi). */
 @JsonClass(generateAdapter = true)
 data class AuthOperatorRequest(val personnelCode: String, val pin: String)
+
+/**
+ * GET /api/mobile/production/me yanıtı. Backend, kullanıcıya bağlı personel yoksa
+ * linked=false + pinRequired=true döner — istemci bu durumda PIN yolunu kullanır.
+ */
+@JsonClass(generateAdapter = true)
+data class MyOperatorDto(
+    val linked: Boolean = false,
+    val operatorId: Int? = null,
+    val name: String? = null,
+    val pinRequired: Boolean = true,
+)
 
 @JsonClass(generateAdapter = true)
 data class AuthOperatorResponse(val operatorId: Int, val name: String)
