@@ -177,6 +177,16 @@ public sealed class EDocumentImportRoundTripTests
             Assert.NotNull(reread);
             Assert.Equal(envelopeId, reread!.EnvelopeId);
             Assert.Equal(docId.Value, reread.Id);
+
+            // ORDINAL KAYMASI KORUMASI: IngestSource SELECT listesinin 13. sirasina (sona)
+            // eklendi ve esleme sira numarasiyla okuyor. Kolon ortaya eklenseydi ya da
+            // ordinal yanlis olsaydi burasi patlar veya YANLIS deger dondururdu — derleme
+            // bunu YAKALAMAZ. Ayni satirda komsu alanlar da dogrulanir ki kayma gorunur olsun.
+            Assert.Equal(EDocumentIngestSource.Offline, reread.IngestSource);
+            Assert.Null(reread.IntegratorSettingsId);
+            Assert.Equal(DocumentKind.EDispatch, reread.Kind);
+            Assert.Equal("1111111111", reread.SenderTaxNumber);
+            Assert.Equal("2222222222", reread.RecipientTaxNumber);
         }
         finally
         {
