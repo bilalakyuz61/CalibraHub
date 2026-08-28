@@ -161,6 +161,8 @@ public sealed class SqlWaContactRepository : IWaContactRepository
             WHERE i.[ContactPhone] IS NOT NULL AND i.[CompanyId] = @CompanyId
             GROUP BY i.[ContactPhone];
 
+            -- tenant-ok: ON kosulu KASTEN 1=0 (hicbir zaman eslesmez -> her satir INSERT).
+            -- Kiraci ayrimi USING alt sorgusunda ve INSERT'te: ikisi de @CompanyId ile kilitli.
             MERGE {_contactTable} AS tgt
             USING (
                 SELECT p.phone, p.display_name

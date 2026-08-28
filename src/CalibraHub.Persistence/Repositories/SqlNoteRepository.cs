@@ -502,6 +502,9 @@ public sealed class SqlNoteRepository : INoteRepository
         // Upsert: mevcut paylaşımın can_edit değerini güncelle, yoksa yeni satır ekle
         // CompanyId ebeveyn Note'tan alınır — oturumdan değil, çocuk ile ebeveynin şirketi asla ayrışamaz.
         command.CommandText = $"""
+            -- tenant-ok: eslesme NoteId uzerinden, o da EBEVEYNIN birincil anahtari —
+            -- iki sirket ayni NoteId'yi tasiyamaz, dolayisiyla ON dogal olarak sirket kapsamli.
+            -- INSERT CompanyId'yi ebeveynden turetir (asagida).
             MERGE {_sharesTable} AS target
             USING (VALUES (@NoteId, @SharedWithUserId)) AS src ([NoteId], [SharedWithUserId])
               ON target.[NoteId] = src.[NoteId] AND target.[SharedWithUserId] = src.[SharedWithUserId]

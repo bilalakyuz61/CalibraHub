@@ -97,6 +97,9 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
         template.UpdatedAt = DateTime.Now;
 
         command.CommandText = $"""
+            -- tenant-ok: guncelleme dali WHEN MATCHED AND target.[CompanyId] = @CompanyId ile
+            -- korunur; baska sirkete ait bir Id gelirse UPDATE calismaz. (Bu durumda hicbir sey
+            -- yazilmaz ve islem sessizce no-op olur — sizinti degil, ama bilincli davranis.)
             MERGE {_table} AS target
             USING (SELECT @Id AS [Id]) AS source ON target.[Id] = source.[Id]
             WHEN MATCHED AND target.[CompanyId] = @CompanyId THEN
