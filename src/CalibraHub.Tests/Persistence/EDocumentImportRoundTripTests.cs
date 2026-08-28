@@ -182,11 +182,23 @@ public sealed class EDocumentImportRoundTripTests
             // eklendi ve esleme sira numarasiyla okuyor. Kolon ortaya eklenseydi ya da
             // ordinal yanlis olsaydi burasi patlar veya YANLIS deger dondururdu — derleme
             // bunu YAKALAMAZ. Ayni satirda komsu alanlar da dogrulanir ki kayma gorunur olsun.
-            Assert.Equal(EDocumentIngestSource.Offline, reread.IngestSource);
-            Assert.Null(reread.IntegratorSettingsId);
+            // Fikstur ENTEGRATORLU bir belge kurar ve IngestSource verilmez -> varsayilan Online.
+            Assert.Equal(EDocumentIngestSource.Online, reread.IngestSource);
+            Assert.Equal(integratorId, reread.IntegratorSettingsId);
             Assert.Equal(DocumentKind.EDispatch, reread.Kind);
             Assert.Equal("1111111111", reread.SenderTaxNumber);
             Assert.Equal("2222222222", reread.RecipientTaxNumber);
+
+            // LISTELEME sorgusu AYRI bir SELECT'tir ve EKRANIN kullandigi yoldur; tekil
+            // okumanin gecmesi onu kapsamaz. IngestSource ikisine de SONA eklendi, ama
+            // birinde unutulsaydi ya da ordinal kaysaydi yalniz burasi yakalardi.
+            var pending = await repo.GetPendingApprovalsAsync(null, CancellationToken.None);
+            var listed = pending.SingleOrDefault(x => x.Id == docId.Value);
+            Assert.NotNull(listed);
+            Assert.Equal(EDocumentIngestSource.Online, listed!.IngestSource);
+            Assert.Equal(envelopeId, listed.EnvelopeId);
+            Assert.Equal(DocumentKind.EDispatch, listed.Kind);
+            Assert.Equal("Test Gonderen", listed.SenderName);
         }
         finally
         {
