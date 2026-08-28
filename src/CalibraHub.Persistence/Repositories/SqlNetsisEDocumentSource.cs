@@ -347,7 +347,14 @@ public sealed class SqlNetsisEDocumentSource : IOfflineEDocumentSource
         return taxes;
     }
 
-    private static string Str(object? v) => v is null or DBNull ? string.Empty : v.ToString()!.Trim();
+    /// <summary>
+    /// Kaynaktan gelen HER metin bu noktadan gecer; Turkce karakter duzeltmesi burada
+    /// uygulanir (bkz. NetsisTextDecoder). Tek nokta olmasi onemli: sorgu bazinda
+    /// tekrarlansaydi yeni bir alan eklendiginde duzeltmeyi unutmak sessizce bozuk
+    /// metin uretirdi.
+    /// </summary>
+    private static string Str(object? v) =>
+        v is null or DBNull ? string.Empty : NetsisTextDecoder.Fix(v.ToString()!.Trim()) ?? string.Empty;
     private static string? NullIfEmpty(string s) => string.IsNullOrWhiteSpace(s) ? null : s;
     private static decimal? Dec(object? v) => v is null or DBNull ? null : Convert.ToDecimal(v);
 
