@@ -73,11 +73,25 @@ public sealed class SqlFormLinesRepository : IFormLinesRepository
                 hasCompanyColumn = Convert.ToInt32(await ccChk.ExecuteScalarAsync(ct) ?? 0) == 1;
             }
 
-            var companyPredicate = hasCompanyColumn ? " AND [CompanyId] = @CompanyId" : string.Empty;
-            cmd.CommandText = $"""
-                SELECT * FROM [{_schema}].[{viewName}]
-                WHERE CAST([{parentColumn}] AS NVARCHAR(100)) = @ParentId{companyPredicate};
-                """;
+            // Suzgec SQL metninde ACIKCA yazilir, degiskenle enjekte EDILMEZ: preflight
+            // tarayicisi ifadenin icinde birebir "CompanyId" arar; interpolasyonla eklenen
+            // kosul taramada GORUNMEZ ve dogru yazilmis kod "suzgecsiz" raporlanir.
+            if (hasCompanyColumn)
+            {
+                cmd.CommandText = $"""
+                    SELECT * FROM [{_schema}].[{viewName}]
+                    WHERE CAST([{parentColumn}] AS NVARCHAR(100)) = @ParentId AND [CompanyId] = @CompanyId;
+                    """;
+            }
+            else
+            {
+                // tenant-ok: gorunumde CompanyId kolonu yok (bugun 26/26 gorunumde VAR;
+                // bu dal yalniz kapsam disi bir taban tablo icin savunma amacli durur).
+                cmd.CommandText = $"""
+                    SELECT * FROM [{_schema}].[{viewName}]
+                    WHERE CAST([{parentColumn}] AS NVARCHAR(100)) = @ParentId;
+                    """;
+            }
             cmd.Parameters.Add(new SqlParameter("@ParentId", parentRecordId));
             if (hasCompanyColumn)
                 cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));

@@ -439,18 +439,23 @@ public sealed class FormMetadataService : IFormMetadataService
             hasCompanyColumn = Convert.ToInt32(await colChk.ExecuteScalarAsync(ct) ?? 0) == 1;
         }
 
-        var companyFilter = hasCompanyColumn ? " [CompanyId] = @CompanyId" : string.Empty;
-
+        // Suzgec SQL metninde ACIKCA yazilir, degiskenle enjekte EDILMEZ: preflight tarayicisi
+        // ifadenin icinde birebir "CompanyId" arar; interpolasyonla eklenen kosul taramada
+        // GORUNMEZ ve dogru yazilmis kod "suzgecsiz" raporlanir.
         await using var cmd = conn.CreateCommand();
         if (recordId is null)
         {
-            var where = hasCompanyColumn ? $"WHERE{companyFilter} " : string.Empty;
-            cmd.CommandText = $"SELECT TOP 1 * FROM [{_schema}].[{viewName}] {where}ORDER BY [{keyColumnEsc}] DESC;";
+            cmd.CommandText = hasCompanyColumn
+                ? $"SELECT TOP 1 * FROM [{_schema}].[{viewName}] WHERE [CompanyId] = @CompanyId ORDER BY [{keyColumnEsc}] DESC;"
+                // tenant-ok: gorunumde CompanyId kolonu yok (bugun 26/26 gorunumde VAR).
+                : $"SELECT TOP 1 * FROM [{_schema}].[{viewName}] ORDER BY [{keyColumnEsc}] DESC;";
         }
         else
         {
-            var andCompany = hasCompanyColumn ? $" AND{companyFilter}" : string.Empty;
-            cmd.CommandText = $"SELECT TOP 1 * FROM [{_schema}].[{viewName}] WHERE CAST([{keyColumnEsc}] AS NVARCHAR(100)) = @Rid{andCompany};";
+            cmd.CommandText = hasCompanyColumn
+                ? $"SELECT TOP 1 * FROM [{_schema}].[{viewName}] WHERE CAST([{keyColumnEsc}] AS NVARCHAR(100)) = @Rid AND [CompanyId] = @CompanyId;"
+                // tenant-ok: gorunumde CompanyId kolonu yok (bugun 26/26 gorunumde VAR).
+                : $"SELECT TOP 1 * FROM [{_schema}].[{viewName}] WHERE CAST([{keyColumnEsc}] AS NVARCHAR(100)) = @Rid;";
             cmd.Parameters.Add(new SqlParameter("@Rid", recordId));
         }
         if (hasCompanyColumn)

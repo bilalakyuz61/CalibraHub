@@ -76,6 +76,11 @@ public static class DefaultDocLayoutBuilder
                 Alias       = "Master",
                 Role        = "master",
                 ViewId      = null,
+                // tenant-ok: sahiplik DocDesignerService.LoadLayoutWithDataAsync icinde,
+                // SQL calismadan ONCE dogrulanir (istemciden gelen DocumentId baska sirkete
+                // aitse istek reddedilir). Suzgec buraya KONULAMAZ: hedef gorunumlerin bir
+                // kismi (or. vw_AssetAssignment) CompanyId kolonu TASIMAZ ve kosul eklemek
+                // "Invalid column name" ile kirardi.
                 AdHocSql    = $"SELECT * FROM [dbo].[{viewName}] WHERE [{keyCol}] = @DocumentId",
                 JoinOn      = null,
                 ParentAlias = null,

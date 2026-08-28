@@ -62,7 +62,18 @@ $scanned = 0
 # Degisken -> tablo adi:  _docTable = $"[{s}].[Document]";
 $varDefRx = [regex]'(?m)(_\w+)\s*=\s*\$?"[^"]*\[(\w+)\]\s*"'
 # Tabloya dokunan ifade basi
-$refRx = [regex]'(?is)\b(FROM|JOIN|UPDATE|DELETE\s+FROM|INSERT\s+INTO|MERGE(?:\s+INTO)?)\s+(?:\{(_\w+)\}|(?:\[?dbo\]?\.)?\[(\w+)\]|(?:\[?dbo\]?\.)(\w+))'
+
+# 2026-08-28 - DUZ GORUNUM (v_Flat_*) KOR NOKTASI:
+# Bu gorunumler "SELECT base.*" ile uretilir ve HIC WHERE tasimaz, yani tum sirketlerin
+# satirlarini gosterirler. Onlari okuyan kod ise adlarini calisma zamaninda kurar:
+#     var viewName = "v_Flat_" + formCode;   ->   FROM [{_schema}].[{viewName}]
+# Eski desen KOSELI PARANTEZ ICINDEKI interpolasyonu ( [{viewName}] ) hic tanimiyordu; bu
+# yuzden FormMetadataService ve SqlFormLinesRepository icindeki UC suzgecsiz okuma taramada
+# GORUNMUYORDU (elle bulundu). Asagidaki iki ek + refRx son alternatifi bunu kapatir.
+$viewDefRx    = [regex]'(?m)\b(\w+)\s*=\s*\$?"v_Flat_'
+$viewConcatRx = [regex]'(?m)\b(\w+)\s*=\s*"v_Flat_"\s*\+'
+
+$refRx = [regex]'(?is)\b(FROM|JOIN|UPDATE|DELETE\s+FROM|INSERT\s+INTO|MERGE(?:\s+INTO)?)\s+(?:\{(_\w+)\}|(?:\[?dbo\]?\.)?\[(\w+)\]|(?:\[?dbo\]?\.)(\w+)|(?:\[[^\]]*\]\.)?\[\{(\w+)\}\])'
 
 foreach ($dir in $srcDirs) {
     foreach ($file in Get-ChildItem $dir -Recurse -Filter *.cs -File) {
@@ -72,6 +83,10 @@ foreach ($dir in $srcDirs) {
 
         $varMap = @{}
         foreach ($d in $varDefRx.Matches($text)) { $varMap[$d.Groups[1].Value] = $d.Groups[2].Value }
+        # Duz gorunum degiskenleri: gercek ad calisma zamaninda kurulur; hepsi tek
+        # mantiksal ad altinda toplanir ki rapor okunabilir kalsin.
+        foreach ($d in $viewDefRx.Matches($text))    { $varMap[$d.Groups[1].Value] = 'v_Flat_*' }
+        foreach ($d in $viewConcatRx.Matches($text)) { $varMap[$d.Groups[1].Value] = 'v_Flat_*' }
 
         foreach ($m in $refRx.Matches($text)) {
             # XML-doc yorumu (///) calistirilabilir SQL degil, anlatim metnidir.
@@ -83,6 +98,7 @@ foreach ($dir in $srcDirs) {
             if     ($m.Groups[2].Success) { $tbl = $varMap[$m.Groups[2].Value] }
             elseif ($m.Groups[3].Success) { $tbl = $m.Groups[3].Value }
             elseif ($m.Groups[4].Success) { $tbl = $m.Groups[4].Value }
+            elseif ($m.Groups[5].Success) { $tbl = $varMap[$m.Groups[5].Value] }
             if (-not $tbl) { continue }
             if ($globalTables -contains $tbl) { continue }
             if ($Table -and $tbl -ne $Table) { continue }
@@ -117,8 +133,8 @@ foreach ($dir in $srcDirs) {
             # Tarayicinin ilk surumleri MERGE'i HIC gormuyordu (desende yoktu) — 21 yazma
             # yolu gorunmezdi; bir ajan elle bulunca ortaya cikti.
             if ($verb -match 'MERGE') {
-                $onIdx = [regex]::Match($tail, '(?i)ON')
-                $whenIdx = [regex]::Match($tail, '(?i)WHEN')
+                $onIdx = [regex]::Match($tail, '(?i)\bON\b')
+                $whenIdx = [regex]::Match($tail, '(?i)\bWHEN\b')
                 if ($onIdx.Success -and $whenIdx.Success -and $whenIdx.Index -gt $onIdx.Index) {
                     $onClause = $tail.Substring($onIdx.Index, $whenIdx.Index - $onIdx.Index)
                     if ($onClause -match 'CompanyId') { continue }
