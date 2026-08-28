@@ -539,6 +539,28 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
     private static decimal? NullableDecimal(object? v)
         => v is null || v == DBNull.Value ? null : Convert.ToDecimal(v);
 
+    /// <summary>
+    /// Cevrimdisi kaynaktan ice aktarilmis EN BUYUK ERP anahtari. Deger PayloadRaw
+    /// icindeki JSON'dan (incKeyNo) okunur — ayri bir imlec tablosu tutulmaz, boylece
+    /// imlec ile veri birbirinden ayrisamaz (kayit silinirse isaret kendini onarir).
+    /// </summary>
+    public async Task<int> GetMaxOfflineSourceKeyAsync(
+        DocumentKind kind, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT ISNULL(MAX(TRY_CAST(JSON_VALUE([PayloadRaw], '$.incKeyNo') AS INT)), 0)
+              FROM {_tableName}
+             WHERE [Kind] = @Kind AND [IngestSource] = 'Offline' AND [CompanyId] = @CompanyId;
+            """;
+        cmd.Parameters.Add(CreateParameter("@Kind", kind.ToString()));
+        cmd.Parameters.Add(CreateParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
+
+        var v = await cmd.ExecuteScalarAsync(cancellationToken);
+        return v is null or DBNull ? 0 : Convert.ToInt32(v);
+    }
+
     private async Task InsertIncomingDocumentDetailsAsync(
         SqlConnection connection,
         SqlTransaction transaction,

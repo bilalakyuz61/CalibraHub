@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Security;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
@@ -98,7 +99,8 @@ public sealed class NetsisEDocumentSourceTests
         Skip.IfNot(ErpReachable(), $"ERP veritabani ({ErpDatabase}) erisilemedi.");
 
         var docs = await BuildSource().ReadAsync(
-            ErpConnection(), new DateTime(2000, 1, 1), maxRows: 25, ct: CancellationToken.None);
+            ErpConnection(), new DateTime(2000, 1, 1), maxRows: 25,
+            afterSourceKey: new OfflineSourceWatermark(0, 0), ct: CancellationToken.None);
 
         Assert.NotEmpty(docs);
 
@@ -136,11 +138,51 @@ public sealed class NetsisEDocumentSourceTests
         Skip.IfNot(ErpReachable(), $"ERP veritabani ({ErpDatabase}) erisilemedi.");
 
         var docs = await BuildSource().ReadAsync(
-            ErpConnection(), new DateTime(2000, 1, 1), maxRows: 40, ct: CancellationToken.None);
+            ErpConnection(), new DateTime(2000, 1, 1), maxRows: 40,
+            afterSourceKey: new OfflineSourceWatermark(0, 0), ct: CancellationToken.None);
 
         // EnvelopeId dedup anahtaridir (ExistsByEnvelopeIdAsync). Cakisirsa ikinci belge
         // sessizce ATLANIR — yani ayni okumada tekrar eden anahtar VERI KAYBI demektir.
         var ids = docs.Select(d => d.Header.EnvelopeId).ToList();
         Assert.Equal(ids.Count, ids.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    /// <summary>
+    /// Ilerleme isareti gercekten ILERLETIYOR mu.
+    ///
+    /// <para>Bu testin sebebi canli dogrulamada gorulen davranis: okuyucu azalan sirada
+    /// calisirken her turda AYNI en yeni kayitlari getiriyor, hepsi dedup'a takiliyor ve
+    /// eski belgeler siraya HIC gelmiyordu (her tur "0 eklendi, 400 atlandi"). Isaret
+    /// ilerlemezse sistem sessizce ilk tavanda takili kalir.</para>
+    /// </summary>
+    [SkippableFact]
+    public async Task Ilerleme_isareti_sonraki_kayitlari_getirir()
+    {
+        Skip.IfNot(ErpReachable(), $"ERP veritabani ({ErpDatabase}) erisilemedi.");
+
+        var src = BuildSource();
+        var first = await src.ReadAsync(ErpConnection(), new DateTime(2000, 1, 1), 5,
+            new OfflineSourceWatermark(0, 0), CancellationToken.None);
+        Assert.NotEmpty(first);
+
+        // Ilk turdaki en buyuk fatura anahtarindan devam et.
+        var lastInvoiceKey = first
+            .Where(d => d.Header.Kind == DocumentKind.EInvoice)
+            .Select(d => int.Parse(d.Header.EnvelopeId.Replace("NETSIS-EFAT-", "")))
+            .DefaultIfEmpty(0).Max();
+        Assert.True(lastInvoiceKey > 0);
+
+        var second = await src.ReadAsync(ErpConnection(), new DateTime(2000, 1, 1), 5,
+            new OfflineSourceWatermark(lastInvoiceKey, 0), CancellationToken.None);
+
+        var secondInvoiceKeys = second
+            .Where(d => d.Header.Kind == DocumentKind.EInvoice)
+            .Select(d => int.Parse(d.Header.EnvelopeId.Replace("NETSIS-EFAT-", "")))
+            .ToList();
+
+        Assert.NotEmpty(secondInvoiceKeys);
+        // Ikinci tur SADECE isaretten SONRAKI kayitlari getirmeli — ortusme = sonsuz dongu.
+        Assert.All(secondInvoiceKeys, k => Assert.True(k > lastInvoiceKey,
+            $"Ilerleme isareti calismiyor: {k} <= {lastInvoiceKey}"));
     }
 }

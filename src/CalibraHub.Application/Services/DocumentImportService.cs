@@ -105,8 +105,15 @@ public sealed class DocumentImportService : IDocumentImportService
         IReadOnlyList<OfflineEDocument> documents;
         try
         {
+            // Ilerleme isareti KENDI verimizden turetilir (ayri imlec tablosu yok).
+            var watermark = new OfflineSourceWatermark(
+                await _incomingDocumentRepository.GetMaxOfflineSourceKeyAsync(
+                    DocumentKind.EInvoice, cancellationToken),
+                await _incomingDocumentRepository.GetMaxOfflineSourceKeyAsync(
+                    DocumentKind.EDispatch, cancellationToken));
+
             documents = await _offlineSource.ReadAsync(
-                connection, since, EDocumentParameters.MaxDocumentsPerPull, cancellationToken);
+                connection, since, EDocumentParameters.MaxDocumentsPerPull, watermark, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -123,8 +130,19 @@ public sealed class DocumentImportService : IDocumentImportService
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
+                // IKI dedup anahtari da sorulur.
+                //
+                // (1) EnvelopeId — bizim urettigimiz kaynak anahtari (ERP PK'sine bagli).
+                // (2) (Kind + DocumentNumber + RecipientTaxNumber) — tabloda AYRI bir UNIQUE
+                //     indeks. Yalniz (1)'e bakmak yetmiyor: ERP'de ayni belge numarasi farkli
+                //     PK'larla tekrarlanabiliyor (olculdu: TBLEIRSMAS'ta 141 grup). O kayitlar
+                //     (1)'den geciyor ama (2)'ye takilip HER TURDA istisna firlatiyordu —
+                //     loglar gereksiz hata satiriyla doluyordu. Artik temiz "atlandi" sayilir.
                 if (await _incomingDocumentRepository.ExistsByEnvelopeIdAsync(
-                        doc.Header.EnvelopeId, cancellationToken))
+                        doc.Header.EnvelopeId, cancellationToken)
+                    || await _incomingDocumentRepository.ExistsByDocumentNumberAndRecipientAsync(
+                        doc.Header.DocumentNumber, doc.Header.RecipientTaxNumber,
+                        doc.Header.Kind, cancellationToken))
                 {
                     skipped++;
                     continue;

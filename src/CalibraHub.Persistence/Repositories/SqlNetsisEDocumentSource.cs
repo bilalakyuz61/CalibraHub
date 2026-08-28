@@ -36,7 +36,8 @@ public sealed class SqlNetsisEDocumentSource : IOfflineEDocumentSource
         => _connectionFactory = connectionFactory;
 
     public async Task<IReadOnlyList<OfflineEDocument>> ReadAsync(
-        ExternalDbConnection connection, DateTime since, int maxRows, CancellationToken ct)
+        ExternalDbConnection connection, DateTime since, int maxRows,
+        OfflineSourceWatermark afterSourceKey, CancellationToken ct)
     {
         if (maxRows <= 0) maxRows = 200;
 
@@ -48,14 +49,14 @@ public sealed class SqlNetsisEDocumentSource : IOfflineEDocumentSource
         await conn.OpenAsync(ct);
 
         var result = new List<OfflineEDocument>();
-        result.AddRange(await ReadInvoicesAsync(conn, since, maxRows, ct));
-        result.AddRange(await ReadDespatchesAsync(conn, since, maxRows, ct));
+        result.AddRange(await ReadInvoicesAsync(conn, since, maxRows, afterSourceKey.LastInvoiceKey, ct));
+        result.AddRange(await ReadDespatchesAsync(conn, since, maxRows, afterSourceKey.LastDespatchKey, ct));
         return result;
     }
 
     // ── e-FATURA ────────────────────────────────────────────────────────────────
     private static async Task<List<OfflineEDocument>> ReadInvoicesAsync(
-        SqlConnection conn, DateTime since, int maxRows, CancellationToken ct)
+        SqlConnection conn, DateTime since, int maxRows, int afterKey, CancellationToken ct)
     {
         var headers = new List<(int Inc, IncomingDocument Doc)>();
 
@@ -72,11 +73,14 @@ public sealed class SqlNetsisEDocumentSource : IOfflineEDocumentSource
                        ISNULL(m.[DOVIZTIP], 0)              AS DovizTip,
                        ISNULL(m.[GENELTOPLAM], 0)           AS GenelToplam
                   FROM [dbo].[TBLEFATMAS] m
-                 WHERE m.[TARIH] >= @Since
-                 ORDER BY m.[INCKEYNO] DESC;
+                 WHERE m.[TARIH] >= @Since AND m.[INCKEYNO] > @AfterKey
+                 -- ARTAN sira + ilerleme isareti: azalan sirada her tur ayni en yeni
+                 -- kayitlar okunur, hepsi dedup'a takilir ve eski belgeler siraya HIC gelmezdi.
+                 ORDER BY m.[INCKEYNO];
                 """;
             cmd.Parameters.Add(new SqlParameter("@Max", maxRows));
             cmd.Parameters.Add(new SqlParameter("@Since", since));
+            cmd.Parameters.Add(new SqlParameter("@AfterKey", afterKey));
 
             await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
@@ -141,7 +145,13 @@ public sealed class SqlNetsisEDocumentSource : IOfflineEDocumentSource
                    k.[ISKACIK], k.[ACIKLAMA],
                    k.[IRSALIYENO], k.[IRSALIYE_TARIH], k.[SIPARISNO], k.[SIPARIS_TARIH]
               FROM [dbo].[TBLEFATKALEM] k
-             WHERE k.[EFATMASINC] = @Inc;
+             WHERE k.[EFATMASINC] = @Inc
+             -- ORDER BY zorunlu: TBLEFATKALEM'de satir SIRA kolonu YOKTUR (irsaliye
+             -- tablosunda var, faturada yok). ORDER BY olmadan SQL Server satir sirasini
+             -- GARANTI ETMEZ; LineNumber tekrar okumalarda kayabilir ve ayni belge farkli
+             -- numaralarla yazilabilirdi. Bu siralama kaynagin ORIJINAL fatura sirasini
+             -- yansitmaz (kaynak onu saklamiyor) ama DETERMINISTIKTIR.
+             ORDER BY k.[STOK_KODU], k.[STRA_GCMIK], k.[STRA_BF];
             """;
         cmd.Parameters.Add(new SqlParameter("@Inc", masterInc));
 
@@ -173,7 +183,7 @@ public sealed class SqlNetsisEDocumentSource : IOfflineEDocumentSource
 
     // ── e-IRSALIYE ──────────────────────────────────────────────────────────────
     private static async Task<List<OfflineEDocument>> ReadDespatchesAsync(
-        SqlConnection conn, DateTime since, int maxRows, CancellationToken ct)
+        SqlConnection conn, DateTime since, int maxRows, int afterKey, CancellationToken ct)
     {
         var headers = new List<(int Inc, IncomingDocument Doc, EDocumentShipmentData Ship)>();
 
@@ -195,11 +205,12 @@ public sealed class SqlNetsisEDocumentSource : IOfflineEDocumentSource
                        m.[SHIP_DPERSON2FIRSTNAME], m.[SHIP_DPERSON2FAMILYNAME], m.[SHIP_DPERSON2NID],
                        m.[SHIP_DPERSON3FIRSTNAME], m.[SHIP_DPERSON3FAMILYNAME], m.[SHIP_DPERSON3NID]
                   FROM [dbo].[TBLEIRSMAS] m
-                 WHERE m.[TARIH] >= @Since
-                 ORDER BY m.[INCKEYNO] DESC;
+                 WHERE m.[TARIH] >= @Since AND m.[INCKEYNO] > @AfterKey
+                 ORDER BY m.[INCKEYNO];
                 """;
             cmd.Parameters.Add(new SqlParameter("@Max", maxRows));
             cmd.Parameters.Add(new SqlParameter("@Since", since));
+            cmd.Parameters.Add(new SqlParameter("@AfterKey", afterKey));
 
             await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))

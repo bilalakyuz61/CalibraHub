@@ -61,6 +61,9 @@ public sealed class InMemoryIncomingDocumentRepository : IIncomingDocumentReposi
         => Task.FromResult<IReadOnlyList<CalibraHub.Application.Services.EDocument.EDocumentLineData>>(
             Array.Empty<CalibraHub.Application.Services.EDocument.EDocumentLineData>());
 
+    public Task<int> GetMaxOfflineSourceKeyAsync(DocumentKind kind, CancellationToken cancellationToken)
+        => Task.FromResult(0);
+
     public Task<IncomingDocument?> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
         _dataStore.IncomingDocuments.TryGetValue(id, out var document);

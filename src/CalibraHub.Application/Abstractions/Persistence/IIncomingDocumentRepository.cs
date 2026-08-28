@@ -35,4 +35,11 @@ public interface IIncomingDocumentRepository
     /// online kayitlar icin).</para>
     /// </summary>
     Task<IReadOnlyList<EDocumentLineData>> GetLinesAsync(int documentId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Cevrimdisi kaynaktan ice aktarilmis EN BUYUK ERP anahtari (PayloadRaw icindeki
+    /// incKeyNo), belge turune gore. Ilerleme isareti buradan TURETILIR — ayri bir imlec
+    /// tablosu tutulmaz, boylece imlec ile veri birbirinden ayrisamaz.
+    /// </summary>
+    Task<int> GetMaxOfflineSourceKeyAsync(DocumentKind kind, CancellationToken cancellationToken);
 }
