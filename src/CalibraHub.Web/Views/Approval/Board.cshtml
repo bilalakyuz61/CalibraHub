@@ -1,0 +1,93 @@
+@model CalibraHub.Web.Models.Approval.ApprovalQueueViewModel
+@using System.Text.Json
+@inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
+@{
+    ViewData["Title"] = Model.PageTitle;
+    ViewData["HelpKey"] = "edocuments";
+
+    var jsonOpts = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+    var boardConfig = ViewData["BoardConfig"];
+    var boardConfigJson = boardConfig != null ? JsonSerializer.Serialize(boardConfig, jsonOpts) : "null";
+}
+
+<div id="reactSmartBoard" class="edoc-board-host"></div>
+
+<style>
+    /* SmartBoard kendi yuksekligini yonetir; kabuk tam alani versin.
+       Sabit yukseklik VERILMEZ — filtre paneli acilinca board kirpilirdi. */
+    .edoc-board-host { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+
+    .cb-mount-error {
+        padding: 16px; text-align: center;
+        color: var(--bs-danger, #dc2626);
+        background: var(--app-surface, #fff);
+        border: 1px solid var(--app-border, #e2e8f0); border-radius: 8px;
+    }
+    .cb-mount-error button {
+        margin-top: 8px; padding: 6px 14px; cursor: pointer;
+        border: 1px solid var(--app-border, #e2e8f0); border-radius: 6px;
+        background: var(--app-surface, #fff); color: var(--bs-body-color, #0f172a);
+    }
+</style>
+
+@section Scripts {
+<script>
+(function () {
+    var BOARD_CONFIG = @Html.Raw(boardConfigJson);
+    var BUNDLE_URL = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL    = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
+
+    var el = document.getElementById('reactSmartBoard');
+    if (!el) { console.error('[EDocuments] Mount elementi yok'); return; }
+
+    function showError(msg) {
+        el.innerHTML = '<div class="cb-mount-error"><div>' + msg + '</div>'
+            + '<button onclick="location.reload()">Sayfayi Yenile</button></div>';
+    }
+
+    function doMount() {
+        if (!BOARD_CONFIG) { showError('Board yapilandirmasi bulunamadi'); return; }
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) {
+            showError('SmartBoard mount fonksiyonu bulunamadi');
+            return;
+        }
+        try {
+            window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
+        } catch (e) {
+            console.error('[EDocuments] mount hatasi', e);
+            showError('Ekran yuklenemedi: ' + e.message);
+        }
+    }
+
+    function loadCss() {
+        if (document.querySelector('link[data-edoc-sb]')) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-edoc-sb', '1');
+        document.head.appendChild(link);
+    }
+
+    function loadScript(cb) {
+        if (document.querySelector('script[data-edoc-sb]')) { cb(); return; }
+        var script = document.createElement('script');
+        script.src = BUNDLE_URL;
+        script.setAttribute('data-edoc-sb', '1');
+        script.onload  = function () { setTimeout(cb, 0); };
+        script.onerror = function () { showError('Bundle yuklenemedi'); };
+        document.head.appendChild(script);
+    }
+
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) {
+        doMount();
+    } else {
+        loadScript(doMount);
+    }
+})();
+</script>
+}

@@ -214,18 +214,25 @@
     </details>
     }
 
-    @if (isMenuAdmin)
+
+    @if (isMenuAdmin || canView("ITEMS") || canView("PRODUCT_CONFIG") || canView("SALES_QUOTE"))
     {
-    <details class="side-group" @(onayOpen ? "open" : null)>
+    <details class="side-group" @(logisticsOpen ? "open" : null)>
         <summary>
             <span class="menu-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M4 7h10"></path><path d="M4 12h16"></path><path d="M4 17h12"></path></svg>
+                <svg viewBox="0 0 24 24"><path d="M3 7h13v10H3z"></path><path d="M16 10h3l2 2v5h-5z"></path><circle cx="7" cy="18" r="2"></circle><circle cx="18" cy="18" r="2"></circle></svg>
             </span>
-            <span class="menu-text">@approvalProcessesText</span>
+            <span class="menu-text">@logisticsText</span>
         </summary>
 
         <div class="menu-group-content">
             <div class="menu-group-content-inner">
+                @* Elektronik Belgeler — 2026-08-28 kullanici karari ile "Onay Surecleri"
+                   grubundan LOJISTIK altina tasindi. Kendi isMenuAdmin kosulu KORUNDU:
+                   Lojistik grubunun kosulu daha genistir (ITEMS/PRODUCT_CONFIG/SALES_QUOTE),
+                   kosulsuz tasimak ekranlari sessizce daha genis bir kitleye acardi. *@
+                @if (isMenuAdmin)
+                {
                 <details class="side-group side-group-nested" @(documentModuleOpen ? "open" : null)>
                     <summary>
                         <span class="menu-icon" aria-hidden="true">
@@ -280,23 +287,8 @@
                         </div>
                     </div>
                 </details>
-            </div>
-        </div>
-    </details>
-    }
+                }
 
-    @if (isMenuAdmin || canView("ITEMS") || canView("PRODUCT_CONFIG") || canView("SALES_QUOTE"))
-    {
-    <details class="side-group" @(logisticsOpen ? "open" : null)>
-        <summary>
-            <span class="menu-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M3 7h13v10H3z"></path><path d="M16 10h3l2 2v5h-5z"></path><circle cx="7" cy="18" r="2"></circle><circle cx="18" cy="18" r="2"></circle></svg>
-            </span>
-            <span class="menu-text">@logisticsText</span>
-        </summary>
-
-        <div class="menu-group-content">
-            <div class="menu-group-content-inner">
                 @if (canView("ITEMS") || canView("PRODUCT_CONFIG"))
                 {
                 <details class="side-group side-group-nested" @(logisticsFixedDefinitionsOpen ? "open" : null)>

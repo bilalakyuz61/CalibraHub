@@ -427,6 +427,124 @@ public sealed class ApprovalController : Controller
         return RedirectToKindPage(normalizedKind, page, pageSize, dateFrom, dateTo, null);
     }
 
+
+    /// <summary>
+    /// E-belge kuyrugunun SmartBoard (C-Grid) yapilandirmasi — proje standardi.
+    ///
+    /// <para>Uc ekran (e-Fatura / e-Arsiv / e-Irsaliye) AYNI yapiyi kullanir; fark yalnizca
+    /// <paramref name="kind"/> suzgeci, baslik ve ikondur. Ayri ayri uc kart kurgusu yazmak
+    /// ayni bakim yukunu uce katlardi.</para>
+    ///
+    /// <para>Filtreleme SmartBoard'un kendi filtre panelinden yapilir: panel
+    /// <c>masterWidgets</c> listesini okur ve karttaki ayni <c>id</c>'li veri parcalariyla
+    /// eslestirir. Bu yuzden her kart widget'inin id/label/dataType ucusu master listesiyle
+    /// BIREBIR ayni olmalidir — ayrisirsa filtre sessizce hicbir sey eslemez.</para>
+    /// </summary>
+    private async Task<object> BuildEDocumentBoardConfigAsync(
+        string? kind, bool? isProcessed, CancellationToken cancellationToken)
+    {
+        var normalizedKind = NormalizeKind(kind);
+        var queue = await _approvalQueueService.GetPendingAsync(isProcessed, cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(normalizedKind))
+        {
+            queue = queue
+                .Where(x => string.Equals(x.Kind, normalizedKind, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+        }
+
+        var (icon, color) = normalizedKind switch
+        {
+            "EInvoice"  => ("FileText", "indigo"),
+            "EArchive"  => ("Archive", "violet"),
+            "EDispatch" => ("Truck", "amber"),
+            _           => ("Files", "slate"),
+        };
+
+        var kindTitle = GetKindTitle(normalizedKind);
+
+        var entities = queue
+            .OrderByDescending(d => d.ImportedAt)
+            .Select(d => new
+            {
+                id = d.Id,
+                title = d.DocumentNumber,
+                subtitle = string.IsNullOrWhiteSpace(d.SenderName) ? d.SenderTaxNumber : d.SenderName,
+                description = (string?)null,
+                imageUrl = (string?)null,
+                statusBadge = d.IsProcessed
+                    ? new { label = "İşlendi", color = "emerald" }
+                    : new { label = "Bekliyor", color = "amber" },
+                widgets = new object[]
+                {
+                    new { id = "w_issue_date", type = "data", dataType = "date",
+                          label = "Belge Tarihi", value = d.IssueDate.ToString("dd.MM.yyyy"),
+                          detail = (string?)null, color = "indigo" },
+                    new { id = "w_sender", type = "data", dataType = "text",
+                          label = "Gönderen", value = d.SenderName ?? "-",
+                          detail = (string?)null, color = "blue" },
+                    new { id = "w_sender_vkn", type = "data", dataType = "text",
+                          label = "Gönderen VKN", value = d.SenderTaxNumber,
+                          detail = (string?)null, color = "slate" },
+                    new { id = "w_scenario", type = "data", dataType = "text",
+                          label = "Senaryo", value = d.Scenario ?? "-",
+                          detail = (string?)null, color = "violet" },
+                    new { id = "w_status", type = "data", dataType = "text",
+                          label = "Durum", value = d.IsProcessed ? "İşlendi" : "Bekliyor",
+                          detail = (string?)null, color = d.IsProcessed ? "emerald" : "amber" },
+                    new { id = "w_imported", type = "data", dataType = "date",
+                          label = "Alınma", value = d.ImportedAt.ToString("dd.MM.yyyy HH:mm"),
+                          detail = (string?)null, color = "slate" },
+                },
+                primaryAction = new
+                {
+                    label = "Görüntüle",
+                    icon = "Eye",
+                    color = "indigo",
+                    url = Url.Action(nameof(ViewPayload), "Approval", new { id = d.Id }),
+                    hideButton = true,   // karta tiklayinca acilir
+                },
+                secondaryAction = (object?)null,
+            })
+            .ToArray();
+
+        // Filtre paneli bu listeden beslenir; kart widget'lariyla ayni id/label/dataType.
+        var masterWidgets = new object[]
+        {
+            new { id = "w_issue_date",  label = "Belge Tarihi", dataType = "date" },
+            new { id = "w_sender",      label = "Gönderen",     dataType = "text" },
+            new { id = "w_sender_vkn",  label = "Gönderen VKN", dataType = "text" },
+            new { id = "w_scenario",    label = "Senaryo",      dataType = "text" },
+            new { id = "w_status",      label = "Durum",        dataType = "text" },
+            new { id = "w_imported",    label = "Alınma",       dataType = "date" },
+        };
+
+        return new
+        {
+            boardKey = "edocument-" + (normalizedKind ?? "all").ToLowerInvariant(),
+            title = kindTitle,
+            subtitle = $"{entities.Length} belge",
+            icon,
+            iconColor = color,
+            refreshUrl = Url.Action(nameof(EDocumentBoardConfig), "Approval",
+                                    new { kind = normalizedKind, isProcessed }),
+            searchPlaceholder = "Belge no / gönderen ara…",
+            emptyText = "Bu kuyrukta belge yok",
+            actions = Array.Empty<object>(),
+            masterWidgets,
+            entities,
+        };
+    }
+
+    /// <summary>
+    /// SmartBoard yerinde yenileme ucu (GET, tam config JSON). C-Grid standardi:
+    /// kart uzerindeki degisiklikten sonra sayfa yeniden YUKLENMEZ, board bu uctan tazelenir.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> EDocumentBoardConfig(
+        string? kind, bool? isProcessed, CancellationToken cancellationToken)
+        => Json(await BuildEDocumentBoardConfigAsync(kind, isProcessed, cancellationToken));
+
     private async Task<IActionResult> RenderQueuePageAsync(
         string? kind,
         int? page,
@@ -465,8 +583,11 @@ public sealed class ApprovalController : Controller
         ViewData["KindTitle"] = kindTitle;
         ViewData["Title"] = pageTitle;
         ViewData["IsProcessed"] = isProcessed;
+        // SmartBoard yapilandirmasi ayni veriden uretilir; gorunum yalnizca mount eder.
+        ViewData["BoardConfig"] = await BuildEDocumentBoardConfigAsync(
+            normalizedKind, isProcessed, cancellationToken);
 
-        return View(nameof(Index), new ApprovalQueueViewModel
+        return View("Board", new ApprovalQueueViewModel
         {
             Documents = documents,
             Kind = normalizedKind ?? string.Empty,
