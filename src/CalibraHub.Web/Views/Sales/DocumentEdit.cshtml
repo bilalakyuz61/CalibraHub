@@ -6991,6 +6991,15 @@
             var data = await resp.json();
             if (!data.success) { CalibraAlert.error(data.message || 'Bilinmeyen hata'); return; }
             document.getElementById('sqStatusBadge').innerHTML = '<span class="sqe-status-badge sqe-status-' + status + '">' + statusLabel(status) + '</span>';
+            // Durum degisikligi Document satirini gunceller → ROWVERSION degisti.
+            // Damga tazelenmezse sonraki "Kaydet" sahte cakisma hatasi verirdi.
+            try {
+                var rvResp = await fetch('/Sales/GetQuote?id=' + currentQuoteId);
+                if (rvResp.ok) {
+                    var rvData = await rvResp.json();
+                    if (rvData && rvData.quote) window.__CALIBRA_ROW_VERSION__ = rvData.quote.rowVersion || null;
+                }
+            } catch (_) { /* damga tazelenemedi — sayfa yenilenince duzelir */ }
         } catch {}
     };
 
