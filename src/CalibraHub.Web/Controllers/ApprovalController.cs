@@ -495,6 +495,15 @@ public sealed class ApprovalController : Controller
                     new { id = "w_imported", type = "data", dataType = "date",
                           label = "Alınma", value = d.ImportedAt.ToString("dd.MM.yyyy HH:mm"),
                           detail = (string?)null, color = "slate" },
+                    // Kaynak: karma kurulumda "bu belge entegratorden mi ERP'den mi geldi"
+                    // sorusu teshiste kritik; eskiden yalniz PayloadRaw'a bakarak yanitlanabiliyordu.
+                    new { id = "w_source", type = "data", dataType = "text",
+                          label = "Kaynak",
+                          value = string.Equals(d.IngestSource, "Offline", StringComparison.OrdinalIgnoreCase)
+                              ? "Çevrimdışı (ERP)" : "Çevrimiçi (Entegratör)",
+                          detail = (string?)null,
+                          color = string.Equals(d.IngestSource, "Offline", StringComparison.OrdinalIgnoreCase)
+                              ? "amber" : "emerald" },
                 },
                 primaryAction = new
                 {
@@ -517,6 +526,7 @@ public sealed class ApprovalController : Controller
             new { id = "w_scenario",    label = "Senaryo",      dataType = "text" },
             new { id = "w_status",      label = "Durum",        dataType = "text" },
             new { id = "w_imported",    label = "Alınma",       dataType = "date" },
+            new { id = "w_source",      label = "Kaynak",       dataType = "text" },
         };
 
         return new

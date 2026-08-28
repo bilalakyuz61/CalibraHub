@@ -217,6 +217,13 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         {
             var hasProcessedColumn = await ColumnExistsAsync(connection, "IncomingDocument", "IsProcessed", cancellationToken);
             var isProcessedSelectSql = hasProcessedColumn ? "[IsProcessed]" : "CAST(0 AS BIT) AS [IsProcessed]";
+            // IngestSource bu oturumda eklendi; eski musteri semalarinda HENUZ YOK. Kosulsuz
+            // SELECT'e yazmak "Invalid column name" ile kirardi — kolon varligi sorulur,
+            // yoksa varsayilan 'Online' projekte edilir (isProcessed ile ayni kalip).
+            var hasIngestSourceColumn = await ColumnExistsAsync(connection, "IncomingDocument", "IngestSource", cancellationToken);
+            var ingestSourceSelectSql = hasIngestSourceColumn
+                ? "[IngestSource]"
+                : "CAST(N'Online' AS NVARCHAR(20)) AS [IngestSource]";
             var isProcessedFilterSql = string.Empty;
             if (isProcessed.HasValue && hasProcessedColumn)
             {
@@ -227,7 +234,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
             // Kiraci suzgeci: IncomingDocument kendi CompanyId kolonunu tasir (bkz.
             // InsertIncomingDocumentAsync INSERT) — listeleme sorgusu buna gore sinirlanir.
             command.CommandText = $"""
-                SELECT [Id], [IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [RecipientTaxNumber], CAST(SUBSTRING([PayloadRaw], 1, 1000) AS NVARCHAR(MAX)) AS [PayloadRaw], [ApprovalStatus], [ImportedAt], ISNULL([SenderName], N'') AS [SenderName], {isProcessedSelectSql}
+                SELECT [Id], [IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [RecipientTaxNumber], CAST(SUBSTRING([PayloadRaw], 1, 1000) AS NVARCHAR(MAX)) AS [PayloadRaw], [ApprovalStatus], [ImportedAt], ISNULL([SenderName], N'') AS [SenderName], {isProcessedSelectSql}, {ingestSourceSelectSql}
                 FROM {_tableName}
                 WHERE [ApprovalStatus] = @ApprovalStatus AND [CompanyId] = @CompanyId {isProcessedFilterSql}
                 ORDER BY [ImportedAt] DESC;
@@ -283,12 +290,19 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
 
         var hasProcessedColumn = await ColumnExistsAsync(connection, "IncomingDocument", "IsProcessed", cancellationToken);
         var isProcessedSelectSql = hasProcessedColumn ? "[IsProcessed]" : "CAST(0 AS BIT) AS [IsProcessed]";
+        // IngestSource bu oturumda eklendi; eski musteri semalarinda HENUZ YOK. Kosulsuz
+        // SELECT'e yazmak "Invalid column name" ile kirardi — kolon varligi sorulur,
+        // yoksa varsayilan 'Online' projekte edilir (isProcessed ile ayni kalip).
+        var hasIngestSourceColumn = await ColumnExistsAsync(connection, "IncomingDocument", "IngestSource", cancellationToken);
+        var ingestSourceSelectSql = hasIngestSourceColumn
+            ? "[IngestSource]"
+            : "CAST(N'Online' AS NVARCHAR(20)) AS [IngestSource]";
 
         await using var command = connection.CreateCommand();
         // Kiraci suzgeci: id istemciden gelir; suzgec olmadan baska sirketin gelen
         // belgesi (e-fatura icerigi dahil) okunabilirdi.
         command.CommandText = $"""
-            SELECT [Id], [IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [RecipientTaxNumber], [PayloadRaw], [ApprovalStatus], [ImportedAt], ISNULL([SenderName], N'') AS [SenderName], {isProcessedSelectSql}
+            SELECT [Id], [IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [RecipientTaxNumber], [PayloadRaw], [ApprovalStatus], [ImportedAt], ISNULL([SenderName], N'') AS [SenderName], {isProcessedSelectSql}, {ingestSourceSelectSql}
             FROM {_tableName}
             WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
@@ -1935,6 +1949,14 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
 
         var senderName = reader.FieldCount > 11 && !reader.IsDBNull(11) ? reader.GetString(11) : null;
         var isProcessed = reader.FieldCount > 12 && !reader.IsDBNull(12) && Convert.ToInt32(reader.GetValue(12)) == 1;
+        // 13. ordinal — SELECT listesinin SONUNA eklendi. Ortaya eklenseydi sonraki tum
+        // ordinaller kayar ve esleme sessizce YANLIS alani okurdu (derleme temiz kalirdi).
+        var ingestSourceRaw = reader.FieldCount > 13 && !reader.IsDBNull(13) ? reader.GetString(13) : null;
+        if (!Enum.TryParse<EDocumentIngestSource>(ingestSourceRaw, true, out var ingestSource)
+            || !Enum.IsDefined(ingestSource))
+        {
+            ingestSource = EDocumentIngestSource.Online;
+        }
 
         var document = new IncomingDocument
         {
@@ -1949,6 +1971,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
             RecipientTaxNumber = reader.GetString(7),
             PayloadRaw = reader.GetString(8),
             ImportedAt = reader.GetFieldValue<DateTime>(10),
+            IngestSource = ingestSource,
             IsProcessed = isProcessed
         };
 

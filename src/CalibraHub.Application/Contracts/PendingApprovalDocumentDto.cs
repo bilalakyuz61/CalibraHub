@@ -10,4 +10,7 @@ public sealed record PendingApprovalDocumentDto(
     string? SenderName,
     DateOnly IssueDate,
     DateTime ImportedAt,
-    bool IsProcessed);
+    bool IsProcessed,
+    /// <summary>Belgenin sisteme HANGI YOLDAN girdigi: Online (entegrator) | Offline (ERP).
+    /// Positional record — alan SONA eklendi ki mevcut cagri yerleri kaymasin.</summary>
+    string IngestSource);

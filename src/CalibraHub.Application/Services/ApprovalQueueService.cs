@@ -30,7 +30,8 @@ public sealed class ApprovalQueueService : IApprovalQueueService
                 x.SenderName,
                 x.IssueDate,
                 x.ImportedAt,
-                x.IsProcessed))
+                x.IsProcessed,
+                x.IngestSource.ToString()))
             .ToArray();
     }
 
