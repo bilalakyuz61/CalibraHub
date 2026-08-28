@@ -61,11 +61,26 @@ public sealed class SqlFormLinesRepository : IFormLinesRepository
         await using var cmd = conn.CreateCommand();
         if (parentColExists)
         {
+            // KIRACI SUZGECI (2026-08-28): v_Flat_* gorunumleri WHERE tasimaz (SELECT base.*),
+            // yani tum sirketlerin satirlarini gosterir. Yalniz ebeveyn kimligine bakmak yetmez —
+            // ebeveyn de suzulmediyse baska sirketin kalemleri donerdi.
+            // Kolon varligi kontrol edilir: eksik kolonla sorgu "Invalid column name" ile kirardi.
+            bool hasCompanyColumn;
+            await using (var ccChk = conn.CreateCommand())
+            {
+                ccChk.CommandText =
+                    $"SELECT CASE WHEN COL_LENGTH(N'[{_schema}].[{viewName}]', N'CompanyId') IS NOT NULL THEN 1 ELSE 0 END;";
+                hasCompanyColumn = Convert.ToInt32(await ccChk.ExecuteScalarAsync(ct) ?? 0) == 1;
+            }
+
+            var companyPredicate = hasCompanyColumn ? " AND [CompanyId] = @CompanyId" : string.Empty;
             cmd.CommandText = $"""
                 SELECT * FROM [{_schema}].[{viewName}]
-                WHERE CAST([{parentColumn}] AS NVARCHAR(100)) = @ParentId;
+                WHERE CAST([{parentColumn}] AS NVARCHAR(100)) = @ParentId{companyPredicate};
                 """;
             cmd.Parameters.Add(new SqlParameter("@ParentId", parentRecordId));
+            if (hasCompanyColumn)
+                cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         }
         else
         {

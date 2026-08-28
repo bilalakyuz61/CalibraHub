@@ -422,16 +422,39 @@ public sealed class FormMetadataService : IFormMetadataService
         string? recordId,
         CancellationToken ct)
     {
+        // KIRACI SUZGECI (2026-08-28) — v_Flat_* gorunumleri "SELECT base.*" ile uretilir ve
+        // HIC WHERE tasimaz; yani tum sirketlerin satirlarini gosterirler. Suzgec olmadan:
+        //   - recordId null  -> "ornek kayit" olarak BASKA sirketin en son kaydi donuyordu,
+        //   - recordId dolu  -> istemciden gelen kimlikle baska sirketin kaydi okunabiliyordu
+        //     (DocDesigner ve rota patlatmadaki kalibin ayni).
+        //
+        // Kolon varligi ONCE sorulur: eksik kolonla kurulan sorgu "Invalid column name" verir ve
+        // asagidaki catch bunu SESSIZCE null'a cevirirdi — yani suzgec eklemek, kapsam disi bir
+        // gorunumu gorunmez sekilde bosaltabilirdi.
+        bool hasCompanyColumn;
+        await using (var colChk = conn.CreateCommand())
+        {
+            colChk.CommandText =
+                $"SELECT CASE WHEN COL_LENGTH(N'[{_schema}].[{viewName}]', N'CompanyId') IS NOT NULL THEN 1 ELSE 0 END;";
+            hasCompanyColumn = Convert.ToInt32(await colChk.ExecuteScalarAsync(ct) ?? 0) == 1;
+        }
+
+        var companyFilter = hasCompanyColumn ? " [CompanyId] = @CompanyId" : string.Empty;
+
         await using var cmd = conn.CreateCommand();
         if (recordId is null)
         {
-            cmd.CommandText = $"SELECT TOP 1 * FROM [{_schema}].[{viewName}] ORDER BY [{keyColumnEsc}] DESC;";
+            var where = hasCompanyColumn ? $"WHERE{companyFilter} " : string.Empty;
+            cmd.CommandText = $"SELECT TOP 1 * FROM [{_schema}].[{viewName}] {where}ORDER BY [{keyColumnEsc}] DESC;";
         }
         else
         {
-            cmd.CommandText = $"SELECT TOP 1 * FROM [{_schema}].[{viewName}] WHERE CAST([{keyColumnEsc}] AS NVARCHAR(100)) = @Rid;";
+            var andCompany = hasCompanyColumn ? $" AND{companyFilter}" : string.Empty;
+            cmd.CommandText = $"SELECT TOP 1 * FROM [{_schema}].[{viewName}] WHERE CAST([{keyColumnEsc}] AS NVARCHAR(100)) = @Rid{andCompany};";
             cmd.Parameters.Add(new SqlParameter("@Rid", recordId));
         }
+        if (hasCompanyColumn)
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
         try
         {
             await using var reader = await cmd.ExecuteReaderAsync(ct);
