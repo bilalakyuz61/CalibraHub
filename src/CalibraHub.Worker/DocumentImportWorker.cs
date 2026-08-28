@@ -1,5 +1,7 @@
 ﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Constants;
+using CalibraHub.Domain.Enums;
 using CalibraHub.Domain.Entities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -55,6 +57,22 @@ public sealed class DocumentImportWorker : BackgroundService
 
                 var activeIntegrators = await integratorSettingsRepository.GetActiveAsync(stoppingToken);
                 var nextDelay = GetNextPollingDelay(activeIntegrators);
+
+                // CEVRIMDISI yol aktifse tarama araligi KENDI parametresinden gelir.
+                // Aksi halde Parametreler ekranindaki "Tarama Araligi" alani hicbir sey
+                // yapmazdi (sessiz no-op) — deger entegrator ayarlarindan hesaplaniyordu,
+                // ama cevrimdisi kurulumda hic entegrator YOKTUR.
+                var parameters = scope.ServiceProvider.GetRequiredService<ICompanyParameterService>();
+                var methodRaw = await parameters.GetStringAsync(
+                    EDocumentParameters.FormCode, EDocumentParameters.IngestMethodKey, stoppingToken);
+
+                if (string.Equals(methodRaw, nameof(EDocumentIngestSource.Offline), StringComparison.OrdinalIgnoreCase))
+                {
+                    var offlineSeconds = await parameters.GetIntAsync(
+                        EDocumentParameters.FormCode, EDocumentParameters.PollIntervalSecondsKey, stoppingToken)
+                        ?? EDocumentParameters.DefaultPollIntervalSeconds;
+                    nextDelay = TimeSpan.FromSeconds(Math.Clamp(offlineSeconds, 30, 86400));
+                }
 
                 var imported = result.ImportedCount + offline.ImportedCount;
                 var skipped  = result.SkippedCount + offline.SkippedCount;
