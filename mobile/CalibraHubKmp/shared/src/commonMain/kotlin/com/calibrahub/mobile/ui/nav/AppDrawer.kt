@@ -38,7 +38,9 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.filled.Warehouse
 import androidx.compose.material.icons.outlined.PushPin
@@ -101,6 +103,9 @@ object AppRoutes {
     /** İhtiyaç Kaydı — talep listesi + yeni talep (bkz. PurchaseRequestScreen). */
     const val PURCHASE_REQUESTS = "purchase_requests"
 
+    /** Kalite Muayene — saha girisi (bkz. InspectionScreen). */
+    const val QUALITY_INSPECTION = "quality_inspection"
+
     // İş emri detayı (Faz 2c EK) — drawer'da YOK, yalnız WorkOrderListScreen'den navigate edilir.
     // AYNI KISS gerekçesiyle PURCHASE/SALES_OPEN_ORDER_DETAIL ile AYNI desen: literal route +
     // AppNavHost'ta hoisted `pendingWorkOrderId` Int state (navigation-compose Multiplatform
@@ -152,6 +157,7 @@ object MenuFormCodes {
     const val APPROVAL_PENDING = "APPROVAL_PENDING"
     const val CONTACTS = "CONTACTS"
     const val PURCHASE_REQUEST = "PURCHASE_REQUEST"
+    const val QUALITY_INSPECTION_EDIT = "QUALITY_INSPECTION_EDIT"
 }
 
 /**
@@ -234,6 +240,19 @@ val drawerEntries: List<DrawerEntry> = listOf(
                 DrawerLeaf(
                     AppRoutes.WAREHOUSE_DRAFT_COUNTS, "Taslak Sayımlar",
                     Icons.AutoMirrored.Filled.FactCheck, listOf(MenuFormCodes.INVENTORY_COUNT),
+                ),
+            ),
+        ),
+    ),
+    DrawerEntry.Expandable(
+        DrawerGroup(
+            key = "kalite",
+            label = "Kalite",
+            icon = Icons.Default.VerifiedUser,
+            leaves = listOf(
+                DrawerLeaf(
+                    AppRoutes.QUALITY_INSPECTION, "Muayene", Icons.Default.FactCheck,
+                    listOf(MenuFormCodes.QUALITY_INSPECTION_EDIT),
                 ),
             ),
         ),

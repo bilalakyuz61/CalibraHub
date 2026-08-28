@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -36,6 +37,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -57,6 +59,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.calibrahub.mobile.data.ActiveActivityDto
+import com.calibrahub.mobile.data.ActivityTypeDto
 import com.calibrahub.mobile.data.WorkOrderDetailDto
 import com.calibrahub.mobile.data.WorkOrderOperationDto
 import com.calibrahub.mobile.session.SessionManager
@@ -107,6 +111,13 @@ fun WorkOrderDetailScreen(session: SessionManager, workOrderId: Int, onBack: () 
     var pinAuthenticating by remember { mutableStateOf(false) }
     var pinError by remember { mutableStateOf<String?>(null) }
 
+    // ── Durus / aktivite ────────────────────────────────────────────────────
+    // Aktivite tipleri bir kez cekilir (tip + sebepleri birlikte). Aktif aktivite operasyon
+    // basina tutulur: iki operasyon ayni anda acik olabilir, tek bir "aktif" yetmez.
+    var activityTypes by remember { mutableStateOf<List<ActivityTypeDto>>(emptyList()) }
+    var activeByOperation by remember { mutableStateOf<Map<Int, ActiveActivityDto>>(emptyMap()) }
+    var activityDialogFor by remember { mutableStateOf<Int?>(null) }
+
     var showStartConfirm by remember { mutableStateOf(false) }
 
     var showCompleteDialog by remember { mutableStateOf(false) }
@@ -126,10 +137,24 @@ fun WorkOrderDetailScreen(session: SessionManager, workOrderId: Int, onBack: () 
         }
     }
 
+    LaunchedEffect(Unit) {
+        repo.activityTypes().onSuccess { activityTypes = it }
+    }
+
     LaunchedEffect(workOrderId, reloadTick) {
         errorMessage = null
         repo.workOrderDetail(workOrderId).fold(
-            onSuccess = { detail = it },
+            onSuccess = { d ->
+                detail = d
+                // Her operasyonun AN AKTIF aktivitesini cek — kartta canli durum rozeti icin.
+                // Hata durumunda sessizce bos birakilir: aktivite bilgisi eksik gorunur ama
+                // is emri ekrani calismaya devam eder.
+                val map = mutableMapOf<Int, ActiveActivityDto>()
+                d.operations.forEach { op ->
+                    repo.activeActivity(op.id).getOrNull()?.let { map[op.id] = it }
+                }
+                activeByOperation = map
+            },
             onFailure = { errorMessage = it.message ?: "İş emri yüklenemedi" },
         )
     }
@@ -335,8 +360,10 @@ fun WorkOrderDetailScreen(session: SessionManager, workOrderId: Int, onBack: () 
                             OperationRow(
                                 op = op,
                                 busy = actionBusy,
+                                activeActivity = activeByOperation[op.id],
                                 onStart = { beginAction(PendingAction.Start(op.id, op.name)) },
                                 onComplete = { beginAction(PendingAction.Complete(op.id, op.name)) },
+                                onChangeStatus = { activityDialogFor = op.id },
                             )
                         }
                     }
@@ -344,6 +371,50 @@ fun WorkOrderDetailScreen(session: SessionManager, workOrderId: Int, onBack: () 
                 }
             }
         }
+    }
+
+    // Durum degistirme diyalogu — tip sec, (varsa) sebep sec, baslat. Aktif aktivite varsa
+    // ayrica "Durumu Bitir" sunulur (servis yeni aktivite baslatirken zaten oncekini kapatir,
+    // ama operator "hicbir sey yapmiyorum" demek isteyebilir).
+    activityDialogFor?.let { opId ->
+        val active = activeByOperation[opId]
+        ActivityDialog(
+            types = activityTypes,
+            active = active,
+            enabled = !actionBusy,
+            onDismiss = { activityDialogFor = null },
+            onEnd = {
+                val opr = operatorId
+                activityDialogFor = null
+                if (opr != null) {
+                    scope.launch {
+                        actionBusy = true
+                        repo.endActivity(opId, opr).fold(
+                            onSuccess = { reloadTick++ },
+                            onFailure = { snackbarHostState.showSnackbar(it.message ?: "Durum kapatılamadı") },
+                        )
+                        actionBusy = false
+                    }
+                }
+            },
+            onSelect = { type, reasonId ->
+                val opr = operatorId
+                activityDialogFor = null
+                if (opr == null) {
+                    // Operator henuz dogrulanmadi — PIN akisi zaten baslat/tamamla ile ayni kapi.
+                    showPinDialog = true
+                } else {
+                    scope.launch {
+                        actionBusy = true
+                        repo.startActivity(opId, opr, type, reasonId, null).fold(
+                            onSuccess = { reloadTick++ },
+                            onFailure = { snackbarHostState.showSnackbar(it.message ?: "Durum değiştirilemedi") },
+                        )
+                        actionBusy = false
+                    }
+                }
+            },
+        )
     }
 
     if (showPinDialog) {
@@ -431,8 +502,10 @@ private fun WorkOrderHeaderCard(detail: WorkOrderDetailDto) {
 private fun OperationRow(
     op: WorkOrderOperationDto,
     busy: Boolean,
+    activeActivity: ActiveActivityDto?,
     onStart: () -> Unit,
     onComplete: () -> Unit,
+    onChangeStatus: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
@@ -467,9 +540,34 @@ private fun OperationRow(
                     color = if (op.scrapQuantity > 0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            // Aktif durum rozeti — operator ne yapiyor (Uretim / Ariza / Malzeme Bekleme…).
+            activeActivity?.let { act ->
+                Spacer(Modifier.height(8.dp))
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                ) {
+                    Text(
+                        text = act.activityTypeLabel +
+                            (act.activityReasonName?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
+            }
+
             if (op.canStart || op.canComplete) {
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Durum degistirme baslamis operasyonda anlamli: duruş/kurulum/mola kaydi.
+                    if (!op.canStart) {
+                        OutlinedButton(onClick = onChangeStatus, enabled = !busy) {
+                            Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Durum")
+                        }
+                    }
                     if (op.canStart) {
                         Button(onClick = onStart, enabled = !busy) {
                             Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -672,6 +770,106 @@ private fun CompleteOperationDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss, enabled = !busy) { Text("Vazgeç") }
+        },
+    )
+}
+
+/**
+ * Durum (aktivite) secim diyalogu. Once TIP secilir, tipin sebepleri varsa altinda listelenir.
+ * Sebep ZORUNLU DEGILDIR — sunucu yalniz "Diger" tipinde not zorunlu kilar.
+ *
+ * Arastirma notu: duruş sebebi olay TAZEYKEN sorulmali (vardiya sonunda hafizadan doldurma
+ * yaygin bir antipattern) — bu yuzden akis tek diyalogda biter, sonraya birakilmaz.
+ */
+@Composable
+private fun ActivityDialog(
+    types: List<ActivityTypeDto>,
+    active: ActiveActivityDto?,
+    enabled: Boolean,
+    onDismiss: () -> Unit,
+    onEnd: () -> Unit,
+    onSelect: (type: Int, reasonId: Int?) -> Unit,
+) {
+    var selectedType by remember { mutableStateOf<Int?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Durum Değiştir") },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                active?.let {
+                    Text(
+                        "Şu an: ${it.activityTypeLabel}" +
+                            (it.activityReasonName?.takeIf { r -> r.isNotBlank() }?.let { r -> " · $r" } ?: ""),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                }
+
+                if (types.isEmpty()) {
+                    Text(
+                        "Durum tipleri yüklenemedi.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
+                types.forEach { t ->
+                    val isSelected = selectedType == t.value
+                    Surface(
+                        onClick = { selectedType = if (isSelected) null else t.value },
+                        shape = MaterialTheme.shapes.small,
+                        color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer
+                                else MaterialTheme.colorScheme.surface,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    ) {
+                        Text(t.label, modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp))
+                    }
+
+                    // Sebepler yalniz secili tipin altinda acilir — liste kisa kalir.
+                    if (isSelected) {
+                        if (t.reasons.isEmpty()) {
+                            // Sebep tanimli degil: tip tek basina gecerli bir durumdur.
+                            Surface(
+                                onClick = { onSelect(t.value, null) },
+                                shape = MaterialTheme.shapes.small,
+                                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 2.dp, bottom = 6.dp),
+                            ) {
+                                Text(
+                                    "Sebepsiz devam et",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                )
+                            }
+                        } else {
+                            t.reasons.forEach { r ->
+                                Surface(
+                                    onClick = { onSelect(t.value, r.id) },
+                                    shape = MaterialTheme.shapes.small,
+                                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 2.dp, bottom = 2.dp),
+                                ) {
+                                    Text(
+                                        r.name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(6.dp))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            Row {
+                if (active != null) {
+                    TextButton(onClick = onEnd, enabled = enabled) { Text("Durumu Bitir") }
+                }
+                TextButton(onClick = onDismiss) { Text("Vazgeç") }
+            }
         },
     )
 }

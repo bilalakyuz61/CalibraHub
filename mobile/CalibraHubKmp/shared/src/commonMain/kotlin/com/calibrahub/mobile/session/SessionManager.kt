@@ -13,6 +13,8 @@ import com.calibrahub.mobile.data.LoginResponse
 import com.calibrahub.mobile.data.PingResponse
 import com.calibrahub.mobile.data.ProductionApi
 import com.calibrahub.mobile.data.PurchaseRequestApi
+import com.calibrahub.mobile.data.QualityApi
+import com.calibrahub.mobile.data.QualityRepository
 import com.calibrahub.mobile.data.PurchaseRequestRepository
 import com.calibrahub.mobile.data.ProductionRepository
 import com.calibrahub.mobile.data.SessionDto
@@ -111,6 +113,7 @@ class SessionManager(private val storage: SecureStorage) {
     val approvalRepository: ApprovalRepository by lazy { ApprovalRepository(this) }
     val contactCardRepository: ContactCardRepository by lazy { ContactCardRepository(this) }
     val purchaseRequestRepository: PurchaseRequestRepository by lazy { PurchaseRequestRepository(this) }
+    val qualityRepository: QualityRepository by lazy { QualityRepository(this) }
 
     private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
 
@@ -286,6 +289,7 @@ class SessionManager(private val storage: SecureStorage) {
     suspend fun approvalApi(): ApprovalApi = ApprovalApi(baseUrl = currentBaseUrl(), client = httpClient)
     suspend fun contactCardApi(): ContactCardApi = ContactCardApi(baseUrl = currentBaseUrl(), client = httpClient)
     suspend fun purchaseRequestApi(): PurchaseRequestApi = PurchaseRequestApi(baseUrl = currentBaseUrl(), client = httpClient)
+    suspend fun qualityApi(): QualityApi = QualityApi(baseUrl = currentBaseUrl(), client = httpClient)
 
     // ─────────────────────────────────────────────────────────────────
     // Auth akislari

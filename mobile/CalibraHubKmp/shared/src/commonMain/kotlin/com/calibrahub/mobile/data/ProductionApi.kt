@@ -37,6 +37,26 @@ class ProductionApi(
     /** Giris yapmis kullaniciya bagli personel + mobilde PIN gerekip gerekmedigi. */
     suspend fun myOperator(): HttpResponse = client.get("${base}production/me")
 
+    // ── Durus / aktivite ────────────────────────────────────────────────────
+    /** Aktivite tipleri + her tipin sebepleri (tek cagri; tip secilince ikinci tur yok). */
+    suspend fun activityTypes(): HttpResponse = client.get("${base}production/activity-types")
+
+    /** Operasyonun an aktif aktivitesi; yoksa govde `null`. */
+    suspend fun activeActivity(operationId: Int): HttpResponse =
+        client.get("${base}production/operations/$operationId/activity")
+
+    suspend fun startActivity(operationId: Int, req: StartActivityBody): HttpResponse =
+        client.post("${base}production/operations/$operationId/activity/start") {
+            contentType(ContentType.Application.Json)
+            setBody(req)
+        }
+
+    suspend fun endActivity(operationId: Int, req: EndActivityBody): HttpResponse =
+        client.post("${base}production/operations/$operationId/activity/end") {
+            contentType(ContentType.Application.Json)
+            setBody(req)
+        }
+
     /** Yanlis sicil no/PIN veya kilitli personel -> 400 {error}. */
     suspend fun authOperator(req: AuthOperatorRequest): HttpResponse =
         client.post("${base}production/auth-operator") {

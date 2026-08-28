@@ -36,6 +36,40 @@ class ProductionRepository(private val session: SessionManager) {
         resp.body<MyOperatorDto>()
     }.getOrElse { MyOperatorDto(linked = false, pinRequired = true) }
 
+    // ── Durus / aktivite ────────────────────────────────────────────────────
+
+    suspend fun activityTypes(): Result<List<ActivityTypeDto>> = runCatchingApi {
+        val resp = session.productionApi().activityTypes()
+        if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
+        resp.body<List<ActivityTypeDto>>()
+    }
+
+    /** Aktif aktivite yoksa `null` doner — bu HATA DEGIL, normal durum. */
+    suspend fun activeActivity(operationId: Int): Result<ActiveActivityDto?> = runCatchingApi {
+        val resp = session.productionApi().activeActivity(operationId)
+        if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
+        val text = resp.body<String>().trim()
+        if (text.isEmpty() || text == "null") null
+        else kotlinx.serialization.json.Json { ignoreUnknownKeys = true }.decodeFromString<ActiveActivityDto>(text)
+    }
+
+    suspend fun startActivity(
+        operationId: Int, operatorId: Int, activityType: Int, reasonId: Int?, note: String?,
+    ): Result<Unit> = runCatchingApi {
+        val resp = session.productionApi().startActivity(
+            operationId,
+            StartActivityBody(operatorId, activityType, reasonId, note?.trim()?.takeIf { it.isNotBlank() }),
+        )
+        if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
+        Unit
+    }
+
+    suspend fun endActivity(operationId: Int, operatorId: Int, note: String? = null): Result<Unit> = runCatchingApi {
+        val resp = session.productionApi().endActivity(operationId, EndActivityBody(operatorId, note))
+        if (!resp.status.isSuccess()) error(parseApiError(resp) ?: "HTTP ${resp.status.value}")
+        Unit
+    }
+
     /** Sicil No + PIN dogrulama — basarida operatorId+name doner, start/complete cagrilarinda kullanilir. */
     suspend fun authOperator(personnelCode: String, pin: String): Result<AuthOperatorResponse> = runCatchingApi {
         val resp = session.productionApi().authOperator(AuthOperatorRequest(personnelCode = personnelCode, pin = pin))

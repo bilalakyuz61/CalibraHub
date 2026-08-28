@@ -66,6 +66,7 @@ public sealed class MobileProductionApiController : ControllerBase
     private readonly ICompanyParameterService _companyParameters;
     private readonly ShopFloorLockoutTracker _shopFloorLockout;
     private readonly ShopFloorOperatorSessionTracker _operatorSessions;
+    private readonly IActivityReasonService _activityReasons;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly IPermissionService _permService;
     private readonly ILogger<MobileProductionApiController> _logger;
@@ -79,6 +80,7 @@ public sealed class MobileProductionApiController : ControllerBase
         ICompanyParameterService companyParameters,
         ShopFloorLockoutTracker shopFloorLockout,
         ShopFloorOperatorSessionTracker operatorSessions,
+        IActivityReasonService activityReasons,
         SqlServerConnectionFactory connectionFactory,
         IPermissionService permService,
         ILogger<MobileProductionApiController> logger)
@@ -91,6 +93,7 @@ public sealed class MobileProductionApiController : ControllerBase
         _companyParameters = companyParameters;
         _shopFloorLockout = shopFloorLockout;
         _operatorSessions = operatorSessions;
+        _activityReasons = activityReasons;
         _connectionFactory = connectionFactory;
         _permService = permService;
         _logger = logger;
@@ -413,6 +416,140 @@ public sealed class MobileProductionApiController : ControllerBase
             return null;
 
         return BadRequest(new { error = "Operatör doğrulaması gerekli. Sicil no ve PIN ile giriş yapın." });
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // DURUS / AKTIVITE KAYDI  (2026-08-28)
+    //
+    // Uretimde gecen sure yalnizca "uretim" degildir: kurulum, malzeme bekleme, ariza, mola…
+    // Bu uclar operasyonun o anki DURUMUNU degistirir ve sebebini kaydeder. Ham OEE verisi
+    // (availability/performance) bu tablodan turetilir.
+    //
+    // Sunucu tarafi HAZIRDI (IWorkOrderOperationActivityService + ActivityReason), web'de 5 uc
+    // vardi; mobilde hicbiri yoktu. Burada yalnizca ince controller katmani eklenir —
+    // durum gecis mantigi (aktif olani otomatik kapatma, tek-aktif garantisi) serviste kalir.
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Aktivite tipleri + her tipin tanimli sebepleri (tek cagrida). Mobil "Durum Degistir"
+    /// ekrani bunu bir kez ceker; tip secilince sebep listesi zaten elindedir (ikinci tur yok).
+    ///
+    /// Sebebi olmayan tip de doner — sebep ZORUNLU DEGILDIR (yalniz "Diger" tipinde servis
+    /// not zorunlu kilar). Bos sebep listesi hata degildir.
+    /// </summary>
+    [HttpGet("activity-types")]
+    public async Task<IActionResult> ActivityTypes(CancellationToken ct)
+    {
+        if (await RequirePermissionAsync(ShopFloorFormCodes, ViewActions, ct) is { } denied)
+            return denied;
+
+        var all = await _activityReasons.ListAsync(activityType: null, includeInactive: false, ct);
+
+        var types = Enum.GetValues<CalibraHub.Domain.Enums.WorkOrderActivityType>()
+            .Select(t => new
+            {
+                value = (int)t,
+                label = DescribeActivityType(t),
+                reasons = all.Where(r => r.ActivityType == t)
+                             .OrderBy(r => r.SortOrder).ThenBy(r => r.Name)
+                             .Select(r => new { id = r.Id, name = r.Name, colorHex = r.ColorHex }),
+            });
+
+        return Ok(types);
+    }
+
+    /// <summary>Operasyonun AN AKTIF aktivitesi. Aktif yoksa <c>null</c> (hata degil).</summary>
+    [HttpGet("operations/{operationId:int}/activity")]
+    public async Task<IActionResult> ActiveActivity(int operationId, CancellationToken ct)
+    {
+        if (await RequirePermissionAsync(ShopFloorFormCodes, ViewActions, ct) is { } denied)
+            return denied;
+
+        return Ok(await _activities.GetActiveAsync(operationId, ct));
+    }
+
+    public sealed record MobileStartActivityRequest(int OperatorId, int ActivityType, int? ActivityReasonId, string? Note);
+
+    /// <summary>
+    /// Durum degistir: yeni aktivite baslatir. Aktif bir aktivite varsa servis onu KAPATIR —
+    /// yani bu uc hem "duruşa geç" hem "duruştan çık" icin kullanilir, ayrica bitirme gerekmez.
+    /// </summary>
+    [HttpPost("operations/{operationId:int}/activity/start")]
+    public async Task<IActionResult> StartActivity(
+        int operationId, [FromBody] MobileStartActivityRequest? req, CancellationToken ct)
+    {
+        if (await RequirePermissionAsync(ShopFloorFormCodes, ViewActions, ct) is { } denied)
+            return denied;
+        if (req is null)
+            return BadRequest(new { error = "Geçersiz istek." });
+        if (!Enum.IsDefined(typeof(CalibraHub.Domain.Enums.WorkOrderActivityType), req.ActivityType))
+            return BadRequest(new { error = "Geçersiz durum tipi." });
+
+        // Operator kimligi: PIN dogrulamasi VEYA kullanicinin kendi personel kaydi
+        // (bkz. ValidateOperatorAsync) — start/complete ile AYNI kapi.
+        if (await ValidateOperatorAsync(req.OperatorId, ct) is { } invalidOperator)
+            return invalidOperator;
+
+        try
+        {
+            var id = await _activities.StartAsync(new StartActivityRequest(
+                WorkOrderOperationId: operationId,
+                PersonnelId: req.OperatorId,
+                ActivityType: (CalibraHub.Domain.Enums.WorkOrderActivityType)req.ActivityType,
+                ActivityReasonId: req.ActivityReasonId is > 0 ? req.ActivityReasonId : null,
+                Notes: string.IsNullOrWhiteSpace(req.Note) ? null : req.Note.Trim()), ct);
+
+            return Ok(new { ok = true, id });
+        }
+        catch (ArgumentException aex) { return BadRequest(new { error = aex.Message }); }
+        catch (InvalidOperationException ioex) { return BadRequest(new { error = ioex.Message }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[MobileProduction] Aktivite baslatilamadi. OperationId={Id}", operationId);
+            return BadRequest(new { error = "İşlem sırasında bir hata oluştu." });
+        }
+    }
+
+    public sealed record MobileEndActivityRequest(int OperatorId, string? Note);
+
+    /// <summary>Aktif aktiviteyi kapatir (yenisini baslatmadan). Aktif yoksa <c>ok:false</c>.</summary>
+    [HttpPost("operations/{operationId:int}/activity/end")]
+    public async Task<IActionResult> EndActivity(
+        int operationId, [FromBody] MobileEndActivityRequest? req, CancellationToken ct)
+    {
+        if (await RequirePermissionAsync(ShopFloorFormCodes, ViewActions, ct) is { } denied)
+            return denied;
+        if (req is null)
+            return BadRequest(new { error = "Geçersiz istek." });
+        if (await ValidateOperatorAsync(req.OperatorId, ct) is { } invalidOperator)
+            return invalidOperator;
+
+        try
+        {
+            var ended = await _activities.EndCurrentAsync(new EndActivityRequest(
+                WorkOrderOperationId: operationId,
+                PersonnelId: req.OperatorId,
+                Notes: string.IsNullOrWhiteSpace(req.Note) ? null : req.Note.Trim()), ct);
+
+            // Aktif yoksa bu bir HATA DEGIL: kullanici iki kez dokunmus olabilir.
+            return Ok(new { ok = ended });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[MobileProduction] Aktivite kapatilamadi. OperationId={Id}", operationId);
+            return BadRequest(new { error = "İşlem sırasında bir hata oluştu." });
+        }
+    }
+
+    /// <summary>Enum [Description] metnini doner — web menusuyle AYNI etiketler.</summary>
+    private static string DescribeActivityType(CalibraHub.Domain.Enums.WorkOrderActivityType t)
+    {
+        var member = typeof(CalibraHub.Domain.Enums.WorkOrderActivityType).GetMember(t.ToString());
+        var attr = member.Length > 0
+            ? member[0].GetCustomAttributes(typeof(System.ComponentModel.DescriptionAttribute), false)
+                       .OfType<System.ComponentModel.DescriptionAttribute>().FirstOrDefault()
+            : null;
+        return attr?.Description ?? t.ToString();
     }
 
     /// <summary>auth-operator basarili oldugunda (kullanici, operator) ciftini dogrulanmis isaretler.</summary>

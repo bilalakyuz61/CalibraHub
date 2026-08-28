@@ -107,3 +107,43 @@ data class MyOperatorDto(
     val name: String? = null,
     val pinRequired: Boolean = true,
 )
+
+// ── Durus / aktivite kaydi ──────────────────────────────────────────────────
+
+/** Bir aktivite tipi (Kurulum, Uretim, Ariza…) ve altindaki tanimli sebepler. */
+@Serializable
+data class ActivityTypeDto(
+    val value: Int,
+    val label: String = "",
+    val reasons: List<ActivityReasonDto> = emptyList(),
+)
+
+@Serializable
+data class ActivityReasonDto(
+    val id: Int,
+    val name: String = "",
+    val colorHex: String? = null,
+)
+
+/** An aktif aktivite. [endedAt] null oldugu surece devam ediyordur. */
+@Serializable
+data class ActiveActivityDto(
+    val id: Int = 0,
+    val activityType: String = "",
+    val activityTypeLabel: String = "",
+    val activityReasonId: Int? = null,
+    val activityReasonName: String? = null,
+    val startedAt: String? = null,
+    val personnelName: String? = null,
+)
+
+@Serializable
+data class StartActivityBody(
+    val operatorId: Int,
+    val activityType: Int,
+    val activityReasonId: Int? = null,
+    val note: String? = null,
+)
+
+@Serializable
+data class EndActivityBody(val operatorId: Int, val note: String? = null)
