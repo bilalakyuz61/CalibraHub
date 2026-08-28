@@ -427,8 +427,41 @@ CREATE TABLE dbo.<TableName> (
 - **Decimal**: `DECIMAL(18,4)` para/miktar, `DECIMAL(5,2)` oran/yüzde.
 - **JSON**: `NVARCHAR(MAX)` — SQL Server'da native JSON tipi yok.
 
-### Multi-tenant kolon
-- Per-company DB mimarisi var → **`CompanyId` kolonu YOK** (tablo zaten ait olduğu DB'de). Master DB tabloları (`dbo.Company`) hariç.
+### Multi-tenant kolon — KURAL DEĞİŞTİ (2026-08-27)
+
+**Eski kural (geçersiz):** *"Per-company DB mimarisi var → `CompanyId` kolonu YOK."*
+
+**Yeni kural:** Aynı veritabanında birden fazla gerçek şirket **ürünün desteklediği bir
+özelliktir** (kullanıcı kararı). Bu yüzden:
+
+- **Yeni tabloya `CompanyId INT NULL` eklenir.** Ters kapsam: muaf liste dışındaki HER tablo
+  alır (`CalibraDatabaseInitializer.CompanyScopeExemptTables`). Beyaz liste tutulsaydı yeni
+  eklenen tablo sessizce kapsam dışı kalırdı — ve kapsam dışı tek tablo, sızıntı demektir.
+- **Muaf olanlar** (kolon YOK): şirket kaydının kendisi, yetki kataloğu (`Forms`,
+  `PermissionDef`, `Field`…), coğrafi referans, sistem altyapısı, MASTER DB tabloları
+  (`Attachment`, `DocumentCategory`), ve `Users` (parola sıfırlama anonim + şirketler arası
+  çalışır; kolonu vardır ama kiracı SÜZGECİ uygulanmaz).
+- **Her sorguya süzgeç:** `WHERE [CompanyId] = @CompanyId`, değer
+  `_connectionFactory.ResolveEffectiveCompanyId()` (kimlikli istekte oturumun şirketi,
+  kimliksiz yollarda veritabanının SAHİBİ şirket — sıfır dönmek arka plan işlerini sessizce
+  boş veriye mahkûm ederdi).
+- **Çocuk tabloda `INSERT`:** değer OTURUMDAN DEĞİL EBEVEYNDEN alınır —
+  `(SELECT p.[CompanyId] FROM parent p WHERE p.[Id] = @ParentId)`. Böylece çocuk ile
+  ebeveyninin şirketi doğduğu anda ayrışamaz.
+- **Ebeveyni üzerinden zaten süzülen sorgu:** süzgeç EKLEME, `// tenant-ok: <gerekçe>` yaz.
+  `preflight/check-tenant-filter.ps1` bu işaretleyiciyi görünce atlar.
+- **Benzersizlik kısıtları `CompanyId` LİDER kolonla kurulur** — `(CompanyId, Code)`.
+  Şirketten bağımsız bir UNIQUE index ikinci şirketin aynı kodu kullanmasını ENGELLER.
+- **`CompanyId` üzerinde FK vardır** (`Company(Id)`). Bu, hata sınıfını imkânsız kılar:
+  FK olmadığı için içe aktarım 39.796 satırı `CompanyId = 0` ile yazmıştı — var olmayan
+  bir şirkete ait, hiçbir ekranda görünmeyen ölü kayıtlar.
+
+**Denetim:** `powershell -File preflight/check-tenant-filter.ps1 [-MutationsOnly] [-Detail]`.
+Statik tarama; rapor motorunun çalıştırdığı kullanıcı SQL'ini ve `/ViewBuilder` kaçış kapısını
+GÖREMEZ — o yollar için RLS uykuda hazır (`CalibraDatabaseInitializer.RlsPilotTables`).
+
+**RLS neden kullanılmadı:** korduğu tabloda `sp_rename`'i ve `CompanyId` kolonunu düşürmeyi
+ENGELLİYOR (test edildi). Bu projede rename migration'ları var, o esneklik korundu.
 
 ### Legacy istisnalar (2026-07-05 itibarıyla tamamlandı)
 Önceki tüm snake_case tablolar (`user_settings`, `notes*`, `card_groups*`, `integration_api_profiles`, `sales_quote_line_details`, `sales_representatives`, `document_types`, `currencies`, `whatsapp_*`, `wa_inbox`, `item_locations`, `design_templates`) `MigrateTableRenamesAsync` + `MigrateColumnRenamesAsync` ile PascalCase'e migrate edildi. **Artık istisna yok.**
