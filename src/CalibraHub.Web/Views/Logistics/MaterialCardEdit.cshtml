@@ -1536,34 +1536,56 @@
 
     /* ── Custom Combobox (mce-cbx) — dark tema uyumlu select replacement ── */
     .mce-cbx { position: relative; flex: 1 1 auto; min-width: 0; }
+    /* Gorunum: kutu DEGIL alt-cizili (underline) — proje geneli standart.
+       Bu tetikleyici native <select>'in YERINE geciyor, dolayisiyla widgetField.css'teki
+       .mce-select ile birebir ayni gorunmeli: ayni --wf-* degiskenleri, ayni yukseklik,
+       ayni yatay padding, ayni chevron. Kutu birakildiginda ustteki "Malzeme Tipi"
+       (native select, underline) ile alttaki "Ana Birim" iki farkli giris gibi
+       goruntuleniyordu (2026-08-29 kullanici bildirimi). */
     .mce-cbx__trigger {
         width: 100%;
-        height: 36px;
-        padding: 0 32px 0 12px;
-        border-radius: 8px;
-        background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.10);
-        color: rgba(255,255,255,0.92);
+        height: var(--wf-input-h, 38px);
+        padding: 0 26px 0 var(--wf-px, 12px);
+        border: none;
+        border-bottom: 1px solid var(--wf-border, rgba(255,255,255,0.08));
+        border-radius: 0;
+        background: transparent;
+        color: var(--wf-text, rgba(255,255,255,0.92));
         font-size: 0.875rem;
         font-weight: 500;
+        letter-spacing: 0.01em;
         text-align: left;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        transition: border-color .12s, background .12s, box-shadow .12s;
+        transition: border-color .12s, box-shadow .12s;
         outline: none;
         box-sizing: border-box;
     }
-    .mce-cbx__trigger:hover:not([disabled]) { border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); }
-    .mce-cbx__trigger.is-open { border-color: rgba(99,102,241,0.55); box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
-    .mce-cbx__trigger.is-invalid { border-color: rgba(239,68,68,0.7); box-shadow: 0 0 0 3px rgba(239,68,68,0.12); }
+    .mce-cbx__trigger:hover:not([disabled]) { border-bottom-color: var(--wf-border-hover, rgba(165,180,252,0.35)); }
+    /* Acikken = .mce-select:focus ile ayni: ikinci 1px cizgi (layout kaymaz) */
+    .mce-cbx__trigger.is-open {
+        border-bottom-color: var(--wf-border-focus, #a5b4fc);
+        box-shadow: 0 1px 0 0 var(--wf-border-focus, #a5b4fc);
+    }
+    .mce-cbx__trigger.is-invalid {
+        border-bottom-color: var(--wf-error-color, #ef4444);
+        box-shadow: 0 1px 0 0 var(--wf-error-color, #ef4444);
+    }
     .mce-cbx__trigger[disabled] { opacity: .5; cursor: not-allowed; }
     .mce-cbx__label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .mce-cbx__label--placeholder { color: rgba(255,255,255,0.35); font-weight: 400; }
+    .mce-cbx__label--placeholder { color: var(--wf-placeholder, rgba(255,255,255,0.4)); font-weight: 400; }
+    /* Ok: DOM'daki metin oku gizlenir, yerine .mce-select'in chevron gorseli
+       ayni konum/boyutta cizilir. Glyph birakilsaydi iki kontrolun oku farkli
+       kalirdi. Element korunuyor — acilinca donme animasyonu ayni. */
     .mce-cbx__arrow {
-        position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-        font-size: 0.65rem; opacity: .55; transition: transform .15s, opacity .15s;
+        position: absolute; right: var(--wf-px, 12px); top: 50%; transform: translateY(-50%);
+        width: 10px; height: 6px;
+        font-size: 0; line-height: 0; color: transparent;
+        background-image: var(--wf-chevron);
+        background-repeat: no-repeat; background-position: center; background-size: 10px 6px;
+        transition: transform .15s, opacity .15s;
         pointer-events: none;
     }
     .mce-cbx__trigger.is-open .mce-cbx__arrow { transform: translateY(-50%) rotate(180deg); opacity: .85; }
@@ -1620,11 +1642,9 @@
     .mce-cbx__option.is-inactive:hover { background: rgba(239,68,68,0.08); }
 
     /* Light tema */
-    body.app-theme-light .mce-cbx__trigger {
-        background: #fff; border-color: rgba(15,23,42,0.10); color: #1e293b;
-    }
-    body.app-theme-light .mce-cbx__trigger:hover:not([disabled]) { border-color: rgba(15,23,42,0.20); background: #f8fafc; }
-    body.app-theme-light .mce-cbx__label--placeholder { color: rgba(15,23,42,0.40); }
+    /* NOT: trigger/label/ok icin light override YOK — renkler --wf-* degiskenlerinden
+       geliyor ve o degiskenler zaten temaya gore ezilir (widgetField.css). Buraya
+       sabit renk yazmak .mce-select ile ayrisma riskini geri getirirdi. */
     body.app-theme-light .mce-cbx__panel { background: #fff; border-color: rgba(15,23,42,0.12); box-shadow: 0 10px 30px rgba(0,0,0,0.12); }
     body.app-theme-light .mce-cbx__option { color: #1e293b; }
     body.app-theme-light .mce-cbx__option:hover { background: rgba(99,102,241,0.10); color: #4f46e5; }
