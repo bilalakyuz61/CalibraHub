@@ -73,6 +73,41 @@ body.app-theme-dark .cap-root {
   border-bottom: 1px solid var(--cap-border);
 }
 
+/* ── Şerit kimliği (C-Grid standardı: 36px gradient ikon + başlık/alt başlık) ── */
+.cap-toolbar__id { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.cap-toolbar__icon {
+  width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, rgba(79,70,229,.18), rgba(79,70,229,.06));
+  border: 1px solid rgba(79,70,229,.30);
+  color: var(--cap-accent);
+}
+.cap-toolbar__title { font-size: 14px; font-weight: 700; line-height: 1.2; color: var(--cap-text); white-space: nowrap; }
+.cap-toolbar__sub { font-size: 11.5px; color: var(--cap-text-muted); margin-top: 2px; white-space: nowrap; }
+
+/* Araçlar sağ uçta — SmartBoard ile aynı sıra ve aralık. */
+.cap-toolbar__tools { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
+
+/* Arama kutusu — MRP/RoutingTree ile aynı ölçü. */
+.cap-search {
+  flex: 0 1 260px;
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px; border-radius: 8px;
+  background: var(--cap-muted, rgba(148,163,184,.12));
+  border: 1px solid var(--cap-border);
+  color: var(--cap-text-muted);
+}
+.cap-search input {
+  flex: 1; border: 0; outline: 0; background: transparent;
+  color: var(--cap-text); font-size: 12.5px; min-width: 0;
+}
+.cap-search__clear {
+  border: 0; background: transparent; padding: 0; cursor: pointer; line-height: 0;
+  color: var(--cap-text-muted); flex-shrink: 0;
+}
+.cap-search__clear:hover { color: var(--cap-text); }
+
+/* Eski tek satırlık başlık — geriye dönük kalsın diye korunur (kullanılmıyor). */
 .cap-toolbar-title {
   display: flex;
   align-items: center;
@@ -143,9 +178,19 @@ body.app-theme-dark .cap-root {
   color: var(--cap-text-muted);
   cursor: pointer;
 }
-.cap-icon-btn:hover {
+.cap-icon-btn:hover:not(:disabled) {
   color: var(--cap-accent);
   border-color: var(--cap-accent);
+}
+.cap-icon-btn:disabled { opacity: .45; cursor: not-allowed; }
+.cap-icon-btn { position: relative; }
+.cap-icon-btn--active { color: var(--cap-accent); border-color: var(--cap-accent); }
+.cap-icon-btn__badge {
+  position: absolute; top: -5px; right: -5px;
+  min-width: 15px; height: 15px; padding: 0 4px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 999px; background: var(--cap-accent); color: #fff;
+  font-size: 9px; font-weight: 700; line-height: 1;
 }
 
 .cap-spacer {
@@ -158,6 +203,16 @@ body.app-theme-dark .cap-root {
 @keyframes cap-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* Efsane artık şeridin ALTINDA ayrı bir şerit (2026-08-29): şerit sağ ucu
+   araçlara ayrıldı, efsane orada araçları sıkıştırıyordu. */
+.cap-legend-bar {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 6px 14px;
+  background: var(--cap-surface);
+  border-bottom: 1px solid var(--cap-border);
 }
 
 .cap-legend {

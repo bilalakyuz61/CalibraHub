@@ -657,17 +657,28 @@ Widget `color` değerleri: `emerald` (aktif/pozitif), `slate` (pasif/nötr), `in
 Tüm liste/kart ekranlarında **header her zaman aynı düzeni** taşır — kullanıcı bir C-Grid sayfasına geçince beklediği aynı sırayı bulur:
 
 ```
-[İkon] Başlık                [🔍 Arama...]   [⚲ Filtre]  [⬇ Excel]  [⚙ Widget]   [+ Ana Eylem]
+[İkon] Başlık        [🔍 Arama...]  [🔄 Yenile] [⚲ Filtre] [⬇ Excel] [⧉ Gruplama] [⚙ Widget]  [+ Ana Eylem]
        alt başlık (X kayıt)
 ```
+
+**AYNI İŞİ YAPAN BUTON HER EKRANDA AYNI YERDE.** Sıra pazarlık konusu değildir; bir
+ekranda Yenile'yi Filtre'nin sağına almak kullanıcının kas hafızasını bozar. Bespoke
+ekranlar (MrpPlanner, RoutingTree, CapacityLoad) SmartBoard bileşenini kullanmasa da
+**bu sırayı birebir izler** (2026-08-29 kullanıcı kuralı).
 
 **Standart bileşenler (sırayla):**
 1. **Sol kimlik:** 36×36 renk gradientli ikon kutusu + başlık + alt başlık (kayıt sayısı)
 2. **Arama:** Kod/ad gibi temel alanlarda anlık (client-side) ya da debounced (server-side) filtre
-3. **Filtre butonu:** `Filter` ikonu — `SmartBoardFilterPanel` modalını açar. Aktif filtre varsa indigo dot + sayı badge gösterilir
-4. **Excel export:** `Download` ikonu — POST `/api/export/smartboard-excel`, kolonlar: Kod + Ad + sistem widget'ları + master widget'ları
-5. **Widget ayarları:** `Settings2` ikonu — `SmartBoardConfigPanel` modalını açar (visibleIds + order, localStorage scope = boardKey)
-6. **Ana eylem:** Primary button (`Yeni X`, `+` ikonu)
+3. **Yenile:** `RefreshCw` ikonu — listeyi yerinde tazeler (in-place refresh; sayfa yeniden yüklenmez)
+4. **Filtre butonu:** `Filter` ikonu — `SmartBoardFilterPanel` modalını açar. Aktif filtre varsa indigo dot + sayı badge gösterilir
+5. **Excel export:** `Download` ikonu — POST `/api/export/smartboard-excel`, kolonlar: Kod + Ad + sistem widget'ları + master widget'ları
+6. **Gruplama:** `Layers` ikonu — varsa (yalnızca SmartBoard'da)
+7. **Widget ayarları:** `Settings2` ikonu — `SmartBoardConfigPanel` modalını açar (visibleIds + order, localStorage scope = boardKey)
+8. **Ana eylem:** Primary button (`Yeni X`, `+` ikonu) — HER ZAMAN en sağda
+
+**Ekranda o araç yoksa yeri boş bırakılır, sıra kaymaz.** Örnek: Kapasite/Yük Raporu'nda
+"yeni kayıt" yoktur → primary buton yoktur; Yenile ikon buton olarak 3. sırada kalır
+(primary görünümü verilseydi konumu da en sağa kayardı).
 
 **Genişletilmiş düzen (tree/master-detail ekranlar):** Detay paneli (operasyon listesi, alt kalemler vb.) açıldığında detay başlığında ayrı bir küçük (xs) `Settings2` butonu — alt seviye widget'lar için ayrı `boardKey` ve ayrı master widget seti.
 
