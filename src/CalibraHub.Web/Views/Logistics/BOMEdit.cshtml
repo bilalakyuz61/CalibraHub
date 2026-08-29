@@ -1058,6 +1058,49 @@
     .bomt-node--cycle { opacity: .6; }
 
     .bomt-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+
+    /* ── Bağlantı çizgileri ──
+       Her ata seviyesi için 20px'lik bir sütun; sütunun içindeki dikey çizgi
+       "bu atanın daha kardeşi var" demektir. Girinti artık boşlukla değil bu
+       sütunlarla veriliyor, böylece hangi satırın kimin altında olduğu okunuyor.
+       Sütunlar arasında BOŞLUK OLMAMALI (gap:0) — yoksa dikey çizgi kırılır. */
+    .bomt-guides { display: flex; align-self: stretch; gap: 0; flex-shrink: 0; }
+    .bomt-guide { position: relative; width: 20px; align-self: stretch; flex-shrink: 0; }
+    /* Dikey hat — sütunun ortasında, satır boyunca */
+    .bomt-guide--line::before,
+    .bomt-guide--tee::before,
+    .bomt-guide--end::before {
+        content: ''; position: absolute; left: 9px; width: 1px;
+        background: var(--border-subtle);
+    }
+    .bomt-guide--line::before { top: 0; bottom: 0; }
+    .bomt-guide--tee::before  { top: 0; bottom: 0; }
+    .bomt-guide--end::before  { top: 0; height: 50%; }   /* son çocuk: alt yarıda çizgi yok */
+    /* Yatay kol — satırın ortasından sağa */
+    .bomt-guide--tee::after,
+    .bomt-guide--end::after {
+        content: ''; position: absolute; left: 9px; top: 50%;
+        width: 11px; height: 1px; background: var(--border-subtle);
+    }
+
+    /* ── Tip ikonu ── */
+    .bomt-type {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 18px; height: 18px; flex-shrink: 0;
+    }
+    .bomt-type--1  { color: #94a3b8; }   /* Hammadde */
+    .bomt-type--2  { color: #818cf8; }   /* Yarı Mamul */
+    .bomt-type--3  { color: #34d399; }   /* Mamul */
+    .bomt-type--4  { color: #60a5fa; }   /* Ticari Mal */
+    .bomt-type--5  { color: #fbbf24; }   /* Sarf Malzemesi */
+    .bomt-type--10 { color: #c084fc; }   /* Kit */
+    .bomt-type--0  { color: var(--text-muted); }   /* tipi tanımsız */
+    body.app-theme-light .bomt-type--1 { color: #64748b; }
+    body.app-theme-light .bomt-type--2 { color: #4f46e5; }
+    body.app-theme-light .bomt-type--3 { color: #059669; }
+    body.app-theme-light .bomt-type--4 { color: #2563eb; }
+    body.app-theme-light .bomt-type--5 { color: #b45309; }
+    body.app-theme-light .bomt-type--10 { color: #7c3aed; }
     .bomt-caret {
         width: 18px; height: 18px; flex-shrink: 0;
         display: inline-flex; align-items: center; justify-content: center;
@@ -3521,14 +3564,16 @@
         var host = pttEl('pttTree');
         host.innerHTML = '';
         if (!pttModel) { host.innerHTML = '<div class="bomt-empty">Agac yok.</div>'; return; }
-        pttRenderNode(pttModel, 0, host, true);
+        pttRenderNode(pttModel, 0, host, true, [], true);
 
         var n = 0;
         (function count(x) { n++; x.children.forEach(count); })(pttModel);
         pttEl('pttHint').textContent = n + ' dugum';
     }
 
-    function pttRenderNode(node, depth, host, isRoot) {
+    /* guides: her ata seviyesi icin "o atanin daha kardesi var mi" (dikey cizgi cizilir mi).
+       isLast: bu dugum atasinin SON cocugu mu (koseli L mi, T mi). */
+    function pttRenderNode(node, depth, host, isRoot, guides, isLast) {
         var row = document.createElement('div');
         row.className = 'bomt-node' + (isRoot ? ' bomt-node--root' : '')
                       + (node.isCycle ? ' bomt-node--cycle' : '');
@@ -3536,7 +3581,21 @@
 
         var nameCell = document.createElement('div');
         nameCell.className = 'bomt-name';
-        nameCell.style.paddingLeft = (depth * 20) + 'px';
+
+        // Girinti artik padding degil, cizgi sutunlari ile veriliyor.
+        var gwrap = document.createElement('span');
+        gwrap.className = 'bomt-guides';
+        for (var g = 0; g < guides.length; g++) {
+            var col = document.createElement('span');
+            col.className = 'bomt-guide' + (guides[g] ? ' bomt-guide--line' : '');
+            gwrap.appendChild(col);
+        }
+        if (!isRoot) {
+            var elbow = document.createElement('span');
+            elbow.className = 'bomt-guide bomt-guide--' + (isLast ? 'end' : 'tee');
+            gwrap.appendChild(elbow);
+        }
+        nameCell.appendChild(gwrap);
 
         var caret = document.createElement('button');
         caret.type = 'button';
@@ -3547,6 +3606,7 @@
             caret.addEventListener('click', function() { node._open = !node._open; pttRender(); });
         }
         nameCell.appendChild(caret);
+        nameCell.appendChild(pttTypeIcon(node.typeId));
 
         var code = document.createElement('span');
         code.className = 'bomt-code';
@@ -3596,8 +3656,38 @@
         host.appendChild(row);
 
         if (node._open) {
-            node.children.forEach(function(c) { pttRenderNode(c, depth + 1, host, false); });
+            // Cocuklarin ata sutunu: kokun cocuklarinda ata sutunu YOKTUR; daha
+            // derinlerde ise "bu dugumun daha kardesi var mi" (yani !isLast) bilgisi
+            // dikey cizgi olarak tasinir.
+            var childGuides = isRoot ? [] : guides.concat([!isLast]);
+            var lastIndex = node.children.length - 1;
+            node.children.forEach(function(c, idx) {
+                pttRenderNode(c, depth + 1, host, false, childGuides, idx === lastIndex);
+            });
         }
+    }
+
+    /* Malzeme tipi ikonu. Tip Items.TypeId'den gelir; tanimsizsa notr bir daire
+       cizilir - ikonu HIC cizmemek satirlarin hizasini bozardi. */
+    var PTT_TYPES = {
+        1:  { label: 'Hammadde',        path: '<path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>' },
+        2:  { label: 'Yari Mamul',      path: '<path d="M12 2l9 5-9 5-9-5 9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/>' },
+        3:  { label: 'Mamul',           path: '<path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/>' },
+        4:  { label: 'Ticari Mal',      path: '<path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 01-8 0"/>' },
+        5:  { label: 'Sarf Malzemesi',  path: '<path d="M12 2.7s6 5.2 6 9.3a6 6 0 01-12 0c0-4.1 6-9.3 6-9.3z"/>' },
+        10: { label: 'Kit',             path: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>' }
+    };
+    function pttTypeIcon(typeId) {
+        var t = PTT_TYPES[typeId];
+        var span = document.createElement('span');
+        span.className = 'bomt-type bomt-type--' + (t ? typeId : 0);
+        span.title = t ? t.label : 'Malzeme tipi tanimsiz';
+        span.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" '
+                       + 'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+                       + 'stroke-linejoin="round">'
+                       + (t ? t.path : '<circle cx="12" cy="12" r="8"/>')
+                       + '</svg>';
+        return span;
     }
 
     function pttBadge(text, kind) {

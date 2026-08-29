@@ -59,6 +59,9 @@ public sealed partial class LogisticsConfigurationService
         var maxDepthSeen = 0;
         // Her düğümün reçetesi; referans sayıları TEK toplu sorguda alınacak (aşağıda).
         var bomIdsSeen = new HashSet<int>();
+        // Ağaçta geçen tüm malzemeler — tip ikonu için tek toplu okuma yapılacak.
+        // Düğüm başına ayrı sorgu, geniş bir ağaçta yüzlerce gidiş-geliş demekti.
+        var itemIdsSeen = new HashSet<int> { itemId };
 
         // ancestors: kökten bu düğüme kadarki malzemeler — döngü (A→B→A) tespiti için.
         // Bir dalda kendini tekrar eden malzeme genişletilmez; aksi halde sonsuza gider.
@@ -69,8 +72,11 @@ public sealed partial class LogisticsConfigurationService
         {
             maxDepthSeen = Math.Max(maxDepthSeen, depth);
 
+            itemIdsSeen.Add(nodeItemId);
             if (ancestors.Contains(nodeItemId))
             {
+                // Döngüde kesilen dal da tip ikonu almalı (yukarıda eklendi) — aksi
+                // halde o satır ikonsuz kalır ve hizası kayar.
                 return new BomTreeNodeDto(
                     nodeItemId, code, name, nodeConfigId, configCode,
                     quantity, scrapRatio, note,
@@ -123,21 +129,31 @@ public sealed partial class LogisticsConfigurationService
             quantity: 1m, scrapRatio: 0m, note: null,
             pinnedBomId: bomId, depth: 0, ancestors: new HashSet<int>());
 
-        // Referans sayıları: düğüm başına ayrı sorgu yerine tek toplu okuma.
+        // Referans sayıları ve malzeme tipleri: düğüm başına ayrı sorgu yerine
+        // iki toplu okuma, ardından TEK gezinme ile ağaca uygulanır.
         var refCounts = await _repository.GetBomReferenceCountsAsync(bomIdsSeen, cancellationToken);
-        tree = ApplyReferenceCounts(tree, refCounts);
+        var typeById = (await _repository.GetItemsByIdsAsync(itemIdsSeen, cancellationToken))
+            .GroupBy(x => x.Id)
+            .ToDictionary(g => g.Key, g => g.First().TypeId);
+        tree = ApplyNodeFacts(tree, refCounts, typeById);
 
         return new BomTreeDto(tree, maxDepthSeen, truncated);
     }
 
-    private static BomTreeNodeDto ApplyReferenceCounts(
-        BomTreeNodeDto node, IReadOnlyDictionary<int, int> counts)
+    /// <summary>
+    /// Toplu okunan gerçekleri (referans sayısı, malzeme tipi) ağaca tek gezinmede işler.
+    /// </summary>
+    private static BomTreeNodeDto ApplyNodeFacts(
+        BomTreeNodeDto node,
+        IReadOnlyDictionary<int, int> counts,
+        IReadOnlyDictionary<int, int?> typeById)
     {
         var children = node.Children.Count == 0
             ? node.Children
-            : node.Children.Select(c => ApplyReferenceCounts(c, counts)).ToList();
+            : node.Children.Select(c => ApplyNodeFacts(c, counts, typeById)).ToList();
         var refCount = node.BomId is int id && counts.TryGetValue(id, out var c) ? c : 0;
-        return node with { ReferenceCount = refCount, Children = children };
+        var typeId = typeById.TryGetValue(node.ItemId, out var t) ? t : null;
+        return node with { ReferenceCount = refCount, TypeId = typeId, Children = children };
     }
 
     // ═══════════════════════════════════════════════════════════════════

@@ -757,7 +757,11 @@ public sealed record BomTreeNodeDto(
     int ReferenceCount,
     // Döngü nedeniyle kesildi mi (A→B→A). Kesilen dal genişletilemez.
     bool IsCycle,
-    IReadOnlyList<BomTreeNodeDto> Children);
+    IReadOnlyList<BomTreeNodeDto> Children,
+    // Malzeme tipi (Items.TypeId) — ağaçta tip ikonu için. Kayıtta tip yoksa null.
+    // Listenin SONUNA eklendi: positional record'da araya eklemek mevcut tüm
+    // kurulum noktalarını sessizce kaydırırdı.
+    int? TypeId = null);
 
 /// <summary>Ağaç okuma sonucu — kök düğüm + gezinme sırasında kesilen dal uyarısı.</summary>
 public sealed record BomTreeDto(
