@@ -216,6 +216,8 @@
     var DOC_TYPES = (BOARD_CONFIG && BOARD_CONFIG.docTypeCatalog)
         ? BOARD_CONFIG.docTypeCatalog.map(function (t) { return { code: t.code, label: t.label }; })
         : [];
+    var DOC_TYPE_LABEL_MAP = {};
+    DOC_TYPES.forEach(function (t) { DOC_TYPE_LABEL_MAP[t.code] = t.label; });
 
     function showError(msg) {
         el.innerHTML = '<div class="cb-mount-error">'
@@ -224,9 +226,85 @@
             + '</div>';
     }
 
+    // ── PageComment Seq 1129: kilitler artık satır bazında, sağdaki widget
+    // şeridinde okunabilir bir liste halinde görünür (İşlemler/"Kilitleri
+    // Düzenle" butonuna gitmeden). Bu dönüşüm TAMAMEN CLIENT-SIDE'dır —
+    // controller/backend'e (board config üretimi) dokunulmadı; ekran kendi
+    // sınırları içinde kalıyor (CLAUDE.md sınır kuralı).
+    //
+    // 1) viewMode='card' zorlanır: değişken sayıda kilit rozeti sabit sütunlu
+    //    tablo görünümüne (2026-07-18 "kesin tablo" varsayılanı) sığmaz —
+    //    SmartBoard'ın belgelenmiş viewMode:'card' opt-out'u kullanılır.
+    // 2) Her satırın widget listesine, kilitli her belge tipi için TIKLANABİLİR
+    //    tekil bir rozet (type:'link') eklenir → tıklayınca sadece o belge
+    //    tipinin kilidini kaldırma onayı ister (bkz. openUnlockConfirm).
+    //    Ayrıca "Kilit Ekle" rozeti eklenir (mevcut çoklu-seçim panelini açar —
+    //    birden fazla tip eklerken checklist hâlâ en pratik yol).
+    // 3) Sistem widget'ı 'w_locked_types' (filtre panelindeki "Kilitli Tipler"
+    //    master widget'ının eşleştiği id) DEĞİŞTİRİLMEZ — SmartBoardFilterPanel
+    //    bu widget'ın ham value'sunu (kod CSV) okuyor; değerini bozmak filtreyi
+    //    kırar. Küçük bir görsel fazlalık (özet chip + tekil rozetler yan yana)
+    //    bilinçli kabul edildi — bkz. rapor.
+    // 4) NOT: entity-bazlı dönüşüm burada değil, SmartBoard'a config.entityTransform
+    //    olarak VERİLİR (bkz. transformBoardConfig altı) — board kendi içinde
+    //    sonsuz-kaydırma/sayfalama ile yeni satır çektiğinde (apiUrl fetch,
+    //    ItemDocumentLocksPage) bu ikinci sayfa/sonraki satırlar cshtml'in
+    //    kendi fetch akışından GEÇMEZ; tek seferlik dizi haritalaması yalnızca
+    //    ilk sayfayı kapsardı. SmartBoard.jsx'e minimal, opt-in bir
+    //    `entityTransform` prop'u eklendi (bkz. rapor — paylaşılan bileşene
+    //    zorunlu, küçük dokunuş) ki dönüşüm HER sayfada tutarlı uygulansın.
+    function transformEntity(entity) {
+        if (!entity) return entity;
+        var locked = (entity.recordValues && entity.recordValues.lockedDocTypes) || [];
+        if (!Array.isArray(locked)) locked = [];
+        var pills = locked.slice().sort(function (a, b) {
+            var la = DOC_TYPE_LABEL_MAP[a] || a, lb = DOC_TYPE_LABEL_MAP[b] || b;
+            return la.localeCompare(lb, 'tr');
+        }).map(function (code) {
+            return {
+                id: 'w_lock_pill_' + code,
+                type: 'link',
+                label: DOC_TYPE_LABEL_MAP[code] || code,
+                value: 'Kilitli',
+                detail: 'Kaldırmak için tıklayın',
+                icon: 'XCircle',
+                color: 'rose',
+                url: '#idl-unlock-' + entity.id + '-' + encodeURIComponent(code),
+                alwaysVisible: true,
+            };
+        });
+        pills.push({
+            id: 'w_lock_add',
+            type: 'link',
+            label: 'Kilit Ekle',
+            value: 'Ekle',
+            detail: 'Bu malzemeye yeni belge tipi kilidi ekle',
+            icon: 'Plus',
+            color: 'indigo',
+            url: '#idl-' + entity.id,
+            alwaysVisible: true,
+        });
+        var next = Object.assign({}, entity);
+        next.widgets = (Array.isArray(entity.widgets) ? entity.widgets : []).concat(pills);
+        // Sol aksiyon şeridindeki "Kilitleri Düzenle" ikon-butonu kaldırılır —
+        // satırdaki rozet listesi ekleme/kaldırmayı karşılıyor. Başlığa tıklama
+        // hâlâ tam paneli açar (kart tıklaması hideButton'dan bağımsız çalışır,
+        // bkz. SmartCard.jsx).
+        if (next.primaryAction) next.primaryAction = Object.assign({}, next.primaryAction, { hideButton: true });
+        return next;
+    }
+
+    function transformBoardConfig(config) {
+        if (!config) return config;
+        config.viewMode = 'card';
+        config.entityTransform = transformEntity;
+        return config;
+    }
+
     function doMount(config) {
         if (!config) { showError('Board config bulunamadı'); return; }
         if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) { showError('SmartBoard mount fonksiyonu bulunamadı'); return; }
+        config = transformBoardConfig(config);
         try {
             mountHandle = window.CalibraHub.mountSmartBoard(el, config);
         } catch (ex) {
@@ -291,6 +369,7 @@
         var url = '/Logistics/ItemDocumentLocksBoardConfig' + (activeLockedType ? ('?lockedDocType=' + encodeURIComponent(activeLockedType)) : '');
         getJson(url).then(function (config) {
             if (!config || config.error) { notify('Board yenilenemedi.', 'err'); return; }
+            config = transformBoardConfig(config);
             if (mountHandle) mountHandle.refresh(config);
         }).catch(function () { notify('Bağlantı hatası.', 'err'); });
     }
@@ -392,14 +471,55 @@
 
     // Kart/satır tıklaması → primaryAction.url = '#idl-{id}' (hash-tetikli, workspace
     // iframe navigasyonunu bozmaz — sayfa değişmez, yalnız hashchange olayı tetiklenir).
+    // Satır içi tekil rozet tıklaması → '#idl-unlock-{id}-{docType}' (bkz.
+    // transformBoardConfig) — sadece o belge tipinin kilidini kaldırma onayı ister.
     function handleHash() {
-        var m = /^#idl-(\d+)$/.exec(window.location.hash || '');
+        var hash = window.location.hash || '';
+        var mUnlock = /^#idl-unlock-(\d+)-(.+)$/.exec(hash);
+        if (mUnlock) {
+            var unlockItemId = parseInt(mUnlock[1], 10);
+            var unlockDocType = decodeURIComponent(mUnlock[2]);
+            try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch (e) { /* ignore */ }
+            if (unlockItemId > 0 && unlockDocType) openUnlockConfirm(unlockItemId, unlockDocType);
+            return;
+        }
+        var m = /^#idl-(\d+)$/.exec(hash);
         if (!m) return;
         var itemId = parseInt(m[1], 10);
         try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch (e) { /* ignore */ }
         if (itemId > 0) openEditModal(itemId);
     }
     window.addEventListener('hashchange', handleHash);
+
+    // Tek bir belge tipi kilidini kaldırma — DESTRÜKTİF (kilit kalkınca malzeme o
+    // belge tipinde tekrar seçilebilir hale gelir), bu yüzden tek tıkla OLMAZ:
+    // ortak showConfirm() modalı (ekran-ortası, CLAUDE.md silme onay standardı)
+    // ile onay alınır, sonra güncel kilit seti okunup (tekil) tip çıkarılıp
+    // ItemDocumentLockSave ile ANINDA kaydedilir — ekranda "kaydedilmemiş
+    // değişiklik" durumu hiç oluşmaz (satırdan ayrılınca veri kaybı riski yok).
+    function openUnlockConfirm(itemId, docType) {
+        var found = null;
+        for (var i = 0; i < DOC_TYPES.length; i++) { if (DOC_TYPES[i].code === docType) { found = DOC_TYPES[i]; break; } }
+        var label = found ? found.label : docType;
+        window.showConfirm({
+            title: 'Kilit Kaldırma Onayı',
+            message: '"' + label + '" belge tipi kilidi bu malzemeden kaldırılacak; malzeme bu belge tipinde tekrar seçilebilir olacak. Devam edilsin mi?',
+            okLabel: 'Evet, Kaldır',
+            danger: true
+        }).then(function (ok) {
+            if (!ok) return;
+            getJson('/Logistics/ItemDocumentLockGet?itemId=' + itemId).then(function (data) {
+                if (!data || data.error) { notify('Kilit bilgisi okunamadı.', 'err'); return null; }
+                var next = (data.docTypes || []).filter(function (c) { return c !== docType; });
+                return postJson('/Logistics/ItemDocumentLockSave', { itemId: itemId, docTypes: next });
+            }).then(function (res) {
+                if (!res) return;
+                if (res.success === false) { notify(res.message || 'Kaldırılamadı.', 'err'); return; }
+                notify('Kilit kaldırıldı.', 'ok');
+                reloadBoard();
+            }).catch(function (err) { notify('Bağlantı hatası: ' + err.message, 'err'); });
+        });
+    }
 
     // ── Toplu işlem paneli ─────────────────────────────────────────
     var bulkBackdrop = document.getElementById('idlBulkBackdrop');

@@ -113,6 +113,13 @@ export default function SmartBoard(props) {
   // sentezlenir (tableMasterWidgets/tableEntities), boylece tabloya cevrilince
   // isim sutunu kaybolmaz.
   var viewMode = props.viewMode === 'card' ? 'card' : 'table'
+  // Opt-in, entity-bazlı client-side dönüşüm (2026-08-29, PageComment Seq 1129).
+  // Verilmişse HER entity'ye (ilk yük + sonsuz-kaydırma/sayfalama ile sonradan
+  // çekilen sayfalar dahil) uygulanır — bkz. filteredEntities altında. Diğer
+  // board'lar için varsayılan null, davranış değişmez. Amaç: sayfa-özel bir
+  // .cshtml'in (ör. ItemDocumentLocks) board config'e dokunmadan entity'lere
+  // ekstra widget/aksiyon eklemesine izin vermek — controller'a dokunulmadan.
+  var entityTransform = typeof props.entityTransform === 'function' ? props.entityTransform : null
 
   // In-place refresh
   var refreshUrl = props.refreshUrl || null
@@ -575,7 +582,7 @@ export default function SmartBoard(props) {
   // Not: Server-side paginated mode'da search server'da yapilir, ama filter panel
   // her iki modda da CLIENT-SIDE calisir. Server-side filter destegi sonra eklenebilir.
   var filteredEntities = useMemo(function () {
-    var arr = entities
+    var arr = entityTransform ? entities.map(entityTransform) : entities
     // 1) Search (client-side mode'da) — title/subtitle/description + opsiyonel searchTags
     // searchTags: controller'in entity'ye eklediği gizli ek arama keywords'i
     // (ör. enum kartlarinda endpoint adi + field path'leri). UI'da gosterilmez.
@@ -595,7 +602,7 @@ export default function SmartBoard(props) {
       arr = arr.filter(function (e) { return entityMatchesFilters(e, filters) })
     }
     return arr
-  }, [search, entities, isPaginated, filters])
+  }, [search, entities, isPaginated, filters, entityTransform])
 
   // Sayfali modda sayac etiketi board config'ten gelir (itemLabel: "reçete", "cari"...).
   // Varsayilan 'cari' — pagination ilk Cari board'unda dogdu; itemLabel gondermeyen
