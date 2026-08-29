@@ -119,13 +119,27 @@ public sealed class SqlMrpRepository : IMrpRepository
 
         var result = new List<MrpOpenOrderLineDto>();
         await using var rd = await cmd.ExecuteReaderAsync(ct);
+
+        // Kolonlar ADLA çözülür, sayarak DEĞİL. İlk sürüm ordinal okuyordu ve decimal
+        // alanlar bir kayıktı (SELECT 19 kolon, okuma 15..19) → çalışma anında
+        // IndexOutOfRange. Ordinal saymak bu dosyada tekrar eden bir hata sınıfı;
+        // GetOrdinal bir kez (döngü dışında) çözülür, hem güvenli hem hızlıdır.
+        int OrdOf(string name) => rd.GetOrdinal(name);
+        int oLineId = OrdOf("LineId"), oDocId = OrdOf("DocumentId"), oDocNo = OrdOf("DocumentNumber"),
+            oContact = OrdOf("ContactName"), oDelivery = OrdOf("DeliveryDate"), oItemId = OrdOf("ItemId"),
+            oItemCode = OrdOf("ItemCode"), oItemName = OrdOf("ItemName"), oTypeId = OrdOf("ItemTypeId"),
+            oPolicy = OrdOf("SplitPolicy"), oConfig = OrdOf("ConfigId"), oUnitId = OrdOf("UnitId"),
+            oUnitCode = OrdOf("UnitCode"), oLoc = OrdOf("EffLocationId"), oQty = OrdOf("OrderQty"),
+            oBaseQty = OrdOf("OrderBaseQty"), oDelivered = OrdOf("DeliveredBaseQty"),
+            oReserved = OrdOf("ReservedBase"), oAllocated = OrdOf("AllocatedQty");
+
         while (await rd.ReadAsync(ct))
         {
-            var orderQty      = rd.GetDecimal(15);
-            var orderBaseQty  = rd.GetDecimal(16);
-            var deliveredBase = rd.GetDecimal(17);
-            var reservedBase  = rd.GetDecimal(18);
-            var allocated     = rd.GetDecimal(19);
+            var orderQty      = rd.GetDecimal(oQty);
+            var orderBaseQty  = rd.GetDecimal(oBaseQty);
+            var deliveredBase = rd.GetDecimal(oDelivered);
+            var reservedBase  = rd.GetDecimal(oReserved);
+            var allocated     = rd.GetDecimal(oAllocated);
 
             // Gösterim ↔ baz birim çevrimi. Kalem 10 KOLİ = 100 AD ise factor = 10; teslim/rezerve
             // miktarları BAZ birimde tutulur, kullanıcıya kalemin kendi biriminde gösterilir.
@@ -135,27 +149,27 @@ public sealed class SqlMrpRepository : IMrpRepository
             var deliveredDisplay = ToDisplay(deliveredBase);
             var reservedDisplay  = ToDisplay(reservedBase);
             var openDisplay      = Math.Max(0m, orderQty - deliveredDisplay);
-            var typeId           = rd.IsDBNull(8) ? (int?)null : rd.GetInt32(8);
+            var typeId           = rd.IsDBNull(oTypeId) ? (int?)null : rd.GetInt32(oTypeId);
 
             result.Add(new MrpOpenOrderLineDto(
-                LineId:            rd.GetInt32(0),
-                DocumentId:        rd.GetInt32(1),
-                DocumentNumber:    rd.IsDBNull(2) ? string.Empty : rd.GetString(2),
-                ContactName:       rd.IsDBNull(3) ? null : rd.GetString(3),
-                DeliveryDate:      rd.IsDBNull(4) ? null : rd.GetDateTime(4),
-                ItemId:            rd.GetInt32(5),
-                ItemCode:          rd.IsDBNull(6) ? string.Empty : rd.GetString(6),
-                ItemName:          rd.IsDBNull(7) ? string.Empty : rd.GetString(7),
-                ConfigId:          rd.IsDBNull(10) ? null : rd.GetInt32(10),
-                UnitId:            rd.IsDBNull(11) ? null : rd.GetInt32(11),
-                UnitCode:          rd.IsDBNull(12) ? null : rd.GetString(12),
-                LocationId:        rd.IsDBNull(13) ? null : rd.GetInt32(13),
+                LineId:            rd.GetInt32(oLineId),
+                DocumentId:        rd.GetInt32(oDocId),
+                DocumentNumber:    rd.IsDBNull(oDocNo) ? string.Empty : rd.GetString(oDocNo),
+                ContactName:       rd.IsDBNull(oContact) ? null : rd.GetString(oContact),
+                DeliveryDate:      rd.IsDBNull(oDelivery) ? null : rd.GetDateTime(oDelivery),
+                ItemId:            rd.GetInt32(oItemId),
+                ItemCode:          rd.IsDBNull(oItemCode) ? string.Empty : rd.GetString(oItemCode),
+                ItemName:          rd.IsDBNull(oItemName) ? string.Empty : rd.GetString(oItemName),
+                ConfigId:          rd.IsDBNull(oConfig) ? null : rd.GetInt32(oConfig),
+                UnitId:            rd.IsDBNull(oUnitId) ? null : rd.GetInt32(oUnitId),
+                UnitCode:          rd.IsDBNull(oUnitCode) ? null : rd.GetString(oUnitCode),
+                LocationId:        rd.IsDBNull(oLoc) ? null : rd.GetInt32(oLoc),
                 OrderQuantity:     orderQty,
                 DeliveredQuantity: deliveredDisplay,
                 ReservedQuantity:  reservedDisplay,
                 AllocatedQuantity: allocated,
                 OpenQuantity:      openDisplay,
-                SplitPolicy:       rd.IsDBNull(9) ? WorkOrderSplitPolicyCatalog.Default : rd.GetString(9),
+                SplitPolicy:       rd.IsDBNull(oPolicy) ? WorkOrderSplitPolicyCatalog.Default : rd.GetString(oPolicy),
                 IsProducible:      ItemTypeCatalog.IsProducible(typeId)));
         }
         return result;
