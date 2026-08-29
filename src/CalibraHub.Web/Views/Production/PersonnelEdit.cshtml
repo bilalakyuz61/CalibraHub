@@ -235,54 +235,6 @@
           </div>
         </div>
 
-        <div class="ux-field ux-field--wide">
-          <label for="pe-notes">Notlar</label>
-          <textarea id="pe-notes" maxlength="2000"
-                    placeholder="Vardiya bilgileri, ekstra notlar...">@(Model?.Notes ?? "")</textarea>
-        </div>
-
-        <div class="ux-row2">
-          <div class="ux-field">
-            <label>Üretim Operatörü</label>
-            <div class="ux-switch-row">
-              <label class="ux-switch">
-                <input type="checkbox" id="pe-operator" @(Model?.IsProductionOperator == true ? "checked" : "") />
-                <span class="ux-switch-track"></span>
-              </label>
-              <span class="ux-switch-label" id="pe-operator-label">@(Model?.IsProductionOperator == true ? "Evet" : "Hayır")</span>
-            </div>
-          </div>
-          <div class="ux-field">
-            <label>Durum</label>
-            <div class="ux-switch-row">
-              <label class="ux-switch">
-                <input type="checkbox" id="pe-active" @(Model is null || Model.IsActive ? "checked" : "") />
-                <span class="ux-switch-track"></span>
-              </label>
-              <span class="ux-switch-label" id="pe-active-label">@(Model is null || Model.IsActive ? "Aktif" : "Pasif")</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="ux-row2">
-          <div class="ux-field ux-field--wide">
-            <label>Mobilde PIN Sor</label>
-            <div class="ux-switch-row">
-              <label class="ux-switch">
-                <input type="checkbox" id="pe-mobile-pin" @(Model is null || Model.IsMobilePinRequired ? "checked" : "") />
-                <span class="ux-switch-track"></span>
-              </label>
-              <span class="ux-switch-label" id="pe-mobile-pin-label">@(Model is null || Model.IsMobilePinRequired ? "Sorulsun" : "Sorulmasın")</span>
-            </div>
-            <div style="font-size:12px; color:var(--app-muted, #64748b); margin-top:6px; line-height:1.5;">
-              Ortak kullanılan tablet/kiosk için <strong>açık</strong> bırakın: her operasyon başlat/tamamla
-              adımında sicil no + PIN sorulur. Personel <strong>kendi telefonunu</strong> kullanıyorsa
-              kapatabilirsiniz — kimlik, giriş yapmış kullanıcının bu personel kaydına bağlanmasından
-              (yukarıdaki <em>Kullanıcı</em> alanı) çözülür. Kullanıcı bağlı değilse PIN yine sorulur.
-            </div>
-          </div>
-        </div>
-
         @* ── İstasyonlar ───────────────────────────────────────────────────────
            İstasyon = makine parkı işaretli lokasyon. Makineler zaten oraya bağlı;
            burada eksik olan ikinci bacak kurulur: personel hangi istasyonlarda
@@ -336,6 +288,54 @@
               <strong>Hiçbiri seçilmezse kısıt uygulanmaz</strong> (personel kısıtlanmamış
               sayılır, &quot;hiçbir yerde çalışamaz&quot; değil).
               Bu alan yukarıdaki <em>Varsayılan Depo</em>'dan ayrıdır: o ambar, bu üretim istasyonudur.
+            </div>
+          </div>
+        </div>
+
+        <div class="ux-field ux-field--wide">
+          <label for="pe-notes">Notlar</label>
+          <textarea id="pe-notes" maxlength="2000"
+                    placeholder="Vardiya bilgileri, ekstra notlar...">@(Model?.Notes ?? "")</textarea>
+        </div>
+
+        <div class="ux-row2">
+          <div class="ux-field">
+            <label>Üretim Operatörü</label>
+            <div class="ux-switch-row">
+              <label class="ux-switch">
+                <input type="checkbox" id="pe-operator" @(Model?.IsProductionOperator == true ? "checked" : "") />
+                <span class="ux-switch-track"></span>
+              </label>
+              <span class="ux-switch-label" id="pe-operator-label">@(Model?.IsProductionOperator == true ? "Evet" : "Hayır")</span>
+            </div>
+          </div>
+          <div class="ux-field">
+            <label>Durum</label>
+            <div class="ux-switch-row">
+              <label class="ux-switch">
+                <input type="checkbox" id="pe-active" @(Model is null || Model.IsActive ? "checked" : "") />
+                <span class="ux-switch-track"></span>
+              </label>
+              <span class="ux-switch-label" id="pe-active-label">@(Model is null || Model.IsActive ? "Aktif" : "Pasif")</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="ux-row2">
+          <div class="ux-field ux-field--wide">
+            <label>Mobilde PIN Sor</label>
+            <div class="ux-switch-row">
+              <label class="ux-switch">
+                <input type="checkbox" id="pe-mobile-pin" @(Model is null || Model.IsMobilePinRequired ? "checked" : "") />
+                <span class="ux-switch-track"></span>
+              </label>
+              <span class="ux-switch-label" id="pe-mobile-pin-label">@(Model is null || Model.IsMobilePinRequired ? "Sorulsun" : "Sorulmasın")</span>
+            </div>
+            <div style="font-size:12px; color:var(--app-muted, #64748b); margin-top:6px; line-height:1.5;">
+              Ortak kullanılan tablet/kiosk için <strong>açık</strong> bırakın: her operasyon başlat/tamamla
+              adımında sicil no + PIN sorulur. Personel <strong>kendi telefonunu</strong> kullanıyorsa
+              kapatabilirsiniz — kimlik, giriş yapmış kullanıcının bu personel kaydına bağlanmasından
+              (yukarıdaki <em>Kullanıcı</em> alanı) çözülür. Kullanıcı bağlı değilse PIN yine sorulur.
             </div>
           </div>
         </div>
