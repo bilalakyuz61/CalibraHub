@@ -1,4 +1,4 @@
-@{
+﻿@{
     ViewData["Title"] = ViewBag.Title;
     ViewData["HelpKey"] = "bom-edit";
     ViewData["BodyClass"] = "page-product-trees";
@@ -1024,6 +1024,108 @@
         30%, 50%, 70% { transform: translateX(-4px); }
         40%, 60% { transform: translateX(4px); }
     }
+    /* ═══════════════ Reçete Ağacı (çok seviyeli düzenleme, 2026-08-29) ═══════════════
+       Prefix ptt- : pta- bu dosyada BASKA bir bileşene (modal overlay) ait,
+       yeniden tanımlamak onu bozardı.
+       Renkler token'lardan (var(--...)) gelir — sabit hex YAZILMAZ, yoksa açık temada
+       koyu kalır (CLAUDE.md tema kuralları). */
+    #pteTab-agac { display: flex; flex-direction: column; min-height: 0; }
+    .ptt-toolbar {
+        display: flex; align-items: center; gap: var(--space-3);
+        flex-wrap: wrap; margin-bottom: var(--space-3);
+    }
+    .ptt-hint { font-size: 12px; color: var(--text-muted); }
+    .ptt-warn {
+        padding: 8px 12px; border-radius: var(--radius-md); font-size: 12px;
+        background: var(--warning-soft-bg, rgba(245,158,11,.10));
+        border: 1px solid var(--warning, rgba(245,158,11,.45));
+        color: var(--text-primary); margin-bottom: var(--space-3);
+    }
+
+    .ptt-tree { display: flex; flex-direction: column; gap: 2px; }
+
+    .ptt-node {
+        display: grid;
+        grid-template-columns: minmax(0,1fr) 96px 84px minmax(120px,1fr) auto;
+        gap: var(--space-3); align-items: center;
+        padding: 6px 8px; border-radius: var(--radius-md);
+        border: 1px solid transparent;
+    }
+    .ptt-node:hover { background: var(--surface-elev-2); border-color: var(--border-subtle); }
+    .ptt-node--root { background: var(--accent-soft-bg); border-color: var(--accent); }
+    /* Döngüde kesilen dal: düzenlenemez, ama GÖRÜNÜR — sessizce gizlemek
+       "bileşen yok" yanılgısı üretirdi. */
+    .ptt-node--cycle { opacity: .6; }
+
+    .ptt-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .ptt-caret {
+        width: 18px; height: 18px; flex-shrink: 0;
+        display: inline-flex; align-items: center; justify-content: center;
+        border: none; background: transparent; cursor: pointer;
+        color: var(--text-muted); padding: 0; border-radius: 4px;
+    }
+    .ptt-caret:hover { background: var(--surface-elev-2); color: var(--text-primary); }
+    .ptt-caret--leaf { visibility: hidden; cursor: default; }
+    .ptt-caret svg { transition: transform var(--motion-fast) var(--motion-ease-out); }
+    .ptt-caret.is-open svg { transform: rotate(90deg); }
+    .ptt-code {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 12px; font-weight: var(--font-weight-semibold);
+        color: var(--text-primary); white-space: nowrap;
+    }
+    .ptt-itemname {
+        font-size: 12px; color: var(--text-muted);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+    }
+
+    .ptt-badge {
+        font-size: 10px; font-weight: var(--font-weight-semibold);
+        padding: 2px 7px; border-radius: 20px; white-space: nowrap; flex-shrink: 0;
+    }
+    .ptt-badge--shared  { background: rgba(245,158,11,.16); color: #b45309; }
+    .ptt-badge--version { background: rgba(139,92,246,.16); color: #6d28d9; }
+    .ptt-badge--cycle   { background: rgba(239,68,68,.16);  color: #b91c1c; }
+    .ptt-badge--new     { background: rgba(16,185,129,.16); color: #047857; }
+    body.app-theme-dark .ptt-badge--shared  { color: #fcd34d; }
+    body.app-theme-dark .ptt-badge--version { color: #c4b5fd; }
+    body.app-theme-dark .ptt-badge--cycle   { color: #fca5a5; }
+    body.app-theme-dark .ptt-badge--new     { color: #6ee7b7; }
+
+    .ptt-node .pte-input { padding: 5px 8px; font-size: 12px; width: 100%; }
+    .ptt-actions { display: flex; gap: 4px; }
+    .ptt-iconbtn {
+        width: 26px; height: 26px; border-radius: var(--radius-md);
+        display: inline-flex; align-items: center; justify-content: center;
+        border: 1px solid var(--border-subtle); background: var(--surface-elev-2);
+        color: var(--text-muted); cursor: pointer; padding: 0;
+    }
+    .ptt-iconbtn:hover { color: var(--text-primary); border-color: var(--border-strong); }
+    .ptt-iconbtn--danger:hover { color: var(--danger); border-color: var(--danger); }
+
+    /* Bileşen ekleme satırı — düğümün hemen altında açılır */
+    .ptt-adder {
+        margin: 4px 0 8px; padding: 10px 12px;
+        border: 1px dashed var(--border-strong); border-radius: var(--radius-md);
+        background: var(--surface-elev-2);
+    }
+    .ptt-adder-row { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
+    .ptt-results {
+        margin-top: 8px; max-height: 200px; overflow-y: auto;
+        border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+    }
+    .ptt-result {
+        display: flex; gap: 10px; align-items: center;
+        padding: 6px 10px; cursor: pointer; font-size: 12px;
+    }
+    .ptt-result:hover { background: var(--accent-soft-bg); }
+    .ptt-result-code {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-weight: var(--font-weight-semibold); color: var(--text-primary);
+    }
+    .ptt-result-name { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ptt-empty { padding: 10px; font-size: 12px; color: var(--text-muted); font-style: italic; }
+
+    .ptt-field-row { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin-top: 8px; }
 </style>
 }
 
@@ -1053,6 +1155,10 @@
                 <span class="pte-nav-dot"></span>
                 Bileşen Bilgileri
                 <span class="pte-nav-count" id="ptCompCount" data-count="0">0</span>
+            </button>
+            <button type="button" class="pte-nav-btn" data-tab="agac">
+                <span class="pte-nav-dot"></span>
+                Reçete Ağacı
             </button>
             <button type="button" class="pte-nav-btn" data-tab="gorsel">
                 <span class="pte-nav-dot"></span>
@@ -1280,6 +1386,29 @@
                 </div>
             </div><!-- /pteTab-bilesen -->
 
+            <!-- ══════════ Reçete Ağacı (çok seviyeli tek ekranda düzenleme) ══════════
+                 Kök mamulden başlayarak TÜM alt reçeteler tek ağaçta düzenlenir.
+                 Paylaşımlı bir alt reçete değiştirilirse yerinde EZİLMEZ: kaydederken
+                 otomatik versiyon türetilir ve ata satırı ona sabitlenir (kullanıcı
+                 kararı 2026-08-29) — böylece diğer mamuller etkilenmez. -->
+            <div id="pteTab-agac" style="display:none;">
+                <div class="pte-card">
+                    <p class="pte-card-title">Reçete Ağacı</p>
+
+                    <div class="ptt-toolbar">
+                        <button type="button" class="pte-btn pte-btn--secondary pte-btn--sm" id="pttReload">Yenile</button>
+                        <button type="button" class="pte-btn pte-btn--secondary pte-btn--sm" id="pttExpandAll">Tümünü Aç</button>
+                        <button type="button" class="pte-btn pte-btn--secondary pte-btn--sm" id="pttCollapseAll">Tümünü Kapat</button>
+                        <button type="button" class="pte-btn pte-btn--primary pte-btn--sm" id="pttSave">Ağacı Kaydet</button>
+                        <span class="ptt-hint" id="pttHint"></span>
+                    </div>
+
+                    <div class="ptt-warn" id="pttTruncWarn" style="display:none;"></div>
+
+                    <div id="pttTree" class="ptt-tree"></div>
+                </div>
+            </div><!-- /pteTab-agac -->
+
         </div><!-- /pte-content -->
 
     </div><!-- /pte-body -->
@@ -1288,15 +1417,15 @@
 </section>
 
 <!-- Excel'den Toplu Yapıştırma Modalı (2026-07-05) -->
-<div class="pta-overlay" id="ptPasteOverlay" role="dialog" aria-labelledby="ptPasteTitle" aria-hidden="true">
-    <div class="pta-panel" role="document" style="width:min(680px,96vw);">
-        <div class="pta-header">
+<div class="ptt-overlay" id="ptPasteOverlay" role="dialog" aria-labelledby="ptPasteTitle" aria-hidden="true">
+    <div class="ptt-panel" role="document" style="width:min(680px,96vw);">
+        <div class="ptt-header">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.6;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
             <h3 id="ptPasteTitle">Excel'den Toplu Bileşen Ekle</h3>
-            <button type="button" class="pta-close" id="ptPasteClose" aria-label="Kapat">&times;</button>
+            <button type="button" class="ptt-close" id="ptPasteClose" aria-label="Kapat">&times;</button>
         </div>
-        <div class="pta-section">
-            <div class="pta-source">
+        <div class="ptt-section">
+            <div class="ptt-source">
                 Excel'den <strong>Kod</strong> ve <strong>Miktar</strong> (opsiyonel <strong>Fire</strong>, <strong>Açıklama</strong>) sütunlarını kopyalayıp aşağıya yapıştırın.
                 Miktar verilmeyen satırlar <strong>1</strong> kabul edilir.
             </div>
@@ -1318,7 +1447,7 @@
             </div>
             <div class="pte-paste-summary" id="ptPasteSummary"></div>
         </div>
-        <div class="pta-actions">
+        <div class="ptt-actions">
             <button type="button" class="pte-btn pte-btn--secondary" id="ptPasteCancel">Vazgeç</button>
             <button type="button" class="pte-btn pte-btn--primary" id="ptPasteApply" disabled>Ekle</button>
         </div>
@@ -1326,19 +1455,19 @@
 </div>
 
 <!-- Versiyon Türet Modalı (2026-08-11 reçete versiyonlama) -->
-<div class="pta-overlay" id="ptDeriveOverlay" role="dialog" aria-labelledby="ptDeriveTitle" aria-hidden="true">
-    <div class="pta-panel" role="document" style="width:min(460px,96vw);">
-        <div class="pta-header">
+<div class="ptt-overlay" id="ptDeriveOverlay" role="dialog" aria-labelledby="ptDeriveTitle" aria-hidden="true">
+    <div class="ptt-panel" role="document" style="width:min(460px,96vw);">
+        <div class="ptt-header">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.6;"><path d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2"/></svg>
             <h3 id="ptDeriveTitle">Versiyon Türet</h3>
-            <button type="button" class="pta-close" id="ptDeriveClose" aria-label="Kapat">&times;</button>
+            <button type="button" class="ptt-close" id="ptDeriveClose" aria-label="Kapat">&times;</button>
         </div>
-        <div class="pta-section">
-            <div class="pta-source" id="ptDeriveSourceInfo">Açık reçetenin kopyasından yeni bir versiyon oluşturulur; versiyon sonradan serbestçe düzenlenebilir.</div>
+        <div class="ptt-section">
+            <div class="ptt-source" id="ptDeriveSourceInfo">Açık reçetenin kopyasından yeni bir versiyon oluşturulur; versiyon sonradan serbestçe düzenlenebilir.</div>
             <label class="pte-label" for="ptDeriveCode" style="display:block;margin:10px 0 6px;">Versiyon Kodu *</label>
             <input type="text" id="ptDeriveCode" class="pte-input" maxlength="30" placeholder="örn. V2, FASON, 2026-B..." style="width:100%;" autocomplete="off" />
         </div>
-        <div class="pta-actions">
+        <div class="ptt-actions">
             <button type="button" class="pte-btn pte-btn--secondary" id="ptDeriveCancel">Vazgeç</button>
             <button type="button" class="pte-btn pte-btn--primary" id="ptDeriveApply">Türet</button>
         </div>
@@ -1347,15 +1476,15 @@
 
 <!-- Bileşen Alt Reçete Seçim Modalı (2026-08-11) — yarı mamul bileşenin hangi
      reçete/versiyonunun kullanılacağı; "Aç" ile seçilen reçetenin detayına gidilir. -->
-<div class="pta-overlay" id="ptCompBomOverlay" role="dialog" aria-labelledby="ptCompBomTitle" aria-hidden="true">
-    <div class="pta-panel" role="document" style="width:min(520px,96vw);">
-        <div class="pta-header">
+<div class="ptt-overlay" id="ptCompBomOverlay" role="dialog" aria-labelledby="ptCompBomTitle" aria-hidden="true">
+    <div class="ptt-panel" role="document" style="width:min(520px,96vw);">
+        <div class="ptt-header">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.6;"><path d="M12 3v18M3 12h18"/></svg>
             <h3 id="ptCompBomTitle">Bileşen Reçetesi</h3>
-            <button type="button" class="pta-close" id="ptCompBomClose" aria-label="Kapat">&times;</button>
+            <button type="button" class="ptt-close" id="ptCompBomClose" aria-label="Kapat">&times;</button>
         </div>
-        <div class="pta-section">
-            <div class="pta-source" id="ptCompBomInfo"></div>
+        <div class="ptt-section">
+            <div class="ptt-source" id="ptCompBomInfo"></div>
             <label class="pte-label" for="ptCompBomSelect" style="display:block;margin:10px 0 6px;">Kullanılacak Reçete</label>
             <div style="display:flex;gap:8px;align-items:center;">
                 <select id="ptCompBomSelect" class="pte-input" style="flex:1 1 0;min-width:0;"></select>
@@ -1363,7 +1492,7 @@
             </div>
             <div style="font-size:.74rem;opacity:.6;margin-top:8px;">"Baz Reçete (canlı)" seçiliyse yarı mamulün güncel baz reçetesi izlenir; belirli versiyon seçilirse o versiyona sabitlenir.</div>
         </div>
-        <div class="pta-actions">
+        <div class="ptt-actions">
             <button type="button" class="pte-btn pte-btn--secondary" id="ptCompBomCancel">Vazgeç</button>
             <button type="button" class="pte-btn pte-btn--primary" id="ptCompBomApply">Uygula</button>
         </div>
@@ -1371,19 +1500,19 @@
 </div>
 
 <!-- Kaydedilmemiş Değişiklik Modalı (2026-07-05) -->
-<div class="pta-overlay" id="ptLeaveOverlay" role="dialog" aria-labelledby="ptLeaveTitle" aria-hidden="true">
-    <div class="pta-panel" role="document" style="width:min(480px,96vw);">
-        <div class="pta-header">
+<div class="ptt-overlay" id="ptLeaveOverlay" role="dialog" aria-labelledby="ptLeaveTitle" aria-hidden="true">
+    <div class="ptt-panel" role="document" style="width:min(480px,96vw);">
+        <div class="ptt-header">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
             <h3 id="ptLeaveTitle">Kaydedilmemiş Değişiklikler</h3>
-            <button type="button" class="pta-close" id="ptLeaveClose" aria-label="Kapat">&times;</button>
+            <button type="button" class="ptt-close" id="ptLeaveClose" aria-label="Kapat">&times;</button>
         </div>
-        <div class="pta-section">
+        <div class="ptt-section">
             <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;">
                 Bu reçetede kaydedilmemiş değişiklikler var. Sayfadan ayrılırsanız değişiklikler kaybolur.
             </div>
         </div>
-        <div class="pta-actions">
+        <div class="ptt-actions">
             <button type="button" class="pte-btn pte-btn--secondary" id="ptLeaveCancel">Vazgeç</button>
             <button type="button" class="pte-btn pte-btn--danger" id="ptLeaveDiscard">Kaydetmeden Çık</button>
             <button type="button" class="pte-btn pte-btn--primary" id="ptLeaveSave">Kaydet ve Çık</button>
@@ -1654,7 +1783,7 @@
     document.querySelectorAll('.pte-nav-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var tab = btn.dataset.tab;
-            if ((tab === 'bilesen' || tab === 'gorsel') && !ptCanSwitchToBilesen()) return;
+            if ((tab === 'bilesen' || tab === 'gorsel' || tab === 'agac') && !ptCanSwitchToBilesen()) return;
 
             document.querySelectorAll('.pte-nav-btn').forEach(function(b) { b.classList.remove('is-active'); });
             btn.classList.add('is-active');
@@ -1664,8 +1793,11 @@
             document.getElementById('pteTab-bilesen').style.display = (tab === 'bilesen') ? '' : 'none';
             var gorselEl = document.getElementById('pteTab-gorsel');
             if (gorselEl) gorselEl.style.display = (tab === 'gorsel') ? '' : 'none';
+            var agacEl = document.getElementById('pteTab-agac');
+            if (agacEl) agacEl.style.display = (tab === 'agac') ? '' : 'none';
 
             if (tab === 'bilesen') renderGrid();
+            if (tab === 'agac') pttOnTabShown();
         });
     });
 
@@ -3266,11 +3398,547 @@
         tryMountFixedFieldLookups();
     }
 
+
+    /* ═══════════════════════════════════════════════════════════════════
+       REÇETE AĞACI — çok seviyeli tek ekranda düzenleme (2026-08-29)
+
+       Kaydetme mantığı SUNUCUDA: paylaşımlı (birden çok ata satırının izlediği)
+       bir alt reçete değiştirilirse yerinde ezilmez, otomatik versiyon türetilir.
+       İstemci yalnız ağacı gönderir ve dönen raporu (notes) kullanıcıya gösterir.
+       Bu ayrım bilinçli — "hangi düğüm paylaşımlı" kararı istemciye bırakılsaydı
+       bayat bir sayımla başka mamuller sessizce değiştirilebilirdi.
+       ═══════════════════════════════════════════════════════════════════ */
+    var pttModel = null;          // kök düğüm (mutable)
+    var pttLoadedKey = null;      // hangi (itemId|bomId) için yüklendi
+    var pttUid = 0;
+    var pttAdderUid = null;
+    var pttUnitCache = null;
+    // Sayfa genelindeki ptDirty'yi AGACIN kendisi mi kirletti? Bilesen sekmesinden
+    // gelen kaydedilmemis degisiklikle agacinkini ayirt etmek icin (bkz. pttOnTabShown).
+    var pttDirtyOwn = false;
+    function pttMarkDirty() { pttDirtyOwn = true; ptMarkDirty(); }
+
+    function pttEl(id) { return document.getElementById(id); }
+    function pttRootKey() { return (ptCurrentItemId || 0) + '|' + (ptCurrentId || 0); }
+
+    function pttOnTabShown() {
+        var warn = pttEl('pttTruncWarn');
+        if (!ptCurrentItemId) {
+            pttModel = null; pttLoadedKey = null;
+            if (warn) warn.style.display = 'none';
+            pttEl('pttTree').innerHTML =
+                '<div class="ptt-empty">Once Genel Bilgiler sekmesinden bir mamul secin.</div>';
+            pttSetSaveEnabled(false);
+            return;
+        }
+
+        // ── Iki editor, tek veri ──
+        // Agac receteyi KAYITLI halinden okur. Bilesen sekmesinde kaydedilmemis
+        // degisiklik varken agaci kaydetmek, o degisiklikleri SESSIZCE geri alirdi
+        // (agac eski satir kumesini yazar). Bu yuzden once oradaki kayit istenir.
+        if (ptDirty && !pttDirtyOwn) {
+            pttModel = null; pttLoadedKey = null;
+            pttEl('pttTree').innerHTML = '';
+            if (warn) {
+                warn.style.display = '';
+                warn.textContent = 'Bilesen Bilgileri sekmesinde kaydedilmemis degisiklik var. '
+                    + 'Agac receteyi KAYITLI halinden okur; simdi agaci kaydetmek o '
+                    + 'degisiklikleri geri alirdi. Once oradaki degisikligi kaydedin, '
+                    + 'sonra bu sekmeye donun.';
+            }
+            pttSetSaveEnabled(false);
+            return;
+        }
+
+        pttSetSaveEnabled(true);
+        // Kok degistiyse (baska recete/versiyon yuklendi) agaci tazele; aksi halde
+        // kullanicinin kaydedilmemis duzenlemesini SILMEMEK icin oldugu gibi birak.
+        if (pttLoadedKey !== pttRootKey()) pttLoad();
+    }
+
+    function pttSetSaveEnabled(on) {
+        var b = pttEl('pttSave');
+        if (b) b.disabled = !on;
+    }
+
+    async function pttLoad() {
+        if (!ptCurrentItemId) return;
+        var host = pttEl('pttTree');
+        host.innerHTML = '<div class="ptt-empty">Agac yukleniyor...</div>';
+        var url = '/Logistics/BomTree?itemId=' + encodeURIComponent(ptCurrentItemId)
+                + (ptCurrentConfigId != null ? '&configId=' + ptCurrentConfigId : '')
+                + (ptCurrentId ? '&bomId=' + ptCurrentId : '');
+        try {
+            var r = await fetch(url, { credentials: 'include' });
+            var data = await r.json();
+            if (!r.ok || !data.success) {
+                host.innerHTML = '<div class="ptt-empty">'
+                    + escHtml((data && data.message) || 'Agac yuklenemedi.') + '</div>';
+                return;
+            }
+            pttModel = pttDecorate(data.tree.root, 0);
+            pttLoadedKey = pttRootKey();
+
+            var warn = pttEl('pttTruncWarn');
+            if (data.tree.truncated) {
+                warn.style.display = '';
+                warn.textContent = 'Agac cok buyuk oldugu icin bir kismi gosterilmiyor. '
+                    + 'Gorunmeyen dallari kendi recete ekranlarindan duzenleyin - '
+                    + 'burada kaydetmek gorunmeyen dallari DEGISTIRMEZ.';
+            } else {
+                warn.style.display = 'none';
+            }
+            pttRender();
+        } catch (e) {
+            host.innerHTML = '<div class="ptt-empty">Agac yuklenemedi: '
+                + escHtml(e.message || '') + '</div>';
+        }
+    }
+
+    /* Sunucu DTO'suna UI alanlari ekler (_uid, _open). Kok ve ilk seviye acik baslar. */
+    function pttDecorate(node, depth) {
+        node._uid = ++pttUid;
+        node._open = depth < 1;
+        node.children = (node.children || []).map(function(c) { return pttDecorate(c, depth + 1); });
+        return node;
+    }
+
+    function pttFindParent(root, uid, parent) {
+        if (root._uid === uid) return parent;
+        for (var i = 0; i < root.children.length; i++) {
+            var f = pttFindParent(root.children[i], uid, root);
+            if (f !== undefined) return f;
+        }
+        return undefined;
+    }
+
+    function pttSetOpenAll(node, open) {
+        node._open = open;
+        node.children.forEach(function(c) { pttSetOpenAll(c, open); });
+    }
+
+    function pttRender() {
+        var host = pttEl('pttTree');
+        host.innerHTML = '';
+        if (!pttModel) { host.innerHTML = '<div class="ptt-empty">Agac yok.</div>'; return; }
+        pttRenderNode(pttModel, 0, host, true);
+
+        var n = 0;
+        (function count(x) { n++; x.children.forEach(count); })(pttModel);
+        pttEl('pttHint').textContent = n + ' dugum';
+    }
+
+    function pttRenderNode(node, depth, host, isRoot) {
+        var row = document.createElement('div');
+        row.className = 'ptt-node' + (isRoot ? ' ptt-node--root' : '')
+                      + (node.isCycle ? ' ptt-node--cycle' : '');
+        row.dataset.uid = node._uid;
+
+        var nameCell = document.createElement('div');
+        nameCell.className = 'ptt-name';
+        nameCell.style.paddingLeft = (depth * 20) + 'px';
+
+        var caret = document.createElement('button');
+        caret.type = 'button';
+        caret.className = 'ptt-caret' + (node.children.length ? '' : ' ptt-caret--leaf')
+                        + (node._open ? ' is-open' : '');
+        caret.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 6l6 6-6 6"/></svg>';
+        if (node.children.length) {
+            caret.addEventListener('click', function() { node._open = !node._open; pttRender(); });
+        }
+        nameCell.appendChild(caret);
+
+        var code = document.createElement('span');
+        code.className = 'ptt-code';
+        code.textContent = node.itemCode || ('#' + node.itemId);
+        nameCell.appendChild(code);
+
+        var nm = document.createElement('span');
+        nm.className = 'ptt-itemname';
+        nm.textContent = node.itemName || '';
+        nameCell.appendChild(nm);
+
+        if (node.isCycle) nameCell.appendChild(pttBadge('Dongu - genisletilemez', 'cycle'));
+        if (node.bomVersionCode) nameCell.appendChild(pttBadge('Versiyon: ' + node.bomVersionCode, 'version'));
+        // Paylasimli uyarisi: burada yapilan degisiklik kaydedilirken versiyon turetilir.
+        if (!isRoot && node.referenceCount > 1) {
+            nameCell.appendChild(pttBadge('Paylasimli x' + node.referenceCount, 'shared'));
+        }
+        if (node._isNew) nameCell.appendChild(pttBadge('Yeni', 'new'));
+        row.appendChild(nameCell);
+
+        // Miktar / fire / not — kokte ata satiri olmadigi icin bos birakilir.
+        if (isRoot) {
+            row.appendChild(document.createElement('div'));
+            row.appendChild(document.createElement('div'));
+            row.appendChild(document.createElement('div'));
+        } else {
+            row.appendChild(pttNumInput(node, 'quantity', 'Miktar'));
+            row.appendChild(pttNumInput(node, 'scrapRatio', 'Fire'));
+            row.appendChild(pttTextInput(node, 'note', 'Not...'));
+        }
+
+        var actions = document.createElement('div');
+        actions.className = 'ptt-actions';
+        if (!node.isCycle) {
+            actions.appendChild(pttIconBtn(
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+                'Bu dugumun altina bilesen ekle', false,
+                function() { pttToggleAdder(node, row, depth); }));
+        }
+        if (!isRoot) {
+            actions.appendChild(pttIconBtn(
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>',
+                'Bu bileseni cikar', true,
+                function() { pttRemove(node); }));
+        }
+        row.appendChild(actions);
+        host.appendChild(row);
+
+        if (node._open) {
+            node.children.forEach(function(c) { pttRenderNode(c, depth + 1, host, false); });
+        }
+    }
+
+    function pttBadge(text, kind) {
+        var b = document.createElement('span');
+        b.className = 'ptt-badge ptt-badge--' + kind;
+        b.textContent = text;
+        return b;
+    }
+
+    function pttIconBtn(svg, title, danger, onClick) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'ptt-iconbtn' + (danger ? ' ptt-iconbtn--danger' : '');
+        b.title = title;
+        b.innerHTML = svg;
+        b.addEventListener('click', onClick);
+        return b;
+    }
+
+    function pttNumInput(node, field, placeholder) {
+        var wrap = document.createElement('div');
+        var i = document.createElement('input');
+        i.type = 'number'; i.className = 'pte-input'; i.step = 'any'; i.min = '0';
+        i.placeholder = placeholder;
+        i.value = (node[field] != null) ? node[field] : '';
+        i.addEventListener('input', function() {
+            var v = parseFloat(i.value);
+            node[field] = isNaN(v) ? 0 : v;
+            pttMarkDirty();
+        });
+        wrap.appendChild(i);
+        return wrap;
+    }
+
+    function pttTextInput(node, field, placeholder) {
+        var wrap = document.createElement('div');
+        var i = document.createElement('input');
+        i.type = 'text'; i.className = 'pte-input'; i.placeholder = placeholder;
+        i.value = node[field] || '';
+        i.addEventListener('input', function() { node[field] = i.value; pttMarkDirty(); });
+        wrap.appendChild(i);
+        return wrap;
+    }
+
+    function pttRemove(node) {
+        var parent = pttFindParent(pttModel, node._uid, null);
+        if (!parent) return;
+        var label = ((node.itemCode || '') + ' ' + (node.itemName || '')).trim();
+        var extra = node.children.length
+            ? '\n\nBu bilesenin ' + node.children.length + ' alt bileseni de agactan cikar.'
+            : '';
+        pttConfirm('Bileseni Cikar',
+            '"' + label + '" bu receteden cikarilsin mi?' + extra
+            + '\n\nMalzeme karti SILINMEZ; yalniz bu recete satiri kaldirilir. '
+            + 'Degisiklik "Agaci Kaydet" denene kadar yazilmaz.',
+            function() {
+                parent.children = parent.children.filter(function(c) { return c._uid !== node._uid; });
+                pttMarkDirty();
+                pttRender();
+            });
+    }
+
+    function pttToggleAdder(node, rowEl, depth) {
+        var existing = document.querySelector('.ptt-adder');
+        if (existing) existing.remove();
+        if (pttAdderUid === node._uid) { pttAdderUid = null; return; }
+        pttAdderUid = node._uid;
+
+        var box = document.createElement('div');
+        box.className = 'ptt-adder';
+        box.style.marginLeft = ((depth + 1) * 20) + 'px';
+        box.innerHTML =
+            '<div class="ptt-adder-row">'
+          + '  <input type="text" class="pte-input" style="flex:1 1 240px;" placeholder="Malzeme kodu veya adi ara..." data-ptt-search>'
+          + '  <button type="button" class="pte-btn pte-btn--secondary pte-btn--sm" data-ptt-new>Yeni Malzeme Karti</button>'
+          + '</div>'
+          + '<div class="ptt-results" style="display:none;" data-ptt-results></div>'
+          + '<div data-ptt-newform style="display:none;"></div>';
+        rowEl.insertAdjacentElement('afterend', box);
+
+        var search = box.querySelector('[data-ptt-search]');
+        var results = box.querySelector('[data-ptt-results]');
+        var timer = null;
+        search.addEventListener('input', function() {
+            clearTimeout(timer);
+            var q = search.value.trim();
+            if (q.length < 2) { results.style.display = 'none'; return; }
+            timer = setTimeout(function() { pttSearch(q, results, node); }, 250);
+        });
+        search.focus();
+
+        box.querySelector('[data-ptt-new]').addEventListener('click', function() {
+            pttShowNewItemForm(box.querySelector('[data-ptt-newform]'), node);
+        });
+    }
+
+    async function pttSearch(q, results, node) {
+        try {
+            var r = await fetch('/Logistics/StockLookup?q=' + encodeURIComponent(q), { credentials: 'include' });
+            var cards = await r.json();
+            results.innerHTML = '';
+            if (!cards.length) {
+                results.innerHTML = '<div class="ptt-empty">Eslesen malzeme yok.</div>';
+            } else {
+                cards.slice(0, 50).forEach(function(c) {
+                    var d = document.createElement('div');
+                    d.className = 'ptt-result';
+                    d.innerHTML = '<span class="ptt-result-code"></span><span class="ptt-result-name"></span>';
+                    d.querySelector('.ptt-result-code').textContent = c.code;
+                    d.querySelector('.ptt-result-name').textContent = c.name || '';
+                    d.addEventListener('click', function() {
+                        pttAddChild(node, c.id, c.code, c.name);
+                    });
+                    results.appendChild(d);
+                });
+            }
+            results.style.display = '';
+        } catch (e) {
+            results.innerHTML = '<div class="ptt-empty">Arama basarisiz.</div>';
+            results.style.display = '';
+        }
+    }
+
+    /* Ayni bilesen ayni dugumde iki kez olmasin ve dugum kendini icermesin.
+       Sunucu da reddeder; burada ANINDA soylemek icin - kaydetme aninda ogrenmek gec. */
+    function pttAddChild(node, itemId, code, name) {
+        if (itemId === node.itemId) {
+            showMsg('Bir malzeme kendi recetesine bilesen olarak eklenemez.', false);
+            return;
+        }
+        if (!PT_ALLOW_DUP && node.children.some(function(c) { return c.itemId === itemId; })) {
+            showMsg('"' + code + '" bu dugumde zaten var.', false);
+            return;
+        }
+        var child = pttDecorate({
+            itemId: itemId, itemCode: code, itemName: name || '',
+            configId: null, configCode: null,
+            quantity: 1, scrapRatio: 0, note: null,
+            bomId: null, bomVersionCode: null, isPinned: false,
+            referenceCount: 0, isCycle: false, children: []
+        }, 1);
+        child._isNew = true;
+        node.children.push(child);
+        node._open = true;
+        pttMarkDirty();
+        pttAdderUid = null;
+        var box = document.querySelector('.ptt-adder');
+        if (box) box.remove();
+        pttRender();
+        showMsg('"' + code + '" eklendi. Yazmak icin "Agaci Kaydet".', true);
+    }
+
+    /* Hizli malzeme karti - KOD ALINMAZ: proje kurali geregi kullanici kod girmez,
+       sunucu addan turetir (istemcide turetilseydi cakisan kod mevcut bir karti
+       sessizce guncellerdi). */
+    async function pttShowNewItemForm(host, node) {
+        if (host.style.display !== 'none') { host.style.display = 'none'; return; }
+        if (!pttUnitCache) {
+            try {
+                var r = await fetch('/Logistics/QuickItemOptions', { credentials: 'include' });
+                var d = await r.json();
+                pttUnitCache = (d && d.success) ? (d.units || []) : [];
+            } catch (e) { pttUnitCache = []; }
+        }
+        if (!pttUnitCache.length) {
+            showMsg('Birim listesi okunamadi - yeni kart acilamiyor. Malzeme Karti ekranindan olusturun.', false);
+            return;
+        }
+        var unitOpts = pttUnitCache.map(function(u) {
+            return '<option value="' + u.id + '">' + escHtml(u.code + ' - ' + (u.name || '')) + '</option>';
+        }).join('');
+        host.innerHTML =
+            '<div class="ptt-field-row">'
+          + '  <input type="text" class="pte-input" style="flex:1 1 220px;" placeholder="Malzeme adi" data-ptt-name>'
+          + '  <select class="pte-input" data-ptt-type>'
+          + '    <option value="1">Hammadde</option><option value="2">Yari Mamul</option>'
+          + '    <option value="3">Mamul</option><option value="4">Ticari Mal</option>'
+          + '    <option value="5">Sarf Malzemesi</option>'
+          + '  </select>'
+          + '  <select class="pte-input" data-ptt-unit>' + unitOpts + '</select>'
+          + '  <button type="button" class="pte-btn pte-btn--primary pte-btn--sm" data-ptt-create>Olustur ve Ekle</button>'
+          + '</div>';
+        host.style.display = '';
+        host.querySelector('[data-ptt-name]').focus();
+        host.querySelector('[data-ptt-create]').addEventListener('click', async function() {
+            var btn = this;
+            var name = host.querySelector('[data-ptt-name]').value.trim();
+            if (!name) { showMsg('Malzeme adi bos olamaz.', false); return; }
+            btn.disabled = true;
+            try {
+                var r = await fetch('/Logistics/QuickCreateItem', {
+                    method: 'POST', credentials: 'include',
+                    headers: { 'Content-Type': 'application/json',
+                               'RequestVerificationToken': ptCsrfToken() },
+                    body: JSON.stringify({
+                        name: name,
+                        typeId: parseInt(host.querySelector('[data-ptt-type]').value, 10),
+                        unitId: parseInt(host.querySelector('[data-ptt-unit]').value, 10)
+                    })
+                });
+                if (r.status === 403) {
+                    showMsg('Malzeme karti olusturma yetkiniz yok.', false);
+                    return;
+                }
+                var d = await r.json();
+                if (!d.success) { showMsg(d.message || 'Kart olusturulamadi.', false); return; }
+                if (d.existed) showMsg('Ayni adda kart zaten vardi; mevcut kart eklendi (' + d.code + ').', true);
+                pttAddChild(node, d.id, d.code, d.name);
+            } catch (e) {
+                showMsg('Kart olusturulamadi: ' + (e.message || ''), false);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    }
+
+    function pttToPayload(node) {
+        return {
+            itemId: node.itemId,
+            configId: node.configId,
+            quantity: node.quantity,
+            scrapRatio: node.scrapRatio,
+            note: node.note,
+            bomId: node.bomId,
+            children: node.children.map(pttToPayload)
+        };
+    }
+
+    async function pttSave() {
+        if (!pttModel) { showMsg('Once agaci yukleyin.', false); return; }
+        if (!pttModel.children.length) {
+            showMsg('Recetede en az bir bilesen olmalidir.', false);
+            return;
+        }
+        var btn = pttEl('pttSave');
+        btn.disabled = true;
+        try {
+            var r = await fetch('/Logistics/SaveBomTree', {
+                method: 'POST', credentials: 'include',
+                headers: { 'Content-Type': 'application/json',
+                           'RequestVerificationToken': ptCsrfToken() },
+                body: JSON.stringify({ root: pttToPayload(pttModel) })
+            });
+            var d = await r.json();
+            if (!r.ok || !d.success) { showMsg((d && d.message) || 'Agac kaydedilemedi.', false); return; }
+
+            ptClearDirty(); pttDirtyOwn = false;
+            pttReportNotes(d.result);
+            // Sunucu versiyon turetmis olabilir; agaci YENIDEN OKU ki ekranda gorunen
+            // ile veritabanindaki ayni olsun (bayat bomId ile ikinci kaydetme yanlis
+            // receteyi hedefler).
+            pttLoadedKey = null;
+            await pttLoad();
+        } catch (e) {
+            showMsg('Agac kaydedilemedi: ' + (e.message || ''), false);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    /* Kaydetme raporu - ozellikle TURETILEN versiyonlar sessiz kalmamali: kullanici
+       "alt receteyi degistirdim" sanirken sistem yeni bir versiyon acip ata satirini
+       ona baglamistir; bunu bilmezse diger mamullerin neden degismedigini anlayamaz. */
+    function pttReportNotes(result) {
+        var notes = (result && result.notes) || [];
+        var derived = notes.filter(function(n) { return n.action === 'derived'; });
+        var written = notes.filter(function(n) { return n.action === 'created' || n.action === 'updated'; });
+
+        if (!derived.length) {
+            showMsg('Agac kaydedildi (' + written.length + ' recete yazildi).', true);
+            return;
+        }
+        var lines = derived.map(function(n) {
+            return n.itemCode + ' -> yeni versiyon "' + n.versionCode + '" ('
+                 + n.referenceCount + ' urunde ortakti)';
+        });
+        var warn = pttEl('pttTruncWarn');
+        warn.style.display = '';
+        warn.textContent = 'Agac kaydedildi. Ortak kullanilan ' + derived.length
+            + ' alt recete yerinde degistirilmedi; her biri icin yeni versiyon turetildi '
+            + 've bu urunun satiri ona sabitlendi: ' + lines.join(' | ');
+        showMsg('Agac kaydedildi - ' + derived.length + ' versiyon turetildi.', true);
+    }
+
+    /* Silme onayi - native confirm() YASAK (CLAUDE.md silme onay standardi):
+       ekranin ortasinda modal, Esc/backdrop ile iptal, Enter ile onay. */
+    function pttConfirm(title, message, onOk) {
+        var back = document.createElement('div');
+        back.className = 'pta-overlay is-open';
+        back.innerHTML =
+            '<div class="pta-panel" style="max-width:460px;">'
+          + '  <div class="pta-header"><h3></h3></div>'
+          + '  <div class="pta-section"><div data-msg style="white-space:pre-line;font-size:13px;"></div></div>'
+          + '  <div class="pta-section" style="display:flex;gap:8px;justify-content:flex-end;">'
+          + '    <button type="button" class="pte-btn pte-btn--secondary" data-cancel>Vazgec</button>'
+          + '    <button type="button" class="pte-btn pte-btn--primary" data-ok>Cikar</button>'
+          + '  </div>'
+          + '</div>';
+        back.querySelector('h3').textContent = title;
+        back.querySelector('[data-msg]').textContent = message;
+        document.body.appendChild(back);
+        function close() { back.remove(); document.removeEventListener('keydown', onKey); }
+        function onKey(e) {
+            if (e.key === 'Escape') close();
+            if (e.key === 'Enter') { close(); onOk(); }
+        }
+        back.querySelector('[data-cancel]').addEventListener('click', close);
+        back.querySelector('[data-ok]').addEventListener('click', function() { close(); onOk(); });
+        back.addEventListener('click', function(e) { if (e.target === back) close(); });
+        document.addEventListener('keydown', onKey);
+        back.querySelector('[data-ok]').focus();
+    }
+
+    function pttBindToolbar() {
+        var reload = pttEl('pttReload');
+        if (!reload) {
+            // Sessiz cikis YASAK (CLAUDE.md #3): DOM henuz hazir degilse ERTELE.
+            // Erken donseydik sekmedeki tum butonlar olu kalirdi - hatasiz, ama islevsiz.
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', pttBindToolbar, { once: true });
+            } else {
+                console.error('[ReceteAgaci] Arac cubugu bulunamadi - sekme calismayacak.');
+            }
+            return;
+        }
+        reload.addEventListener('click', function() { pttLoadedKey = null; pttLoad(); });
+        pttEl('pttExpandAll').addEventListener('click', function() {
+            if (pttModel) { pttSetOpenAll(pttModel, true); pttRender(); }
+        });
+        pttEl('pttCollapseAll').addEventListener('click', function() {
+            if (pttModel) { pttSetOpenAll(pttModel, false); pttModel._open = true; pttRender(); }
+        });
+        pttEl('pttSave').addEventListener('click', pttSave);
+    }
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
         init();
     }
+    pttBindToolbar();
 })();
 </script>
 }
