@@ -92,23 +92,7 @@
         background: rgba(255,255,255,0.03);
     }
 
-    /* İstasyon rozetleri — çoklu seçim, açılır listeden eklenir. */
-    .pe-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-    .pe-chip {
-        display: inline-flex; align-items: center; gap: 6px;
-        padding: 4px 6px 4px 10px; border-radius: 999px;
-        background: var(--app-accent-soft, #eef2ff);
-        border: 1px solid var(--app-border, #dbe2f0);
-        font-size: 12px; line-height: 1.3; color: var(--bs-body-color, #0f172a);
-        max-width: 100%;
-    }
-    .pe-chip__meta { color: var(--app-muted, #64748b); font-size: 11px; }
-    .pe-chip__x {
-        border: 0; background: transparent; cursor: pointer; padding: 0 2px;
-        color: var(--app-muted, #64748b); font-size: 15px; line-height: 1;
-    }
-    .pe-chip__x:hover { color: var(--danger, #dc2626); }
-    body.app-theme-dark .pe-chip { background: rgba(99,102,241,.16); }
+
 </style>
 
 <form class="integrator-form" style="display:none" aria-hidden="true"
@@ -240,35 +224,41 @@
             <span class="ux-hint">Personelin ihtiyaç kayıtlarında otomatik seçilecek depo. Değiştirilebilir.</span>
           </div>
           @* İstasyon = makine parkı işaretli lokasyon; makineler zaten oraya bağlı.
-             Depo gibi açılır listeden seçilir, ama TEK değil ÇOKLU: operatör gerçekte
-             birden fazla istasyonda çalışır (vardiya değişimi, izin yerine bakma, çapraz
-             eğitim). Bu yüzden seçilenler altta rozet olarak birikir. *@
+             Varsayılan Depo ile aynı desen: tek seçim.
+             Veri katmanı (PersonnelStation) çoklu atamayı taşıyabilir — ekran tek seçime
+             kapatır. İleride çoklu istenirse şema göçü değil, yalnız bu alan değişir. *@
           <div class="ux-field">
-            <label for="pe-station-add">İstasyonlar</label>
-            <select id="pe-station-add">
-              <option value="">— İstasyon ekle —</option>
+            <label for="pe-station">İstasyon</label>
+            <select id="pe-station" data-current="@(Model?.StationIds?.FirstOrDefault().ToString() ?? "")">
+              <option value="">— Seçiniz —</option>
               @{
                   var stationList = ViewData["StationList"] as System.Collections.IEnumerable;
-                  var selectedStations = Model?.StationIds ?? new List<int>();
               }
               @if (stationList != null)
               {
                   foreach (dynamic st in stationList)
                   {
-                      // dynamic uzerinde ternary tip cikarimini zorlamamak icin acikca cast.
                       int mc = (int)st.MachineCount;
                       string parent = st.ParentName as string;
                       var meta = (string.IsNullOrEmpty(parent) ? "" : parent + " · ")
                                  + (mc == 0 ? "makine yok" : mc + " makine");
-                      <option value="@st.Id" data-meta="@meta"
-                              data-selected="@(selectedStations.Contains((int)st.Id) ? "1" : "0")">@st.Name</option>
+                      <option value="@st.Id">@st.Name (@meta)</option>
                   }
               }
             </select>
-            <div id="pe-station-chips" class="pe-chips"></div>
-            <span class="ux-hint" id="pe-station-hint">
-              Çalışabildiği üretim istasyonları. Hiçbiri seçilmezse kısıt uygulanmaz.
+            <span class="ux-hint">
+              Personelin çalıştığı üretim istasyonu. Boş bırakılırsa kısıt uygulanmaz.
             </span>
+            @* Sessiz veri kaybı uyarisi: kayitta birden fazla istasyon varsa (veri katmani
+               bunu tasiyabiliyor), tek secime dusurmek digerlerini SILER. Kullanici bunu
+               kaydetmeden ONCE gormeli. *@
+            @if ((Model?.StationIds?.Count ?? 0) > 1)
+            {
+                <span class="ux-hint" style="color:var(--danger, #dc2626);">
+                    Bu personelde birden fazla istasyon kayıtlı (@Model!.StationNames).
+                    Kaydettiğinizde yalnızca seçili olan kalır.
+                </span>
+            }
           </div>
         </div>
 
@@ -504,78 +494,12 @@
         if (current) sel.value = current;
     })();
 
-    // ── İstasyon seçimi (açılır liste → rozet) ────────────────────────────
-    // Depo gibi seçilir ama ÇOKLU: seçilen istasyon listeden çıkar, altta rozet olur;
-    // rozetin × ile kaldırılması onu listeye geri koyar. Böylece aynı istasyon iki kez
-    // eklenemez (DB'deki UNIQUE kısıtın kullanıcı tarafındaki karşılığı).
-    var peStationMeta = {};          // id -> { name, meta }
-    var peStationSel  = {};          // id -> true (seçili olanlar)
-
-    function peSelectedStations() {
-        return Object.keys(peStationSel).map(function (k) { return parseInt(k, 10); });
-    }
-
-    (function initStations() {
-        var sel = document.getElementById('pe-station-add');
-        var box = document.getElementById('pe-station-chips');
-        if (!sel || !box) return;
-
-        var preselected = [];
-        Array.prototype.slice.call(sel.options).forEach(function (o) {
-            if (!o.value) return;
-            peStationMeta[o.value] = { name: o.textContent, meta: o.getAttribute('data-meta') || '' };
-            if (o.getAttribute('data-selected') === '1') preselected.push(o.value);
-        });
-
-        function render() {
-            box.innerHTML = '';
-            Object.keys(peStationSel).forEach(function (id) {
-                var m = peStationMeta[id] || { name: '#' + id, meta: '' };
-                var chip = document.createElement('span');
-                chip.className = 'pe-chip';
-                var label = document.createElement('span');
-                label.textContent = m.name;
-                chip.appendChild(label);
-                if (m.meta) {
-                    var meta = document.createElement('span');
-                    meta.className = 'pe-chip__meta';
-                    meta.textContent = m.meta;
-                    chip.appendChild(meta);
-                }
-                var x = document.createElement('button');
-                x.type = 'button';
-                x.className = 'pe-chip__x';
-                x.textContent = '×';
-                x.title = 'Kaldır';
-                x.addEventListener('click', function () { remove(id); });
-                chip.appendChild(x);
-                box.appendChild(chip);
-            });
-        }
-
-        function setOptionVisible(id, visible) {
-            var o = sel.querySelector('option[value="' + id + '"]');
-            if (o) o.hidden = !visible;
-        }
-
-        function add(id) {
-            if (!id || peStationSel[id]) return;
-            peStationSel[id] = true;
-            setOptionVisible(id, false);
-            render();
-        }
-        function remove(id) {
-            delete peStationSel[id];
-            setOptionVisible(id, true);
-            render();
-        }
-
-        preselected.forEach(add);
-        sel.addEventListener('change', function () {
-            var v = sel.value;
-            sel.value = '';
-            add(v);
-        });
+    // ── İstasyon seçimi (Varsayılan Depo ile aynı desen) ──────────────────
+    (function syncStation() {
+        var sel = document.getElementById('pe-station');
+        if (!sel) return;
+        var current = sel.getAttribute('data-current') || '';
+        if (current) sel.value = current;
     })();
 
     // ── Save handler ──
@@ -607,7 +531,12 @@
                 // Her zaman dizi gönderilir (null "dokunma" anlamına gelir) — kullanıcı
                 // tüm istasyonları kaldırdıysa bu boş dizi olarak gitmeli, yoksa eski
                 // atamalar sessizce yerinde kalırdı.
-                stationIds:           peSelectedStations(),
+                // Dizi olarak gönderilir: veri katmanı çoklu taşır, ekran tek seçer.
+                // Boş dizi = "istasyonu kaldır" (null olsaydı "dokunma" anlamına gelirdi).
+                stationIds:           (function () {
+                                          var v = document.getElementById('pe-station').value;
+                                          return v ? [parseInt(v, 10)] : [];
+                                      })(),
                 birthDate:            document.getElementById('pe-birthdate').value || null
             };
             saveBtn.disabled = true;
