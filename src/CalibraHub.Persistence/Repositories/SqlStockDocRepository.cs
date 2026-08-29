@@ -2780,7 +2780,9 @@ public sealed class SqlStockDocRepository : IStockDocRepository
     /// <summary>
     /// Seri-takipli stokta (Items.TrackingType='Serial') satırın serilerini çözer ve satıra bağlar
     /// (DocumentLineSerial). Kurallar: miktar tam sayı, seri sayısı = miktar. GİRİŞ (2): seri
-    /// listesi boşsa ve stok AutoSerial ise ItemCode-yyMMdd-NNN üretilir; Issued/pasif seri
+    /// listesi boşsa ve stok AutoSerial ise otomatik üretilir (bkz. GenerateAutoSerialsAsync —
+    /// Tasarım Kuralları > Seri Numarası kuralı varsa onunla, yoksa fail-open ItemCode-yyMMdd-NNN
+    /// legacy formatıyla); Issued/pasif seri
     /// girişle stoğa döner (iade), başka belgeyle stokta olan seri tekrar giremez.
     /// ÇIKIŞ (1): seriler InStock olmalı → Issued. TRANSFER (3): InStock şart, durum değişmez.
     /// Seri-takipli olmayan stokta no-op.
@@ -2963,10 +2965,64 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         }
     }
 
-    /// <summary>Otomatik seri üretimi: {ItemCode}-{yyMMdd}-{NNN}. Sıra numarası aynı önekteki en
-    /// yüksek değerin devamıdır; UPDLOCK+HOLDLOCK ile tx içinde okunur, UX_ItemSerial_Item_SerialNo
-    /// unique index'i olası yarışta çakışmayı DB seviyesinde engeller (tx rollback).</summary>
+    /// <summary>
+    /// Otomatik seri üretimi. Öncelik: Tasarım Kuralları → "Seri Numarası" kural motoru
+    /// (<see cref="ICodeGeneratorService"/>, CodeRule EntityType='Serial' — Cari/Stok Kodu
+    /// kuralı ile AYNI altyapı, /CodeRule?entity=serial ekranından tanımlanır). Aktif/eşleşen
+    /// kural yoksa (fail-open, eski davranış aynen korunur) legacy sabit formata düşer:
+    /// {ItemCode}-{yyMMdd}-{NNN}.
+    /// </summary>
     private async Task<List<string>> GenerateAutoSerialsAsync(
+        SqlConnection conn, SqlTransaction tx, int itemId, string itemCode, int count, DateTime docDate, CancellationToken ct)
+    {
+        if (_codeGenerator != null)
+        {
+            var ruled = await TryGenerateSerialsFromCodeRuleAsync(itemCode, count, ct);
+            if (ruled != null) return ruled;
+        }
+        return await GenerateLegacyAutoSerialsAsync(conn, tx, itemId, itemCode, count, docDate, ct);
+    }
+
+    /// <summary>
+    /// Seri Numarası kural motoru ile üretim dener. İlk seri için hiç aktif/eşleşen kural
+    /// yoksa null döner (çağıran taraf legacy'e düşer — fail-open). Kısmen üretim başladıktan
+    /// sonra kural aksarsa (örn. 26 suffix denemesinde de benzersiz kod bulunamadı) karışık
+    /// format üretmek yerine net hata fırlatılır — sessiz kısmi üretim/skip YOK.
+    /// Benzersizlik: her çağrı kuralın CodeRuleCounter'ını atomik biçimde artırır (bkz.
+    /// SqlCodeRuleRepository.IncrementCounterAsync — UPDATE...OUTPUT, tek statement) — bu
+    /// satırın kendi içindeki N seri, henüz ItemSerial'a INSERT edilmemiş olsa dahi counter
+    /// değeri farklı olduğu için çakışmaz. Bu yüzden CodeRuleController.SaveJson, EntityType=
+    /// 'Serial' kurallarında template'te {Counter:N} zorunluluğunu denetler.
+    /// </summary>
+    private async Task<List<string>?> TryGenerateSerialsFromCodeRuleAsync(string itemCode, int count, CancellationToken ct)
+    {
+        var fieldValues = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ItemCode"] = itemCode,
+        };
+        var results = new List<string>(count);
+        for (var i = 0; i < count; i++)
+        {
+            var result = await _codeGenerator!.GenerateAsync(
+                new GenerateCodeRequest { EntityType = "Serial", FieldValues = fieldValues }, ct);
+            if (!result.Success)
+            {
+                if (i == 0) return null; // hiç kural yok/eşleşmedi → tamamen fail-open, legacy'e düş
+                throw new InvalidOperationException(
+                    $"'{itemCode}' için otomatik seri üretimi {i}. seriden sonra durdu: {result.Error ?? "bilinmeyen hata"}. " +
+                    "Tasarım Kuralları > Seri Numarası kuralını kontrol edin.");
+            }
+            results.Add(result.Code!);
+        }
+        return results;
+    }
+
+    /// <summary>Legacy otomatik seri üretimi: {ItemCode}-{yyMMdd}-{NNN}. Sıra numarası aynı
+    /// önekteki en yüksek değerin devamıdır; UPDLOCK+HOLDLOCK ile tx içinde okunur,
+    /// UX_ItemSerial_Item_SerialNo unique index'i olası yarışta çakışmayı DB seviyesinde
+    /// engeller (tx rollback). Tasarım Kuralları'nda aktif "Seri Numarası" kuralı YOKSA
+    /// kullanılan varsayılan (fail-open) yol.</summary>
+    private async Task<List<string>> GenerateLegacyAutoSerialsAsync(
         SqlConnection conn, SqlTransaction tx, int itemId, string itemCode, int count, DateTime docDate, CancellationToken ct)
     {
         var prefix = $"{itemCode}-{docDate:yyMMdd}-";
