@@ -402,6 +402,14 @@ export default function MrpPlanner(props) {
         <div className="mrp-header__tools">
           {step === 1 && (
             <>
+              {/* SIRA SmartBoard ile BIREBIR AYNI (2026-08-29 kullanici kurali):
+                  arama → Yenile → Filtre → Excel → Ayarlar → ana eylem.
+                  Ayni isi yapan buton her ekranda ayni yerde olmali; sirayi burada
+                  degistirmek kullanicinin kas hafizasini bozar. */}
+              <button type="button" className="mrp-icon-btn" title="Yenile"
+                      onClick={function () { loadLines(search) }} disabled={loading}>
+                <RefreshCw size={15} />
+              </button>
               <button type="button"
                       className={'mrp-icon-btn' + (filters.length > 0 ? ' mrp-icon-btn--active' : '')}
                       title={filters.length > 0 ? (filters.length + ' filtre aktif') : 'Filtreleme'}
@@ -416,10 +424,6 @@ export default function MrpPlanner(props) {
               <button type="button" className="mrp-icon-btn" title="Sütun Ayarları"
                       onClick={function () { setColumnsOpen(true) }}>
                 <Settings2 size={15} />
-              </button>
-              <button type="button" className="mrp-icon-btn" title="Yenile"
-                      onClick={function () { loadLines(search) }} disabled={loading}>
-                <RefreshCw size={15} />
               </button>
               <button type="button" className="mrp-btn mrp-btn--primary"
                       onClick={runPreview} disabled={loading || selectedIds.length === 0}>
