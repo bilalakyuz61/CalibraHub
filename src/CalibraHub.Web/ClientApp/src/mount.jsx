@@ -46,6 +46,7 @@ import DbImportWizard from './components/DbImport/DbImportWizard'
 import IntegrationQueue from './components/IntegrationWizard/IntegrationQueue'
 import './components/IntegrationWizard/IntegrationWizard.css'
 import RoutingTree from './components/RoutingTree/RoutingTree'
+import MrpPlanner from './components/MrpPlanner/MrpPlanner'
 import ReportDesigner from './components/ReportDesigner/ReportDesigner'
 import ReportViewer from './components/ReportViewer/ReportViewer'
 import './components/ReportDesigner/ReportDesigner.css'
@@ -1437,6 +1438,29 @@ function mountRoutingTree(element, config) {
   }
 }
 window.CalibraHub.mountRoutingTree = mountRoutingTree
+
+/**
+ * MrpPlanner mount — Malzeme İhtiyaç Planlama (MRP) ekranı.
+ * config.documentId > 0 ise sipariş kartı kısayolu: o belgenin satırları seçili gelir.
+ */
+function mountMrpPlanner(element, config) {
+  config = config || {}
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(MrpPlanner, { config: config })
+    )
+  )
+  return {
+    unmount: function() { root.unmount(); mountedRoots.delete(element) }
+  }
+}
+window.CalibraHub.mountMrpPlanner = mountMrpPlanner
 
 /**
  * OperationGrid mount — Operasyon Tanımlamaları kart grid görünümü.

@@ -1,0 +1,70 @@
+@{
+    ViewData["Title"] = "Malzeme İhtiyaç Planlama";
+    ViewData["FormCode"] = "MRP_PLANNING";
+    ViewData["BodyClass"] = "page-mrp";
+    var mrpDocumentId = ViewData["MrpDocumentId"] as int? ?? 0;
+}
+
+@section Styles {
+<link rel="stylesheet" href="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")" />
+<style>
+    /* MachineSchedule ile aynı tam-viewport iskelet: ekran kendi içinde kayar,
+       sayfa gövdesi kaymaz (CLAUDE.md scroll-free layout). */
+    .page-mrp .workspace-action-bar { display: none !important; }
+    .page-mrp .integrator-dashboard,
+    .page-mrp .integrator-dashboard__content {
+        display: flex !important;
+        flex-direction: column;
+        width: 100% !important;
+        max-width: none !important;
+        height: 100% !important;
+        min-height: 0;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: hidden;
+        background: transparent !important;
+        box-shadow: none !important;
+        border: none !important;
+        border-radius: 0 !important;
+    }
+    .mrp-mount {
+        flex: 1 1 auto;
+        display: flex;
+        min-height: 0;
+        overflow: hidden;
+    }
+</style>
+}
+
+@* CSRF token — MrpPreview/MrpApply/MrpDiscard uçları [ValidateAntiForgeryToken] taşır;
+   React tarafı bu input'tan okuyup RequestVerificationToken başlığıyla gönderir. *@
+@Html.AntiForgeryToken()
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div class="mrp-mount" id="mrpPlannerRoot" data-document-id="@mrpDocumentId"></div>
+</section>
+
+@section Scripts {
+<script src="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")"></script>
+<script>
+    (function () {
+        var el = document.getElementById('mrpPlannerRoot')
+        if (!el) return
+        var cfg = { documentId: parseInt(el.getAttribute('data-document-id') || '0', 10) || 0 }
+        function doMount() {
+            if (!window.CalibraHub || !window.CalibraHub.mountMrpPlanner) {
+                console.error('[MRP] mount fonksiyonu bulunamadi'); return
+            }
+            try { window.CalibraHub.mountMrpPlanner(el, cfg) }
+            catch (ex) { console.error('[MRP] mount hatasi:', ex) }
+        }
+        if (window.CalibraHub && window.CalibraHub.mountMrpPlanner) { doMount(); return }
+        var tries = 0
+        var timer = setInterval(function () {
+            tries++
+            if (window.CalibraHub && window.CalibraHub.mountMrpPlanner) { clearInterval(timer); doMount() }
+            else if (tries >= 30) { clearInterval(timer); console.error('[MRP] timeout') }
+        }, 100)
+    })()
+</script>
+}
