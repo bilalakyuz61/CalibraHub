@@ -82,6 +82,13 @@ body.app-theme-dark .capa-dash {
 }
 .capa-btn:hover { background: var(--capa-bg); }
 .capa-btn--ghost { color: var(--capa-muted); }
+/* Ikon buton — SmartBoard/MRP/Kapasite seridindeki Yenile ile ayni olcu (32px).
+   Ayni isi yapan buton ekranlar arasinda ayni gorunsun (C-Grid serit standardi). */
+.capa-btn--icon {
+  width: 32px; height: 32px; padding: 0;
+  justify-content: center; color: var(--capa-muted);
+}
+.capa-btn--icon:hover { color: var(--capa-text); }
 
 /* ── Yükleniyor / hata / boş ── */
 .capa-loading, .capa-error, .capa-empty {

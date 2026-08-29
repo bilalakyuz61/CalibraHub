@@ -1153,6 +1153,22 @@
     body.app-theme-dark .bomt-badge--cycle   { color: #fca5a5; }
     body.app-theme-dark .bomt-badge--new     { color: #6ee7b7; }
 
+    /* Kombinasyon rozeti — buton (span degil), bu yuzden tarayici varsayilanlari
+       sifirlanir. Doluysa (secilmis kod) dolu-mor, bosSa (secilebilir ama secilmemis)
+       kesikli-notr — "+ Kombinasyon" cagrisi acik olsun. */
+    .bomt-badge--combo {
+        border: none; cursor: pointer; font-family: ui-monospace, Menlo, Consolas, monospace;
+        background: rgba(99,102,241,.16); color: #4338ca;
+    }
+    .bomt-badge--combo:hover { background: rgba(99,102,241,.26); }
+    .bomt-badge--combo-empty {
+        background: transparent; font-family: inherit;
+        border: 1px dashed var(--border-strong); color: var(--text-muted);
+    }
+    .bomt-badge--combo-empty:hover { border-color: var(--accent); color: var(--accent); }
+    body.app-theme-dark .bomt-badge--combo { color: #c7d2fe; background: rgba(129,140,248,.24); }
+    body.app-theme-dark .bomt-badge--combo:hover { background: rgba(129,140,248,.34); }
+
     .bomt-node .pte-input { padding: 5px 8px; font-size: 12px; width: 100%; }
     .bomt-actions { display: flex; gap: 4px; }
     .bomt-iconbtn {
@@ -3538,6 +3554,12 @@
         nm.textContent = node.itemName || '';
         nameCell.appendChild(nm);
 
+        // Kombinasyon rozeti — yalniz kombinasyon takipli bilesende gorunur (PageComment
+        // 1131). Kok'ta gosterilmez: mamulun kendi kombinasyonu Genel Bilgiler sekmesinde.
+        if (!isRoot) {
+            var comboBadge = pttConfigBadge(node);
+            if (comboBadge) nameCell.appendChild(comboBadge);
+        }
         if (node.isCycle) nameCell.appendChild(pttBadge('Dongu - genisletilemez', 'cycle'));
         if (node.bomVersionCode) nameCell.appendChild(pttBadge('Versiyon: ' + node.bomVersionCode, 'version'));
         // Paylasimli uyarisi: burada yapilan degisiklik kaydedilirken versiyon turetilir.
@@ -3614,6 +3636,37 @@
         var b = document.createElement('span');
         b.className = 'bomt-badge bomt-badge--' + kind;
         b.textContent = text;
+        return b;
+    }
+
+    /* Kombinasyon rozeti/butonu — mevcut kombinasyon rehberini (window.CalibraHub.
+       openCombinationPicker) yeniden kullanir; paralel yeni bir secici YAZILMAZ
+       (CLAUDE.md + PageComment 1131). node._hasConfig bilinmiyorsa (harita henuz
+       gelmediyse) hicbir sey cizilmez — bilinmeyen durumu "takipsiz" gibi gostermek
+       yanlis olurdu; harita gelince pttLoadConfigTrackMap zaten tekrar render eder. */
+    function pttConfigBadge(node) {
+        if (node._hasConfig !== true) return null;
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'bomt-badge bomt-badge--combo' + (node.configCode ? '' : ' bomt-badge--combo-empty');
+        b.textContent = node.configCode || '+ Kombinasyon';
+        b.title = node.configCode ? 'Kombinasyonu degistir' : 'Kombinasyon sec';
+        b.addEventListener('click', function(e) {
+            e.stopPropagation();
+            ptOpenComboPicker(node.itemCode, {
+                materialName: node.itemName || '',
+                currentCode: node.configCode || null,
+                // ID-tabanli kayit: configId node'a yazilir, kod yalniz gosterim
+                // (CLAUDE.md "ID tabanli eslestirme kurali"). pttToPayload zaten
+                // configId'yi SaveBomTree istegine tasiyor — ek alan gerekmedi.
+                onApply: function(configId, code) {
+                    node.configId = configId;
+                    node.configCode = code;
+                    pttMarkDirty();
+                    pttRender();
+                }
+            });
+        });
         return b;
     }
 
@@ -3820,7 +3873,7 @@
                 var d = await r.json();
                 if (!d.success) { showMsg(d.message || 'Kart olusturulamadi.', false); return; }
                 if (d.existed) showMsg('Ayni adda kart zaten vardi; mevcut kart eklendi (' + d.code + ').', true);
-                pttAddChild(node, d.id, d.code, d.name);
+                pttAddChild(node, d.id, d.code, d.name, d.hasConfig);
             } catch (e) {
                 showMsg('Kart olusturulamadi: ' + (e.message || ''), false);
             } finally {
