@@ -57,16 +57,21 @@
         <input type="hidden" id="me-code" value="@(Model.MachineCode ?? "")" />
 
         <div class="ux-field ux-field--wide">
-          <label for="me-location">Lokasyon *</label>
+          <label for="me-location">İstasyon *</label>
           <div class="ux-picker-group">
             <input type="text" id="me-location" readonly autocomplete="off"
-                   placeholder="Lokasyon seçmek için tıklayın…" />
+                   placeholder="İstasyon seçmek için tıklayın…" />
             <input type="hidden" id="me-location-id" value="" />
             <button type="button" class="ux-picker-btn" id="me-location-pick" title="Lokasyon seç" aria-label="Lokasyon seç">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             </button>
           </div>
-          <div class="ux-hint">Yalnızca Makine Parkuru olarak işaretli lokasyonlar listelenir.</div>
+          <div class="ux-hint">
+            Makinenin bağlı olduğu üretim istasyonu — yalnızca &quot;Makine Parkuru&quot; işaretli
+            lokasyonlar listelenir. Personelin hangi istasyonlarda çalışabildiği
+            <strong>Personel</strong> ekranından tanımlanır; iş emri ile operatör bu istasyon
+            üzerinden eşleşir.
+          </div>
         </div>
 
         <div class="ux-field ux-field--wide">

@@ -38,4 +38,21 @@ public interface IPersonnelRepository
 
     /// <summary>Sistem kullanıcısına bağlı personel kartını döner (UserId eşleşmesi).</summary>
     Task<PersonnelDto?> GetByUserIdAsync(int userId, CancellationToken ct);
+
+    /// <summary>
+    /// Personelin çalışabildiği istasyonlar (makine parkı lokasyon Id'leri).
+    /// Boş liste = istasyon ataması yapılmamış — bu "hiçbir yerde çalışamaz" DEĞİL,
+    /// "henüz kısıtlanmamış" demektir; süzgeç yazan taraf bunu böyle yorumlamalıdır.
+    /// </summary>
+    Task<IReadOnlyList<int>> GetStationIdsAsync(int personnelId, CancellationToken ct);
+
+    /// <summary>Birden çok personelin istasyonları — liste ekranında N+1 sorgudan kaçınmak için.</summary>
+    Task<IReadOnlyDictionary<int, IReadOnlyList<int>>> GetStationIdsForAllAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Personelin istasyon atamalarını verilen kümeyle DEĞİŞTİRİR (tam eşitleme: eksikler
+    /// eklenir, fazlalar silinir). Değişmeyen satırlar korunur — böylece Created damgası
+    /// ve Id'ler her kaydetmede yenilenmez.
+    /// </summary>
+    Task SetStationsAsync(int personnelId, IReadOnlyCollection<int> locationIds, CancellationToken ct);
 }

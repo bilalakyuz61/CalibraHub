@@ -18317,6 +18317,53 @@ END;
                AND COL_LENGTH(N'[{schemaForSql}].[Personnel]', N'LocationId') IS NULL
                 ALTER TABLE [{schemaForSql}].[Personnel] ADD [LocationId] INT NULL;
 
+            -- ===== 2026-08-29: PersonnelStation (personel x istasyon) =====
+            -- ISTASYON = makine parki lokasyonu (Location.IsMachinePark = 1). Makineler zaten
+            -- Location'a bagli (Machine.LocationId NOT NULL); bu tablo eksik olan ikinci bacagi
+            -- kurar: bu personel hangi istasyonlarda calisabilir.
+            --
+            -- NEDEN N:N ve neden Personnel.LocationId DEGIL: (1) Personnel.LocationId'nin anlami
+            -- varsayilan DEPO'dur (ihtiyac kaydinda otomatik secilir) — istasyon olarak
+            -- kullanmak o alani bozardi. (2) Operator gercekte birden fazla istasyonda calisir
+            -- (vardiya degisimi, izin yerine bakma, capraz egitim); tekil kolon ilk (bugun diger
+            -- hatta bakiyor) durumunda ya gecmisi bozar ya da filtreyi yanlislar.
+            --
+            -- NEDEN MAKINE SEVIYESI DEGIL: personel x makine iliskisi kisi ve makine sayisinin
+            -- CARPIMI kadar satir demektir; ilk gun doldurulur, alti ay sonra gercegi yansitmaz
+            -- ve o noktada filtre YANLIS calisir — ki bu filtresiz olmaktan kotudur.
+            IF OBJECT_ID(N'[{schemaForSql}].[PersonnelStation]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{schemaForSql}].[PersonnelStation]
+                (
+                    [Id]          INT IDENTITY(1,1) NOT NULL
+                        CONSTRAINT [PK_PersonnelStation] PRIMARY KEY,
+                    [CompanyId]   INT NULL,
+                    [PersonnelId] INT NOT NULL,
+                    [LocationId]  INT NOT NULL,
+                    [IsActive]    BIT NOT NULL CONSTRAINT [DF_PersonnelStation_IsActive] DEFAULT(1),
+                    [CreatedById] INT NULL,
+                    [Created]     DATETIME NOT NULL
+                        CONSTRAINT [DF_PersonnelStation_Created] DEFAULT(SYSUTCDATETIME()),
+                    [UpdatedById] INT NULL,
+                    [Updated]     DATETIME NULL,
+                    -- Personel silinince atamalari da gider (atama personelden bagimsiz bir sey degil).
+                    CONSTRAINT [FK_PersonnelStation_Personnel]
+                        FOREIGN KEY ([PersonnelId])
+                        REFERENCES [{schemaForSql}].[Personnel]([Id]) ON DELETE CASCADE,
+                    -- Lokasyonda CASCADE YOK: istasyon silinmeye calisildiginda FK engellesin,
+                    -- personel atamalari sessizce yok olmasin.
+                    CONSTRAINT [FK_PersonnelStation_Location]
+                        FOREIGN KEY ([LocationId])
+                        REFERENCES [{schemaForSql}].[Location]([Id])
+                );
+                -- Ayni personel + ayni istasyon iki kez atanamaz.
+                CREATE UNIQUE INDEX [UX_PersonnelStation_Personnel_Location]
+                    ON [{schemaForSql}].[PersonnelStation]([PersonnelId], [LocationId]);
+                -- Ters yon: bu istasyonda kimler calisabilir sorgusu icin.
+                CREATE INDEX [IX_PersonnelStation_Location]
+                    ON [{schemaForSql}].[PersonnelStation]([LocationId]);
+            END;
+
             -- ===== Faz 3a revize: User'dan PIN/Card/IsProductionOperator alanlarini KALDIR =====
             -- Bu alanlar Personnel'e tasindi. Idempotent rollback.
             IF EXISTS (

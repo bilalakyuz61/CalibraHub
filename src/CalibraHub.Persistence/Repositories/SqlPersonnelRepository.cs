@@ -19,6 +19,7 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
     private readonly IDataVisibilityFilter _dvFilter;
     private readonly string _schema;
     private readonly string _table;
+    private readonly string _stationTable;
 
     public SqlPersonnelRepository(SqlServerConnectionFactory factory, CalibraDatabaseOptions options, IDataVisibilityFilter dvFilter)
     {
@@ -27,6 +28,7 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
         _schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         var s = _schema.Replace("]", "]]");
         _table = $"[{s}].[Personnel]";
+        _stationTable = $"[{s}].[PersonnelStation]";
     }
 
     public async Task<IReadOnlyCollection<PersonnelDto>> ListAsync(bool includeInactive, bool onlyOperators, CancellationToken ct)
@@ -133,6 +135,94 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
         cmd.Parameters.AddWithValue("@BirthDate", (object?)e.BirthDate ?? DBNull.Value);
         var result = await cmd.ExecuteScalarAsync(ct);
         return result != null && result != DBNull.Value ? Convert.ToInt32(result) : 0;
+    }
+
+    // ── İstasyon atamaları (PersonnelStation) ──────────────────────────────
+    // İstasyon = makine parkı lokasyonu. Burada yalnız Id taşınır; "bu Id gerçekten bir
+    // makine parkı mı" doğrulaması servis katmanında yapılır (repo şema bilgisiyle
+    // sınırlıdır, iş kuralıyla değil).
+
+    public async Task<IReadOnlyList<int>> GetStationIdsAsync(int personnelId, CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        // Personel üzerinden şirket süzgeci — atama satırının kendi CompanyId'sine GÜVENİLMEZ
+        // (nullable kolon; ebeveyn tek doğru kaynaktır).
+        cmd.CommandText = $@"
+            SELECT ps.[LocationId]
+            FROM {_stationTable} ps
+            INNER JOIN {_table} p ON p.[Id] = ps.[PersonnelId]
+            WHERE ps.[PersonnelId] = @PersonnelId
+              AND ps.[IsActive] = 1
+              AND p.[CompanyId] = @CompanyId;";
+        cmd.Parameters.AddWithValue("@PersonnelId", personnelId);
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+
+        var list = new List<int>();
+        await using var rd = await cmd.ExecuteReaderAsync(ct);
+        while (await rd.ReadAsync(ct)) list.Add(rd.GetInt32(0));
+        return list;
+    }
+
+    public async Task<IReadOnlyDictionary<int, IReadOnlyList<int>>> GetStationIdsForAllAsync(CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+            SELECT ps.[PersonnelId], ps.[LocationId]
+            FROM {_stationTable} ps
+            INNER JOIN {_table} p ON p.[Id] = ps.[PersonnelId]
+            WHERE ps.[IsActive] = 1 AND p.[CompanyId] = @CompanyId;";
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+
+        var map = new Dictionary<int, List<int>>();
+        await using var rd = await cmd.ExecuteReaderAsync(ct);
+        while (await rd.ReadAsync(ct))
+        {
+            var pid = rd.GetInt32(0);
+            if (!map.TryGetValue(pid, out var l)) map[pid] = l = new List<int>();
+            l.Add(rd.GetInt32(1));
+        }
+        return map.ToDictionary(k => k.Key, v => (IReadOnlyList<int>)v.Value);
+    }
+
+    public async Task SetStationsAsync(int personnelId, IReadOnlyCollection<int> locationIds, CancellationToken ct)
+    {
+        var desired = locationIds.Where(id => id > 0).Distinct().ToHashSet();
+        var current = (await GetStationIdsAsync(personnelId, ct)).ToHashSet();
+
+        var toAdd = desired.Except(current).ToList();
+        var toRemove = current.Except(desired).ToList();
+        if (toAdd.Count == 0 && toRemove.Count == 0) return;
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+
+        foreach (var locId in toAdd)
+        {
+            await using var ins = conn.CreateCommand();
+            // CompanyId OTURUMDAN DEĞİL EBEVEYNDEN alınır — çocuk satır ebeveyninin
+            // şirketinden doğduğu anda ayrışamasın (CLAUDE.md kiracı kuralı).
+            ins.CommandText = $@"
+                INSERT INTO {_stationTable} ([CompanyId],[PersonnelId],[LocationId])
+                SELECT p.[CompanyId], @PersonnelId, @LocationId
+                FROM {_table} p WHERE p.[Id] = @PersonnelId;";
+            ins.Parameters.AddWithValue("@PersonnelId", personnelId);
+            ins.Parameters.AddWithValue("@LocationId", locId);
+            await ins.ExecuteNonQueryAsync(ct);
+        }
+
+        foreach (var locId in toRemove)
+        {
+            await using var del = conn.CreateCommand();
+            del.CommandText = $@"
+                DELETE FROM {_stationTable}
+                WHERE [PersonnelId] = @PersonnelId AND [LocationId] = @LocationId;";
+            del.Parameters.AddWithValue("@PersonnelId", personnelId);
+            del.Parameters.AddWithValue("@LocationId", locId);
+            await del.ExecuteNonQueryAsync(ct);
+        }
     }
 
     public async Task DeleteAsync(int id, CancellationToken ct)

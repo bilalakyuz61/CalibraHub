@@ -14,4 +14,10 @@ public interface IPersonnelService
 
     /// <summary>Giriş yapan sistem kullanıcısına bağlı personel kartını döner.</summary>
     Task<PersonnelDto?> GetByUserIdAsync(int userId, CancellationToken ct);
+
+    /// <summary>
+    /// Atanabilir istasyonlar — aktif VE makine parkı olan lokasyonlar. Depo/kabul/sevkiyat
+    /// alanları burada YER ALMAZ: istasyon üretim kavramıdır.
+    /// </summary>
+    Task<IReadOnlyList<StationOptionDto>> ListStationsAsync(CancellationToken ct);
 }

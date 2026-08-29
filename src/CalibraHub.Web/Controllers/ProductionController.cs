@@ -1331,6 +1331,10 @@ public sealed class ProductionController : Controller
             .Select(l => new { l.Id, Name = l.LocationName ?? l.LocationCode })
             .ToList();
 
+        // İstasyon listesi = makine parkı işaretli aktif lokasyonlar (yukarıdaki "varsayılan
+        // depo" listesinden AYRI — o depo/ambar, bu üretim istasyonu).
+        ViewData["StationList"] = await _personnel.ListStationsAsync(ct);
+
         return View(dto);
     }
 
@@ -1358,6 +1362,13 @@ public sealed class ProductionController : Controller
         {
             var id = await _personnel.SaveAsync(req, ct);
             return Json(new { ok = true, id });
+        }
+        catch (ArgumentException ex)
+        {
+            // Doğrulama mesajları KULLANICI İÇİN yazılmıştır (aynı isim, geçersiz istasyon,
+            // PIN uzunluğu) — jenerik mesajla değiştirmek kullanıcıyı neyi düzelteceğini
+            // bilmez halde bırakır. İç detay sızdırmaz; bunlar zaten bizim metinlerimiz.
+            return Json(new { ok = false, error = ex.Message });
         }
         catch (Exception ex)
         {
