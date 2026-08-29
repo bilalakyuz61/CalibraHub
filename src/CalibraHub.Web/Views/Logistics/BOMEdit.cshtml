@@ -1951,7 +1951,9 @@
                 var descRowEl = document.getElementById('ptConfigDescRow');
                 if (descEl) descEl.value = descText;
                 if (descRowEl) descRowEl.style.display = descText ? 'flex' : 'none';
-                if (typeof ptLoadExistingTree === 'function') ptLoadExistingTree(materialCode, code);
+                // itemId'yi mevcut ptCurrentItemId'den tasi — bu noktada mamul zaten
+                // resolve edilmis olmali (kombinasyon secici yalniz gecerli mamulde acilir).
+                if (typeof ptLoadExistingTree === 'function') ptLoadExistingTree(materialCode, code, true, ptCurrentItemId);
             }
         });
     });
@@ -2012,7 +2014,7 @@
             var descRowEl = document.getElementById('ptConfigDescRow');
             if (descEl) descEl.value = descText;
             if (descRowEl) descRowEl.style.display = descText ? 'flex' : 'none';
-            if (typeof ptLoadExistingTree === 'function') ptLoadExistingTree(mat, match.code);
+            if (typeof ptLoadExistingTree === 'function') ptLoadExistingTree(mat, match.code, true, ptCurrentItemId);
         } catch (err) {
             showMsg('Kombinasyon kodu doğrulanamadı', false);
         }
@@ -2469,15 +2471,21 @@
         ptWireRoutingInputListener();
     }
 
-    function ptApplyTreeData(data, switchTab) {
+    function ptApplyTreeData(data, switchTab, resolvedItemId) {
         ptComponents = []; ptCurrentId = null; ptSelIndex = -1; ptEditIndex = -1;
-        ptCurrentVersionCode = null; ptCurrentItemId = null; ptCurrentConfigId = null;
+        ptCurrentVersionCode = null; ptCurrentConfigId = null;
+        // ptCurrentItemId artik burada koru KOSULSUZ sifirlanmiyor: GetBOM {found:false}
+        // donduren YENI (henuz recetesiz) mamulde backend itemId vermez, ama Reçete Ağacı
+        // sekmesinin acilabilmesi icin itemId yine de gerekli (PageComment 1130 — "mamul
+        // kodu yazdiysam bilesen eklemeyi BEKLEMEDEN baslayabilmeliyim"). Caller (StockLookup
+        // eslesmesinden gelen match.id) resolvedItemId ile tasir; found=true ise backend'in
+        // kendi itemId'si esas alinir (otorite kaynak).
+        ptCurrentItemId = (data && data.found) ? (data.itemId || null) : (resolvedItemId || null);
 
         if (data && data.found) {
             ptCurrentId = data.id;
             // Versiyonlama durumu (2026-08-11): null = baz recete; dolu = versiyon.
             ptCurrentVersionCode = data.versionCode || null;
-            ptCurrentItemId = data.itemId || null;
             ptCurrentConfigId = (data.configId != null) ? data.configId : null;
             ptComponents = (data.lines || []).map(function(l) { return {
                 code: l.componentMaterialCode,
@@ -2589,7 +2597,7 @@
     }
     window.ptApplyTreeData = ptApplyTreeData;
 
-    async function ptLoadExistingTree(materialCode, configCode, switchTab) {
+    async function ptLoadExistingTree(materialCode, configCode, switchTab, resolvedItemId) {
         if (switchTab === undefined) switchTab = true;
         try {
             var url = '/Logistics/GetBOM?materialCode=' + encodeURIComponent(materialCode)
@@ -2598,10 +2606,10 @@
             // Sunucu hatasi olsa bile form'u "yeni" duruma geciren reset cagirilsin
             // (ptApplyTreeData {found:false} ile gorsel/aciklama/bilesen temizler).
             var data = resp.ok ? await resp.json() : { found: false };
-            ptApplyTreeData(data, switchTab);
+            ptApplyTreeData(data, switchTab, resolvedItemId);
         } catch {
             // baglanti hatasi: yine de yeni-recete moduna gec
-            ptApplyTreeData({ found: false }, false);
+            ptApplyTreeData({ found: false }, false, resolvedItemId);
         }
     }
     window.ptLoadExistingTree = ptLoadExistingTree;
@@ -3286,10 +3294,10 @@
                 ptSetConfigRowEnabled(true);
                 if (cfgInput) cfgInput.value = cfg;
                 if (cfgDescRow) cfgDescRow.style.display = 'none';
-                ptLoadExistingTree(card.code, cfg, false);
+                ptLoadExistingTree(card.code, cfg, false, card.id);
             } else {
                 ptSetConfigRowEnabled(!!card.hasConfig);
-                ptLoadExistingTree(card.code, null, false);
+                ptLoadExistingTree(card.code, null, false, card.id);
             }
         } catch { /* silent */ }
     })();
@@ -3386,11 +3394,68 @@
             } else {
                 warn.style.display = 'none';
             }
+            // Kombinasyon rozetleri icin "bu malzeme kombinasyon takipli mi" haritasini
+            // render'dan ONCE cikar — aksi halde harita gelince ikinci bir pttRender()
+            // tetiklenir ve asagida acilan "otomatik ekleme kutusu" (bos receteler icin)
+            // kullanicinin daha yeni yazmaya basladigi arama kutusuyla birlikte silinirdi.
+            await pttLoadConfigTrackMap();
             pttRender();
+
+            // Yeni recete (henuz hic bilesen yok) — "+" tiklamayi BEKLEMEDEN bilesen
+            // yazmaya baslayabilmek icin kok dugumun ekleme kutusunu otomatik ac
+            // (PageComment 1130). Kutu sadece arama/yeni-kart formudur; bir sonuc
+            // SECILMEDEN pttModel'e hicbir satir eklenmez — bos satir asla kaydolmaz.
+            if (pttModel && !pttModel.children.length) {
+                var rootRow = host.querySelector('.bomt-node--root');
+                if (rootRow) pttToggleAdder(pttModel, rootRow, 0);
+            }
         } catch (e) {
             host.innerHTML = '<div class="bomt-empty">Agac yuklenemedi: '
                 + escHtml(e.message || '') + '</div>';
         }
+    }
+
+    /* Kombinasyon takip haritasi (code(lower) -> hasConfig). Mevcut /Logistics/ResolveItemCodes
+       ucu yeniden kullanilir (yeni backend endpoint YOK) — agactaki her dugum icin StockLookup'i
+       tek tek cagirmak yerine TEK toplu istek. Zaten bilinen kodlar tekrar sorgulanmaz. */
+    var pttConfigTrackMap = {};
+    function pttCollectNonRootCodes(node, into) {
+        (node.children || []).forEach(function(c) {
+            if (c.itemCode) into.add(c.itemCode);
+            pttCollectNonRootCodes(c, into);
+        });
+    }
+    async function pttLoadConfigTrackMap() {
+        if (!pttModel) return;
+        var codes = new Set();
+        pttCollectNonRootCodes(pttModel, codes);
+        var toFetch = Array.from(codes).filter(function(c) {
+            return !(c.toLowerCase() in pttConfigTrackMap);
+        });
+        if (toFetch.length) {
+            try {
+                var r = await fetch('/Logistics/ResolveItemCodes', {
+                    method: 'POST', credentials: 'include',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': ptCsrfToken() },
+                    body: JSON.stringify({ codes: toFetch })
+                });
+                var rows = r.ok ? await r.json() : [];
+                (rows || []).forEach(function(row) {
+                    if (row && row.code) pttConfigTrackMap[row.code.toLowerCase()] = !!row.hasConfig;
+                });
+            } catch (e) {
+                // sessiz — kombinasyon rozeti opsiyonel zenginlik, agac islevini engellemez
+            }
+        }
+        (function apply(node) {
+            (node.children || []).forEach(function(c) {
+                if (typeof c._hasConfig !== 'boolean') {
+                    var key = (c.itemCode || '').toLowerCase();
+                    if (key in pttConfigTrackMap) c._hasConfig = pttConfigTrackMap[key];
+                }
+                apply(c);
+            });
+        })(pttModel);
     }
 
     /* Sunucu DTO'suna UI alanlari ekler (_uid, _open). Kok ve ilk seviye acik baslar. */
@@ -3654,7 +3719,7 @@
                     d.querySelector('.bomt-result-code').textContent = c.code;
                     d.querySelector('.bomt-result-name').textContent = c.name || '';
                     d.addEventListener('click', function() {
-                        pttAddChild(node, c.id, c.code, c.name);
+                        pttAddChild(node, c.id, c.code, c.name, c.hasConfig);
                     });
                     results.appendChild(d);
                 });
@@ -3668,7 +3733,7 @@
 
     /* Ayni bilesen ayni dugumde iki kez olmasin ve dugum kendini icermesin.
        Sunucu da reddeder; burada ANINDA soylemek icin - kaydetme aninda ogrenmek gec. */
-    function pttAddChild(node, itemId, code, name) {
+    function pttAddChild(node, itemId, code, name, hasConfig) {
         if (itemId === node.itemId) {
             showMsg('Bir malzeme kendi recetesine bilesen olarak eklenemez.', false);
             return;
@@ -3684,6 +3749,11 @@
             bomId: null, bomVersionCode: null, isPinned: false,
             referenceCount: 0, isCycle: false, children: []
         }, 1);
+        // Kombinasyon takip bilgisi arama sonucundan (StockLookup.hasConfig) doner —
+        // sunucuya tekrar sormaya gerek yok; rozet bunu kullanip gosterip gostermeyecegine
+        // karar verir (PageComment 1131 — takipli degilse alan hic gorunmez).
+        child._hasConfig = !!hasConfig;
+        pttConfigTrackMap[code.toLowerCase()] = !!hasConfig;
         child._isNew = true;
         node.children.push(child);
         node._open = true;
@@ -3905,6 +3975,10 @@
             if (nameEl) nameEl.value = '';
             if (typeof window.ptSetConfigRowEnabled === 'function') window.ptSetConfigRowEnabled(false);
             window.ptCurrentMaterialCode = null;
+            // Mamul kodu silindi — Recete Agaci sekmesi de "once mamul secin" durumuna
+            // donmeli (PageComment 1130); itemId burada da sifirlanmazsa eski mamulun
+            // agaci acilmis kalirdi.
+            ptCurrentItemId = null;
             if (typeof window.ptSetRecipeStatus === 'function') window.ptSetRecipeStatus(null);
             return;
         }
@@ -3927,12 +4001,16 @@
                 if (typeof window.ptSetConfigRowEnabled === 'function') window.ptSetConfigRowEnabled(isCfg);
                 if (cfgDescRow) cfgDescRow.style.display = 'none';
                 window.ptCurrentMaterialCode = isCfg ? match.code : null;
+                // match.id = Items.Id — GetBOM {found:false} donerse (henuz recetesi
+                // olmayan YENI mamul) backend itemId vermez; Recete Agaci sekmesinin
+                // yine de acilabilmesi icin StockLookup'tan resolve edilen id burada
+                // 4. parametre olarak tasinir (PageComment 1130).
                 if (isCfg) {
                     if (cfgInput) cfgInput.value = '';
                     if (cfgDesc) cfgDesc.value = '';
-                    if (typeof window.ptLoadExistingTree === 'function') window.ptLoadExistingTree(match.code, null, false);
+                    if (typeof window.ptLoadExistingTree === 'function') window.ptLoadExistingTree(match.code, null, false, match.id);
                 } else {
-                    if (typeof window.ptLoadExistingTree === 'function') window.ptLoadExistingTree(match.code, null);
+                    if (typeof window.ptLoadExistingTree === 'function') window.ptLoadExistingTree(match.code, null, true, match.id);
                 }
             })
             .catch(function (err) {

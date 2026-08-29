@@ -364,16 +364,20 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
             />
             {text ? <X size={13} style={{ cursor: 'pointer' }} onClick={() => setText('')} /> : null}
           </div>
-          <button type="button" className={'al-btn' + (autoRefresh ? ' is-on' : '')}
-            title="15 saniyede bir otomatik yenile"
-            onClick={() => setAutoRefresh(v => !v)}>
-            <Activity size={14} /> Canlı
-          </button>
+          {/* Standart araclar ONCE, ekrana OZEL olanlar SONRA (C-Grid serit kurali,
+              CLAUDE.md). "Canlı" bu ekrana ozgu bir kip anahtaridir; arama ile Yenile
+              arasinda dururken standart ikili (Yenile → Excel) her ekranda ayni yerde
+              olmaktan cikiyordu. */}
           <button type="button" className="al-btn" onClick={() => (locked ? loadLocked(false) : load(false))} disabled={viewLoading} title="Yenile">
             <RefreshCw size={14} className={viewLoading ? 'al-spin' : ''} />
           </button>
           <button type="button" className="al-btn" onClick={exportExcel} disabled={exporting} title="Excel'e aktar">
             <Download size={14} /> Excel
+          </button>
+          <button type="button" className={'al-btn' + (autoRefresh ? ' is-on' : '')}
+            title="15 saniyede bir otomatik yenile"
+            onClick={() => setAutoRefresh(v => !v)}>
+            <Activity size={14} /> Canlı
           </button>
         </div>
       </div>

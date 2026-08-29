@@ -1,4 +1,4 @@
-@{
+﻿@{
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewData["Title"] = "Sirket ve Kullanici Tanimlari";
     ViewData["BodyClass"] = "page-setup-definitions";
@@ -101,6 +101,10 @@ body.app-theme-dark .cum-root {
     border-bottom:1px solid var(--cum-border);
     background: var(--cum-surface);
 }
+/* Ana eylem HER ZAMAN en sagda (C-Grid serit standardi, CLAUDE.md).
+   2026-08-29: buton serit BASINDAYDI; kullanici diger ekranlardan gelen
+   aliskanlikla sag uste bakip bulamiyordu. */
+.cum-btn--last { margin-left:auto; }
 
 /* ── Şirket filtresi (toolbar select) ── */
 .cum-filter-wrap {

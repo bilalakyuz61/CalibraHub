@@ -298,9 +298,9 @@ export default function CompanyUserManagementPanel() {
         <div className="cum-body">
           <div className={'cum-list-panel' + (editingComp !== null ? ' cum-list-panel--narrow' : '')}>
             <div className="cum-toolbar">
-              <button type="button" className="cum-btn cum-btn--primary" onClick={handleNewComp}>
-                <Plus size={14} /> Yeni Şirket
-              </button>
+              {/* Sıra C-Grid standardı (CLAUDE.md): arama → Yenile → … → ana eylem.
+                  Ana eylem HER ZAMAN en sağda; başta durduğunda kullanıcı diğer
+                  ekranlardan gelen alışkanlığıyla sağ üste bakıp bulamıyordu. */}
               <div className="cum-search-wrap">
                 <Search size={13} className="cum-search-ico" />
                 <input type="search" className="cum-search" placeholder="Şirket ara..."
@@ -309,6 +309,9 @@ export default function CompanyUserManagementPanel() {
               </div>
               <button type="button" className="cum-btn cum-btn--ghost" onClick={loadCompanies} title="Yenile">
                 <RefreshCw size={14} className={compLoading ? 'cum-spin' : ''} />
+              </button>
+              <button type="button" className="cum-btn cum-btn--primary cum-btn--last" onClick={handleNewComp}>
+                <Plus size={14} /> Yeni Şirket
               </button>
             </div>
 
@@ -494,10 +497,9 @@ export default function CompanyUserManagementPanel() {
           {/* List panel */}
           <div className={'cum-list-panel' + (editingUser !== null ? ' cum-list-panel--narrow' : '')}>
             <div className="cum-toolbar">
-              <button type="button" className="cum-btn cum-btn--primary" onClick={handleNewUser}>
-                <Plus size={14} /> Yeni Kullanıcı
-              </button>
-
+              {/* Sıra C-Grid standardı (CLAUDE.md): arama → Yenile → … → ana eylem.
+                  Ana eylem HER ZAMAN en sağda; başta durduğunda kullanıcı diğer
+                  ekranlardan gelen alışkanlığıyla sağ üste bakıp bulamıyordu. */}
               <div className="cum-filter-wrap" title="Şirket filtresi">
                 <Building2 size={13} className="cum-filter-ico" />
                 <select className="cum-filter-select"
@@ -521,6 +523,9 @@ export default function CompanyUserManagementPanel() {
               </div>
               <button type="button" className="cum-btn cum-btn--ghost" onClick={loadUsers} title="Yenile">
                 <RefreshCw size={14} className={userLoading ? 'cum-spin' : ''} />
+              </button>
+              <button type="button" className="cum-btn cum-btn--primary cum-btn--last" onClick={handleNewUser}>
+                <Plus size={14} /> Yeni Kullanıcı
               </button>
             </div>
 

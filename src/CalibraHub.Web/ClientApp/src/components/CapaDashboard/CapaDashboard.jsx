@@ -196,8 +196,11 @@ export default function CapaDashboard({ config }) {
             <div className="capa-dash-subtitle">{fmtInt(totalCount)} kayıt · {fmtInt(openCount)} açık</div>
           </div>
         </div>
-        <button type="button" className="capa-btn capa-btn--ghost" onClick={load} title="Yenile">
-          <RefreshCw size={14} /> Yenile
+        {/* Yenile diger ekranlardaki gibi IKON buton (C-Grid serit standardi):
+            ayni isi yapan buton her yerde ayni gorunsun ve ayni yerde dursun. */}
+        <button type="button" className="capa-btn capa-btn--icon" onClick={load} title="Yenile"
+                aria-label="Yenile">
+          <RefreshCw size={15} />
         </button>
       </div>
 
