@@ -2019,16 +2019,48 @@
                         font-size:.68rem; font-weight:600; color:rgba(148,163,184,.9);
                         letter-spacing:.02em;
                     }
+                    /* Gorunum: kutu DEGIL alt-cizili (underline) — proje geneli standart,
+                       widgetField.css'teki .mce-input/.mce-select ile ayni --wf-* degiskenleri.
+                       Sabit renk YAZILMAZ: degiskenler zaten temaya gore ezilir, buraya hex
+                       yazmak light/dark ayrismasini geri getirir. */
                     .smv-fgroup input, .smv-fgroup select {
-                        padding:7px 10px; border-radius:8px; font-size:.8rem;
-                        background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12);
-                        color:rgba(255,255,255,0.9); outline:none; min-width:150px;
+                        min-width:150px;
+                        height:var(--wf-input-h, 38px);
+                        padding:0 var(--wf-px, 12px);
+                        border:none;
+                        border-bottom:1px solid var(--wf-border, rgba(255,255,255,0.08));
+                        border-radius:0;
+                        /* KISAYOL DEGIL: `background: transparent` ayni zamanda
+                           background-image'i de sifirlar ve tarih alanlarindaki takvim
+                           ikonunu (calibra-datepicker.css `input.calibra-date-input`)
+                           SILER — iki kural da (0,1,1), bu inline <style> daha sonra
+                           geldigi icin kazanirdi. Ayni tuzak 2026-08-22'de DOF ekraninda
+                           yasandi, dosyada belgeli. */
+                        background-color:transparent;
+                        color:var(--wf-text, rgba(255,255,255,0.9));
+                        font-size:.8rem; font-weight:500;
+                        outline:none; box-shadow:none; box-sizing:border-box;
+                        transition:border-color .12s, box-shadow .12s;
                     }
-                    body.app-theme-light .smv-fgroup input, body.app-theme-light .smv-fgroup select {
-                        background:#fff; border-color:#e2e8f0; color:#1e293b;
+                    /* Native select kutusu appearance sifirlanmadan (ozellikle light temada)
+                       cizilmeye devam ederdi; ok da appearance:none ile kalktigi icin
+                       .mce-select'in chevron gorseli geri eklenir. */
+                    .smv-fgroup select {
+                        appearance:none; -webkit-appearance:none; -moz-appearance:none;
+                        padding-right:26px;
+                        background-image:var(--wf-chevron);
+                        background-repeat:no-repeat;
+                        background-position:right var(--wf-px, 12px) center;
+                        background-size:10px 6px;
+                    }
+                    .smv-fgroup input:hover:not(:focus), .smv-fgroup select:hover:not(:focus) {
+                        border-bottom-color:var(--wf-border-hover, rgba(165,180,252,0.35));
                     }
                     .smv-fgroup input:focus, .smv-fgroup select:focus {
-                        border-color:rgba(99,102,241,.55); box-shadow:0 0 0 3px rgba(99,102,241,.12);
+                        border-bottom-color:var(--wf-border-focus, #a5b4fc);
+                        /* background shorthand DEGIL — select chevron background-image'ini korur */
+                        background-color:transparent;
+                        box-shadow:0 1px 0 0 var(--wf-border-focus, #a5b4fc);
                     }
                     .smv-fbtn {
                         display:inline-flex; align-items:center; gap:6px;

@@ -3592,12 +3592,12 @@ function PopoverRow(props) {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Tab bar
+   Yatay kaydirilabilir sekme seridi (tasma oklari)
+   Ust satir ve child (nested) satir AYNI bileseni kullanir: sag/sol ok,
+   tekerlek→yatay kaydirma ve aktif sekmeyi gorunur kilma tek yerdedir.
    ══════════════════════════════════════════════════════════════ */
-function TabBar(props) {
+function TabScrollArea(props) {
   var isDark = props.isDark
-  var lang = props.lang || 'TR'
-  var borderColor = isDark ? 'border-white/[0.06]' : 'border-slate-200/80'
   var scrollRef = useRef(null)
   var [canLeft, setCanLeft] = useState(false)
   var [canRight, setCanRight] = useState(false)
@@ -3623,8 +3623,8 @@ function TabBar(props) {
     }
   }, [])
 
-  // Tab listesi degistiginde / aktif tab degistiginde overflow yeniden hesapla
-  // ve aktif tab'i gorunur hale getir.
+  // Sekme listesi degistiginde / aktif sekme degistiginde tasma yeniden
+  // hesaplanir ve aktif sekme gorunur hale getirilir.
   useEffect(function() {
     recomputeOverflow()
     var el = scrollRef.current
@@ -3633,7 +3633,7 @@ function TabBar(props) {
     if (active && active.scrollIntoView) {
       active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
     }
-  }, [props.tabs.length, props.activeKey])
+  }, [props.itemCount, props.activeKey])
 
   function scrollBy(dx) {
     var el = scrollRef.current
@@ -3652,8 +3652,58 @@ function TabBar(props) {
   }
 
   var chevronBtn = 'absolute top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-md flex items-center justify-center transition-colors ' +
-    (isDark ? 'bg-[#0a0d17] border border-white/10 text-white/60 hover:text-white hover:bg-white/[0.06]'
-            : 'bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-100')
+    (isDark ? 'border border-white/10 text-white/60 hover:text-white hover:bg-white/[0.06]'
+            : 'border border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-100')
+  // Ok butonunun zemini seridin zeminiyle ayni olmali ki altindaki sekme
+  // metni ok'un arkasindan sizmasin (ust satir icerik zemini, child satir
+  // muted zemin kullanir).
+  var chevronBg = props.chevronBg || 'var(--app-content-bg)'
+  var padLeft = typeof props.padLeft === 'number' ? props.padLeft : 8
+  var padRight = typeof props.padRight === 'number' ? props.padRight : 16
+
+  return (
+    <div className={'relative overflow-hidden ' + (props.className || '')}>
+      {canLeft && (
+        <button
+          type="button"
+          onClick={function() { scrollBy(-200) }}
+          className={chevronBtn}
+          style={{ left: 4, background: chevronBg }}
+          title="Sola kaydır"
+        >
+          <ChevronLeft size={14} strokeWidth={2.2} />
+        </button>
+      )}
+      {canRight && (
+        <button
+          type="button"
+          onClick={function() { scrollBy(200) }}
+          className={chevronBtn}
+          style={{ right: 4, background: chevronBg }}
+          title="Sağa kaydır"
+        >
+          <ChevronRight size={14} strokeWidth={2.2} />
+        </button>
+      )}
+      <div
+        ref={scrollRef}
+        onWheel={handleWheel}
+        className="flex items-center gap-1 h-full overflow-x-auto smartcard-widgets-scroll"
+        style={{ paddingLeft: canLeft ? 34 : padLeft, paddingRight: canRight ? 34 : padRight }}
+      >
+        {props.children}
+      </div>
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Tab bar
+   ══════════════════════════════════════════════════════════════ */
+function TabBar(props) {
+  var isDark = props.isDark
+  var lang = props.lang || 'TR'
+  var borderColor = isDark ? 'border-white/[0.06]' : 'border-slate-200/80'
 
   var showDash = !!props.showDashboard
 
@@ -3748,48 +3798,35 @@ function TabBar(props) {
         style={{ background: 'var(--app-content-bg)' }}
       >
         {/* Scrollable tab alanı */}
-        <div className="relative flex-1 overflow-hidden h-full">
-          {canLeft && (
-            <button
-              type="button"
-              onClick={function() { scrollBy(-200) }}
-              className={chevronBtn}
-              style={{ left: 4 }}
-              title="Sola kaydır"
-            >
-              <ChevronLeft size={14} strokeWidth={2.2} />
-            </button>
-          )}
-          {canRight && (
-            <button
-              type="button"
-              onClick={function() { scrollBy(200) }}
-              className={chevronBtn}
-              style={{ right: 4 }}
-              title="Sağa kaydır"
-            >
-              <ChevronRight size={14} strokeWidth={2.2} />
-            </button>
-          )}
-          <div
-            ref={scrollRef}
-            onWheel={handleWheel}
-            className="flex items-center gap-1 h-full overflow-x-auto smartcard-widgets-scroll"
-            style={{ paddingLeft: canLeft ? 34 : 8, paddingRight: canRight ? 34 : 16 }}
-          >
-            {topTabs.map(function(t) { return renderTabChip(t, false) })}
-          </div>
-        </div>
+        <TabScrollArea
+          isDark={isDark}
+          activeKey={props.activeKey}
+          itemCount={topTabs.length}
+          className="flex-1 h-full"
+          padLeft={8}
+          padRight={16}
+        >
+          {topTabs.map(function(t) { return renderTabChip(t, false) })}
+        </TabScrollArea>
       </div>
 
       {/* Child (nested) sekme satırı — sadece aktif grubun altında, üst-seviye
-          sekme (liste ekranı gibi) hep görünür kalır. */}
+          sekme (liste ekranı gibi) hep görünür kalır. Üst şeritle AYNI taşma
+          okları: çok kayıt açıldığında satır sığmıyor, ok olmadan kaydırılamıyordu. */}
       {childTabs.length > 0 && (
         <div
-          className={'flex items-center h-9 border-b overflow-x-auto smartcard-widgets-scroll ' + borderColor}
-          style={{ background: 'var(--app-muted-surface)', paddingLeft: 18, paddingRight: 16 }}
+          className={'flex items-center h-9 border-b ' + borderColor}
+          style={{ background: 'var(--app-muted-surface)' }}
         >
-          <div className="flex items-center gap-1">
+          <TabScrollArea
+            isDark={isDark}
+            activeKey={props.activeKey}
+            itemCount={childTabs.length}
+            className="flex-1 h-full"
+            padLeft={18}
+            padRight={16}
+            chevronBg="var(--app-muted-surface)"
+          >
             {/* Liste sekmesi (grup parent'i) her zaman en solda SABİT anchor olarak
                 — kayıtlardayken listeye tek tıkla dönülür (kullanıcı isteği 2026-08-03). */}
             {(function() {
@@ -3797,7 +3834,7 @@ function TabBar(props) {
               return listTab ? renderTabChip(listTab, true, true) : null
             })()}
             {childTabs.map(function(t) { return renderTabChip(t, true) })}
-          </div>
+          </TabScrollArea>
         </div>
       )}
     </div>
