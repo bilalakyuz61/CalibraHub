@@ -2,7 +2,8 @@
 @using System.Text.Json
 @{
     var entityType  = (string)(ViewBag.EntityType ?? Model.EntityType);
-    var entityLabel = (string)(ViewBag.EntityLabel ?? (entityType == "Item" ? "Stok Kodu" : "Cari Kodu"));
+    var entitySlug  = entityType == "Item" ? "item" : (entityType == "Serial" ? "serial" : "contact");
+    var entityLabel = (string)(ViewBag.EntityLabel ?? (entityType == "Item" ? "Stok Kodu" : (entityType == "Serial" ? "Seri Numarası" : "Cari Kodu")));
     ViewData["Title"] = (Model.Id == 0 ? "Yeni" : "Düzenle") + " — " + entityLabel + " Kuralı";
     ViewData["HelpKey"] = "code-rule-edit";
 
@@ -121,8 +122,8 @@
         ["Title"]      = (string)ViewData["Title"],
         // embed=1 zorunlu — bu Edit ekranı _DesignRulesTabs'in İÇ iframe'i içinde açılıyor;
         // embed'siz hedef iç iframe'i host moduna düşürüp şerit çiftlenmesine yol açar.
-        ["ListUrl"]    = $"/CodeRule?entity={(entityType == "Item" ? "item" : "contact")}&embed=1",
-        ["NewUrl"]     = $"/CodeRule/New?entity={(entityType == "Item" ? "item" : "contact")}&embed=1",
+        ["ListUrl"]    = $"/CodeRule?entity={entitySlug}&embed=1",
+        ["NewUrl"]     = $"/CodeRule/New?entity={entitySlug}&embed=1",
         ["SaveBtnId"]  = "crSaveBtn",
         ["ShowDelete"] = false,
     })

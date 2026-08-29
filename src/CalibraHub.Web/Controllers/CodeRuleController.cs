@@ -175,13 +175,25 @@ public sealed class CodeRuleController : Controller
     private static string NormalizeEntity(string? raw)
     {
         var v = (raw ?? "contact").Trim().ToLowerInvariant();
-        return v == "item" ? "Item" : "Contact";
+        return v switch
+        {
+            "item" => "Item",
+            "serial" => "Serial",
+            _ => "Contact",
+        };
     }
+
+    private static string EntityLabel(string entityType) => entityType switch
+    {
+        "Item" => "Stok Kodu",
+        "Serial" => "Seri Numarası",
+        _ => "Cari Kodu",
+    };
 
     private void PopulateLookups(string entityType)
     {
         ViewBag.EntityType = entityType;
-        ViewBag.EntityLabel = entityType == "Contact" ? "Cari Kodu" : "Stok Kodu";
+        ViewBag.EntityLabel = EntityLabel(entityType);
         ViewBag.ResetPeriods = new[]
         {
             new { value = (int)DocumentNumberResetPeriod.None,    label = "Sıfırlanmaz" },
@@ -189,9 +201,12 @@ public sealed class CodeRuleController : Controller
             new { value = (int)DocumentNumberResetPeriod.Monthly, label = "Aylık" },
             new { value = (int)DocumentNumberResetPeriod.Daily,   label = "Günlük" },
         };
-        ViewBag.SampleFields = entityType == "Contact"
-            ? new[] { "AccountCode", "AccountTitle", "TaxNumber", "City", "District", "CountryCode", "ContactGroupId", "AccountType" }
-            : new[] { "Code", "Name", "TypeId", "UnitId", "TaxRate" };
+        ViewBag.SampleFields = entityType switch
+        {
+            "Contact" => new[] { "AccountCode", "AccountTitle", "TaxNumber", "City", "District", "CountryCode", "ContactGroupId", "AccountType" },
+            "Serial"  => new[] { "ItemCode" },
+            _         => new[] { "Code", "Name", "TypeId", "UnitId", "TaxRate" },
+        };
         ViewBag.Operators = new[]
         {
             new { value = "=",          label = "Eşittir (=)" },
@@ -207,7 +222,7 @@ public sealed class CodeRuleController : Controller
     private async Task<object> BuildBoardConfigAsync(string entityType, CancellationToken ct)
     {
         var rules = await _repo.ListAsync(entityType, ct);
-        var label = entityType == "Contact" ? "Cari Kodu" : "Stok Kodu";
+        var label = EntityLabel(entityType);
 
         var entities = rules.Select(r => new
         {
@@ -249,8 +264,8 @@ public sealed class CodeRuleController : Controller
             boardKey = $"code-rules-{entityType.ToLowerInvariant()}",
             title = $"{label} Kuralları",
             subtitle = $"{entities.Length} kural",
-            icon = entityType == "Contact" ? "Users" : "Package",
-            iconColor = entityType == "Contact" ? "indigo" : "emerald",
+            icon = entityType switch { "Contact" => "Users", "Serial" => "Hash", _ => "Package" },
+            iconColor = entityType switch { "Contact" => "indigo", "Serial" => "violet", _ => "emerald" },
             refreshUrl = $"/CodeRule/BoardConfig?entity={entityType.ToLowerInvariant()}",
             searchPlaceholder = "Hızlı ara…",
             emptyText = "Henüz kural tanımlanmamış",

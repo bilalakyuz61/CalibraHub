@@ -16,8 +16,9 @@
     var drIsNumber = drPath.StartsWith("/DocumentNumberRule", StringComparison.OrdinalIgnoreCase);
     var drIsCode   = drPath.StartsWith("/CodeRule", StringComparison.OrdinalIgnoreCase);
     var drEntity   = (string?)Context.Request.Query["entity"] ?? "contact";
-    var drActiveContact = drIsCode && !string.Equals(drEntity, "item", StringComparison.OrdinalIgnoreCase);
     var drActiveItem    = drIsCode && string.Equals(drEntity, "item", StringComparison.OrdinalIgnoreCase);
+    var drActiveSerial  = drIsCode && string.Equals(drEntity, "serial", StringComparison.OrdinalIgnoreCase);
+    var drActiveContact = drIsCode && !drActiveItem && !drActiveSerial;
     // İç iframe başlangıç URL'i = mevcut sayfa + embed=1 (şeritsiz içerik dalı)
     var drSelf = drPath + (Context.Request.QueryString.Value ?? "");
     var drInitialSrc = drSelf + (drSelf.Contains('?') ? "&" : "?") + "embed=1";
@@ -67,6 +68,10 @@
         <a href="/CodeRule?entity=item" data-src="/CodeRule?entity=item" class="dlr-tab @(drActiveItem ? "active" : "")">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
             Stok Kodu
+        </a>
+        <a href="/CodeRule?entity=serial" data-src="/CodeRule?entity=serial" class="dlr-tab @(drActiveSerial ? "active" : "")">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg>
+            Seri Numarası
         </a>
     </div>
     <iframe id="drContentFrame" class="dlr-frame" src="@drInitialSrc" title="Tasarım Kuralları içeriği"></iframe>

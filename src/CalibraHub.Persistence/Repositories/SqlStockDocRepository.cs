@@ -30,6 +30,10 @@ public sealed class SqlStockDocRepository : IStockDocRepository
     // (WorkOrderService _lineLinks/_docSourceRepo deseniyle birebir "opsiyonel bağımlılık").
     private readonly IDocumentLineLinkRepository? _lineLinks;
     private readonly ILogger<SqlStockDocRepository>? _logger;
+    // Tasarım Kuralları > Seri Numarası kural motoru (CodeRule EntityType='Serial'). Opsiyonel —
+    // null veya eşleşen aktif kural yoksa GenerateAutoSerialsAsync legacy sabit formata düşer
+    // (fail-open, bkz. sınıf metodu XML doc).
+    private readonly ICodeGeneratorService? _codeGenerator;
 
     public SqlStockDocRepository(
         SqlServerConnectionFactory connectionFactory,
@@ -37,7 +41,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         ICompanyParameterService companyParams,
         CalibraDatabaseOptions options,
         IDocumentLineLinkRepository? lineLinks = null,
-        ILogger<SqlStockDocRepository>? logger = null)
+        ILogger<SqlStockDocRepository>? logger = null,
+        ICodeGeneratorService? codeGenerator = null)
     {
         _connectionFactory = connectionFactory;
         _numberService = numberService;
@@ -45,6 +50,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         _schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         _lineLinks = lineLinks;
         _logger = logger;
+        _codeGenerator = codeGenerator;
     }
 
     /// <summary>Seri benzersizlik kapsamı "Global" mi (barkod gibi tüm malzemeler arası tek)?</summary>

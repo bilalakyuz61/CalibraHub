@@ -12,9 +12,13 @@ using Microsoft.Extensions.Logging;
 namespace CalibraHub.Persistence.Services.CodeRule;
 
 /// <summary>
-/// Cari/Stok kod üretici. SqlServerConnectionFactory bağımlılığı sebebiyle Persistence
+/// Cari/Stok/Seri kod üretici. SqlServerConnectionFactory bağımlılığı sebebiyle Persistence
 /// katmanında (ApprovalSqlQueryService ile aynı pattern). Application'da
 /// <see cref="ICodeGeneratorService"/> interface'i tutulur.
+/// EntityType="Serial": otomatik seri numarası üretimi (SqlStockDocRepository.GenerateAutoSerialsAsync)
+/// bu motoru kullanır — Counter (CodeRuleCounter, atomik UPDATE...OUTPUT) her çağrıda kesin artar,
+/// bu yüzden aynı satırda ardışık N seri üretimi (henüz ItemSerial'a INSERT edilmemiş olsa da)
+/// çakışmaz. Template'te {Counter:N} zorunluluğu CodeRuleController.SaveJson'da denetlenir.
 ///
 /// Token sözdizimi (regex): {Type:Arg}
 ///   {Field:KolonAdi}     → request.FieldValues[KolonAdi]
@@ -194,8 +198,13 @@ public sealed class CodeGeneratorService : ICodeGeneratorService
 
     private static (string? table, string column) ResolveTableAndColumn(string entityType) => entityType.ToLowerInvariant() switch
     {
-        "contact" => ("Contact", "AccountCode"),
-        "item"    => ("Items",   "Code"),
+        "contact" => ("Contact",    "AccountCode"),
+        "item"    => ("Items",      "Code"),
+        // Seri numarası: fiziksel benzersizlik ItemSerial.SerialNo üzerinde global kontrol
+        // edilir (item-bazlı olması gerekmez — global kontrol her zaman DAHA sıkı, hiçbir
+        // zaman çakışan seri üretmez; bkz. CLAUDE.md "Seri benzersizlik kapsamı" — asıl
+        // item/global ayrımı ItemSerial INSERT anında SqlStockDocRepository'de uygulanır).
+        "serial"  => ("ItemSerial", "SerialNo"),
         _         => (null, string.Empty),
     };
 }
