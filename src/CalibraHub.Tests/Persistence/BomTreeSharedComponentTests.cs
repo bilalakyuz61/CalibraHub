@@ -210,6 +210,77 @@ public sealed class BomTreeSharedComponentTests
         public void InvalidateCache(string formCode) { }
     }
 
+    /// <summary>
+    /// DÖNGÜ, ağaçta YAPRAK görünen bir bileşenin KAYITLI reçetesi üzerinden kapanıyorsa
+    /// da yakalanmalı — ve zincir ADIYLA bildirilmeli.
+    ///
+    /// <para>Kullanıcının canlıda karşılaştığı durum tam buydu: bileşen ağaca yeni
+    /// eklenmiş, ekranda çocuksuz görünüyor, ama veritabanındaki kendi reçetesi dolaylı
+    /// olarak mamulün kendisine bağlı. Yalnız gönderilen ağaca bakan bir denetim bunu
+    /// GÖREMEZ.</para>
+    /// </summary>
+    [SkippableFact]
+    public async Task Kayitli_recete_uzerinden_kapanan_dongu_zinciriyle_birlikte_bildirilir()
+    {
+        Skip.IfNot(DbReachable(), "CalibraHub veritabanina erisilemedi.");
+
+        var factory = BuildFactory();
+        var repo = new SqlLogisticsConfigurationRepository(
+            factory,
+            new CalibraDatabaseOptions { ConnectionString = Conn!, Schema = "dbo" },
+            new NoDataVisibilityFilter());
+        var service = new LogisticsConfigurationService(repo);
+        var ct = CancellationToken.None;
+
+        var tag = "ZZTREE" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        var itemIds = new List<int>();
+
+        try
+        {
+            var unitId = await FirstActiveUnitIdAsync();
+            Skip.If(unitId is null, "Aktif olcu birimi yok — fikstur kurulamiyor.");
+
+            // A ─ C          (A'nin recetesi)
+            // B ─ A          (B'nin recetesi A'yi KULLANIYOR)
+            // Simdi A'nin agacina B eklenirse:  A -> B -> A  = dongu
+            var a = await InsertItemAsync(tag + "-A", "Dongu Mamul A", 3, unitId!.Value); itemIds.Add(a);
+            var b = await InsertItemAsync(tag + "-B", "Dongu Yari B", 2, unitId.Value);   itemIds.Add(b);
+            var c = await InsertItemAsync(tag + "-C", "Dongu Ham C", 1, unitId.Value);    itemIds.Add(c);
+
+            var bomA = await AddBomAsync(repo, a, (c, 1m), ct);
+            await AddBomAsync(repo, b, (a, 1m), ct);
+
+            var tree = await service.GetBomTreeAsync(a, null, bomA, ct);
+            Assert.NotNull(tree);
+
+            // B'yi A'nin altina ekle — agacta YAPRAK olarak (cocuksuz), tipki ekranda
+            // yeni bilesen eklendiginde oldugu gibi.
+            var payload = ToSave(tree!.Root);
+            payload.Children.Add(new MutableNode { ItemId = b, Quantity = 1m, ScrapRatio = 0m, BomId = null });
+
+            var ex = await Assert.ThrowsAsync<BomCycleException>(() =>
+                service.SaveBomTreeAsync(new SaveBomTreeRequest(Freeze(payload)), null, ct));
+
+            // Zincirdeki HER IKI malzeme de bildirilmeli — ekran bunlari isaretleyecek.
+            Assert.Contains(a, ex.ItemIds);
+            Assert.Contains(b, ex.ItemIds);
+            // Mesaj kodlari icermeli; "bu bilesenlerden biri" gibi genel bir metin
+            // kullaniciya hangi bagi kaldiracagini SOYLEMIYORDU.
+            Assert.Contains(tag + "-A", ex.Message);
+            Assert.Contains(tag + "-B", ex.Message);
+
+            // Ve HICBIR SEY YAZILMAMIS olmali: denetim kaydetmeden ONCE calisir,
+            // yarim yazilmis bir agac birakmaz.
+            var aAfter = await repo.GetBOMByIdWithNamesAsync(bomA, ct);
+            Assert.Single(aAfter!.Lines);
+            Assert.Equal(c, aAfter.Lines.First().ItemId);
+        }
+        finally
+        {
+            await CleanupAsync(itemIds, new List<int>());
+        }
+    }
+
     // ── Fikstur yardimcilari ────────────────────────────────────────────
 
     private static async Task<int?> FirstActiveUnitIdAsync()

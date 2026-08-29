@@ -379,6 +379,13 @@ public sealed class BomController : Controller
             var result = await _logisticsConfigurationService.SaveBomTreeAsync(request, CurrentUserId(), ct);
             return Ok(new { success = true, result });
         }
+        catch (CalibraHub.Application.Contracts.BomCycleException ex)
+        {
+            // Dongusel recete: mesajin yani sira ILGILI MALZEMELER de doner ki ekran
+            // o dugumleri isaretleyebilsin. Yalniz metin donseydi kullanici hangi
+            // satiri duzeltecegini bulamazdi.
+            return BadRequest(new { success = false, message = ex.Message, cycleItemIds = ex.ItemIds });
+        }
         catch (ArgumentException ex)
         {
             return BadRequest(new { success = false, message = ex.Message });

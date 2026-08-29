@@ -1073,8 +1073,23 @@
     .bomt-node:hover { background: var(--surface-elev-2); border-color: var(--border-subtle); }
     .bomt-node--root { background: var(--accent-soft-bg); border-color: var(--accent); }
     /* Döngüde kesilen dal: düzenlenemez, ama GÖRÜNÜR — sessizce gizlemek
-       "bileşen yok" yanılgısı üretirdi. */
-    .bomt-node--cycle { opacity: .6; }
+       "bileşen yok" yanılgısı üretirdi.
+       Vurgu SOLUKLAŞTIRMA DEĞİL: hata olan satır göze çarpmalı, geri çekilmemeli.
+       Önceki sürüm opacity:.6 ile tam tersini yapıyordu. */
+    .bomt-node--cycle {
+        background: rgba(239,68,68,.10);
+        border-color: rgba(239,68,68,.45);
+        box-shadow: inset 3px 0 0 0 #ef4444;
+    }
+    .bomt-node--cycle:hover { background: rgba(239,68,68,.16); }
+    body.app-theme-light .bomt-node--cycle { background: rgba(239,68,68,.07); }
+    /* Zincirin sorumlusu olarak sunucunun işaretlediği satır — daha güçlü. */
+    .bomt-node--cyclehit { box-shadow: inset 3px 0 0 0 #ef4444, 0 0 0 1px rgba(239,68,68,.5); }
+    @@keyframes bomtCycleFlash {
+        0%, 100% { box-shadow: inset 3px 0 0 0 #ef4444; }
+        50%      { box-shadow: inset 3px 0 0 0 #ef4444, 0 0 0 4px rgba(239,68,68,.35); }
+    }
+    .bomt-node--flash { animation: bomtCycleFlash 1s ease-in-out 2; }
 
     .bomt-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
 
@@ -3335,6 +3350,10 @@
     // Sayfa genelindeki ptDirty'yi AGACIN kendisi mi kirletti? Bilesen sekmesinden
     // gelen kaydedilmemis degisiklikle agacinkini ayirt etmek icin (bkz. pttOnTabShown).
     var pttDirtyOwn = false;
+    // Donguye karisan malzeme kimlikleri (istemci taramasi VEYA sunucu yaniti) ve
+    // kullaniciya gosterilecek zincir metni.
+    var pttCycleIds = new Set();
+    var pttCycleText = '';
     function pttMarkDirty() { pttDirtyOwn = true; ptMarkDirty(); }
 
     function pttEl(id) { return document.getElementById(id); }
@@ -3400,6 +3419,7 @@
             }
             pttModel = pttDecorate(data.tree.root, 0);
             pttLoadedKey = pttRootKey();
+            pttMarkCycles();
 
             var warn = pttEl('pttTruncWarn');
             if (data.tree.truncated) {
@@ -3491,12 +3511,42 @@
         return undefined;
     }
 
+    /* Agacta dongu var mi — sunucudaki kuralin AYNISI: bir dugumun malzemesi
+       kendi atalari arasinda geciyorsa dongudur. Her yapisal degisiklikten sonra
+       calisir; boylece kullanici KAYDETMEDEN once gorur.
+       Sunucu yine de dogrular (istemciye guvenilmez), ama hatayi kaydetme aninda
+       ogrenmek gec — kullanici o ana kadar ustune bes satir daha eklemis olur. */
+    function pttMarkCycles() {
+        pttCycleIds = new Set();
+        pttCycleText = '';
+        if (!pttModel) return;
+        var chain = null;
+
+        (function walk(node, ancestors, labels) {
+            var hitAt = ancestors.indexOf(node.itemId);
+            if (hitAt >= 0) {
+                node.isCycle = true;
+                var ids = ancestors.slice(hitAt).concat([node.itemId]);
+                ids.forEach(function(id) { pttCycleIds.add(id); });
+                if (!chain) chain = labels.slice(hitAt).concat([node.itemCode || ('#' + node.itemId)]);
+                return;   // daha derine INME — sonsuz donguye girerdi
+            }
+            node.isCycle = false;
+            var nextA = ancestors.concat([node.itemId]);
+            var nextL = labels.concat([node.itemCode || ('#' + node.itemId)]);
+            node.children.forEach(function(c) { walk(c, nextA, nextL); });
+        })(pttModel, [], []);
+
+        if (chain) pttCycleText = chain.join(' \u2192 ');
+    }
+
     function pttSetOpenAll(node, open) {
         node._open = open;
         node.children.forEach(function(c) { pttSetOpenAll(c, open); });
     }
 
     function pttRender() {
+        pttMarkCycles();
         var host = pttEl('pttTree');
         host.innerHTML = '';
         if (!pttModel) { host.innerHTML = '<div class="bomt-empty">Agac yok.</div>'; return; }
@@ -3511,8 +3561,10 @@
        isLast: bu dugum atasinin SON cocugu mu (koseli L mi, T mi). */
     function pttRenderNode(node, depth, host, isRoot, guides, isLast) {
         var row = document.createElement('div');
+        var inCycle = node.isCycle || pttCycleIds.has(node.itemId);
         row.className = 'bomt-node' + (isRoot ? ' bomt-node--root' : '')
-                      + (node.isCycle ? ' bomt-node--cycle' : '');
+                      + (inCycle ? ' bomt-node--cycle' : '')
+                      + (node.isCycle ? ' bomt-node--cyclehit' : '');
         row.dataset.uid = node._uid;
 
         var nameCell = document.createElement('div');
@@ -3560,7 +3612,8 @@
             var comboBadge = pttConfigBadge(node);
             if (comboBadge) nameCell.appendChild(comboBadge);
         }
-        if (node.isCycle) nameCell.appendChild(pttBadge('Dongu - genisletilemez', 'cycle'));
+        if (node.isCycle) nameCell.appendChild(pttBadge('Döngü - burada kapanıyor', 'cycle'));
+        else if (inCycle) nameCell.appendChild(pttBadge('Döngü zincirinde', 'cycle'));
         if (node.bomVersionCode) nameCell.appendChild(pttBadge('Versiyon: ' + node.bomVersionCode, 'version'));
         // Paylasimli uyarisi: burada yapilan degisiklik kaydedilirken versiyon turetilir.
         if (!isRoot && node.referenceCount > 1) {
@@ -3582,7 +3635,7 @@
 
         var actions = document.createElement('div');
         actions.className = 'bomt-actions';
-        if (!node.isCycle) {
+        if (!inCycle) {
             actions.appendChild(pttIconBtn(
                 '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
                 'Bu dugumun altina bilesen ekle', false,
@@ -3816,6 +3869,49 @@
         if (box) box.remove();
         pttRender();
         showMsg('"' + code + '" eklendi. Yazmak icin "Agaci Kaydet".', true);
+
+        // Eklenen malzemenin KENDI recetesini de getir. Yoksa dugum yaprak gorunur,
+        // alt receten gizli kalir ve donguyu ancak kaydederken ogreniriz.
+        pttGraftSubtree(child);
+    }
+
+    /* Bir dugumun kayitli recetesini sunucudan cekip altina yerlestirir.
+       Basarisiz olursa dugum yaprak kalir — ama SESSIZ degil: durum satirina yazilir,
+       cunku "alt recetesi yok" ile "alt recetesi okunamadi" ayni sey degildir. */
+    async function pttGraftSubtree(node) {
+        try {
+            var r = await fetch('/Logistics/BomTree?itemId=' + encodeURIComponent(node.itemId),
+                                { credentials: 'include' });
+            var d = await r.json();
+            if (!r.ok || !d.success || !d.tree || !d.tree.root) return;
+            var kids = d.tree.root.children || [];
+            if (kids.length === 0) return;
+            node.children = kids.map(function(k) { return pttDecorate(k, 1); });
+            node._open = true;
+            pttRender();
+            if (pttCycleText) {
+                pttShowCycleWarning();
+            } else {
+                showMsg('"' + (node.itemCode || '') + '" alt recetesi de yuklendi ('
+                        + node.children.length + ' bilesen).', true);
+            }
+        } catch (e) {
+            var hint = pttEl('pttHint');
+            if (hint) hint.textContent = '"' + (node.itemCode || '')
+                + '" alt recetesi okunamadi — yaprak olarak gosteriliyor.';
+        }
+    }
+
+    /* Dongu uyarisi: ust seritte zinciri ADIYLA goster. Genel bir "dongu var"
+       mesaji kullaniciyi hangi bagi kaldiracagi konusunda yalniz birakirdi. */
+    function pttShowCycleWarning() {
+        var warn = pttEl('pttTruncWarn');
+        if (!warn) return;
+        warn.style.display = '';
+        warn.textContent = 'Döngüsel reçete: ' + pttCycleText
+            + ' — bu zincirdeki bağlardan birini kaldırın. Bir malzeme, doğrudan ya da '
+            + 'dolaylı olarak kendi bileşeni olamaz. Ağaç bu haliyle KAYDEDİLEMEZ.';
+        showMsg('Döngüsel reçete tespit edildi.', false);
     }
 
     /* Hizli malzeme karti - KOD ALINMAZ: proje kurali geregi kullanici kod girmez,
@@ -3900,6 +3996,9 @@
             showMsg('Recetede en az bir bilesen olmalidir.', false);
             return;
         }
+        // Dongu varsa sunucuya hic gitme — hata zaten kesin, kullaniciyi bekletme.
+        pttMarkCycles();
+        if (pttCycleText) { pttShowCycleWarning(); pttRender(); return; }
         var btn = pttEl('pttSave');
         btn.disabled = true;
         try {
@@ -3910,7 +4009,19 @@
                 body: JSON.stringify({ root: pttToPayload(pttModel) })
             });
             var d = await r.json();
-            if (!r.ok || !d.success) { showMsg((d && d.message) || 'Agac kaydedilemedi.', false); return; }
+            if (!r.ok || !d.success) {
+                // Sunucu donguyu tespit ettiyse ILGILI DUGUMLERI isaretle ve bul.
+                // Yalniz mesaj gostermek kullaniciyi hangi satiri duzeltecegi
+                // konusunda yalniz birakirdi.
+                if (d && Array.isArray(d.cycleItemIds) && d.cycleItemIds.length) {
+                    pttCycleIds = new Set(d.cycleItemIds);
+                    var warn = pttEl('pttTruncWarn');
+                    if (warn) { warn.style.display = ''; warn.textContent = d.message; }
+                    pttRevealCycle();
+                }
+                showMsg((d && d.message) || 'Agac kaydedilemedi.', false);
+                return;
+            }
 
             ptClearDirty(); pttDirtyOwn = false;
             pttReportNotes(d.result);
@@ -3923,6 +4034,29 @@
             showMsg('Agac kaydedilemedi: ' + (e.message || ''), false);
         } finally {
             btn.disabled = false;
+        }
+    }
+
+    /* Isaretlenen dongu dugumunu GORUNUR kil: kapali bir dalin icindeyse kullanici
+       kirmizi satiri hic gormezdi. Atalarini ac, ekrana kaydir, kisa sure yanip sonsun. */
+    function pttRevealCycle() {
+        if (!pttModel || pttCycleIds.size === 0) return;
+
+        (function open(node) {
+            var hit = pttCycleIds.has(node.itemId);
+            var childHit = false;
+            node.children.forEach(function(c) { if (open(c)) childHit = true; });
+            if (childHit) node._open = true;
+            return hit || childHit;
+        })(pttModel);
+
+        pttRender();
+
+        var first = document.querySelector('.bomt-node--cycle');
+        if (first) {
+            first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            first.classList.add('bomt-node--flash');
+            setTimeout(function() { first.classList.remove('bomt-node--flash'); }, 2200);
         }
     }
 

@@ -178,6 +178,12 @@ public sealed partial class LogisticsConfigurationService
         var codeById = itemSnapshot.ToDictionary(x => x.Id, x => x.Code);
         var rootCode = codeById.TryGetValue(root.ItemId, out var rc) ? rc : root.ItemId.ToString();
 
+        // Döngü denetimi HER ŞEYDEN ÖNCE. Alan katmanı (BOM.EnsureNoCycle) zaten
+        // engelliyor ama mesajı "bu bileşenlerden biri" diyor — hangisi olduğunu
+        // söylemediği için kullanıcı düzeltemiyordu. Burada zincir çıkarılıp adıyla
+        // bildiriliyor. Ayrıca ERKEN çalışır: yarısı yazılmış bir ağaç bırakmaz.
+        await EnsureTreeHasNoCycleAsync(root, codeById, cancellationToken);
+
         // Referans sayıları — hangi alt reçetenin PAYLAŞIMLI olduğunu bilmeden
         // yerinde ezmek, başka mamulleri sessizce değiştirmek demektir.
         var existingBomIds = new List<int>();
@@ -286,6 +292,79 @@ public sealed partial class LogisticsConfigurationService
 
         var rootNote = notes.LastOrDefault(n => n.ItemId == root.ItemId);
         return new SaveBomTreeResultDto(rootNote?.BomId ?? root.BomId ?? 0, notes);
+    }
+
+    /// <summary>
+    /// Gönderilen ağaçta döngü var mı — ve VARSA hangi zincir.
+    ///
+    /// <para>İki kaynağı birlikte gezer: (a) kullanıcının ağaçta kurduğu bağlar,
+    /// (b) ağaçta YAPRAK görünen bir bileşenin veritabanındaki KENDİ reçetesi.
+    /// İkincisi olmadan en sinsi durum kaçar: kullanıcı bileşeni yeni eklemiştir,
+    /// ekranda çocuksuz görünür, ama o bileşenin kayıtlı reçetesi dolaylı olarak
+    /// mamulün kendisine bağlıdır.</para>
+    ///
+    /// <para>Derinlik ve düğüm tavanı var; bozuk bir veri kümesi denetimi sonsuza
+    /// sürüklemesin (kayıtlı reçetelerde zaten döngü olabilir).</para>
+    /// </summary>
+    private async Task EnsureTreeHasNoCycleAsync(
+        SaveBomTreeNode root,
+        IReadOnlyDictionary<int, string> codeById,
+        CancellationToken cancellationToken)
+    {
+        var childCache = new Dictionary<(int ItemId, int BomKey), IReadOnlyCollection<int>>();
+        var expansions = 0;
+
+        async Task<IReadOnlyCollection<int>> StoredChildrenAsync(int itemId, int? pinnedBomId)
+        {
+            var key = (itemId, pinnedBomId ?? 0);
+            if (childCache.TryGetValue(key, out var hit)) return hit;
+            if (expansions++ > BomTreeMaxNodes) return Array.Empty<int>();
+            var rows = pinnedBomId is > 0
+                ? await _repository.GetBOMComponentLinesByBomIdAsync(pinnedBomId.Value, cancellationToken)
+                : await _repository.GetBOMComponentLinesAsync(itemId, cancellationToken);
+            var ids = rows.Select(r => r.ItemId).Where(x => x > 0).Distinct().ToArray();
+            childCache[key] = ids;
+            return ids;
+        }
+
+        string Label(int id) => codeById.TryGetValue(id, out var c) && !string.IsNullOrWhiteSpace(c)
+            ? c : "#" + id;
+
+        // path: kökten bu düğüme kadarki malzeme zinciri (sıra korunur — mesajda gösterilecek).
+        async Task WalkAsync(int itemId, int? pinnedBomId, IReadOnlyList<SaveBomTreeNode>? submitted,
+                             List<int> path, int depth)
+        {
+            var at = path.IndexOf(itemId);
+            if (at >= 0)
+            {
+                var chain = path.Skip(at).Append(itemId).ToList();
+                var text = string.Join(" → ", chain.Select(Label));
+                throw new BomCycleException(
+                    "Döngüsel reçete: " + text + ". Bu zincirdeki bağlardan birini kaldırın — "
+                    + "bir malzeme, doğrudan ya da dolaylı olarak kendi bileşeni olamaz.",
+                    chain);
+            }
+            if (depth >= BomTreeMaxDepth) return;
+
+            path.Add(itemId);
+            try
+            {
+                if (submitted is { Count: > 0 })
+                {
+                    foreach (var child in submitted)
+                        await WalkAsync(child.ItemId, child.BomId, child.Children, path, depth + 1);
+                }
+                else
+                {
+                    // Ağaçta yaprak: kayıtlı reçetesinden devam et.
+                    foreach (var childId in await StoredChildrenAsync(itemId, pinnedBomId))
+                        await WalkAsync(childId, null, null, path, depth + 1);
+                }
+            }
+            finally { path.RemoveAt(path.Count - 1); }
+        }
+
+        await WalkAsync(root.ItemId, root.BomId, root.Children, new List<int>(), 0);
     }
 
     private static void CollectItemIds(SaveBomTreeNode node, List<int> into)
