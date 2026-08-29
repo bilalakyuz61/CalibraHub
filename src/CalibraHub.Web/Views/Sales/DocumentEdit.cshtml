@@ -2535,19 +2535,19 @@
         {
             var dlvLabel   = isPurchaseOrder ? "Mal Kabul" : "Teslim Et";
             var dlvEndpoint = isPurchaseOrder ? "/Warehouse/ReceivePurchaseOrderJson" : "/Warehouse/DeliverSalesOrderJson";
-            var dlvTitle   = isPurchaseOrder
-                ? "Açık kalemleri mal kabul et — Alış İrsaliyesi oluşturur, stok girişi yazar"
-                : "Açık kalemleri teslim et — Satış İrsaliyesi oluşturur, stok çıkışı yazar";
-            <button type="button" class="pte-btn pte-btn--secondary pte-btn--icon" id="sqBtnDeliver" data-collaboration-allow onclick="sqDeliverOrder()" title="@dlvTitle" aria-label="@dlvLabel">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-                <span class="pte-btn__label">@dlvLabel</span>
-            </button>
+            <!-- Teslim Et / Mal Kabul — ust seritten Islemler menusune tasindi (Seq 1126,
+                 2026-08-29): "islem" niteligindeki diger butonlarla (Muayene Olustur/DOF Ac)
+                 ayni desen. Gorunurluk kosulu (isOrder||isPurchaseOrder) ve asagidaki
+                 script (sqDeliverOrder + kismi teslimat miktar modali) birebir korundu;
+                 menu ogesi bkz. sqActionsDropdown icindeki ayni-kosullu blok. -->
             <script>
             var _sqDlvEndpoint = '@dlvEndpoint';
             var _sqDlvLabel = '@dlvLabel';
             var _sqDlvOpenUrl = '/Warehouse/OrderOpenLinesJson';
             // Kısmi teslimat: önce açık kalemleri çek, miktar modalını aç.
-            function sqDeliverOrder() {
+            function sqDeliverOrder(ev) {
+                if (ev) ev.stopPropagation();
+                sqCloseActionsMenu();
                 var oid = @(Model.DocumentId ?? 0);
                 if (!oid) return;
                 fetch(_sqDlvOpenUrl + '?orderId=' + oid, { credentials: 'same-origin' })
@@ -2950,6 +2950,20 @@
                     <line x1="8" y1="18" x2="13" y2="18"/>
                 </svg>
                 <span>Tüm Ürünlerin Maliyeti</span>
+            </button>
+        }
+        @if ((isOrder || isPurchaseOrder) && Model.DocumentId.HasValue)
+        {
+            var dlvMenuLabel = isPurchaseOrder ? "Mal Kabul" : "Teslim Et";
+            var dlvMenuTitle = isPurchaseOrder
+                ? "Açık kalemleri mal kabul et — Alış İrsaliyesi oluşturur, stok girişi yazar"
+                : "Açık kalemleri teslim et — Satış İrsaliyesi oluşturur, stok çıkışı yazar";
+            <!-- Teslim Et / Mal Kabul — ust seritten tasindi (Seq 1126, 2026-08-29). JS
+                 (sqDeliverOrder + kismi teslimat miktar modali) yukaridaki ayni-kosullu
+                 @@if bloğunda tanimli, degismedi. -->
+            <button type="button" role="menuitem" class="sqe-actions-item" id="sqBtnDeliver" data-collaboration-allow title="@dlvMenuTitle" onclick="sqDeliverOrder(event)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+                <span>@dlvMenuLabel</span>
             </button>
         }
         @if (Model.DocumentId.HasValue)
@@ -6882,12 +6896,13 @@
         }
     };
 
-    // ── Islemler: Liste ekranindan derin-link (?autoAction=costs|approval|status) ──
+    // ── Islemler: Liste ekranindan derin-link (?autoAction=costs|approval|status|deliver) ──
     // sqLoadQuote, belge + kalem gridi TAM yuklendikten sonra bunu cagirir (mevcut
     // kayitta, tek sefer — __sqAutoActionFired flag'i korur). "costs" React grid
     // bridge'inden satir okur (sqActionShowAllCosts), bu yuzden bridge'in yeni
     // satirlari yansitmasini kisa polling ile bekleriz (sqReloadRenderer ile ayni
-    // desen). "approval"/"status" grid'e bagimli degil, dogrudan tetiklenir.
+    // desen). "approval"/"status"/"deliver" grid'e bagimli degil, dogrudan tetiklenir
+    // ("deliver" kendi acik-kalem fetch'ini yapip miktar modalini kendisi acar — Seq 1126).
     function sqRunAutoAction(expectedLineCount) {
         if (!autoActionParam || __sqAutoActionFired) return;
         __sqAutoActionFired = true;
@@ -6909,6 +6924,12 @@
                     break;
                 case 'approval':
                     window.sqActionOpenApproval();
+                    break;
+                case 'deliver':
+                    // Liste satir menusunden "Teslim Et" (Seq 1126, 2026-08-29) — sqDeliverOrder
+                    // acik kalemleri cekip miktar-secim modalini kendisi acar; burada Islemler
+                    // menusunu ayrica acmaya gerek yok (modal dogrudan gorunur).
+                    if (typeof window.sqDeliverOrder === 'function') window.sqDeliverOrder();
                     break;
                 case 'status':
                     // Islemler menusunu ac, ardindan Durum Degistir alt-menusunu ac.

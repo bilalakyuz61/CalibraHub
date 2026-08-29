@@ -319,7 +319,11 @@ public sealed class SalesController : Controller
     // ekranındaki İşlemler ögesi de aynı koşula bağlandı; burası kısıtlanmazsa liste satır
     // menüsü autoAction=costs deep-link'iyle o ekranı diğer belge tiplerinde de AÇMAYA
     // devam ederdi (JS fonksiyonu global) — yani ayar görünürde uygulanır, fiilen delik kalırdı.
-    private static object[] BuildRecordOperationActions(int id, bool inlineStatusMenu, bool approvalGoverned = false, bool includeCosts = false)
+    // includeDeliver: "Teslim Et" YALNIZ Satış Siparişi listesinde (PageComment Seq 1126,
+    // 2026-08-29). Deep-link autoAction=deliver DocumentEdit'i açıp aynı miktar-seçim modalını
+    // (sqDeliverOrder) tetikler — listeden TEK TIKLA sessiz tam teslimat YAPILMAZ; kısmi
+    // teslimat miktar girişi kullanıcı etkileşimi gerektirdiği için edit ekranına yönlendirilir.
+    private static object[] BuildRecordOperationActions(int id, bool inlineStatusMenu, bool approvalGoverned = false, bool includeCosts = false, bool includeDeliver = false)
     {
         var actions = new List<object>
         {
@@ -329,6 +333,8 @@ public sealed class SalesController : Controller
         };
         if (includeCosts)
             actions.Add(new { label = "Tüm Ürünlerin Maliyeti", icon = "Receipt", color = "amber", url = $"/Sales/DocumentEdit?id={id}&autoAction=costs" });
+        if (includeDeliver)
+            actions.Add(new { label = "Teslim Et", icon = "Truck", color = "emerald", url = $"/Sales/DocumentEdit?id={id}&autoAction=deliver" });
         actions.Add(new { label = "Onay Süreci", icon = "GitBranch", color = "sky", url = $"/Sales/DocumentEdit?id={id}&autoAction=approval" });
         return actions.ToArray();
     }
@@ -661,6 +667,13 @@ public sealed class SalesController : Controller
         var trCulture = CultureInfo.GetCultureInfo("tr-TR");
         var orderAuditFormCode = DocumentTypeFormMap.Resolve("satis_siparisi").Header;
 
+        // Hibrit governance (PageComment Seq 1126, 2026-08-29): Satış Siparişi listesinde de
+        // inline durum menüsü açıldı (kullanıcı talebi — düzenleme moduna atlamadan durum
+        // değiştirme). Satış Teklifi'yle AYNI desen: türde tanımlı+aktif onay akışı varsa
+        // inline menüde Onaylandı/Reddedildi gizlenir (asıl zorlama ChangeQuoteStatus'ta).
+        var ordersKind = CalibraHub.Application.Approval.EntityTypes.DocumentEntityTypes.ResolveKind("satis_siparisi");
+        var ordersApprovalGoverned = await IsApprovalGovernedAsync(ordersKind, ct);
+
         // 2026-05-24: SmartBoardFilterHelpers — admin form widgets + sistem alanlar collapsible
         var soSchema = await _widgetService.GetFormSchemaByCodeAsync("SALES_ORDER_EDIT", ct);
         var masterWidgets = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.BuildAdminFormWidgets(soSchema);
@@ -718,7 +731,7 @@ public sealed class SalesController : Controller
                     confirm = $"Bu siparisi silmek istediginizden emin misiniz? ({order.DocumentNumber})",
                 },
                 extraActions = new object[] { BuildCopyAction(order.Id) }
-                    .Concat(BuildRecordOperationActions(order.Id, inlineStatusMenu: false))
+                    .Concat(BuildRecordOperationActions(order.Id, inlineStatusMenu: true, approvalGoverned: ordersApprovalGoverned, includeDeliver: true))
                     .Append(BuildAuditLogAction("satis_siparisi", order.Id, orderAuditFormCode))
                     .ToArray(),
             });
