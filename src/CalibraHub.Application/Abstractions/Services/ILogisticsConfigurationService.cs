@@ -1,4 +1,4 @@
-using CalibraHub.Application.Contracts;
+﻿using CalibraHub.Application.Contracts;
 
 namespace CalibraHub.Application.Abstractions.Services;
 
@@ -128,6 +128,26 @@ public interface ILogisticsConfigurationService
     /// <summary>Kaynak receteden kullanicinin verdigi kodla yeni DUZENLENEBILIR versiyon turetir.
     /// Otomatik versiyonlama yoktur — versiyon yalniz bu metotla olusur.</summary>
     Task<int> DeriveBomVersionAsync(int sourceBomId, string versionCode, int? userId, CancellationToken cancellationToken);
+
+    // ── Recete Agaci (cok seviyeli tek ekranda duzenleme, 2026-08-29) ──
+    /// <summary>
+    /// Bir mamulun recetesini HIYERARSIK okur (ExplodeBOM duzlestirir, bu duzlestirmez).
+    /// <paramref name="bomId"/> verilirse o versiyon koktur; yoksa baz recete.
+    /// Her dugum kendi recete kimligini ve "kac ata satiri bu receteyi izliyor"
+    /// bilgisini tasir — paylasimli dugumun UI'da isaretlenmesi icin.
+    /// Mamul yoksa null; recetesi yoksa cocuksuz kok doner.
+    /// </summary>
+    Task<BomTreeDto?> GetBomTreeAsync(
+        int itemId, int? configId, int? bomId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Agaci kaydeder: her dugum icin BOM upsert. Yalniz DEGISEN dugumler yazilir.
+    /// Paylasimli (ReferenceCount &gt; 1) bir alt recete degistiyse yerinde EZILMEZ —
+    /// otomatik yeni versiyon turetilir ve ata satiri ona sabitlenir; boylece
+    /// diger mamuller etkilenmez. Yapilan her islem sonucta raporlanir.
+    /// </summary>
+    Task<SaveBomTreeResultDto> SaveBomTreeAsync(
+        SaveBomTreeRequest request, int? userId, CancellationToken cancellationToken);
     /// <summary>
     /// Recete kaydeder. <paramref name="userId"/> CreatedById/UpdatedById audit
     /// alanlarina yazilir (rapor 2026-05-17 madde 3.5). Cycle korumasi (madde 3.1):

@@ -1,4 +1,4 @@
-using CalibraHub.Domain.Enums;
+﻿using CalibraHub.Domain.Enums;
 
 namespace CalibraHub.Application.Contracts;
 
@@ -713,3 +713,85 @@ public sealed record SaveMaterialGroupMappingsRequest(
     IReadOnlyCollection<string?> SlotCodes);
 
 public sealed record DeleteMaterialGroupBody(int Id, int Category);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Reçete Ağacı (çok seviyeli tek ekranda düzenleme) — 2026-08-29
+//
+// ExplodeBOM'dan FARKI: patlatma sonucu DÜZLEŞTİRİR (ItemId'ye göre toplar),
+// dolayısıyla ata-çocuk yapısı kaybolur ve düzenleme için kullanılamaz. Burada
+// hiyerarşi korunur; her düğüm kendi reçetesini (BomId) ve ata satırındaki
+// miktar/fire değerlerini taşır.
+//
+// YENİ TABLO YOK: ağaç, mevcut BOM/BOMLine kayıtlarının okunma biçimidir.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// <summary>
+/// Ağaçtaki tek düğüm. Kök = mamulün kendisi (ParentLine alanları anlamsızdır).
+/// </summary>
+public sealed record BomTreeNodeDto(
+    // Bu düğümün malzemesi.
+    int ItemId,
+    string ItemCode,
+    string ItemName,
+    int? ConfigId,
+    string? ConfigCode,
+    // Ata satırındaki miktar (kök için 1).
+    decimal Quantity,
+    decimal ScrapRatio,
+    string? Note,
+    // Bu düğümün İZLENEN reçetesi. NULL = bu malzemenin reçetesi yok (yaprak).
+    int? BomId,
+    // Reçete versiyon kodu (NULL = baz reçete).
+    string? BomVersionCode,
+    // Ata satırında reçete SABİTLENMİŞ mi (BOMLine.ComponentBomId dolu mu).
+    bool IsPinned,
+    // Bu reçeteyi izleyen ata satırı sayısı. >1 ise dugum PAYLASIMLIDIR: burada
+    // yapilan degisiklik kaydedilirken otomatik versiyon turetilir (kullanici karari
+    // 2026-08-29), böylece diğer mamuller etkilenmez.
+    int ReferenceCount,
+    // Döngü nedeniyle kesildi mi (A→B→A). Kesilen dal genişletilemez.
+    bool IsCycle,
+    IReadOnlyList<BomTreeNodeDto> Children);
+
+/// <summary>Ağaç okuma sonucu — kök düğüm + gezinme sırasında kesilen dal uyarısı.</summary>
+public sealed record BomTreeDto(
+    BomTreeNodeDto Root,
+    int MaxDepth,
+    bool Truncated);
+
+// ── Kaydetme ──
+
+/// <summary>
+/// Ağaç kaydetme isteği. İstemci TÜM ağacı gönderir; sunucu her düğümü depodaki
+/// haliyle karşılaştırıp yalnız DEĞİŞENLERİ yazar. Değişmeyen düğümün atlanması
+/// sadece performans değil DOĞRULUK meselesidir: aksi halde ağacı açıp kaydetmek
+/// paylaşımlı her düğüm için gereksiz versiyon türetirdi.
+/// </summary>
+public sealed record SaveBomTreeRequest(
+    SaveBomTreeNode Root);
+
+public sealed record SaveBomTreeNode(
+    int ItemId,
+    int? ConfigId,
+    // Ata satırındaki miktar/fire (kök için yok sayılır).
+    decimal Quantity,
+    decimal ScrapRatio,
+    string? Note,
+    // Düzenlenen mevcut reçete. NULL = bu düğüm için henüz reçete yok.
+    int? BomId,
+    IReadOnlyList<SaveBomTreeNode> Children);
+
+/// <summary>Kaydetme sonrası tek düğüm raporu — hangi reçete yazıldı, versiyon türedi mi.</summary>
+public sealed record BomTreeSaveNoteDto(
+    int ItemId,
+    string ItemCode,
+    int BomId,
+    // "created" | "updated" | "derived" | "unchanged"
+    string Action,
+    string? VersionCode,
+    // Türetme yapıldıysa: kaç ata satırı paylaşıyordu.
+    int ReferenceCount);
+
+public sealed record SaveBomTreeResultDto(
+    int RootBomId,
+    IReadOnlyList<BomTreeSaveNoteDto> Notes);

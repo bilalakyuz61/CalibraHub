@@ -28,6 +28,12 @@ public sealed class Item
     /// <summary>Giriş serisi otomatik: seri-takipli stokta giriş belgesinde seri listesi boş
     /// bırakılırsa sunucu üretir (ItemCode-yyMMdd-NNN). Yalnız TrackingType='Serial' iken anlamlı.</summary>
     public bool AutoSerial { get; init; }
+
+    /// <summary>MRP iş emri kırılım politikası: "PerOrderLine" | "PerOrder" | "Cumulative".
+    /// Yalnız üretilebilir tiplerde (Mamul / Yarı Mamul) anlamlıdır; boş/geçersizse
+    /// "PerOrderLine" (bugünkü davranış). Bkz. <c>WorkOrderSplitPolicyCatalog</c>.</summary>
+    public string? WorkOrderSplitPolicy { get; init; } = "PerOrderLine";
+
     public bool IsActive { get; private set; } = true;
     // 2026-05-26: CLAUDE.md audit standardi — Created/Updated + CreatedBy/UpdatedBy NVARCHAR(120)
     public DateTime? Created { get; init; }

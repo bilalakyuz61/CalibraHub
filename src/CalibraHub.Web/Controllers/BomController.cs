@@ -1,4 +1,4 @@
-using CalibraHub.Application.Constants;
+﻿using CalibraHub.Application.Constants;
 using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
@@ -334,6 +334,56 @@ public sealed class BomController : Controller
             return Ok(new { success = true, id });
         }
         catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Recete Agaci (cok seviyeli tek ekranda duzenleme, 2026-08-29)
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Hiyerarsik recete okuma. ExplodeBOM'dan FARKI: patlatma sonucu duzlestirir
+    /// (ItemId'ye gore toplar) — duzenleme icin ata-cocuk yapisi gerekir, bu uc onu korur.
+    /// GET /Logistics/BomTree?itemId=5&amp;configId=&amp;bomId=
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> BomTree(int itemId, int? configId, int? bomId, CancellationToken ct)
+    {
+        try
+        {
+            var tree = await _logisticsConfigurationService.GetBomTreeAsync(itemId, configId, bomId, ct);
+            if (tree is null)
+                return NotFound(new { success = false, message = "Mamul bulunamadi veya aktif degil." });
+            return Ok(new { success = true, tree });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Agaci kaydeder. Paylasimli bir alt recete degistiyse yerinde EZILMEZ — otomatik
+    /// versiyon turetilir ve ata satiri ona sabitlenir (kullanici karari 2026-08-29).
+    /// Yapilan her islem `notes` altinda raporlanir; istemci bunu kullaniciya gosterir.
+    /// </summary>
+    [HttpPost]
+    public async Task<IActionResult> SaveBomTree([FromBody] SaveBomTreeRequest request, CancellationToken ct)
+    {
+        if (request is null)
+            return BadRequest(new { success = false, message = "Gecersiz istek." });
+        try
+        {
+            var result = await _logisticsConfigurationService.SaveBomTreeAsync(request, CurrentUserId(), ct);
+            return Ok(new { success = true, result });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+        catch (CalibraHub.Domain.Common.DomainException ex)
         {
             return BadRequest(new { success = false, message = ex.Message });
         }

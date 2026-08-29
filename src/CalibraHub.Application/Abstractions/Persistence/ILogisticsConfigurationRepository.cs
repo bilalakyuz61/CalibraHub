@@ -1,4 +1,4 @@
-using CalibraHub.Application.Contracts;
+﻿using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 
 namespace CalibraHub.Application.Abstractions.Persistence;
@@ -198,6 +198,27 @@ public interface ILogisticsConfigurationRepository
     /// satirda sabitlenen alt versiyon (ComponentBomId) cozumlemesi icin.</summary>
     Task<IReadOnlyCollection<BOMComponentLineRow>> GetBOMComponentLinesByBomIdAsync(
         int bomId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 2026-08-29 (Recete Agaci): verilen recetelerin KAC ata satiri tarafindan
+    /// izlendigini doner (BomId -> sayi). Iki yol sayilir:
+    ///   (a) satir bu receteye SABITLENMIS  -> BOMLine.ComponentBomId = BOM.Id
+    ///   (b) satir sabitlenmemis VE bu recete o malzemenin BAZ recetesi
+    ///       -> ComponentBomId IS NULL AND ItemId/ConfigId esler AND VersionCode IS NULL
+    /// Sonuc 1'den buyukse recete PAYLASIMLIDIR; agacta duzenlenirse otomatik
+    /// versiyon turetilir (yoksa duzenleme diger mamulleri de sessizce degistirirdi).
+    /// Listede olmayan/hic referansi olmayan Id sonucta YER ALMAZ (caller 0 varsayar).
+    /// </summary>
+    Task<IReadOnlyDictionary<int, int>> GetBomReferenceCountsAsync(
+        IReadOnlyCollection<int> bomIds, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 2026-08-29 (Recete Agaci): verilen malzemelerin BAZ recete Id'si (VersionCode IS NULL,
+    /// IsActive=1) — ItemId+ConfigId anahtariyla. Agac gezinirken her dugum icin ayri
+    /// sorgu atmamak icin toplu. Recetesi olmayan malzeme sonucta yer almaz.
+    /// </summary>
+    Task<IReadOnlyDictionary<(int ItemId, int ConfigKey), (int BomId, string? VersionCode)>>
+        GetBaseBomIdsAsync(IReadOnlyCollection<(int ItemId, int? ConfigId)> keys, CancellationToken cancellationToken);
 
     // ── Kit / Paket Urun ─────────────────────────────────────────────
     /// <summary>Kit malzeme kartinin AKTIF icerigini (MAX VersionNo, IsActive=1)

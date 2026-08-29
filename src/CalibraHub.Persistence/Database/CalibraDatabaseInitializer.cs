@@ -838,6 +838,8 @@ END;";
             await EnsureRptRunLogTableAsync(connection, cancellationToken);
             await SeedRptViewRegistryAsync(connection, cancellationToken);
             await EnsureProductionInfrastructureAsync(connection, cancellationToken);
+            // MRP tabloları WorkOrder'a FK taşır → üretim altyapısından SONRA.
+            await EnsureMrpTablesAsync(connection, cancellationToken);
             // 2026-08-23 (sıfır-DB sıra düzeltmesi): EnsureGuideTablesAsync üretim
             // altyapısından SONRA çalışır. cbv_Guide_Routing / cbv_Guide_Personnel /
             // cbv_Guide_WorkOrders view'ları Routing / Personnel / WorkOrder tablolarına
@@ -1576,7 +1578,14 @@ END;";
         ("FK_WorkOrderOperation_Machine",               "WorkOrderOperation",         "MachineId",              "Machine"),
         ("FK_WorkOrderOperationActivity_Company",       "WorkOrderOperationActivity", "CompanyId",              "Company"),
         ("FK_WorkOrderOperationActivity_Personnel",     "WorkOrderOperationActivity", "PersonnelId",            "Personnel"),
+        // RootDocumentId/RootLineId'ye FK YOK: WorkOrderSource ile aynı stil (soft-referans).
+        // FK eklemek, iş emrine peg'lenmiş bir siparişin silinmesini DB katmanında kilitlerdi;
+        // o karar iş kuralında (GetDeleteBlockReasonAsync) verilir, şemada değil.
+        ("FK_WorkOrderPeg_Company",                     "WorkOrderPeg",               "CompanyId",              "Company"),
         ("FK_WorkOrderSource_Company",                  "WorkOrderSource",            "CompanyId",              "Company"),
+        ("FK_MrpRun_Company",                           "MrpRun",                     "CompanyId",              "Company"),
+        ("FK_MrpRunLine_Company",                       "MrpRunLine",                 "CompanyId",              "Company"),
+        ("FK_MrpRunLine_Items",                         "MrpRunLine",                 "ItemId",                 "Items"),
         ("FK_WorkflowDefinition_Company",               "WorkflowDefinition",         "CompanyId",              "Company"),
         ("FK_WorkflowDefinition_DocumentType",          "WorkflowDefinition",         "DocumentTypeId",         "DocumentType"),
         ("FK_WorkflowInstance_Company",                 "WorkflowInstance",           "CompanyId",              "Company"),
@@ -3695,6 +3704,21 @@ END;
             BEGIN
                 ALTER TABLE [{schemaForSql}].[Items]
                     ADD [AutoSerial] BIT NOT NULL CONSTRAINT [df_Items_AutoSerial] DEFAULT(0);
+            END;
+
+            -- 2026-08-29: İş emri kırılım politikası (MRP). Bir malzemenin ihtiyacı iş emrine
+            -- dönüşürken nasıl gruplanacağını belirler:
+            --   PerOrderLine (varsayılan) = her açık sipariş satırı için ayrı emir (bugünkü davranış)
+            --   PerOrder                  = aynı belgedeki aynı malzeme satırları tek emirde
+            --   Cumulative                = koşudaki tüm siparişler tek emirde
+            -- TrackingType ile aynı desen: NVARCHAR + kodda sabitler (DB'de enum tipi yok).
+            -- Yalnız üretilebilir tiplerde (Mamul/Yarı Mamul) anlamlıdır; diğerlerinde okunmaz.
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[Items]', N'WorkOrderSplitPolicy') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[Items]
+                    ADD [WorkOrderSplitPolicy] NVARCHAR(20) NOT NULL
+                        CONSTRAINT [df_Items_WorkOrderSplitPolicy] DEFAULT(N'PerOrderLine');
             END;
 
             -- 2026-07-16: Fiziksel/üretici barkodu (EAN/GTIN). NVARCHAR(50) NULL — opsiyonel;
@@ -18543,6 +18567,15 @@ END;
                 ALTER TABLE [{schemaForSql}].[WorkOrder] ADD [ArgeProjectId] INT NULL;
             END;
 
+            -- ===== MRP Faz 1 (2026-08-29): WorkOrder.MrpRunId =====
+            -- Bu emri hangi MRP koşusu üretti (iz). FK YOK — koşu kayıtları temizlenebilir
+            -- olmalı, emrin kendisi silinmemeli. NULL = elle açılmış emir.
+            IF OBJECT_ID(N'[{schemaForSql}].[WorkOrder]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[WorkOrder]', N'MrpRunId') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[WorkOrder] ADD [MrpRunId] INT NULL;
+            END;
+
             -- ===== Faz 2: WorkOrderComponent (BOM patlatma ciktisi) =====
             -- Iş emri reçetesinin patlatilmis bilesen listesi. ExplodeBomAsync
             -- mevcut satirlari silip yeniden yazar (idempotent re-explode).
@@ -18926,6 +18959,127 @@ END;
                     REFERENCES [{schemaForSql}].[ActivityReason]([Id]);
             END;
             ";
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// MRP (Malzeme İhtiyaç Planlaması) tabloları — Faz 1 (2026-08-29).
+    /// <para><b>WorkOrderPeg</b>: alt/üst iş emri bağı. <c>WorkOrder.ParentWorkOrderId</c> kolonu
+    /// BİLEREK eklenmedi — kümüle politikada bir alt emrin BİRDEN ÇOK üstü olur (tek yarı mamul
+    /// emri, üç ayrı mamul emrini besler) ve tek kolon bunu ifade edemez. Grain:
+    /// <i>(alt emir × üst emir × kök satış siparişi satırı)</i> → "hangi siparişten ne kadar"
+    /// sorusu <c>GROUP BY RootLineId</c> ile, ağaç ise <c>ParentWorkOrderId</c> ile okunur.
+    /// Seviye-0 (satış siparişinden doğan) emirler <c>WorkOrderSource</c>'ta KALIR; oranın
+    /// semantiği (ComputeLineFloor / GetAllocatedQuantitiesForDocumentAsync) hiç değişmez.</para>
+    /// <para><b>MrpRun / MrpRunLine</b>: koşu kalıcıdır çünkü (1) onay, kullanıcının GÖRDÜĞÜ planı
+    /// uygular — apply anında yeniden hesaplansaydı "3 gördüm, 5 açıldı" olurdu; (2) Draft→Applied
+    /// tek yönlü geçiş çift-apply'ı engeller; (3) "bu emir neden açıldı" izi. Koşu bir stok
+    /// TAHSİSİ DEĞİLDİR — MRP'nin stok tahsisi sanaldır, StockReservation'a yazılmaz.</para>
+    /// <para>WorkOrder tablosuna FK taşıdığı için <c>EnsureProductionInfrastructureAsync</c>'ten
+    /// SONRA çağrılmalıdır.</para>
+    /// </summary>
+    private async Task EnsureMrpTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            IF OBJECT_ID(N'[{s}].[MrpRun]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[MrpRun]
+                (
+                    [Id]              INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_MrpRun] PRIMARY KEY,
+                    [CompanyId]       INT            NULL,
+                    [RunDate]         DATETIME       NOT NULL CONSTRAINT [DF_MrpRun_RunDate] DEFAULT(SYSUTCDATETIME()),
+                    -- 0=Draft (önizlendi, uygulanmadı) · 1=Applied · 2=Discarded
+                    [Status]          TINYINT        NOT NULL CONSTRAINT [DF_MrpRun_Status] DEFAULT(0),
+                    -- 'Selected' (toplu ekrandan seçim) | 'SingleOrder' (sipariş kartı kısayolu)
+                    [SourceScope]     NVARCHAR(20)   NOT NULL CONSTRAINT [DF_MrpRun_SourceScope] DEFAULT(N'Selected'),
+                    [SelectedLineIds] NVARCHAR(MAX)  NULL,   -- JSON int[] — hangi sipariş satırları seçildi
+                    [AppliedAt]       DATETIME       NULL,
+                    [Summary]         NVARCHAR(MAX)  NULL,   -- JSON özet (emir/eksik sayıları)
+                    [IsActive]        BIT            NOT NULL CONSTRAINT [DF_MrpRun_IsActive] DEFAULT(1),
+                    [CreatedById]     INT            NULL,
+                    [Created]         DATETIME       NOT NULL CONSTRAINT [DF_MrpRun_Created] DEFAULT(SYSUTCDATETIME()),
+                    [UpdatedById]     INT            NULL,
+                    [Updated]         DATETIME       NULL,
+                    CONSTRAINT [CK_MrpRun_Status] CHECK ([Status] BETWEEN 0 AND 2)
+                );
+                CREATE INDEX [IX_MrpRun_Company_Status]
+                    ON [{s}].[MrpRun]([CompanyId],[Status],[RunDate]);
+            END;
+
+            IF OBJECT_ID(N'[{s}].[MrpRunLine]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[MrpRunLine]
+                (
+                    [Id]                INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_MrpRunLine] PRIMARY KEY,
+                    [CompanyId]         INT            NULL,
+                    [MrpRunId]          INT            NOT NULL,
+                    [Level]             TINYINT        NOT NULL CONSTRAINT [DF_MrpRunLine_Level] DEFAULT(0),
+                    [ItemId]            INT            NOT NULL,
+                    [ConfigId]          INT            NULL,
+                    -- NewWorkOrder | MergeWorkOrder | PurchaseRequest | CoveredByStock | Shortage
+                    [ActionType]        NVARCHAR(20)   NOT NULL,
+                    [GrossQuantity]     DECIMAL(18,4)  NOT NULL CONSTRAINT [DF_MrpRunLine_Gross] DEFAULT(0),
+                    [OnHandApplied]     DECIMAL(18,4)  NOT NULL CONSTRAINT [DF_MrpRunLine_OnHand] DEFAULT(0),
+                    [OpenSupplyApplied] DECIMAL(18,4)  NOT NULL CONSTRAINT [DF_MrpRunLine_Supply] DEFAULT(0),
+                    [NetQuantity]       DECIMAL(18,4)  NOT NULL CONSTRAINT [DF_MrpRunLine_Net] DEFAULT(0),
+                    [PlannedStartDate]  DATETIME       NULL,
+                    [PlannedEndDate]    DATETIME       NULL,
+                    [ParentRunLineId]   INT            NULL,   -- ağaç; self-FK YOK (yazım sırası serbest kalsın)
+                    [TargetWorkOrderId] INT            NULL,   -- MergeWorkOrder ise hedef emir
+                    [PegJson]           NVARCHAR(MAX)  NULL,   -- [{{rootDocumentId, rootLineId, qty}}]
+                    [CreatedWorkOrderId] INT           NULL,   -- apply sonrası
+                    [CreatedDocumentId]  INT           NULL,   -- apply sonrası (satın alma talebi)
+                    -- Atlanan/karşılanan satırın GEREKÇESİ. Sessiz continue yasak (CLAUDE.md #3):
+                    -- talep 0, reçete yok, rota yok, tip üretilemez, malzeme kilitli — hepsi burada.
+                    [Message]           NVARCHAR(1000) NULL,
+                    [IsActive]          BIT            NOT NULL CONSTRAINT [DF_MrpRunLine_IsActive] DEFAULT(1),
+                    [CreatedById]       INT            NULL,
+                    [Created]           DATETIME       NOT NULL CONSTRAINT [DF_MrpRunLine_Created] DEFAULT(SYSUTCDATETIME()),
+                    [UpdatedById]       INT            NULL,
+                    [Updated]           DATETIME       NULL,
+                    CONSTRAINT [FK_MrpRunLine_MrpRun] FOREIGN KEY ([MrpRunId])
+                        REFERENCES [{s}].[MrpRun]([Id]) ON DELETE CASCADE
+                );
+                CREATE INDEX [IX_MrpRunLine_Run]
+                    ON [{s}].[MrpRunLine]([CompanyId],[MrpRunId],[Level]);
+            END;
+
+            IF OBJECT_ID(N'[{s}].[WorkOrderPeg]', N'U') IS NULL
+               AND OBJECT_ID(N'[{s}].[WorkOrder]', N'U') IS NOT NULL
+            BEGIN
+                CREATE TABLE [{s}].[WorkOrderPeg]
+                (
+                    [Id]                INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_WorkOrderPeg] PRIMARY KEY,
+                    [CompanyId]         INT            NULL,
+                    [WorkOrderId]       INT            NOT NULL,   -- ALT (üretilen) emir
+                    [ParentWorkOrderId] INT            NOT NULL,   -- ÜST emir (bileşeni tüketen)
+                    [ParentComponentId] INT            NULL,       -- WorkOrderComponent.Id (üstteki reçete satırı)
+                    [RootDocumentId]    INT            NOT NULL,   -- kök satış siparişi
+                    [RootLineId]        INT            NOT NULL,   -- kök satış siparişi satırı
+                    [Quantity]          DECIMAL(18,4)  NOT NULL CONSTRAINT [DF_WorkOrderPeg_Quantity] DEFAULT(0),
+                    [Level]             TINYINT        NOT NULL CONSTRAINT [DF_WorkOrderPeg_Level] DEFAULT(1),
+                    [MrpRunId]          INT            NULL,
+                    [IsActive]          BIT            NOT NULL CONSTRAINT [DF_WorkOrderPeg_IsActive] DEFAULT(1),
+                    [CreatedById]       INT            NULL,
+                    [Created]           DATETIME       NOT NULL CONSTRAINT [DF_WorkOrderPeg_Created] DEFAULT(SYSUTCDATETIME()),
+                    [UpdatedById]       INT            NULL,
+                    [Updated]           DATETIME       NULL,
+                    -- CASCADE yalnız ALT emir bacağında: SQL Server aynı tabloya iki cascade
+                    -- yola izin vermez. Üst emir silinirken peg'leri servis önce temizler.
+                    CONSTRAINT [FK_WorkOrderPeg_WorkOrder] FOREIGN KEY ([WorkOrderId])
+                        REFERENCES [{s}].[WorkOrder]([Id]) ON DELETE CASCADE,
+                    CONSTRAINT [FK_WorkOrderPeg_Parent] FOREIGN KEY ([ParentWorkOrderId])
+                        REFERENCES [{s}].[WorkOrder]([Id])
+                );
+                CREATE INDEX [IX_WorkOrderPeg_WorkOrder] ON [{s}].[WorkOrderPeg]([CompanyId],[WorkOrderId]);
+                CREATE INDEX [IX_WorkOrderPeg_Parent]    ON [{s}].[WorkOrderPeg]([CompanyId],[ParentWorkOrderId]);
+                CREATE INDEX [IX_WorkOrderPeg_Root]      ON [{s}].[WorkOrderPeg]([CompanyId],[RootLineId]);
+            END;
+            """;
 
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;
@@ -21526,6 +21680,29 @@ END;
              GROUP BY dl.[ItemId];
         ";
 
+        // MRP arz tarafı (2026-08-29): açık SATIN ALMA siparişi = beklenen giriş.
+        // Satış analoğuyla AYNI kanonik formül (BaseQuantity - DeliveredQuantity; mal kabul
+        // DeliveredQuantity'yi artırır) — ikinci bir "açık sipariş" tanımı üretmemek için.
+        // vw_ItemOpenSalesQty'den FARKI: CompanyId projeksiyona GİRER. Satış view'ı kiracı
+        // kolonunu taşımıyor (bilinen eksik, ayrıca düzeltilecek); aynı hatayı tekrarlamıyoruz —
+        // tüketen sorgu WHERE CompanyId = @CompanyId uygulayabilsin diye kolon burada.
+        var purchaseSql = $@"
+            CREATE OR ALTER VIEW [{s}].[vw_ItemOpenPurchaseQty]
+            AS
+            SELECT  dl.[ItemId]                                        AS [ItemId],
+                    doc.[CompanyId]                                     AS [CompanyId],
+                    SUM(dl.[BaseQuantity] - dl.[DeliveredQuantity])     AS [OpenQty],
+                    MIN(doc.[DeliveryDate])                             AS [EarliestExpectedDate]
+              FROM [{s}].[DocumentLine] dl
+              INNER JOIN [{s}].[Document]     doc ON doc.[id] = dl.[DocumentId]
+              INNER JOIN [{s}].[DocumentType] dt  ON dt.[id]  = doc.[DocumentTypeId]
+             WHERE dt.[code] = N'alis_siparisi'
+               AND doc.[IsActive] = 1
+               AND doc.[status] NOT IN (N'Rejected', N'Cancelled')
+               AND dl.[BaseQuantity] > dl.[DeliveredQuantity]
+             GROUP BY dl.[ItemId], doc.[CompanyId];
+        ";
+
         try
         {
             await using var cmd = connection.CreateCommand();
@@ -21538,6 +21715,17 @@ END;
             // Örnek view zorunlu değil — eksik bir tablo yüzünden açılış zincirinin geri
             // kalanı durmamalı. Sessizce yutulmuyor: sebebi konsola yazılır.
             Console.Error.WriteLine($"[DB INIT] vw_ItemOpenSalesQty olusturulamadi ({ex.Number}): {ex.Message}");
+        }
+
+        try
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = purchaseSql;
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (SqlException ex)
+        {
+            Console.Error.WriteLine($"[DB INIT] vw_ItemOpenPurchaseQty olusturulamadi ({ex.Number}): {ex.Message}");
         }
     }
 

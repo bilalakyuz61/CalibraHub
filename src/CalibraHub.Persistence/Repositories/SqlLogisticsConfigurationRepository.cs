@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
@@ -87,7 +87,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                    ISNULL([TrackingType], 'None') AS [TrackingType],
                    ISNULL([MinStock], 0) AS [MinStock],
                    ISNULL([AutoSerial], 0) AS [AutoSerial],
-                   [Barcode]
+                   [Barcode],
+                   ISNULL([WorkOrderSplitPolicy], 'PerOrderLine') AS [WorkOrderSplitPolicy]
             FROM {_stockCardsTableName} sc
             WHERE sc.[CompanyId] = @CompanyId
             {dv.Sql}
@@ -114,7 +115,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 TrackingType = reader.IsDBNull(11) ? "None" : reader.GetString(11),
                 MinStock = reader.IsDBNull(12) ? 0m : reader.GetDecimal(12),
                 AutoSerial = !reader.IsDBNull(13) && reader.GetBoolean(13),
-                Barcode = reader.IsDBNull(14) ? null : reader.GetString(14)
+                Barcode = reader.IsDBNull(14) ? null : reader.GetString(14),
+                // Ordinal okuma: yeni kolonlar SELECT listesinin SONUNA eklenir, araya
+                // sokulursa buradaki tüm index'ler sessizce kayar.
+                WorkOrderSplitPolicy = reader.IsDBNull(15) ? "PerOrderLine" : reader.GetString(15)
             };
 
             if (!reader.GetBoolean(3))
@@ -1429,9 +1433,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_stockCardsTableName}
-                ([CompanyId], [Code], [Name], [TypeId], [UnitId], [IsActive], [Created], [Combinations], [TaxRate], [TrackingType], [MinStock], [AutoSerial], [Barcode])
+                ([CompanyId], [Code], [Name], [TypeId], [UnitId], [IsActive], [Created], [Combinations], [TaxRate], [TrackingType], [MinStock], [AutoSerial], [Barcode], [WorkOrderSplitPolicy])
             VALUES
-                (@CompanyId, @Code, @Name, @TypeId, @UnitId, @IsActive, @Created, @Combinations, @TaxRate, @TrackingType, @MinStock, @AutoSerial, @Barcode);
+                (@CompanyId, @Code, @Name, @TypeId, @UnitId, @IsActive, @Created, @Combinations, @TaxRate, @TrackingType, @MinStock, @AutoSerial, @Barcode, @WorkOrderSplitPolicy);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
 
@@ -1448,6 +1452,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@MinStock", stockCard.MinStock));
         command.Parameters.Add(new SqlParameter("@AutoSerial", stockCard.AutoSerial ? 1 : 0));
         command.Parameters.Add(new SqlParameter("@Barcode", (object?)stockCard.Barcode ?? DBNull.Value));
+        // Normalize: geçersiz/boş politika DB'ye yazılmaz, varsayılana çevrilir.
+        command.Parameters.Add(new SqlParameter("@WorkOrderSplitPolicy",
+            WorkOrderSplitPolicyCatalog.Normalize(stockCard.WorkOrderSplitPolicy)));
 
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
     }
@@ -1470,6 +1477,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 [MinStock] = @MinStock,
                 [AutoSerial] = @AutoSerial,
                 [Barcode] = @Barcode,
+                [WorkOrderSplitPolicy] = @WorkOrderSplitPolicy,
                 [Updated] = @Updated
             WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
@@ -1489,6 +1497,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@MinStock", stockCard.MinStock));
         command.Parameters.Add(new SqlParameter("@AutoSerial", stockCard.AutoSerial ? 1 : 0));
         command.Parameters.Add(new SqlParameter("@Barcode", (object?)stockCard.Barcode ?? DBNull.Value));
+        // Normalize: geçersiz/boş politika DB'ye yazılmaz, varsayılana çevrilir.
+        command.Parameters.Add(new SqlParameter("@WorkOrderSplitPolicy",
+            WorkOrderSplitPolicyCatalog.Normalize(stockCard.WorkOrderSplitPolicy)));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -3828,6 +3839,91 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 ComponentBomId: reader.IsDBNull(4) ? null : reader.GetInt32(4)));
         }
         return rows;
+    }
+
+    /// <summary>
+    /// Bkz. ILogisticsConfigurationRepository.GetBomReferenceCountsAsync.
+    /// Id listesi PARAMETRE olarak baglanir (string birlestirme YOK — SQL enjeksiyonu).
+    /// </summary>
+    public async Task<IReadOnlyDictionary<int, int>> GetBomReferenceCountsAsync(
+        IReadOnlyCollection<int> bomIds, CancellationToken cancellationToken)
+    {
+        var ids = bomIds?.Where(x => x > 0).Distinct().ToArray() ?? Array.Empty<int>();
+        if (ids.Length == 0) return new Dictionary<int, int>();
+
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+
+        var placeholders = string.Join(",", ids.Select((_, i) => "@b" + i));
+        command.CommandText = $"""
+            SELECT b.[Id], COUNT_BIG(1)
+            FROM {_productTreesTableName} b
+            -- tenant-ok: BOMLine'in kiracisi ata recetesinden gelir; asagidaki
+            -- p JOIN'i p.[CompanyId] ile suzuyor, satira ayrica suzgec gerekmez.
+            INNER JOIN {_productTreeLinesTableName} l
+                ON  l.[ComponentBomId] = b.[Id]
+                OR (l.[ComponentBomId] IS NULL
+                    AND b.[VersionCode] IS NULL
+                    AND l.[ItemId] = b.[ItemId]
+                    AND ISNULL(l.[ConfigId], -1) = ISNULL(b.[ConfigId], -1))
+            INNER JOIN {_productTreesTableName} p
+                ON p.[Id] = l.[BOMId] AND p.[IsActive] = 1 AND p.[CompanyId] = @CompanyId
+            WHERE b.[Id] IN ({placeholders})
+              AND b.[IsActive] = 1 AND b.[CompanyId] = @CompanyId
+            GROUP BY b.[Id];
+            """;
+        for (var i = 0; i < ids.Length; i++)
+            command.Parameters.Add(new SqlParameter("@b" + i, ids[i]));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
+
+        var result = new Dictionary<int, int>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            result[reader.GetInt32(0)] = (int)reader.GetInt64(1);
+        return result;
+    }
+
+    /// <summary>
+    /// Bkz. ILogisticsConfigurationRepository.GetBaseBomIdsAsync.
+    /// Anahtar (ItemId, ConfigKey) — ConfigKey = ConfigId ?? 0, cunku NULL sozluk
+    /// anahtari olarak esitlik karsilastirmasinda tuzak uretir.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<(int ItemId, int ConfigKey), (int BomId, string? VersionCode)>>
+        GetBaseBomIdsAsync(
+            IReadOnlyCollection<(int ItemId, int? ConfigId)> keys, CancellationToken cancellationToken)
+    {
+        var empty = new Dictionary<(int, int), (int, string?)>();
+        var itemIds = keys?.Select(k => k.ItemId).Where(x => x > 0).Distinct().ToArray() ?? Array.Empty<int>();
+        if (itemIds.Length == 0) return empty;
+
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+
+        // ConfigId eslesmesi SQL'de degil bellekte yapiliyor: bir malzemenin aktif baz
+        // recete sayisi kombinasyon basina 1'dir (UX_BOM_Base), yani satir sayisi kucuk.
+        var placeholders = string.Join(",", itemIds.Select((_, i) => "@i" + i));
+        command.CommandText = $"""
+            SELECT b.[Id], b.[ItemId], b.[ConfigId], b.[VersionCode]
+            FROM {_productTreesTableName} b
+            WHERE b.[ItemId] IN ({placeholders})
+              AND b.[IsActive] = 1 AND b.[CompanyId] = @CompanyId
+              AND b.[VersionCode] IS NULL;
+            """;
+        for (var i = 0; i < itemIds.Length; i++)
+            command.Parameters.Add(new SqlParameter("@i" + i, itemIds[i]));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
+
+        var result = new Dictionary<(int ItemId, int ConfigKey), (int BomId, string? VersionCode)>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var configKey = reader.IsDBNull(2) ? 0 : reader.GetInt32(2);
+            result[(reader.GetInt32(1), configKey)] =
+                (reader.GetInt32(0), reader.IsDBNull(3) ? null : reader.GetString(3));
+        }
+        return result;
     }
 
     public async Task<IReadOnlyCollection<WhereUsedItemDto>> GetWhereUsedAsync(

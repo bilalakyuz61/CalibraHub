@@ -11,7 +11,7 @@ using System.Text.RegularExpressions;
 
 namespace CalibraHub.Application.Services;
 
-public sealed class LogisticsConfigurationService : ILogisticsConfigurationService
+public sealed partial class LogisticsConfigurationService : ILogisticsConfigurationService
 {
     private const string ProductValueSeparator = " || ";
     private static readonly Regex PropertyCodeRegex = new("^[A-Za-z0-9]{8}$", RegexOptions.Compiled);
