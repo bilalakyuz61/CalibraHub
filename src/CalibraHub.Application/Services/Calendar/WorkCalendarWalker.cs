@@ -84,48 +84,43 @@ public sealed class WorkCalendarWalker
         if (!HasCalendar || minutes <= 0m) return end;
 
         var remaining = (double)minutes;
-        var cursor = end;
-        // Sonsuz döngü koruması: en fazla ~5 yıl geriye. Takvim çok seyrekse (haftada 1 saat)
-        // uzun sürebilir; sınır aşılırsa elde kalan süreyle birlikte o ana dönülür.
-        var maxDays = Math.Min(3650, (int)Math.Ceiling(remaining / Math.Max(1, _weeklyMinutes / 7.0)) + 400);
-        var guard = 0;
 
-        while (remaining > 0.0001 && guard++ < maxDays)
+        // Durum (gün, o günde sayılabilecek EN GEÇ dakika) çifti olarak taşınır. Tek bir
+        // DateTime "imleç" kullanmak hataya açık: önceki güne geçmek için gün sonunu
+        // ifade etmenin doğal bir yolu yok (gün-1'in 24:00'ü = bugünün 00:00'ı → aynı güne
+        // geri dönülür ve döngü ilerlemez).
+        var day = end.Date;
+        var limit = (int)(end - day).TotalMinutes;   // ilk gün: bitiş anına kadar
+
+        // Sonsuz döngü koruması: gereken gün sayısı + geniş pay, en fazla ~10 yıl.
+        var perDay = Math.Max(1.0, _weeklyMinutes / 7.0);
+        var maxDays = (int)Math.Min(3650, Math.Ceiling(remaining / perDay) + 400);
+
+        for (var guard = 0; guard < maxDays; guard++)
         {
-            var day = cursor.Date;
-            if (!IsWorkingDay(day))
+            if (IsWorkingDay(day))
             {
-                // Kapalı gün: bir önceki günün SONUNA atla (gün sonu = 23:59'dan başlanır,
-                // aşağıdaki kesişim mantığı o günün penceresini bulur).
-                cursor = day.AddDays(-1).AddMinutes(24 * 60);
-                continue;
-            }
-
-            // O gün, cursor'a kadar olan kısımdaki açık aralıklar (geç saatten erkene doğru).
-            var cursorMinute = cursor == day ? 0 : (int)(cursor - day).TotalMinutes;
-            var intervals = _byDay[(byte)day.DayOfWeek];
-            var consumedThisDay = false;
-
-            for (var i = intervals.Count - 1; i >= 0 && remaining > 0.0001; i--)
-            {
-                var (s, e) = intervals[i];
-                var segEnd = Math.Min(e, cursorMinute);
-                if (segEnd <= s) continue;                 // bu aralık cursor'un ilerisinde
-
-                var segLen = segEnd - s;
-                consumedThisDay = true;
-                if (segLen >= remaining)
+                // O günün açık aralıkları, GEÇ saatten erkene doğru tüketilir.
+                var intervals = _byDay[(byte)day.DayOfWeek];
+                for (var i = intervals.Count - 1; i >= 0; i--)
                 {
-                    return day.AddMinutes(segEnd - remaining);
+                    var (s, e) = intervals[i];
+                    var segEnd = Math.Min((int)e, limit);
+                    if (segEnd <= s) continue;              // aralık limitin ilerisinde
+
+                    var segLen = segEnd - s;
+                    if (segLen >= remaining) return day.AddMinutes(segEnd - remaining);
+                    remaining -= segLen;
                 }
-                remaining -= segLen;
-                cursor = day.AddMinutes(s);
             }
 
-            if (!consumedThisDay || remaining > 0.0001)
-                cursor = day.AddDays(-1).AddMinutes(24 * 60);   // bu gün bitti, öncekine geç
+            day = day.AddDays(-1);
+            limit = 24 * 60;                                // önceki günler tamamen taranır
+            if (remaining <= 0.0001) return day.AddDays(1); // güvenlik: zaten yukarıda dönülür
         }
 
-        return cursor;
+        // Süre takvime sığmadı (aşırı uzun üretim / çok seyrek takvim): ulaşılan en erken güne
+        // düşülür. Sessizce "bugün" demek, gerçekte imkânsız bir planı mümkün göstermek olurdu.
+        return day;
     }
 }
