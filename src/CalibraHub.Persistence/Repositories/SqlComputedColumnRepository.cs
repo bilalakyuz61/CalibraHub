@@ -161,9 +161,14 @@ public sealed class SqlComputedColumnRepository : IComputedColumnRepository
             cmd.CommandText = $"""
                 SELECT TOP (@Take) [{res.KeyColumn}] AS K, [{res.ValueColumn}] AS V
                        {(res.UnitColumn is null ? ", CAST(NULL AS NVARCHAR(40)) AS U" : $", [{res.UnitColumn}] AS U")}
-                  FROM [{res.Schema}].[{res.ViewName}];
+                  FROM [{res.Schema}].[{res.ViewName}]
+                       {(res.HasCompanyId ? "WHERE [CompanyId] = @CompanyId" : "")};
                 """;
             cmd.Parameters.AddWithValue("@Take", take);
+            // Önizleme de kiracıya süzülür — yoksa tasarım ekranında başka şirketin
+            // örnek verisi görünürdü.
+            if (res.HasCompanyId)
+                cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
 
             var rows = new List<ComputedColumnPreviewRowDto>();
             await using var rd = await cmd.ExecuteReaderAsync(ct);
@@ -208,10 +213,15 @@ public sealed class SqlComputedColumnRepository : IComputedColumnRepository
                 SELECT [{res.KeyColumn}] AS K, [{res.ValueColumn}] AS V
                        {(res.UnitColumn is null ? ", CAST(NULL AS NVARCHAR(40)) AS U" : $", [{res.UnitColumn}] AS U")}
                   FROM [{res.Schema}].[{res.ViewName}]
-                 WHERE [{res.KeyColumn}] IN ({string.Join(",", paramNames)});
+                 WHERE [{res.KeyColumn}] IN ({string.Join(",", paramNames)})
+                       {(res.HasCompanyId ? "AND [CompanyId] = @CompanyId" : "")};
                 """;
             var i2 = 0;
             foreach (var k in keys) cmd.Parameters.AddWithValue(paramNames[i2++], k);
+            // View kiracı kolonu taşıyorsa yalnız bu şirketin satırları okunur. Taşımayan
+            // view'larda süzgeç HİÇ eklenmez → mevcut hesaplanan kolonlar aynen çalışır.
+            if (res.HasCompanyId)
+                cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
 
             var map = new Dictionary<int, ComputedCellValue>();
             await using var rd = await cmd.ExecuteReaderAsync(ct);
@@ -265,12 +275,12 @@ public sealed class SqlComputedColumnRepository : IComputedColumnRepository
     /// yazdığı adlardır — çağıran onları sorguya koyar, kullanıcının girdiği metni değil.
     /// Bulunamayan ad sorguya HİÇ girmez; hata metniyle geri döner.
     /// </summary>
-    private async Task<(string? Schema, string? ViewName, string? KeyColumn, string? ValueColumn, string? UnitColumn, string? Error)>
+    private async Task<(string? Schema, string? ViewName, string? KeyColumn, string? ValueColumn, string? UnitColumn, bool HasCompanyId, string? Error)>
         ResolveAsync(SqlConnection conn, string? view, string? key, string? val, string? unit, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(view)) return (null, null, null, null, null, "Kaynak view seçilmedi.");
-        if (string.IsNullOrWhiteSpace(key)) return (null, null, null, null, null, "Anahtar kolon seçilmedi.");
-        if (string.IsNullOrWhiteSpace(val)) return (null, null, null, null, null, "Değer kolonu seçilmedi.");
+        if (string.IsNullOrWhiteSpace(view)) return (null, null, null, null, null, false, "Kaynak view seçilmedi.");
+        if (string.IsNullOrWhiteSpace(key)) return (null, null, null, null, null, false, "Anahtar kolon seçilmedi.");
+        if (string.IsNullOrWhiteSpace(val)) return (null, null, null, null, null, false, "Değer kolonu seçilmedi.");
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
@@ -294,24 +304,27 @@ public sealed class SqlComputedColumnRepository : IComputedColumnRepository
             }
         }
         if (viewName is null)
-            return (null, null, null, null, null, $"View bulunamadı: '{view}'. Silinmiş ya da yeniden adlandırılmış olabilir.");
+            return (null, null, null, null, null, false, $"View bulunamadı: '{view}'. Silinmiş ya da yeniden adlandırılmış olabilir.");
 
         string? Match(string? name) => name is null
             ? null
             : cols.FirstOrDefault(c => string.Equals(c, name.Trim(), StringComparison.OrdinalIgnoreCase));
 
         var k = Match(key);
-        if (k is null) return (null, null, null, null, null, $"'{viewName}' view'ında '{key}' kolonu yok.");
+        if (k is null) return (null, null, null, null, null, false, $"'{viewName}' view'ında '{key}' kolonu yok.");
         var v = Match(val);
-        if (v is null) return (null, null, null, null, null, $"'{viewName}' view'ında '{val}' kolonu yok.");
+        if (v is null) return (null, null, null, null, null, false, $"'{viewName}' view'ında '{val}' kolonu yok.");
 
         string? u = null;
         if (!string.IsNullOrWhiteSpace(unit))
         {
             u = Match(unit);
-            if (u is null) return (null, null, null, null, null, $"'{viewName}' view'ında '{unit}' birim kolonu yok.");
+            if (u is null) return (null, null, null, null, null, false, $"'{viewName}' view'ında '{unit}' birim kolonu yok.");
         }
 
-        return (schemaName, viewName, k, v, u, null);
+        // Kiracı süzgeci: view CompanyId taşıyorsa sorguya OTOMATİK eklenir (aşağıdaki
+        // okuma noktaları). Taşımıyorsa süzgeç yoktur — mevcut view'lar birebir aynı çalışır.
+        var hasCompany = cols.Any(c => string.Equals(c, "CompanyId", StringComparison.OrdinalIgnoreCase));
+        return (schemaName, viewName, k, v, u, hasCompany, null);
     }
 }

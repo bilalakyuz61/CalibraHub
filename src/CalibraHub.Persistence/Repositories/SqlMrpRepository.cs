@@ -505,6 +505,25 @@ public sealed class SqlMrpRepository : IMrpRepository
     }
 
     /// <inheritdoc />
+    public async Task<int> PurgeStaleDraftRunsAsync(int olderThanDays, CancellationToken ct)
+    {
+        var days = Math.Clamp(olderThanDays, 1, 3650);
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        // Yalnız Status=0 (Draft). MrpRunLine FK'si ON DELETE CASCADE → satırlar birlikte gider.
+        cmd.CommandText = $"""
+            DELETE FROM {T("MrpRun")}
+             WHERE [CompanyId] = @CompanyId AND [Status] = 0
+               AND [RunDate] < DATEADD(DAY, -@Days, SYSUTCDATETIME());
+            SELECT @@ROWCOUNT;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
+        cmd.Parameters.Add(new SqlParameter("@Days", days));
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<MrpItemInfo>> GetItemInfoAsync(IReadOnlyCollection<int> itemIds, CancellationToken ct)
     {
         var ids = (itemIds ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList();

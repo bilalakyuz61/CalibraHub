@@ -73,6 +73,9 @@ public sealed class MrpService : IMrpService
     /// <summary>Reçete patlatma derinlik sınırı — ExplodeBOMAsync ile aynı (döngü/derin ağaç koruması).</summary>
     private const int MaxBomLevel = 20;
 
+    /// <summary>Bu kadar günden eski, uygulanmamış (Draft) koşular önizleme başında silinir.</summary>
+    private const int StaleDraftRunDays = 30;
+
     /// <summary>Koşu satırının yanında taşınan görüntü alanları (DB'de saklanmaz — tek kaynak Items).</summary>
     private readonly record struct NodeExtra(
         string Code, string Name, string? UnitCode, string Policy, int? LocationId, string? TargetNo);
@@ -120,6 +123,11 @@ public sealed class MrpService : IMrpService
         var lineIds = (request?.LineIds ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList();
         if (lineIds.Count == 0)
             return Fail("En az bir sipariş satırı seçilmelidir.");
+
+        // Terk edilmiş önizlemeleri temizle (uygulanmamış Draft koşular). Applied olanlar
+        // "bu emir neden açıldı" izidir, dokunulmaz. Temizlik başarısız olursa koşu devam eder.
+        try { await _repo.PurgeStaleDraftRunsAsync(StaleDraftRunDays, ct); }
+        catch (Exception ex) { _logger?.LogWarning(ex, "[MRP] Eski taslak koşular temizlenemedi."); }
 
         var lines = await _repo.ListOpenSalesOrderLinesAsync(lineIds, null, null, ct);
         if (lines.Count == 0)

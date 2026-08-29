@@ -411,6 +411,22 @@ public sealed class WorkOrderService : IWorkOrderService
                 Notes: target.Notes,
                 ArgeProjectId: target.ArgeProjectId), null, ct);
 
+            // Planlanan miktar arttı → BİLEŞEN ihtiyaçları da artmalı. Yeniden patlatılmazsa
+            // WorkOrderComponent.RequiredQuantity eski miktara göre kalır ve üretim eksik
+            // malzemeyle planlanır (sessiz veri hatası). ExplodeBomAsync idempotenttir; sarf
+            // başlamışsa (IssuedQuantity>0) kendisi reddeder — o durumda emir yine geçerlidir,
+            // yalnız bileşen listesi elle güncellenmelidir, bu yüzden hata yutulmaz, loglanır.
+            try
+            {
+                await ExplodeBomAsync(target.Id, ct);
+            }
+            catch (Exception bomEx)
+            {
+                _logger?.LogWarning(bomEx,
+                    "[MRP] Emir {WorkOrderId} miktarı arttı ama reçete yeniden patlatılamadı — bileşen miktarları elle kontrol edilmeli.",
+                    target.Id);
+            }
+
             _audit?.LogChanges("WorkOrder", target.Id, target.OrderNumber,
                 [new AuditFieldChange("PlannedQuantity", "Planlanan Miktar",
                     AuditDiff.Normalize(target.PlannedQuantity),
@@ -681,9 +697,6 @@ public sealed class WorkOrderService : IWorkOrderService
                 oldWorkOrderDocumentId, newWorkOrderId);
         }
     }
-
-    public Task<IReadOnlyCollection<WorkOrderListItemDto>> ListEligibleForMergeAsync(int itemId, int? configId, CancellationToken ct)
-        => _workOrders.ListEligibleForMergeAsync(itemId, configId, ct);
 
     public Task<decimal> GetAllocatedQuantityForLineAsync(int sourceLineId, CancellationToken ct)
         => _workOrders.GetAllocatedQuantityForLineAsync(sourceLineId, ct);

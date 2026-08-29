@@ -16,7 +16,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Workflow, Search, RefreshCw, ChevronRight, ChevronDown, Check, X,
-  AlertTriangle, Loader2, PackageCheck, PlusCircle, GitMerge, ShoppingCart,
+  AlertTriangle, Loader2, PackageCheck, PlusCircle, GitMerge, ShoppingCart, Download,
 } from 'lucide-react'
 import './MrpPlanner.css'
 
@@ -164,6 +164,71 @@ export default function MrpPlanner(props) {
     setPreview(null); setApplyResult(null); setStep(1); setError(null)
   }
 
+  // ── Excel dışa aktarım (C-Grid standardı) ──
+  // Önizlenen planı olduğu gibi indirir. Form POST kullanılır (fetch değil): tarayıcı
+  // dosyayı doğrudan indirir, blob'u bellekte tutmaya gerek kalmaz — RoutingTree deseni.
+  function exportExcel() {
+    if (!preview || !preview.nodes.length) return
+    var headers = [
+      { id: 'level',    label: 'Seviye' },
+      { id: 'itemCode', label: 'Stok Kodu' },
+      { id: 'itemName', label: 'Stok Adı' },
+      { id: 'action',   label: 'Aksiyon' },
+      { id: 'policy',   label: 'Kırılım' },
+      { id: 'gross',    label: 'Brüt' },
+      { id: 'onHand',   label: 'Eldeki' },
+      { id: 'supply',   label: 'Açık Arz' },
+      { id: 'net',      label: 'Net' },
+      { id: 'start',    label: 'Başlangıç' },
+      { id: 'end',      label: 'Bitiş' },
+      { id: 'sources',  label: 'Kaynak Siparişler' },
+      { id: 'message',  label: 'Not' },
+    ]
+    var rows = preview.nodes.map(function (n) {
+      return {
+        level:    n.level,
+        itemCode: n.itemCode || ('#' + n.itemId),
+        itemName: n.itemName || '',
+        action:   (ACTION_META[n.actionType] || {}).label || n.actionType,
+        policy:   POLICY_LABEL[n.splitPolicy] || n.splitPolicy,
+        gross:    n.grossQuantity,
+        onHand:   n.onHandApplied,
+        supply:   n.openSupplyApplied,
+        net:      n.netQuantity,
+        start:    fmtDate(n.plannedStartDate),
+        end:      fmtDate(n.plannedEndDate),
+        sources:  (n.pegs || []).map(function (p) { return p.rootDocumentNumber + ' (' + fmtQty(p.quantity) + ')' }).join(', '),
+        message:  n.message || '',
+      }
+    })
+
+    var ts = new Date()
+    var pad = function (x) { return x < 10 ? '0' + x : String(x) }
+    var stamp = ts.getFullYear() + pad(ts.getMonth() + 1) + pad(ts.getDate()) + '_' +
+                pad(ts.getHours()) + pad(ts.getMinutes()) + pad(ts.getSeconds())
+
+    var form = document.createElement('form')
+    form.method = 'POST'; form.action = '/api/export/smartboard-excel'
+    form.target = '_self'; form.style.display = 'none'
+    var hidden = document.createElement('textarea')
+    hidden.name = 'payload'
+    hidden.value = JSON.stringify({
+      fileName: 'mrp-plani_' + stamp + '.xlsx',
+      sheetName: 'MRP Plani',
+      headers: headers, rows: rows,
+    })
+    form.appendChild(hidden)
+    var token = csrfToken()
+    if (token) {
+      var ti = document.createElement('input')
+      ti.type = 'hidden'; ti.name = '__RequestVerificationToken'; ti.value = token
+      form.appendChild(ti)
+    }
+    document.body.appendChild(form)
+    form.submit()
+    setTimeout(function () { try { document.body.removeChild(form) } catch (e) {} }, 1000)
+  }
+
   function restart() {
     setPreview(null); setApplyResult(null); setSelected({}); setStep(1); setError(null)
     loadLines(search)
@@ -202,6 +267,13 @@ export default function MrpPlanner(props) {
               <RefreshCw size={13} /> Yenile
             </button>
           </>
+        )}
+
+        {step === 2 && (
+          <button type="button" className="mrp-btn" style={{ marginLeft: 'auto' }}
+                  onClick={exportExcel} title="Planı Excel olarak indir">
+            <Download size={13} /> Excel
+          </button>
         )}
       </div>
 

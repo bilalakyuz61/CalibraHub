@@ -130,6 +130,14 @@ public interface IMrpRepository
     /// </summary>
     Task SetWorkOrderMrpRunAsync(int workOrderId, int mrpRunId, CancellationToken ct);
 
+    /// <summary>
+    /// Terk edilmiş DRAFT koşuları siler (kullanıcı önizledi, uygulamadı, sekmeyi kapattı).
+    /// <b>Applied koşulara DOKUNULMAZ</b> — onlar "bu emir neden açıldı" izidir. Ayrı bir
+    /// arka plan işi/parametre yerine önizleme başında çağrılır: temizlik, tabloyu şişiren
+    /// akışın kendi içinde kalır (KISS).
+    /// </summary>
+    Task<int> PurgeStaleDraftRunsAsync(int olderThanDays, CancellationToken ct);
+
     /// <summary>Malzeme planlama bilgisi (kod/ad/tip/birim/kırılım politikası) — toplu.</summary>
     Task<IReadOnlyList<MrpItemInfo>> GetItemInfoAsync(IReadOnlyCollection<int> itemIds, CancellationToken ct);
 

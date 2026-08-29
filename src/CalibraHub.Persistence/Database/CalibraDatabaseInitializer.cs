@@ -21669,6 +21669,7 @@ END;
             CREATE OR ALTER VIEW [{s}].[vw_ItemOpenSalesQty]
             AS
             SELECT  dl.[ItemId]                                        AS [ItemId],
+                    doc.[CompanyId]                                     AS [CompanyId],
                     SUM(dl.[BaseQuantity] - dl.[DeliveredQuantity])     AS [OpenQty],
                     MAX(u.[Code])                                       AS [UnitCode]
               FROM [{s}].[DocumentLine] dl
@@ -21680,8 +21681,12 @@ END;
                AND doc.[IsActive] = 1
                AND doc.[status] NOT IN (N'Rejected', N'Cancelled')
                AND dl.[BaseQuantity] > dl.[DeliveredQuantity]
-             GROUP BY dl.[ItemId];
+             GROUP BY dl.[ItemId], doc.[CompanyId];
         ";
+        // 2026-08-29: CompanyId projeksiyona ve GROUP BY'a eklendi. Öncesinde view kiracı
+        // kolonu TAŞIMIYORDU; aynı veritabanında iki şirket varsa hesaplanan kolon her iki
+        // şirketin açık siparişini TEK rakamda topluyordu. Hesaplanan Kolon motoru artık
+        // CompanyId taşıyan view'ları otomatik süzer (SqlComputedColumnRepository.ResolveAsync).
 
         // MRP arz tarafı (2026-08-29): açık SATIN ALMA siparişi = beklenen giriş.
         // Satış analoğuyla AYNI kanonik formül (BaseQuantity - DeliveredQuantity; mal kabul

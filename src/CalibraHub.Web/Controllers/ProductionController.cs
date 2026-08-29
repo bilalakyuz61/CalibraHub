@@ -25,7 +25,6 @@ namespace CalibraHub.Web.Controllers;
 ///   POST /Production/ChangeStatus/{id} → JSON (durum gecisi)
 ///   POST /Production/Revise/{id}       → JSON (revize akisi)
 ///   POST /Production/CreateFromSalesLine → JSON (Sales modal cagri noktasi)
-///   GET  /Production/EligibleForMerge  → JSON (toplama icin uygun emirler)
 ///   GET  /Production/AllocatedQuantity → JSON (sipariş satırı acik bakiye)
 /// </summary>
 [Authorize]
@@ -568,13 +567,6 @@ public sealed class ProductionController : Controller
             _logger.LogError(ex, "[WorkOrder.CreateFromSalesLine] satış satırından iş emri oluşturulamadı. SourceLineId={SourceLineId}", req?.SourceLineId);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> EligibleForMerge(int itemId, int? configId, CancellationToken ct)
-    {
-        var list = await _service.ListEligibleForMergeAsync(itemId, configId, ct);
-        return Json(list);
     }
 
     [HttpGet]

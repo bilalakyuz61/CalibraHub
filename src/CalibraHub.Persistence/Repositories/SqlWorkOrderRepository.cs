@@ -564,66 +564,6 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
         return result is null || result is DBNull ? 0 : Convert.ToInt32(result);
     }
 
-    public async Task<IReadOnlyCollection<WorkOrderListItemDto>> ListEligibleForMergeAsync(int itemId, int? configId, CancellationToken ct)
-    {
-        var companyId = _connectionFactory.ResolveCurrentCompanyId();
-        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-        await using var cmd = conn.CreateCommand();
-        var configFilter = configId.HasValue
-            ? "AND w.[ConfigId] = @ConfigId"
-            : "AND w.[ConfigId] IS NULL";
-        cmd.CommandText = $@"
-            SELECT w.[Id], d.[DocumentNumber], d.[DocumentDate], w.[ItemId],
-                   i.[Code], i.[Name],
-                   w.[ConfigId], w.[PlannedQuantity], w.[ProducedQuantity],
-                   w.[UnitId], u.[Code] AS UnitCode,
-                   w.[Status], w.[Priority],
-                   w.[PlannedStartDate], w.[PlannedEndDate],
-                   w.[AssignedUserId], usr.[FullName], d.[RevisionNo]
-            FROM {_woTable} w
-            INNER JOIN {_docTable} d ON d.[Id] = w.[DocumentId]
-            LEFT JOIN [{_schema}].[Items] i ON i.[Id] = w.[ItemId]
-            LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = w.[UnitId]
-            LEFT JOIN [{_schema}].[Users] usr ON usr.[Id] = w.[AssignedUserId]
-            WHERE w.[CompanyId] = @CompanyId
-              AND w.[ItemId] = @ItemId
-              {configFilter}
-              AND w.[Status] IN (0, 1) /* Planned, Released */
-              AND w.[IsActive] = 1
-            ORDER BY d.[DocumentDate] DESC;";
-        cmd.Parameters.AddWithValue("@CompanyId", companyId);
-        cmd.Parameters.AddWithValue("@ItemId", itemId);
-        if (configId.HasValue) cmd.Parameters.AddWithValue("@ConfigId", configId.Value);
-
-        var list = new List<WorkOrderListItemDto>();
-        await using var r = await cmd.ExecuteReaderAsync(ct);
-        while (await r.ReadAsync(ct))
-        {
-            list.Add(new WorkOrderListItemDto(
-                Id: r.GetInt32(0),
-                OrderNumber: r.GetString(1),
-                OrderDate: r.GetDateTime(2),
-                ItemId: r.GetInt32(3),
-                ItemCode: r.IsDBNull(4) ? null : r.GetString(4),
-                ItemName: r.IsDBNull(5) ? null : r.GetString(5),
-                ConfigId: r.IsDBNull(6) ? null : r.GetInt32(6),
-                PlannedQuantity: r.GetDecimal(7),
-                ProducedQuantity: r.GetDecimal(8),
-                UnitId: r.IsDBNull(9) ? null : r.GetInt32(9),
-                UnitCode: r.IsDBNull(10) ? null : r.GetString(10),
-                Status: (WorkOrderStatus)r.GetByte(11),
-                Priority: (WorkOrderPriority)r.GetByte(12),
-                PlannedStartDate: r.IsDBNull(13) ? null : r.GetDateTime(13),
-                PlannedEndDate: r.IsDBNull(14) ? null : r.GetDateTime(14),
-                AssignedUserId: r.IsDBNull(15) ? null : r.GetInt32(15),
-                AssignedUserName: r.IsDBNull(16) ? null : r.GetString(16),
-                RevisionNo: r.GetInt32(17),
-                AssignedPersonnelId: r.FieldCount > 18 && !r.IsDBNull(18) ? r.GetInt32(18) : null,
-                AssignedPersonnelName: r.FieldCount > 19 && !r.IsDBNull(19) ? r.GetString(19) : null));
-        }
-        return list;
-    }
-
     /// <summary>
     /// İş emrinin üretim hareketleri — mamul girişi + bileşen sarfı.
     ///

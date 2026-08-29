@@ -32,8 +32,6 @@ public interface IWorkOrderService
     /// </summary>
     Task<int> CreateFromMrpAsync(CreateWorkOrderFromMrpRequest request, CancellationToken ct);
 
-    Task<IReadOnlyCollection<WorkOrderListItemDto>> ListEligibleForMergeAsync(int itemId, int? configId, CancellationToken ct);
-
     /// <summary>Bir sipariş satırı için atanmış toplam miktar (açık bakiye hesabı).</summary>
     Task<decimal> GetAllocatedQuantityForLineAsync(int sourceLineId, CancellationToken ct);
 

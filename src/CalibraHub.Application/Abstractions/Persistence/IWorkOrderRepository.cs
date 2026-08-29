@@ -60,9 +60,6 @@ public interface IWorkOrderRepository
     /// </summary>
     Task<int?> GetIdByDocumentIdAsync(int documentId, CancellationToken ct);
 
-    /// <summary>Toplama (mevcut emire ekleme) icin uygun is emirleri: ayni Item+Config, Status IN (Planned, Released).</summary>
-    Task<IReadOnlyCollection<WorkOrderListItemDto>> ListEligibleForMergeAsync(int itemId, int? configId, CancellationToken ct);
-
     /// <summary>İş emrinin RoutingId alanını günceller (Release auto-resolve sırasında kullanılır).</summary>
     Task SetRoutingIdAsync(int workOrderId, int routingId, CancellationToken ct);
 
