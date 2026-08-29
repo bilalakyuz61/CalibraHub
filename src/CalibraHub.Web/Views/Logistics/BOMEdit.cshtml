@@ -3294,183 +3294,6 @@
         } catch { /* silent */ }
     })();
 
-})();
-
-/* ──────────────────────────────────────────────────────────────
-   Rehber ozellestirme — admin "Alan ve Widget Tanimlari" ekranindan
-   PRODUCT_TREES formundaki alanlara rehber baglandiysa
-   FixedFieldLookupBridge LookupCard'i mount eder. parentCode (mamul)
-   icin binding zorunludur; binding yoksa kullanici hicbir buton gormez.
-   ────────────────────────────────────────────────────────────── */
-(function () {
-    // ── Mamul kodu resolve — module scope ──
-    // Onceden bridge mount tamamlanmadan listener bagligi yapilmadigi icin
-    // kullanici yazip blur etse bile reçete yuklenmiyordu. Sebep: wireCustomLookups
-    // bridge bundle yuklenmesini bekliyordu (CalibraHub.mountFixedFieldLookups async).
-    // Yeni yaklasim: ptResolveParent + listener'lar bundle'a bagimsiz olarak DOM
-    // hazir olunca baglanir; bridge ek olarak gelmis ise sadece display fill yapar.
-    // window.X formati ile cagri — helper'lar farkli IIFE icinde tanimli; lokal
-    // scope'tan erisilemez. Birinci IIFE bunlari window'a expose ediyor.
-    function ptResolveParent(code, bridgeDisplay) {
-        var nameEl = document.getElementById('ptParentName');
-        if (!code) {
-            if (nameEl) nameEl.value = '';
-            if (typeof window.ptSetConfigRowEnabled === 'function') window.ptSetConfigRowEnabled(false);
-            window.ptCurrentMaterialCode = null;
-            if (typeof window.ptSetRecipeStatus === 'function') window.ptSetRecipeStatus(null);
-            return;
-        }
-        if (nameEl && bridgeDisplay) nameEl.value = bridgeDisplay;
-        fetch('/Logistics/StockLookup?q=' + encodeURIComponent(code))
-            .then(function (r) { return r.json(); })
-            .then(function (list) {
-                var match = (list || []).find(function (s) { return (s.code || '').toLowerCase() === code.toLowerCase(); });
-                var cfgInput  = document.getElementById('ptConfigCode');
-                var cfgDescRow = document.getElementById('ptConfigDescRow');
-                var cfgDesc   = document.getElementById('ptConfigDesc');
-                if (!match) {
-                    // Stok yok — yine de BOM lookup deneyelim (silinmis stok edge case)
-                    // ve sonuc yoksa form'u "yeni recete" durumuna getir.
-                    if (typeof window.ptLoadExistingTree === 'function') window.ptLoadExistingTree(code, null, false);
-                    return;
-                }
-                if (nameEl && !bridgeDisplay) nameEl.value = match.name || '';
-                var isCfg = match.hasConfig === true || match.hasConfig === 'true';
-                if (typeof window.ptSetConfigRowEnabled === 'function') window.ptSetConfigRowEnabled(isCfg);
-                if (cfgDescRow) cfgDescRow.style.display = 'none';
-                window.ptCurrentMaterialCode = isCfg ? match.code : null;
-                if (isCfg) {
-                    if (cfgInput) cfgInput.value = '';
-                    if (cfgDesc) cfgDesc.value = '';
-                    if (typeof window.ptLoadExistingTree === 'function') window.ptLoadExistingTree(match.code, null, false);
-                } else {
-                    if (typeof window.ptLoadExistingTree === 'function') window.ptLoadExistingTree(match.code, null);
-                }
-            })
-            .catch(function (err) {
-                console.warn('[BOMEdit] ptResolveParent fetch hatasi:', err);
-            });
-    }
-    // Disaridan da cagrilabilsin (admin tools, debug) — window'a expose
-    window.ptResolveParent = ptResolveParent;
-
-    // ── Resolve dedup + debounce ──
-    // Bridge mount durumuna bagimli olmadan, kullanici yazarken AJAX in-place
-    // fill calismali (stok/cari kart pattern'i). Bridge varsa her keystroke
-    // change dispatch eder; yoksa change sadece blur'da fire eder. Bu yuzden
-    // ek olarak debounced 'input' handler — her iki senaryoda da calisir.
-    // Dedup: ayni kod tekrar gelirse fetch atma.
-    var lastResolvedCode = null;
-    var debouncedTimer = null;
-    function maybeResolve(code, bridgeDisplay, immediate) {
-        code = (code || '').trim();
-        if (code === lastResolvedCode) return;
-        clearTimeout(debouncedTimer);
-        if (immediate) {
-            lastResolvedCode = code;
-            ptResolveParent(code, bridgeDisplay);
-        } else {
-            debouncedTimer = setTimeout(function () {
-                lastResolvedCode = code;
-                ptResolveParent(code, bridgeDisplay);
-            }, 250);
-        }
-    }
-
-    function attachParentListeners() {
-        var parentInput = document.getElementById('ptParentCode');
-        if (!parentInput) { setTimeout(attachParentListeners, 100); return; }
-        if (parentInput.dataset.ptListenersAttached === '1') return;
-        parentInput.dataset.ptListenersAttached = '1';
-
-        parentInput.addEventListener('change', function () {
-            maybeResolve(parentInput.value, parentInput.getAttribute('data-display'), false);
-        });
-        parentInput.addEventListener('input', function () {
-            maybeResolve(parentInput.value, parentInput.getAttribute('data-display'), false);
-        });
-        parentInput.addEventListener('blur', function () {
-            maybeResolve(parentInput.value, null, true);
-        });
-        parentInput.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') { e.preventDefault(); maybeResolve(parentInput.value, null, true); }
-        });
-        parentInput.addEventListener('ffl-clear', function () { lastResolvedCode = null; });
-        parentInput.addEventListener('ffl-sync',  function () {
-            lastResolvedCode = (parentInput.value || '').trim();
-        });
-    }
-
-    function attachComponentListeners() {
-        var compInput = document.getElementById('cfCompCode');
-        if (!compInput) { setTimeout(attachComponentListeners, 100); return; }
-        if (compInput.dataset.cfListenersAttached === '1') return;
-        compInput.dataset.cfListenersAttached = '1';
-
-        compInput.addEventListener('change', function () {
-            var code = (compInput.value || '').trim();
-            var nameEl = document.getElementById('cfCompName');
-            var cfgWrap  = document.getElementById('cfCompCfgWrap');
-            var cfgLabel = document.getElementById('cfCompCfgLabel');
-            var cfgCodeEl = document.getElementById('cfCompCfgCode');
-            var cfgDescEl = document.getElementById('cfCompCfgDesc');
-            if (!code) {
-                if (nameEl) nameEl.value = '';
-                if (cfgWrap)  cfgWrap.classList.add('pte-cfg-disabled');
-                if (cfgLabel) cfgLabel.classList.add('pte-cfg-disabled');
-                return;
-            }
-            var bridgeDisplay = compInput.getAttribute('data-display');
-            if (nameEl && bridgeDisplay) nameEl.value = bridgeDisplay;
-            fetch('/Logistics/StockLookup?q=' + encodeURIComponent(code))
-                .then(function (r) { return r.json(); })
-                .then(function (list) {
-                    var match = (list || []).find(function (s) { return (s.code || '').toLowerCase() === code.toLowerCase(); });
-                    if (match) {
-                        if (nameEl && !bridgeDisplay) nameEl.value = match.name || '';
-                        var isCfg = match.hasConfig === true || match.hasConfig === 'true';
-                        if (cfgWrap)  cfgWrap.classList.toggle('pte-cfg-disabled', !isCfg);
-                        if (cfgLabel) cfgLabel.classList.toggle('pte-cfg-disabled', !isCfg);
-                        if (cfgCodeEl) cfgCodeEl.value = '';
-                        if (cfgDescEl) cfgDescEl.value = '';
-                        ptCompMaterialCode = isCfg ? match.code : null;
-                    }
-                })
-                .catch(function () {});
-        });
-    }
-
-    // Bridge bundle (CalibraHub.mountFixedFieldLookups) varsa onu da cagir;
-    // yoksa endise yok — listener'lar zaten bagli, plain input olarak calisir.
-    // 2026-07-05: poll-only yerine event-tabanli — loader script.onload
-    // 'calibrahub-bundle-ready' event'i atar, mount aninda tetiklenir (onceden
-    // 200ms poll + cache'siz bundle nedeniyle kartlar gozle gorulur gec geliyordu).
-    var fflMountStarted = false;
-    function tryMountFixedFieldLookups() {
-        if (fflMountStarted) return;
-        if (!window.CalibraHub || typeof CalibraHub.mountFixedFieldLookups !== 'function') {
-            setTimeout(tryMountFixedFieldLookups, 100);
-            return;
-        }
-        fflMountStarted = true;
-        CalibraHub.mountFixedFieldLookups('PRODUCT_TREES')
-            .then(function () {
-                // Kartlar mount oldu — bekleme gorseli (input icindeki buyutec) kalksin
-                document.querySelectorAll('.pte-lookup--pending').forEach(function (el) {
-                    el.classList.remove('pte-lookup--pending');
-                });
-            })
-            .catch(function () { /* sessizce — plain input akisi devrede kalir */ });
-    }
-    window.addEventListener('calibrahub-bundle-ready', tryMountFixedFieldLookups);
-
-    function init() {
-        attachParentListeners();
-        attachComponentListeners();
-        tryMountFixedFieldLookups();
-    }
-
-
     /* ═══════════════════════════════════════════════════════════════════
        REÇETE AĞACI — çok seviyeli tek ekranda düzenleme (2026-08-29)
 
@@ -4055,12 +3878,192 @@
         pttEl('pttSave').addEventListener('click', pttSave);
     }
 
+    // Arac cubugu baglari — bu IIFE'nin sonunda, DOM hazir degilse
+    // pttBindToolbar kendi icinde DOMContentLoaded'a erteler.
+    pttBindToolbar();
+
+})();
+
+/* ──────────────────────────────────────────────────────────────
+   Rehber ozellestirme — admin "Alan ve Widget Tanimlari" ekranindan
+   PRODUCT_TREES formundaki alanlara rehber baglandiysa
+   FixedFieldLookupBridge LookupCard'i mount eder. parentCode (mamul)
+   icin binding zorunludur; binding yoksa kullanici hicbir buton gormez.
+   ────────────────────────────────────────────────────────────── */
+(function () {
+    // ── Mamul kodu resolve — module scope ──
+    // Onceden bridge mount tamamlanmadan listener bagligi yapilmadigi icin
+    // kullanici yazip blur etse bile reçete yuklenmiyordu. Sebep: wireCustomLookups
+    // bridge bundle yuklenmesini bekliyordu (CalibraHub.mountFixedFieldLookups async).
+    // Yeni yaklasim: ptResolveParent + listener'lar bundle'a bagimsiz olarak DOM
+    // hazir olunca baglanir; bridge ek olarak gelmis ise sadece display fill yapar.
+    // window.X formati ile cagri — helper'lar farkli IIFE icinde tanimli; lokal
+    // scope'tan erisilemez. Birinci IIFE bunlari window'a expose ediyor.
+    function ptResolveParent(code, bridgeDisplay) {
+        var nameEl = document.getElementById('ptParentName');
+        if (!code) {
+            if (nameEl) nameEl.value = '';
+            if (typeof window.ptSetConfigRowEnabled === 'function') window.ptSetConfigRowEnabled(false);
+            window.ptCurrentMaterialCode = null;
+            if (typeof window.ptSetRecipeStatus === 'function') window.ptSetRecipeStatus(null);
+            return;
+        }
+        if (nameEl && bridgeDisplay) nameEl.value = bridgeDisplay;
+        fetch('/Logistics/StockLookup?q=' + encodeURIComponent(code))
+            .then(function (r) { return r.json(); })
+            .then(function (list) {
+                var match = (list || []).find(function (s) { return (s.code || '').toLowerCase() === code.toLowerCase(); });
+                var cfgInput  = document.getElementById('ptConfigCode');
+                var cfgDescRow = document.getElementById('ptConfigDescRow');
+                var cfgDesc   = document.getElementById('ptConfigDesc');
+                if (!match) {
+                    // Stok yok — yine de BOM lookup deneyelim (silinmis stok edge case)
+                    // ve sonuc yoksa form'u "yeni recete" durumuna getir.
+                    if (typeof window.ptLoadExistingTree === 'function') window.ptLoadExistingTree(code, null, false);
+                    return;
+                }
+                if (nameEl && !bridgeDisplay) nameEl.value = match.name || '';
+                var isCfg = match.hasConfig === true || match.hasConfig === 'true';
+                if (typeof window.ptSetConfigRowEnabled === 'function') window.ptSetConfigRowEnabled(isCfg);
+                if (cfgDescRow) cfgDescRow.style.display = 'none';
+                window.ptCurrentMaterialCode = isCfg ? match.code : null;
+                if (isCfg) {
+                    if (cfgInput) cfgInput.value = '';
+                    if (cfgDesc) cfgDesc.value = '';
+                    if (typeof window.ptLoadExistingTree === 'function') window.ptLoadExistingTree(match.code, null, false);
+                } else {
+                    if (typeof window.ptLoadExistingTree === 'function') window.ptLoadExistingTree(match.code, null);
+                }
+            })
+            .catch(function (err) {
+                console.warn('[BOMEdit] ptResolveParent fetch hatasi:', err);
+            });
+    }
+    // Disaridan da cagrilabilsin (admin tools, debug) — window'a expose
+    window.ptResolveParent = ptResolveParent;
+
+    // ── Resolve dedup + debounce ──
+    // Bridge mount durumuna bagimli olmadan, kullanici yazarken AJAX in-place
+    // fill calismali (stok/cari kart pattern'i). Bridge varsa her keystroke
+    // change dispatch eder; yoksa change sadece blur'da fire eder. Bu yuzden
+    // ek olarak debounced 'input' handler — her iki senaryoda da calisir.
+    // Dedup: ayni kod tekrar gelirse fetch atma.
+    var lastResolvedCode = null;
+    var debouncedTimer = null;
+    function maybeResolve(code, bridgeDisplay, immediate) {
+        code = (code || '').trim();
+        if (code === lastResolvedCode) return;
+        clearTimeout(debouncedTimer);
+        if (immediate) {
+            lastResolvedCode = code;
+            ptResolveParent(code, bridgeDisplay);
+        } else {
+            debouncedTimer = setTimeout(function () {
+                lastResolvedCode = code;
+                ptResolveParent(code, bridgeDisplay);
+            }, 250);
+        }
+    }
+
+    function attachParentListeners() {
+        var parentInput = document.getElementById('ptParentCode');
+        if (!parentInput) { setTimeout(attachParentListeners, 100); return; }
+        if (parentInput.dataset.ptListenersAttached === '1') return;
+        parentInput.dataset.ptListenersAttached = '1';
+
+        parentInput.addEventListener('change', function () {
+            maybeResolve(parentInput.value, parentInput.getAttribute('data-display'), false);
+        });
+        parentInput.addEventListener('input', function () {
+            maybeResolve(parentInput.value, parentInput.getAttribute('data-display'), false);
+        });
+        parentInput.addEventListener('blur', function () {
+            maybeResolve(parentInput.value, null, true);
+        });
+        parentInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); maybeResolve(parentInput.value, null, true); }
+        });
+        parentInput.addEventListener('ffl-clear', function () { lastResolvedCode = null; });
+        parentInput.addEventListener('ffl-sync',  function () {
+            lastResolvedCode = (parentInput.value || '').trim();
+        });
+    }
+
+    function attachComponentListeners() {
+        var compInput = document.getElementById('cfCompCode');
+        if (!compInput) { setTimeout(attachComponentListeners, 100); return; }
+        if (compInput.dataset.cfListenersAttached === '1') return;
+        compInput.dataset.cfListenersAttached = '1';
+
+        compInput.addEventListener('change', function () {
+            var code = (compInput.value || '').trim();
+            var nameEl = document.getElementById('cfCompName');
+            var cfgWrap  = document.getElementById('cfCompCfgWrap');
+            var cfgLabel = document.getElementById('cfCompCfgLabel');
+            var cfgCodeEl = document.getElementById('cfCompCfgCode');
+            var cfgDescEl = document.getElementById('cfCompCfgDesc');
+            if (!code) {
+                if (nameEl) nameEl.value = '';
+                if (cfgWrap)  cfgWrap.classList.add('pte-cfg-disabled');
+                if (cfgLabel) cfgLabel.classList.add('pte-cfg-disabled');
+                return;
+            }
+            var bridgeDisplay = compInput.getAttribute('data-display');
+            if (nameEl && bridgeDisplay) nameEl.value = bridgeDisplay;
+            fetch('/Logistics/StockLookup?q=' + encodeURIComponent(code))
+                .then(function (r) { return r.json(); })
+                .then(function (list) {
+                    var match = (list || []).find(function (s) { return (s.code || '').toLowerCase() === code.toLowerCase(); });
+                    if (match) {
+                        if (nameEl && !bridgeDisplay) nameEl.value = match.name || '';
+                        var isCfg = match.hasConfig === true || match.hasConfig === 'true';
+                        if (cfgWrap)  cfgWrap.classList.toggle('pte-cfg-disabled', !isCfg);
+                        if (cfgLabel) cfgLabel.classList.toggle('pte-cfg-disabled', !isCfg);
+                        if (cfgCodeEl) cfgCodeEl.value = '';
+                        if (cfgDescEl) cfgDescEl.value = '';
+                        ptCompMaterialCode = isCfg ? match.code : null;
+                    }
+                })
+                .catch(function () {});
+        });
+    }
+
+    // Bridge bundle (CalibraHub.mountFixedFieldLookups) varsa onu da cagir;
+    // yoksa endise yok — listener'lar zaten bagli, plain input olarak calisir.
+    // 2026-07-05: poll-only yerine event-tabanli — loader script.onload
+    // 'calibrahub-bundle-ready' event'i atar, mount aninda tetiklenir (onceden
+    // 200ms poll + cache'siz bundle nedeniyle kartlar gozle gorulur gec geliyordu).
+    var fflMountStarted = false;
+    function tryMountFixedFieldLookups() {
+        if (fflMountStarted) return;
+        if (!window.CalibraHub || typeof CalibraHub.mountFixedFieldLookups !== 'function') {
+            setTimeout(tryMountFixedFieldLookups, 100);
+            return;
+        }
+        fflMountStarted = true;
+        CalibraHub.mountFixedFieldLookups('PRODUCT_TREES')
+            .then(function () {
+                // Kartlar mount oldu — bekleme gorseli (input icindeki buyutec) kalksin
+                document.querySelectorAll('.pte-lookup--pending').forEach(function (el) {
+                    el.classList.remove('pte-lookup--pending');
+                });
+            })
+            .catch(function () { /* sessizce — plain input akisi devrede kalir */ });
+    }
+    window.addEventListener('calibrahub-bundle-ready', tryMountFixedFieldLookups);
+
+    function init() {
+        attachParentListeners();
+        attachComponentListeners();
+        tryMountFixedFieldLookups();
+    }
+
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
         init();
     }
-    pttBindToolbar();
 })();
 </script>
 }

@@ -75,6 +75,9 @@ export default function MrpPlanner(props) {
   var [applyResult, setApplyResult] = useState(null)
   var [confirmOpen, setConfirmOpen] = useState(false)
   var [discardOpen, setDiscardOpen] = useState(false)
+  // Eksik (satın alınacak) malzemeler icin talep belgesi de olussun mu — varsayilan ACIK,
+  // kullanici kapatabilir (o zaman yalniz rapor).
+  var [createPr, setCreatePr] = useState(true)
 
   // ── 1. adım: açık satırları yükle ──
   var loadLines = useCallback(function (q) {
@@ -144,7 +147,7 @@ export default function MrpPlanner(props) {
   function applyPlan() {
     if (!preview || !preview.runId) return
     setConfirmOpen(false); setLoading(true); setError(null)
-    postJson('/Production/MrpApply', { runId: preview.runId, createPurchaseRequest: false })
+    postJson('/Production/MrpApply', { runId: preview.runId, createPurchaseRequest: !!createPr })
       .then(function (d) {
         if (!d || !d.ok) { setError((d && d.error) || 'Plan uygulanamadı.'); return }
         setApplyResult(d); setStep(3)
@@ -344,8 +347,13 @@ export default function MrpPlanner(props) {
                             </button>
                           )}
                         </td>
-                        <td>
-                          <div style={{ fontWeight: 600 }}>{n.itemCode || ('#' + n.itemId)}</div>
+                        {/* Seviye girintisi: 0 = mamul, 1+ = yarı mamul/hammadde (çok seviyeli
+                            patlatma). Ağaç hiyerarşisi girintiyle okunur. */}
+                        <td style={{ paddingLeft: 10 + (n.level || 0) * 18 }}>
+                          <div style={{ fontWeight: 600 }}>
+                            {(n.level || 0) > 0 && <span className="mrp-dim" style={{ marginRight: 4 }}>↳</span>}
+                            {n.itemCode || ('#' + n.itemId)}
+                          </div>
                           <div className="mrp-dim" style={{ fontSize: 11 }}>{n.itemName}</div>
                         </td>
                         <td>
