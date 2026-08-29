@@ -9,10 +9,15 @@ using Microsoft.AspNetCore.Mvc;
 namespace CalibraHub.Web.Controllers;
 
 /// <summary>
-/// Cari/Stok Kodu Türetme Kuralları — Tasarım Kuralları (DocLayoutRule/DocumentNumberRule)
-/// pattern'inin tıpkısı. Sol "Tasarım > Tasarım Kuralları" altında 2 yeni tab:
+/// Cari/Stok/Seri Kodu Türetme Kuralları — Tasarım Kuralları (DocLayoutRule/DocumentNumberRule)
+/// pattern'inin tıpkısı. Sol "Tasarım > Tasarım Kuralları" altında tab'lar:
 ///   - /CodeRule?entity=contact → Cari Kodu Kuralları
 ///   - /CodeRule?entity=item    → Stok Kodu Kuralları
+///   - /CodeRule?entity=serial  → Seri Numarası Kuralları (2026-08-29) — otomatik seri üretimi
+///     (Items.AutoSerial açık kartlarda depo girişi/mobil teslimat) bu kural motorunu kullanır;
+///     bkz. SqlStockDocRepository.GenerateAutoSerialsAsync (fail-open: aktif/eşleşen kural yoksa
+///     legacy sabit format'a düşer). Benzersizlik CodeRuleCounter'a dayandığı için template'te
+///     {Counter:N} ZORUNLU tutulur (bkz. SaveJson).
 ///
 /// Routes:
 ///   GET    /CodeRule[?entity=contact|item]   → Index (SmartBoard liste)
@@ -46,7 +51,7 @@ public sealed class CodeRuleController : Controller
     {
         var et = NormalizeEntity(entity);
         ViewBag.EntityType = et;
-        ViewBag.EntityLabel = et == "Contact" ? "Cari Kodu" : "Stok Kodu";
+        ViewBag.EntityLabel = EntityLabel(et);
         var config = await BuildBoardConfigAsync(et, ct);
         return View(config);
     }
@@ -93,8 +98,15 @@ public sealed class CodeRuleController : Controller
             return BadRequest(new { ok = false, error = "Template zorunludur (örn. 'MS-{Field:City}-{Counter:4}')." });
 
         var et = NormalizeEntity(input.EntityType);
-        if (et != "Contact" && et != "Item")
-            return BadRequest(new { ok = false, error = "EntityType 'Contact' veya 'Item' olmalı." });
+        if (et != "Contact" && et != "Item" && et != "Serial")
+            return BadRequest(new { ok = false, error = "EntityType 'Contact', 'Item' veya 'Serial' olmalı." });
+
+        // Seri kuralı benzersizliği CodeRuleCounter'ın atomik artışına dayanır (bkz.
+        // SqlStockDocRepository.GenerateAutoSerialsAsync) — sayaçsız sabit template aynı
+        // belge/satır içindeki çoklu seri üretiminde (henüz DB'ye yazılmamış aday kodlar
+        // arasında) mükerrer kod üretebilir. Bu yüzden kaydetmeden reddedilir.
+        if (et == "Serial" && !input.Template.Contains("{Counter:", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { ok = false, error = "Seri Numarası kuralında template mutlaka {Counter:N} içermelidir (aksi halde çoklu seri üretiminde çakışma riski oluşur)." });
 
         try
         {
