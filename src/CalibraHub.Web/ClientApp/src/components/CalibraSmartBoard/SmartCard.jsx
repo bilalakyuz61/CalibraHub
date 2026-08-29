@@ -371,8 +371,11 @@ export default function SmartCard(props) {
   function dispatchActionUrl(action) {
     if (!action || !action.url) return
     /* Sekme açma mantığı TEK YERDE: openActionUrl. Varsayılan ALT SEKME. */
+    // SmartCard entity nesnesi ALMAZ — kimlik alanlari duz prop olarak gelir
+    // (props.title / props.subtitle). Burada entity.* kullanmak calisma zamaninda
+    // ReferenceError verirdi; derleme bunu yakalamaz.
     var opened = openActionUrl(action, {
-      defaultTitle: entity.subtitle || entity.title || action.label,
+      defaultTitle: subtitle || title || action.label,
     })
     if (opened) return
 

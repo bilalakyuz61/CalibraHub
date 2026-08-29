@@ -39,6 +39,11 @@ export function openActionUrl(action, opts) {
   var options = opts || {}
   var tab = action.openInTab
 
+  /* Hash-only URL ("#detail-1") AYNI SAYFA İÇİNDE gezinmedir — sekme açılmaz.
+     Varsayılan alt-sekme kuralı bunları da kapsasaydı, ekran içi bölüm geçişleri
+     boş bir sekme açardı. Açıkça openInTab gönderen bir çağrı istisnadır. */
+  if (!tab && typeof action.url === 'string' && action.url.charAt(0) === '#') return false
+
   // openInTab hiç verilmemişse VARSAYILAN alt sekme (bkz. dosya başı).
   var isAsChild
   var explicitMatchPath
