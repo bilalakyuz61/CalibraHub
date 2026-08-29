@@ -1821,6 +1821,10 @@ public sealed class DocumentService : IDocumentService
                 ContactName = first.ContactName,
                 ContactAddress = first.ContactAddress,
                 SalesRepId = first.SalesRepId,
+                // Depo (2026-08-29): kaynak teklifin başlık deposu siparişe TAŞINIR. Taşınmazsa
+                // deposu satırında yazmayan kalemler siparişte deposuz kalır — rezervasyon "depo
+                // belirlenemedi" ile düşer ve teklif üzerinden geçen ön kontrolle çelişirdi.
+                LocationId = first.LocationId,
                 CurrencyId = first.CurrencyId,
                 // PageComment Seq 1067/1068 — kur + KDV Dahil kaynak teklifin header'ından taşınır.
                 // LineTotal'ler zaten kaynak satırdan aynen kopyalanıyor (aşağıda), o toplamlar
