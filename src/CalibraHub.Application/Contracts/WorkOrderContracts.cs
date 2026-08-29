@@ -144,6 +144,34 @@ public sealed record CreateWorkOrderFromSalesLineRequest(
     /// <summary>Doluysa mevcut emire AllocatedQuantity ekler (toplama). NULL ise yeni emir acar.</summary>
     int? TargetWorkOrderId);
 
+/// <summary>Bir MRP planlı emrinin tek bir kaynak sipariş satırından taşıdığı miktar.</summary>
+public sealed record MrpWorkOrderSourceLine(int SourceDocumentId, int SourceLineId, decimal Quantity);
+
+/// <summary>
+/// MRP koşusundan iş emri üretimi (2026-08-29). <see cref="CreateWorkOrderFromSalesLineRequest"/>
+/// ile aynı işi yapar ama İKİ FARKI vardır:
+/// <list type="number">
+/// <item>ÇOKLU kaynak satırı taşır — kümüle/sipariş-bazlı kırılımda tek emir birden çok
+/// sipariş satırından beslenir; her biri için ayrı <c>WorkOrderSource</c> kaydı yazılır.</item>
+/// <item>Satır bilgisi (ItemId/UnitId/LocationId) ÇAĞIRANDAN gelir — servis satırı tekrar
+/// okumaz. <c>CreateFromSalesLineAsync</c>'in içindeki <c>GetSalesLineAsync</c> her çağrıda
+/// belgenin TÜM satırlarını çeker; toplu koşuda bu N kez tam-belge okuma demekti.</item>
+/// </list>
+/// </summary>
+public sealed record CreateWorkOrderFromMrpRequest(
+    int ItemId,
+    int? ConfigId,
+    decimal Quantity,
+    int? UnitId,
+    int? LocationId,
+    DateTime? PlannedStartDate,
+    DateTime? PlannedEndDate,
+    IReadOnlyList<MrpWorkOrderSourceLine> Sources,
+    /// <summary>Doluysa mevcut emre miktar eklenir (toplama); NULL ise yeni emir açılır.</summary>
+    int? TargetWorkOrderId,
+    /// <summary>Koşu izi — WorkOrder.MrpRunId'ye yazılır.</summary>
+    int? MrpRunId);
+
 /// <summary>
 /// İş emrinin ÜRETİM HAREKETİ satırı — mamul girişi (MovementType=Receipt) ve bileşen
 /// sarfı (Issue) aynı listede döner.

@@ -91,8 +91,12 @@ public sealed class ProductionController : Controller
         IMachineCapacityReportService capacityReport,
         CalibraHub.Application.Auditing.IAuditTrailService audit,
         ILogger<ProductionController> logger,
-        IUserSettingRepository userSettings)
+        IUserSettingRepository userSettings,
+        CalibraHub.Application.Abstractions.Services.IMrpService mrp,
+        IPermissionService permService)
     {
+        _mrp = mrp;
+        _permService = permService;
         _service = service;
         _operations = operations;
         _routings = routings;
@@ -118,6 +122,22 @@ public sealed class ProductionController : Controller
         _audit = audit;
         _logger = logger;
         _userSettings = userSettings;
+    }
+
+    /// <summary>MRP koşusu servisi (Faz 2, 2026-08-29).</summary>
+    private readonly CalibraHub.Application.Abstractions.Services.IMrpService _mrp;
+    private readonly IPermissionService _permService;
+
+    /// <summary>Yazma (olusturma/duzenleme) icin yeterli sayilan izin kodlari.</summary>
+    private static readonly string[] WriteActionCodes = { "CREATE", "EDIT_OWN", "EDIT_ALL" };
+
+    /// <summary>Verilen form kodunda gecerli kullanicinin izinlerinden herhangi biri var mi
+    /// (SalesController.HasFormPermissionAsync ile ayni desen).</summary>
+    private async Task<bool> HasFormPermissionAsync(string formCode, string[] actionCodes, CancellationToken ct)
+    {
+        CalibraHub.Application.Security.UserAuthorizationCatalog.TryParseRole(User.FindFirstValue(ClaimTypes.Role) ?? "", out var role);
+        int? dept = int.TryParse(User.FindFirstValue("department_id"), out var d) && d > 0 ? d : null;
+        return await _permService.CheckAnyAsync(CurrentUserId() ?? 0, role, dept, formCode, actionCodes, ct);
     }
 
     private static string BlockTypeLabel(byte t) => t switch
@@ -1790,6 +1810,103 @@ public sealed class ProductionController : Controller
     // GET  /Production/MachineScheduleData?from=&to=             → makineler + bloklar + planlanacak kuyruğu
     // POST /Production/SaveScheduleBlock                         → oluştur/taşı (çakışma uyarı olarak döner)
     // POST /Production/DeleteScheduleBlock                       → soft-delete
+    // ═══════════════════════════════════════════════════════════════
+    // MRP — siparişlerden iş emri planlama (Faz 2, 2026-08-29)
+    //
+    // Üç adım: liste (açık sipariş satırları) → önizleme (Draft koşu) → onay (uygula).
+    // Önizleme HİÇBİR ŞEY yazmaz (koşu kaydı hariç); iş emri yalnız onayda açılır.
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>MRP ekranı. Opsiyonel documentId ile tek siparişe odaklanır (sipariş kartı kısayolu).</summary>
+    [HttpGet("Production/Mrp")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MrpPlanning)]
+    public IActionResult Mrp(int? documentId)
+    {
+        ViewData["Title"] = "Malzeme İhtiyaç Planlama";
+        ViewData["MrpDocumentId"] = documentId ?? 0;
+        return View();
+    }
+
+    /// <summary>1. adım — seçilebilir açık satış siparişi satırları.</summary>
+    [HttpGet("Production/MrpOpenLines")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MrpPlanning)]
+    public async Task<IActionResult> MrpOpenLines(int? documentId, string? search, CancellationToken ct)
+    {
+        try
+        {
+            var lines = await _mrp.ListOpenOrderLinesAsync(documentId, search, ct);
+            return Json(new { ok = true, lines });
+        }
+        catch (Exception ex)
+        {
+            // Sessiz catch YASAK — gerçek hata sunucuya, istemciye jenerik mesaj.
+            _logger.LogError(ex, "[MRP] Açık sipariş satırları listelenemedi. documentId={DocumentId}", documentId);
+            return Json(new { ok = false, error = "Açık sipariş satırları listelenemedi." });
+        }
+    }
+
+    /// <summary>2. adım — planı hesaplar ve Draft koşu olarak saklar. İş emri AÇILMAZ.</summary>
+    [HttpPost("Production/MrpPreview")]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MrpPlanning)]
+    public async Task<IActionResult> MrpPreview([FromBody] MrpPreviewRequest req, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _mrp.PreviewAsync(req, CurrentUserId(), ct);
+            return Json(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[MRP] Önizleme hesaplanamadı.");
+            return Json(new { ok = false, error = "MRP önizlemesi hesaplanamadı." });
+        }
+    }
+
+    /// <summary>
+    /// 3. adım — önizlenen koşunun TAMAMINI uygular. İş emri oluşturma yetkisi ayrıca aranır:
+    /// MRP yetkisi olup iş emri yetkisi olmayan kullanıcı bu kapıdan emir açtıramamalı.
+    /// </summary>
+    [HttpPost("Production/MrpApply")]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionGateReviewed("HasFormPermissionAsync — MRP yetkisine EK OLARAK iş emri yazma yetkisi aranir")]
+    public async Task<IActionResult> MrpApply([FromBody] MrpApplyRequest req, CancellationToken ct)
+    {
+        if (!await HasFormPermissionAsync(FormCodes.MrpPlanning, WriteActionCodes, ct))
+            return Json(new { ok = false, error = "MRP çalıştırma yetkiniz bulunmuyor." });
+        if (!await HasFormPermissionAsync(FormCodes.WorkOrderEdit, WriteActionCodes, ct))
+            return Json(new { ok = false, error = "İş emri oluşturmak için yetkiniz bulunmuyor." });
+
+        try
+        {
+            var result = await _mrp.ApplyAsync(req, CurrentUserId(), ct);
+            return Json(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[MRP] Koşu {RunId} uygulanamadı.", req?.RunId);
+            return Json(new { ok = false, error = "MRP planı uygulanamadı." });
+        }
+    }
+
+    /// <summary>Kullanıcı vazgeçti — Draft koşuyu iptal eder.</summary>
+    [HttpPost("Production/MrpDiscard")]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MrpPlanning)]
+    public async Task<IActionResult> MrpDiscard(int runId, CancellationToken ct)
+    {
+        try
+        {
+            await _mrp.DiscardAsync(runId, CurrentUserId(), ct);
+            return Json(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[MRP] Koşu {RunId} iptal edilemedi.", runId);
+            return Json(new { ok = false, error = "Koşu iptal edilemedi." });
+        }
+    }
+
     [HttpGet]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineSchedule)]
     public IActionResult MachineSchedule() => View();

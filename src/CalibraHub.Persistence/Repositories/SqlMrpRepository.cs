@@ -503,4 +503,21 @@ public sealed class SqlMrpRepository : IMrpRepository
         cmd.Parameters.Add(new SqlParameter("@Msg", (object?)message ?? DBNull.Value));
         await cmd.ExecuteNonQueryAsync(ct);
     }
+
+    /// <inheritdoc />
+    public async Task SetWorkOrderMrpRunAsync(int workOrderId, int mrpRunId, CancellationToken ct)
+    {
+        if (workOrderId <= 0 || mrpRunId <= 0) return;
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            UPDATE {T("WorkOrder")} SET [MrpRunId] = @RunId
+             WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@RunId", mrpRunId));
+        cmd.Parameters.Add(new SqlParameter("@Id", workOrderId));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
 }

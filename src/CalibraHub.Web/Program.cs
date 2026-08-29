@@ -744,6 +744,12 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.ILotR
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IStockReservationRepository,
                            CalibraHub.Persistence.Repositories.SqlStockReservationRepository>();
 
+// MRP — siparişlerden iş emri planlama (Faz 2, 2026-08-29).
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IMrpRepository,
+                           CalibraHub.Persistence.Repositories.SqlMrpRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IMrpService,
+                           CalibraHub.Application.Services.Mrp.MrpService>();
+
 // Sabit alan ayarlari (FldSet — rehber eslestirme)
 builder.Services.AddScoped<IFieldSettingRepository, SqlFieldSettingRepository>();
 

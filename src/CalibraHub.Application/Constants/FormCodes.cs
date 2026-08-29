@@ -123,6 +123,11 @@ public static class FormCodes
     public const string ShopFloor      = "SHOP_FLOOR";
     public const string ProductionDefs = "PRODUCTION_DEFS";
 
+    /// <summary>MRP — siparişlerden iş emri planlama (2026-08-29). Önizleme = okuma,
+    /// uygulama = oluşturma yetkisi. SeedFormsAsync'e eklenmezse Yetki Yönetimi
+    /// matrisinde hiç görünmez (USER_MANAGEMENT dersi).</summary>
+    public const string MrpPlanning = "MRP_PLANNING";
+
     // Makine Planlama (Üretim Çizelgeleme) — Faz 1 Manuel (2026-08-04).
     public const string MachineSchedule = "MACHINE_SCHEDULE";
     // Makine Çalışma Takvimi (haftalık müsaitlik + resmi tatil) — Faz 2 (2026-08-05).

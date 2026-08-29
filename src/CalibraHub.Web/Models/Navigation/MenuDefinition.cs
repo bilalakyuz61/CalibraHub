@@ -217,6 +217,8 @@ public static class MenuDefinition
                     PermissionFormCode: FormCodes.WorkOrders),
                 new("production.shopfloor",   isEn ? "Production Terminal"       : "Üretim Terminali",       "Tablet",        "/Production/ShopFloor",    null,
                     PermissionFormCode: FormCodes.ShopFloor),
+                new("production.mrp",         isEn ? "Material Requirements (MRP)" : "Malzeme İhtiyaç Planlama", "Workflow", "/Production/Mrp", null,
+                    PermissionFormCode: FormCodes.MrpPlanning),
                 new("production.machineschedule", isEn ? "Machine Scheduling"    : "Makine Planlama",        "CalendarClock", "/Production/MachineSchedule", null,
                     PermissionFormCode: FormCodes.MachineSchedule),
                 new("production.machinecalendar", isEn ? "Shift Scenarios" : "Vardiya Senaryoları", "CalendarDays",  "/Production/MachineCalendar", null,

@@ -14943,6 +14943,9 @@ END;
             // 2026-08-04: Makine Planlama (Üretim Çizelgeleme, Faz 1 Manuel) — Gantt canvas UI,
             // ShopFloor gibi widget hedefi olmayan özel ekran.
             ("MACHINE_SCHEDULE",    "Makine Planlama",                  "Üretim",               null,                       519,  false),
+            // 2026-08-29: MRP — siparişlerden iş emri planlama. Önizleme→onay akışlı özel
+            // ekran (widget hedefi değil), MachineSchedule ile aynı sınıfta.
+            ("MRP_PLANNING",        "Malzeme İhtiyaç Planlama (MRP)",   "Üretim",               null,                       517,  false),
             ("MACHINE_CALENDAR",    "Makine Çalışma Takvimi",           "Üretim",               null,                       520,  false),
             // 2026-08-22: Kapasite / Yük Raporu — makine doluluk ısı haritası, MachineSchedule/MachineCalendar gibi widget hedefi olmayan özel ekran.
             ("CAPACITY_LOAD",       "Kapasite / Yük Raporu",            "Üretim",               null,                       521,  false),

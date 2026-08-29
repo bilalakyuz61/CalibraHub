@@ -101,4 +101,11 @@ public interface IMrpRepository
 
     /// <summary>Apply sonrası koşu satırına üretilen emir/belge Id'sini işler.</summary>
     Task SetRunLineResultAsync(int runLineId, int? workOrderId, int? documentId, string? message, CancellationToken ct);
+
+    /// <summary>
+    /// İş emrine koşu izini yazar (<c>WorkOrder.MrpRunId</c>). Ters yön (koşu → emir) zaten
+    /// <c>MrpRunLine.CreatedWorkOrderId</c>'de; bu, emirden koşuya gidebilmek içindir.
+    /// Yalnız MRP'nin kendi açtığı/beslediği emirlerde çağrılır.
+    /// </summary>
+    Task SetWorkOrderMrpRunAsync(int workOrderId, int mrpRunId, CancellationToken ct);
 }

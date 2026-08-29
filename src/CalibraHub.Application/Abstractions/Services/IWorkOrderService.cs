@@ -25,6 +25,13 @@ public interface IWorkOrderService
     /// </summary>
     Task<int> CreateFromSalesLineAsync(CreateWorkOrderFromSalesLineRequest request, CancellationToken ct);
 
+    /// <summary>
+    /// MRP koşusundan iş emri üretir/besler. <see cref="CreateFromSalesLineAsync"/>'ten farkı
+    /// çoklu kaynak satırı taşıması ve satır verisini çağırandan alması (N+1 tuzağından kaçınmak
+    /// için) — ayrıntı: <see cref="CreateWorkOrderFromMrpRequest"/>.
+    /// </summary>
+    Task<int> CreateFromMrpAsync(CreateWorkOrderFromMrpRequest request, CancellationToken ct);
+
     Task<IReadOnlyCollection<WorkOrderListItemDto>> ListEligibleForMergeAsync(int itemId, int? configId, CancellationToken ct);
 
     /// <summary>Bir sipariş satırı için atanmış toplam miktar (açık bakiye hesabı).</summary>

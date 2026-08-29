@@ -354,6 +354,102 @@ public sealed class WorkOrderService : IWorkOrderService
         return revisionId;
     }
 
+    /// <inheritdoc />
+    public async Task<int> CreateFromMrpAsync(CreateWorkOrderFromMrpRequest request, CancellationToken ct)
+    {
+        if (request.Quantity <= 0)
+            throw new ArgumentException("Miktar 0'dan buyuk olmali.", nameof(request));
+        if (request.ItemId <= 0)
+            throw new ArgumentException("Malzeme secilmeli.", nameof(request));
+
+        // Malzeme Belge Kilitleri ("is_emri") — MRP de manuel açma ile AYNI kapıya tabidir.
+        // Kilidi atlamak, ekrandan açılamayan emri toplu koşuyla açtırmak olurdu.
+        var lockedForWorkOrder = await _logisticsConfig.GetLockedItemIdsByDocTypeAsync(
+            ItemDocumentLockTypes.WorkOrderCode, ct);
+        if (lockedForWorkOrder.Contains(request.ItemId))
+        {
+            var lockedItem = (await _logisticsConfig.GetItemsByIdsAsync(new[] { request.ItemId }, ct))
+                .FirstOrDefault();
+            var label = lockedItem?.Code ?? $"#{request.ItemId}";
+            throw new InvalidOperationException(
+                $"'{label}' malzemesi İş Emri / Üretim için kilitli — Malzeme Belge Kilitleri ekranından kilidi kaldırın.");
+        }
+
+        var sources = (request.Sources ?? Array.Empty<MrpWorkOrderSourceLine>())
+            .Where(s => s.SourceLineId > 0 && s.Quantity > 0)
+            .ToList();
+
+        // ── Toplama: mevcut açık emre miktar ekle ──
+        if (request.TargetWorkOrderId is > 0)
+        {
+            var target = await _workOrders.GetAsync(request.TargetWorkOrderId.Value, ct)
+                ?? throw new InvalidOperationException("Hedef is emri bulunamadi.");
+            if (target.Status is not (WorkOrderStatus.Planned or WorkOrderStatus.Released))
+                throw new InvalidOperationException("Sadece Planned veya Released emire eklenebilir.");
+            // ID tabanlı eşleşme (CLAUDE.md) — ConfigId NULL ↔ NULL de eşleşme sayılır.
+            if (target.ItemId != request.ItemId || target.ConfigId != request.ConfigId)
+                throw new InvalidOperationException("Mamul/konfigurasyon uyusmuyor.");
+
+            foreach (var s in sources)
+            {
+                await _workOrders.AddSourceAsync(target.Id, s.SourceDocumentId, s.SourceLineId, s.Quantity, ct);
+                await LinkWorkOrderLineageAsync(target.DocumentId, s.SourceDocumentId, ct);
+                await TryLinkWorkOrderAllocAsync(s.SourceLineId, s.SourceDocumentId, target.DocumentId, target.Id, s.Quantity, ct);
+            }
+
+            await _workOrders.UpdateAsync(target.Id, new UpdateWorkOrderRequest(
+                PlannedQuantity: target.PlannedQuantity + request.Quantity,
+                UnitId: target.UnitId,
+                PlannedStartDate: target.PlannedStartDate,
+                PlannedEndDate: target.PlannedEndDate,
+                Priority: target.Priority,
+                AssignedUserId: target.AssignedUserId,
+                WarehouseLocationId: target.WarehouseLocationId,
+                RoutingId: target.RoutingId,
+                DefaultMachineId: target.DefaultMachineId,
+                AssignedPersonnelId: target.AssignedPersonnelId,
+                Notes: target.Notes,
+                ArgeProjectId: target.ArgeProjectId), null, ct);
+
+            _audit?.LogChanges("WorkOrder", target.Id, target.OrderNumber,
+                [new AuditFieldChange("PlannedQuantity", "Planlanan Miktar",
+                    AuditDiff.Normalize(target.PlannedQuantity),
+                    AuditDiff.Normalize(target.PlannedQuantity + request.Quantity))],
+                detail: request.MrpRunId is > 0
+                    ? $"MRP koşusu #{request.MrpRunId} — mevcut emre toplama"
+                    : "MRP — mevcut emre toplama");
+            return target.Id;
+        }
+
+        // ── Yeni emir ──
+        var newId = await CreateAsync(new CreateWorkOrderRequest(
+            ItemId: request.ItemId,
+            ConfigId: request.ConfigId,
+            PlannedQuantity: request.Quantity,
+            UnitId: request.UnitId,
+            PlannedStartDate: request.PlannedStartDate,
+            PlannedEndDate: request.PlannedEndDate,
+            Priority: WorkOrderPriority.Medium,
+            AssignedUserId: null,
+            WarehouseLocationId: request.LocationId,
+            RoutingId: null,   // CreateAsync icinde Item bazli auto-resolve
+            DefaultMachineId: null,
+            AssignedPersonnelId: null,
+            Notes: request.MrpRunId is > 0 ? $"MRP koşusu #{request.MrpRunId}" : null), ct);
+
+        var createdWo = await _workOrders.GetAsync(newId, ct);
+        foreach (var s in sources)
+        {
+            await _workOrders.AddSourceAsync(newId, s.SourceDocumentId, s.SourceLineId, s.Quantity, ct);
+            if (createdWo is not null)
+            {
+                await LinkWorkOrderLineageAsync(createdWo.DocumentId, s.SourceDocumentId, ct);
+                await TryLinkWorkOrderAllocAsync(s.SourceLineId, s.SourceDocumentId, createdWo.DocumentId, newId, s.Quantity, ct);
+            }
+        }
+        return newId;
+    }
+
     public async Task<int> CreateFromSalesLineAsync(CreateWorkOrderFromSalesLineRequest request, CancellationToken ct)
     {
         if (request.Quantity <= 0)

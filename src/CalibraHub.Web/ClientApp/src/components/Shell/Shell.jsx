@@ -2591,72 +2591,6 @@ function ShortcutsBar(props) {
 
   return (
     <div className="flex-1 min-w-0 flex items-center gap-1.5">
-      {/* Kısayol düzenleme kontrolleri (kalem / Kaydet + Ekle + İsimler) — ÇUBUĞUN
-          SOL BAŞINDA. Sağ uçtayken sayfa yorumu (annotation) kalemiyle yan yana
-          düşüp karışıyordu (kullanıcı raporu 2026-08-29). */}
-      {loaded && (
-        <div className="flex-shrink-0">
-          {editMode ? (
-            <button
-              type="button"
-              onClick={commitEdit}
-              title={tShell('shortcuts_save', lang)}
-              aria-label={tShell('shortcuts_save', lang)}
-              className="w-8 h-8 rounded-xl flex items-center justify-center text-white transition-transform hover:scale-105"
-              style={{ background: 'linear-gradient(135deg,#22c55e,#16a34a)', boxShadow: '0 4px 12px rgba(34,197,94,0.35)' }}
-            >
-              <Check size={15} strokeWidth={2.6} />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={enterEditMode}
-              title={tShell('shortcuts_edit', lang)}
-              aria-label={tShell('shortcuts_edit', lang)}
-              className={
-                'w-8 h-8 rounded-xl flex items-center justify-center transition-colors ' +
-                (isDark ? 'text-white/40 hover:text-white hover:bg-white/[0.06]' : 'text-slate-400 hover:text-slate-800 hover:bg-slate-100')
-              }
-            >
-              <Pencil size={14} strokeWidth={2} />
-            </button>
-          )}
-        </div>
-      )}
-
-      {loaded && editMode && (
-        <button
-          type="button"
-          onClick={function() { setPickerOpen(true) }}
-          title={tShell('shortcuts_add', lang)}
-          className={
-            'flex items-center justify-center gap-1 w-8 h-8 rounded-lg flex-shrink-0 border border-dashed transition-colors ' +
-            (isDark ? 'border-white/20 text-white/60 hover:text-white hover:border-white/40 hover:bg-white/[0.05]'
-                    : 'border-slate-300 text-slate-500 hover:text-slate-800 hover:border-slate-400 hover:bg-slate-50')
-          }
-        >
-          <Plus size={13} strokeWidth={2.4} />
-        </button>
-      )}
-
-      {loaded && editMode && (
-        <label
-          className={
-            'flex items-center gap-1.5 h-8 px-2 rounded-lg flex-shrink-0 cursor-pointer select-none ' +
-            (isDark ? 'text-white/60 hover:text-white' : 'text-slate-500 hover:text-slate-800')
-          }
-          title={tShell('shortcuts_shownames', lang)}
-        >
-          <span className="text-[11px] font-medium whitespace-nowrap">{tShell('shortcuts_shownames', lang)}</span>
-          <MiniSwitch
-            isDark={isDark}
-            checked={showNames}
-            label={tShell('shortcuts_shownames', lang)}
-            onClick={function() { setShowNames(function(v) { return !v }) }}
-          />
-        </label>
-      )}
-
       {loaded && (
         <div className={'w-px h-5 flex-shrink-0 ' + (isDark ? 'bg-white/10' : 'bg-slate-200')} />
       )}
@@ -2723,6 +2657,75 @@ function ShortcutsBar(props) {
       >
         <Home size={15} strokeWidth={1.8} />
       </button>
+
+      {/* Kısayol düzenleme kontrolleri (kalem / Kaydet + Ekle + İsimler) — ANA SAYFA'NIN
+          SAĞINDA (kullanıcı isteği, 2026-08-29). Daha önce çubuğun sol başındaydı; oradan
+          da taşınmıştı çünkü sağ uçta sayfa yorumu (annotation) kalemiyle yan yana düşüp
+          karışıyordu. Buradaki yeri her ikisinden de uzak: çark/ana sayfa ikilisinin
+          hemen sağında, kısayol chip'lerinden önce. */}
+      {loaded && (
+        <div className="flex-shrink-0">
+          {editMode ? (
+            <button
+              type="button"
+              onClick={commitEdit}
+              title={tShell('shortcuts_save', lang)}
+              aria-label={tShell('shortcuts_save', lang)}
+              className="w-8 h-8 rounded-xl flex items-center justify-center text-white transition-transform hover:scale-105"
+              style={{ background: 'linear-gradient(135deg,#22c55e,#16a34a)', boxShadow: '0 4px 12px rgba(34,197,94,0.35)' }}
+            >
+              <Check size={15} strokeWidth={2.6} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={enterEditMode}
+              title={tShell('shortcuts_edit', lang)}
+              aria-label={tShell('shortcuts_edit', lang)}
+              className={
+                'w-8 h-8 rounded-xl flex items-center justify-center transition-colors ' +
+                (isDark ? 'text-white/40 hover:text-white hover:bg-white/[0.06]' : 'text-slate-400 hover:text-slate-800 hover:bg-slate-100')
+              }
+            >
+              <Pencil size={14} strokeWidth={2} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {loaded && editMode && (
+        <button
+          type="button"
+          onClick={function() { setPickerOpen(true) }}
+          title={tShell('shortcuts_add', lang)}
+          className={
+            'flex items-center justify-center gap-1 w-8 h-8 rounded-lg flex-shrink-0 border border-dashed transition-colors ' +
+            (isDark ? 'border-white/20 text-white/60 hover:text-white hover:border-white/40 hover:bg-white/[0.05]'
+                    : 'border-slate-300 text-slate-500 hover:text-slate-800 hover:border-slate-400 hover:bg-slate-50')
+          }
+        >
+          <Plus size={13} strokeWidth={2.4} />
+        </button>
+      )}
+
+      {loaded && editMode && (
+        <label
+          className={
+            'flex items-center gap-1.5 h-8 px-2 rounded-lg flex-shrink-0 cursor-pointer select-none ' +
+            (isDark ? 'text-white/60 hover:text-white' : 'text-slate-500 hover:text-slate-800')
+          }
+          title={tShell('shortcuts_shownames', lang)}
+        >
+          <span className="text-[11px] font-medium whitespace-nowrap">{tShell('shortcuts_shownames', lang)}</span>
+          <MiniSwitch
+            isDark={isDark}
+            checked={showNames}
+            label={tShell('shortcuts_shownames', lang)}
+            onClick={function() { setShowNames(function(v) { return !v }) }}
+          />
+        </label>
+      )}
+
 
       {loaded && (resolved.length > 0 || editMode) && (
         <div className={'w-px h-5 flex-shrink-0 ' + (isDark ? 'bg-white/10' : 'bg-slate-200')} />
