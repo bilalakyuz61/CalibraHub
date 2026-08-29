@@ -16,7 +16,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { CircleDot, ChevronLeft, ChevronRight, X, AlertTriangle, Trash2, Check, Loader2 } from 'lucide-react'
 import SmartWidget from './SmartWidget'
 import { resolveColor, resolveIcon } from './DynamicWidgetFactory'
-import { navigateInWorkspace, deriveMatchPathFromUrl } from '../../utils/workspaceNav'
+import { navigateInWorkspace } from '../../utils/workspaceNav'
+import { openActionUrl } from './openActionUrl'
 import { getTopBody, useClosePortalOnFrameHidden } from '../../utils/topPortal'
 
 // Bir widget'ın kısıt ihlali varsa açıklama döndür, yoksa null.
@@ -369,50 +370,13 @@ export default function SmartCard(props) {
    */
   function dispatchActionUrl(action) {
     if (!action || !action.url) return
-    if (action.openInTab) {
-      try {
-        if (window.top && window.top.CalibraHub && typeof window.top.CalibraHub.openWorkspaceTab === 'function') {
-          // matchPath GENEL kurali (2026-07-21): alan acikca verilmemisse (undefined —
-          // backend openInTab: { title } gonderip matchPath'i hic eklemediyse) URL'in
-          // path kisminden otomatik turetilir, boylece "ayni sayfa zaten aciksa mevcut
-          // sekmeye git" davranisi caller ayrica matchPath gondermese bile calisir.
-          // Acikca null/false verilmis (alan mevcut ama falsy) "her tiklamada yeni
-          // sekme ac" istisnalari KIRILMAZ — sadece "tanimsiz" durumda turetme yapilir.
-          //
-          // asChild ISTISNASI (Bulgu 1, 2026-08-03 adversarial review): asChild:true
-          // niyeti zaten "her kayit KENDI child sekmesinde acilsin" demektir. matchPath'i
-          // backend'in gonderip gondermedigine GUVENME — .NET tarafinda null alanlar
-          // JsonIgnoreCondition.WhenWritingNull ile serialize'da DUSEBILIYOR (ilk yukleme
-          // vs in-place refresh farkli JSON secenekleri kullanabiliyor), bu da
-          // explicitMatchPath'i beklenmedik sekilde undefined yapip deriveMatchPathFromUrl'u
-          // tetikleyebilir → farkli id'ler ayni prefix'i paylasip birbirini ezer. Bu yuzden
-          // asChild=true iken matchPath'i HER ZAMAN JS tarafinda null'a kelepceleriz;
-          // sadece exact-URL eslesmesi (Shell openWorkspaceTab adim 1) gecerli olur.
-          var isAsChild = !!action.openInTab.asChild
-          var matchPath
-          if (isAsChild) {
-            matchPath = null
-          } else {
-            var explicitMatchPath = action.openInTab.matchPath
-            matchPath = (explicitMatchPath !== undefined)
-              ? (explicitMatchPath || null)
-              : deriveMatchPathFromUrl(action.url)
-          }
-          window.top.CalibraHub.openWorkspaceTab({
-            url: action.url,
-            title: action.openInTab.title || action.label || 'Yeni Sekme',
-            matchPath: matchPath,
-            // Nested (child) tab destegi (PageComment Seq 1063, 2026-08-03) — backend
-            // openInTab.asChild:true gonderirse Shell bu yeni sekmeyi cagiran sekmenin
-            // (veya openInTab.parentKey ile acikca verilenin) ALTINDA child olarak acar.
-            asChild: isAsChild,
-            parentKey: action.openInTab.parentKey || null,
-          })
-          return
-        }
-      } catch (e) { /* cross-origin — fallback */ }
-    }
-    // Hash-only URL'lerde workspace nav'i bypass et: navigateInWorkspace iframe icinde
+    /* Sekme açma mantığı TEK YERDE: openActionUrl. Varsayılan ALT SEKME. */
+    var opened = openActionUrl(action, {
+      defaultTitle: entity.subtitle || entity.title || action.label,
+    })
+    if (opened) return
+
+    // Hash-only URL'lerde workspace nav'i bypass et: navigateInFrame iframe icinde
     // ?workspace=1 ekledigi icin hash icine query string sokuyor (#detail-1?workspace=1),
     // bu da host sayfanin hashchange listener regex'ini bozuyor. Pure hash icin direct set.
     if (typeof action.url === 'string' && action.url.charAt(0) === '#') {

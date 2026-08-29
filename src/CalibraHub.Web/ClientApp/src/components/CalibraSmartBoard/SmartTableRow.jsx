@@ -54,7 +54,8 @@ import { AlertTriangle, Trash2, X, ArrowUpRight, List, MoreVertical, ChevronRigh
 import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon } from './DynamicWidgetFactory'
 import { checkConstraintViolation, resolveTokensWithRecord } from './SmartWidget'
 import GuideListField from '../DynamicWidgetRenderer/GuideListField'
-import { navigateInWorkspace, deriveMatchPathFromUrl } from '../../utils/workspaceNav'
+import { navigateInWorkspace } from '../../utils/workspaceNav'
+import { openActionUrl } from './openActionUrl'
 import { getTopBody, getTopFrameOffset, getTopViewportSize, useClosePortalOnFrameHidden } from '../../utils/topPortal'
 
 /* ── Per-sutun render yardimcilari — align/pin/font tum hucre tiplerinde ortak ── */
@@ -594,41 +595,15 @@ export default function SmartTableRow(props) {
 
   function dispatchActionUrl(action) {
     if (!action || !action.url) return
-    if (action.openInTab) {
-      try {
-        if (window.top && window.top.CalibraHub && typeof window.top.CalibraHub.openWorkspaceTab === 'function') {
-          // matchPath GENEL kurali (2026-07-21) — bkz. SmartCard.jsx dispatchActionUrl
-          // (birebir ayni mantik): alan acikca verilmemisse (undefined) URL path'inden
-          // turetilir; acikca null/false verilmis istisnalar KIRILMAZ.
-          //
-          // asChild ISTISNASI (Bulgu 1, 2026-08-03 adversarial review) — bkz. SmartCard.jsx
-          // dispatchActionUrl (birebir ayni mantik): backend'in matchPath'i JSON'da
-          // gonderip gondermedigine guvenilmez (WhenWritingNull null'i dusurebiliyor),
-          // bu yuzden asChild=true iken matchPath JS tarafinda HER ZAMAN null'a
-          // kelepcelenir — sadece exact-URL eslesmesi gecerli olur.
-          var isAsChild = !!action.openInTab.asChild
-          var matchPath
-          if (isAsChild) {
-            matchPath = null
-          } else {
-            var explicitMatchPath = action.openInTab.matchPath
-            matchPath = (explicitMatchPath !== undefined)
-              ? (explicitMatchPath || null)
-              : deriveMatchPathFromUrl(action.url)
-          }
-          window.top.CalibraHub.openWorkspaceTab({
-            url: action.url,
-            title: action.openInTab.title || action.label || 'Yeni Sekme',
-            matchPath: matchPath,
-            // Nested (child) tab destegi (PageComment Seq 1063, 2026-08-03) — bkz.
-            // SmartCard.jsx dispatchActionUrl (birebir ayni mantik).
-            asChild: isAsChild,
-            parentKey: action.openInTab.parentKey || null,
-          })
-          return
-        }
-      } catch (e) { /* cross-origin — fallback */ }
-    }
+    /* Sekme açma mantığı TEK YERDE: openActionUrl (bkz. o dosyanın başındaki kural).
+       Varsayılan artık ALT SEKME — kayıt, listenin altında açılır.
+       Sekme başlığı: kaydın kimliği (kod/ad), aksiyon etiketi ("Düzenle") değil;
+       kullanıcı sekme şeridinde hangi kaydı açtığını görmeli. */
+    var opened = openActionUrl(action, {
+      defaultTitle: entity.subtitle || entity.title || action.label,
+    })
+    if (opened) return
+
     if (typeof action.url === 'string' && action.url.charAt(0) === '#') {
       try { window.location.hash = action.url } catch (e) { /* fallback */ }
       try { window.dispatchEvent(new HashChangeEvent('hashchange')) } catch (e) { /* ignore */ }

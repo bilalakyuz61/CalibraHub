@@ -28,7 +28,8 @@ import SmartBoardFilterPanel, { describeFilter, entityMatchesFilters } from './S
 import { resolveIcon, resolveColor } from './DynamicWidgetFactory'
 import { loadWidgetConfig } from '../../services/widgetConfigService'
 import { loadBoardColumnConfig, readBoardColumnConfigLocal } from '../../services/columnConfigService'
-import { navigateInWorkspace, deriveMatchPathFromUrl } from '../../utils/workspaceNav'
+import { navigateInWorkspace } from '../../utils/workspaceNav'
+import { openActionUrl } from './openActionUrl'
 
 var FILTER_STORAGE_PREFIX = 'cb-sb-filters:'
 function loadInitialFilters(boardKey) {
@@ -647,42 +648,10 @@ export default function SmartBoard(props) {
       return
     }
     if (action.url) {
-      // openInTab (2026-07-25, PageComment Seq 27) — SmartCard.jsx / SmartTableRow.jsx
-      // dispatchActionUrl ile BİREBİR AYNI mantık (bkz. AuditLogActionHelper.cs XML doc'u):
-      // board header aksiyonlarında (örn. "Karşılama Merkezi") Shell.openWorkspaceTab
-      // API'siyle yeni/mevcut tab'da açar — sol menüden tıklanmışçasına davranır. openInTab
-      // sunulmamışsa davranış ÖNCEKİYLE BİREBİR AYNI (navigateInWorkspace, aynı iframe içinde).
-      if (action.openInTab) {
-        try {
-          if (window.top && window.top.CalibraHub && typeof window.top.CalibraHub.openWorkspaceTab === 'function') {
-            // asChild ISTISNASI (Bulgu 1, 2026-08-03 adversarial review) — bkz. SmartCard.jsx
-            // dispatchActionUrl (birebir ayni mantik): backend'in matchPath'i JSON'da
-            // gonderip gondermedigine guvenilmez (WhenWritingNull null'i dusurebiliyor),
-            // bu yuzden asChild=true iken matchPath JS tarafinda HER ZAMAN null'a
-            // kelepcelenir — sadece exact-URL eslesmesi gecerli olur.
-            var isAsChild = !!action.openInTab.asChild
-            var matchPath
-            if (isAsChild) {
-              matchPath = null
-            } else {
-              var explicitMatchPath = action.openInTab.matchPath
-              matchPath = (explicitMatchPath !== undefined)
-                ? (explicitMatchPath || null)
-                : deriveMatchPathFromUrl(action.url)
-            }
-            window.top.CalibraHub.openWorkspaceTab({
-              url: action.url,
-              title: action.openInTab.title || action.label || 'Yeni Sekme',
-              matchPath: matchPath,
-              // Nested (child) tab destegi (PageComment Seq 1063, 2026-08-03) — bkz.
-              // SmartCard.jsx dispatchActionUrl (birebir ayni mantik).
-              asChild: isAsChild,
-              parentKey: action.openInTab.parentKey || null,
-            })
-            return
-          }
-        } catch (e) { /* cross-origin — fallback */ }
-      }
+      /* Sekme açma mantığı TEK YERDE: openActionUrl (bkz. o dosyanın kuralı).
+         Header aksiyonları da ("Yeni X") varsayılan olarak ALT SEKMEDE açılır —
+         liste sekmesi kalıcı kalır, yeni kayıt onun altında görünür. */
+      if (openActionUrl(action, { defaultTitle: action.label })) return
       navigateInWorkspace(action.url)
     }
   }, [])
