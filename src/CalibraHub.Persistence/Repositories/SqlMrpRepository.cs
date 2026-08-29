@@ -505,6 +505,143 @@ public sealed class SqlMrpRepository : IMrpRepository
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<MrpItemInfo>> GetItemInfoAsync(IReadOnlyCollection<int> itemIds, CancellationToken ct)
+    {
+        var ids = (itemIds ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList();
+        if (ids.Count == 0) return Array.Empty<MrpItemInfo>();
+
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        var ps = string.Join(",", ids.Select((_, i) => $"@it{i}"));
+        cmd.CommandText = $"""
+            SELECT i.[Id], ISNULL(i.[Code], N''), ISNULL(i.[Name], N''), i.[TypeId], i.[UnitId],
+                   u.[Code] AS UnitCode,
+                   ISNULL(i.[WorkOrderSplitPolicy], N'PerOrderLine') AS SplitPolicy
+            FROM {T("Items")} i
+            LEFT JOIN {T("Unit")} u ON u.[Id] = i.[UnitId]
+            WHERE i.[Id] IN ({ps}) AND i.[CompanyId] = @CompanyId;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
+        for (var i = 0; i < ids.Count; i++) cmd.Parameters.Add(new SqlParameter($"@it{i}", ids[i]));
+
+        var rows = new List<MrpItemInfo>(ids.Count);
+        await using var rd = await cmd.ExecuteReaderAsync(ct);
+        while (await rd.ReadAsync(ct))
+            rows.Add(new MrpItemInfo(
+                rd.GetInt32(0), rd.GetString(1), rd.GetString(2),
+                rd.IsDBNull(3) ? null : rd.GetInt32(3),
+                rd.IsDBNull(4) ? null : rd.GetInt32(4),
+                rd.IsDBNull(5) ? null : rd.GetString(5),
+                rd.GetString(6)));
+        return rows;
+    }
+
+    /// <inheritdoc />
+    public async Task AddPegsAsync(IReadOnlyList<WorkOrderPegInput> pegs, int? userId, CancellationToken ct)
+    {
+        var list = (pegs ?? Array.Empty<WorkOrderPegInput>())
+            .Where(p => p.WorkOrderId > 0 && p.ParentWorkOrderId > 0 && p.Quantity > 0m)
+            .ToList();
+        if (list.Count == 0) return;
+
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            foreach (var p in list)
+            {
+                await using var cmd = conn.CreateCommand();
+                cmd.Transaction = tx;
+                cmd.CommandText = $"""
+                    INSERT INTO {T("WorkOrderPeg")}
+                        ([CompanyId],[WorkOrderId],[ParentWorkOrderId],[ParentComponentId],
+                         [RootDocumentId],[RootLineId],[Quantity],[Level],[MrpRunId],
+                         [IsActive],[CreatedById],[Created])
+                    VALUES (@CompanyId,@Wo,@Parent,@Comp,@RootDoc,@RootLine,@Qty,@Level,@Run,1,@User,SYSUTCDATETIME());
+                    """;
+                cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
+                cmd.Parameters.Add(new SqlParameter("@Wo", p.WorkOrderId));
+                cmd.Parameters.Add(new SqlParameter("@Parent", p.ParentWorkOrderId));
+                cmd.Parameters.Add(new SqlParameter("@Comp", (object?)p.ParentComponentId ?? DBNull.Value));
+                cmd.Parameters.Add(new SqlParameter("@RootDoc", p.RootDocumentId));
+                cmd.Parameters.Add(new SqlParameter("@RootLine", p.RootLineId));
+                cmd.Parameters.Add(new SqlParameter("@Qty", p.Quantity));
+                cmd.Parameters.Add(new SqlParameter("@Level", (byte)Math.Clamp(p.Level, 0, 255)));
+                cmd.Parameters.Add(new SqlParameter("@Run", (object?)p.MrpRunId ?? DBNull.Value));
+                cmd.Parameters.Add(new SqlParameter("@User", (object?)userId ?? DBNull.Value));
+                await cmd.ExecuteNonQueryAsync(ct);
+            }
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            try { await tx.RollbackAsync(ct); } catch { /* rollback hatası orijinali gizlemesin */ }
+            throw;
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<WorkOrderPegRow>> ListPegsByWorkOrderAsync(int workOrderId, CancellationToken ct)
+        => ListPegsAsync("[WorkOrderId]", workOrderId, byParent: false, ct);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<WorkOrderPegRow>> ListPegsByParentAsync(int parentWorkOrderId, CancellationToken ct)
+        => ListPegsAsync("[ParentWorkOrderId]", parentWorkOrderId, byParent: true, ct);
+
+    /// <summary>
+    /// Peg listesi. <paramref name="byParent"/> true ise KARŞI taraf (alt emir) bilgileri
+    /// gösterilir, false ise üst emir bilgileri — kullanıcı hangi yöne bakıyorsa onun
+    /// malzeme/numara bilgisini görmeli.
+    /// </summary>
+    private async Task<IReadOnlyList<WorkOrderPegRow>> ListPegsAsync(
+        string column, int id, bool byParent, CancellationToken ct)
+    {
+        if (id <= 0) return Array.Empty<WorkOrderPegRow>();
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+
+        var otherJoin = byParent ? "p.[WorkOrderId]" : "p.[ParentWorkOrderId]";
+        cmd.CommandText = $"""
+            SELECT p.[Id], p.[WorkOrderId], p.[ParentWorkOrderId], p.[ParentComponentId],
+                   p.[RootDocumentId], rd.[DocumentNumber] AS RootDocNo, p.[RootLineId],
+                   p.[Quantity], p.[Level],
+                   w.[ItemId], i.[Code], i.[Name], wd.[DocumentNumber] AS WoNo, w.[Status]
+            FROM {T("WorkOrderPeg")} p
+            LEFT JOIN {T("Document")}  rd ON rd.[Id] = p.[RootDocumentId]
+            LEFT JOIN {T("WorkOrder")} w  ON w.[Id]  = {otherJoin}
+            LEFT JOIN {T("Document")}  wd ON wd.[Id] = w.[DocumentId]
+            LEFT JOIN {T("Items")}     i  ON i.[Id]  = w.[ItemId]
+            WHERE p.{column} = @Id AND p.[IsActive] = 1 AND p.[CompanyId] = @CompanyId
+            ORDER BY p.[Level], p.[Id];
+            """;
+        cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
+
+        var rows = new List<WorkOrderPegRow>();
+        await using var rd2 = await cmd.ExecuteReaderAsync(ct);
+        while (await rd2.ReadAsync(ct))
+            rows.Add(new WorkOrderPegRow(
+                Id:                 rd2.GetInt32(0),
+                WorkOrderId:        rd2.GetInt32(1),
+                ParentWorkOrderId:  rd2.GetInt32(2),
+                ParentComponentId:  rd2.IsDBNull(3) ? null : rd2.GetInt32(3),
+                RootDocumentId:     rd2.GetInt32(4),
+                RootDocumentNumber: rd2.IsDBNull(5) ? null : rd2.GetString(5),
+                RootLineId:         rd2.GetInt32(6),
+                Quantity:           rd2.GetDecimal(7),
+                Level:              rd2.GetByte(8),
+                ItemId:             rd2.IsDBNull(9) ? null : rd2.GetInt32(9),
+                ItemCode:           rd2.IsDBNull(10) ? null : rd2.GetString(10),
+                ItemName:           rd2.IsDBNull(11) ? null : rd2.GetString(11),
+                WorkOrderNumber:    rd2.IsDBNull(12) ? null : rd2.GetString(12),
+                Status:             rd2.IsDBNull(13) ? null : rd2.GetByte(13)));
+        return rows;
+    }
+
+    /// <inheritdoc />
     public async Task SetWorkOrderMrpRunAsync(int workOrderId, int mrpRunId, CancellationToken ct)
     {
         if (workOrderId <= 0 || mrpRunId <= 0) return;

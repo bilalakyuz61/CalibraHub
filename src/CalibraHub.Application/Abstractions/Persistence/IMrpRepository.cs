@@ -30,6 +30,27 @@ public sealed record MrpOpenWorkOrderRow(
 /// <summary>Açık satın alma siparişinden beklenen giriş (malzeme bazında toplanmış).</summary>
 public sealed record MrpOpenPurchaseRow(int ItemId, decimal OpenQuantity, DateTime? EarliestExpectedDate);
 
+/// <summary>
+/// MRP'nin bir malzeme hakkında bilmesi gereken her şey (tek toplu sorgudan).
+/// <c>ILogisticsConfigurationRepository.GetItemsByIdsAsync</c> KULLANILAMAZ: o okuma
+/// <c>WorkOrderSplitPolicy</c>/<c>TrackingType</c> gibi sonradan eklenen kolonları
+/// SELECT'ine almıyor — politika her zaman varsayılan görünür ve kırılım sessizce yanlış olurdu.
+/// </summary>
+public sealed record MrpItemInfo(
+    int ItemId, string Code, string Name, int? TypeId, int? UnitId, string? UnitCode, string SplitPolicy);
+
+/// <summary>Alt/üst iş emri bağı — <c>WorkOrderPeg</c> satırı.</summary>
+public sealed record WorkOrderPegRow(
+    int Id, int WorkOrderId, int ParentWorkOrderId, int? ParentComponentId,
+    int RootDocumentId, string? RootDocumentNumber, int RootLineId,
+    decimal Quantity, int Level,
+    int? ItemId, string? ItemCode, string? ItemName, string? WorkOrderNumber, byte? Status);
+
+/// <summary>Yazılacak peg kaydı (Id yok — INSERT).</summary>
+public sealed record WorkOrderPegInput(
+    int WorkOrderId, int ParentWorkOrderId, int? ParentComponentId,
+    int RootDocumentId, int RootLineId, decimal Quantity, int Level, int? MrpRunId);
+
 /// <summary>Kalıcılaştırılacak koşu satırı — <c>MrpRunLine</c> tablosunun birebir karşılığı.</summary>
 public sealed record MrpRunLineRecord(
     int Id,
@@ -108,4 +129,16 @@ public interface IMrpRepository
     /// Yalnız MRP'nin kendi açtığı/beslediği emirlerde çağrılır.
     /// </summary>
     Task SetWorkOrderMrpRunAsync(int workOrderId, int mrpRunId, CancellationToken ct);
+
+    /// <summary>Malzeme planlama bilgisi (kod/ad/tip/birim/kırılım politikası) — toplu.</summary>
+    Task<IReadOnlyList<MrpItemInfo>> GetItemInfoAsync(IReadOnlyCollection<int> itemIds, CancellationToken ct);
+
+    /// <summary>Alt/üst iş emri bağlarını yazar (Faz 4 — çok seviyeli patlatma).</summary>
+    Task AddPegsAsync(IReadOnlyList<WorkOrderPegInput> pegs, int? userId, CancellationToken ct);
+
+    /// <summary>Bu emir KİMLERİ besliyor — üst emirler (WorkOrderEdit "İş Emri Ağacı").</summary>
+    Task<IReadOnlyList<WorkOrderPegRow>> ListPegsByWorkOrderAsync(int workOrderId, CancellationToken ct);
+
+    /// <summary>Bu emri KİMLER besliyor — alt emirler.</summary>
+    Task<IReadOnlyList<WorkOrderPegRow>> ListPegsByParentAsync(int parentWorkOrderId, CancellationToken ct);
 }

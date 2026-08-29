@@ -1035,6 +1035,25 @@
         flex-wrap: wrap; margin-bottom: var(--space-3);
     }
     .bomt-hint { font-size: 12px; color: var(--text-muted); }
+
+    /* Araç çubuğu butonları. NOT: .pte-btn--primary/--secondary/--sm bu projede
+       tanımlı DEĞİL (calibra-actionbar.css yalnız .pte-btn + --icon içerir ve
+       temel sınıf saydam zeminlidir) — o yüzden burada kendi stilimiz var. */
+    .bomt-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 12px; border-radius: var(--radius-md);
+        font-size: 12px; font-weight: var(--font-weight-semibold);
+        line-height: 1.2; cursor: pointer; user-select: none;
+        border: 1px solid var(--border-subtle);
+        background: var(--surface-elev-2); color: var(--text-primary);
+        transition: border-color .12s, background .12s, opacity .12s;
+    }
+    .bomt-btn:hover:not(:disabled) { border-color: var(--border-strong); }
+    .bomt-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .bomt-btn--primary {
+        background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+    .bomt-btn--primary:hover:not(:disabled) { filter: brightness(1.08); }
     .bomt-warn {
         padding: 8px 12px; border-radius: var(--radius-md); font-size: 12px;
         background: var(--warning-soft-bg, rgba(245,158,11,.10));
@@ -1439,10 +1458,10 @@
                     <p class="pte-card-title">Reçete Ağacı</p>
 
                     <div class="bomt-toolbar">
-                        <button type="button" class="pte-btn pte-btn--secondary pte-btn--sm" id="pttReload">Yenile</button>
-                        <button type="button" class="pte-btn pte-btn--secondary pte-btn--sm" id="pttExpandAll">Tümünü Aç</button>
-                        <button type="button" class="pte-btn pte-btn--secondary pte-btn--sm" id="pttCollapseAll">Tümünü Kapat</button>
-                        <button type="button" class="pte-btn pte-btn--primary pte-btn--sm" id="pttSave">Ağacı Kaydet</button>
+                        <button type="button" class="bomt-btn" id="pttReload">Yenile</button>
+                        <button type="button" class="bomt-btn" id="pttExpandAll">Tümünü Aç</button>
+                        <button type="button" class="bomt-btn" id="pttCollapseAll">Tümünü Kapat</button>
+                        <button type="button" class="bomt-btn bomt-btn--primary" id="pttSave">Ağacı Kaydet</button>
                         <span class="bomt-hint" id="pttHint"></span>
                     </div>
 
@@ -1840,7 +1859,17 @@
             if (agacEl) agacEl.style.display = (tab === 'agac') ? '' : 'none';
 
             if (tab === 'bilesen') renderGrid();
-            if (tab === 'agac') pttOnTabShown();
+            if (tab === 'agac') {
+                // Sessiz kirilma yasak: burada atilan bir istisna sekmeyi bos
+                // birakir ve kullanici NEDENINI goremezdi.
+                try { pttOnTabShown(); }
+                catch (err) {
+                    console.error('[ReceteAgaci] Sekme acilamadi', err);
+                    var th = document.getElementById('pttTree');
+                    if (th) th.innerHTML = '<div class="bomt-empty">Recete agaci acilamadi: '
+                        + escHtml(err && err.message ? err.message : String(err)) + '</div>';
+                }
+            }
         });
     });
 
@@ -3494,6 +3523,9 @@
         }
 
         pttSetSaveEnabled(true);
+        var hint = pttEl('pttHint');
+        if (hint && !pttModel) hint.textContent = 'mamul #' + ptCurrentItemId
+            + (ptCurrentId ? ' / recete #' + ptCurrentId : ' / recete kaydedilmemis');
         // Kok degistiyse (baska recete/versiyon yuklendi) agaci tazele; aksi halde
         // kullanicinin kaydedilmemis duzenlemesini SILMEMEK icin oldugu gibi birak.
         if (pttLoadedKey !== pttRootKey()) pttLoad();
@@ -3762,7 +3794,7 @@
         box.innerHTML =
             '<div class="bomt-adder-row">'
           + '  <input type="text" class="pte-input" style="flex:1 1 240px;" placeholder="Malzeme kodu veya adi ara..." data-bomt-search>'
-          + '  <button type="button" class="pte-btn pte-btn--secondary pte-btn--sm" data-bomt-new>Yeni Malzeme Karti</button>'
+          + '  <button type="button" class="bomt-btn" data-bomt-new>Yeni Malzeme Karti</button>'
           + '</div>'
           + '<div class="bomt-results" style="display:none;" data-bomt-results></div>'
           + '<div data-bomt-newform style="display:none;"></div>';
@@ -3868,7 +3900,7 @@
           + '    <option value="5">Sarf Malzemesi</option>'
           + '  </select>'
           + '  <select class="pte-input" data-bomt-unit>' + unitOpts + '</select>'
-          + '  <button type="button" class="pte-btn pte-btn--primary pte-btn--sm" data-bomt-create>Olustur ve Ekle</button>'
+          + '  <button type="button" class="bomt-btn bomt-btn--primary" data-bomt-create>Olustur ve Ekle</button>'
           + '</div>';
         host.style.display = '';
         host.querySelector('[data-bomt-name]').focus();
@@ -3982,8 +4014,8 @@
           + '  <div class="pta-header"><h3></h3></div>'
           + '  <div class="pta-section"><div data-msg style="white-space:pre-line;font-size:13px;"></div></div>'
           + '  <div class="pta-section" style="display:flex;gap:8px;justify-content:flex-end;">'
-          + '    <button type="button" class="pte-btn pte-btn--secondary" data-cancel>Vazgec</button>'
-          + '    <button type="button" class="pte-btn pte-btn--primary" data-ok>Cikar</button>'
+          + '    <button type="button" class="bomt-btn" data-cancel>Vazgec</button>'
+          + '    <button type="button" class="bomt-btn bomt-btn--primary" data-ok>Cikar</button>'
           + '  </div>'
           + '</div>';
         back.querySelector('h3').textContent = title;
