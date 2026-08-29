@@ -1,4 +1,4 @@
-@model CalibraHub.Domain.Entities.CodeRule
+﻿@model CalibraHub.Domain.Entities.CodeRule
 @using System.Text.Json
 @{
     var entityType  = (string)(ViewBag.EntityType ?? Model.EntityType);
@@ -202,6 +202,7 @@
 </div>
 
 @section Scripts {
+@await Html.PartialAsync("_EmbedThemeSync")
 <script>
 (function() {
     var INITIAL = @Html.Raw(initialJson);

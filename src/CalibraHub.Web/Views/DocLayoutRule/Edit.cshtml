@@ -1,4 +1,4 @@
-@model CalibraHub.Web.Controllers.DocLayoutRuleController.DocLayoutRuleEditVm
+﻿@model CalibraHub.Web.Controllers.DocLayoutRuleController.DocLayoutRuleEditVm
 @{
     ViewData["Title"] = Model.Id == 0 ? "Yeni Tasarım Kuralı" : "Tasarım Kuralı Düzenle";
     ViewData["HelpKey"] = "doc-layout-rule-edit";
@@ -525,6 +525,7 @@
 </div>
 
 @section Scripts {
+@await Html.PartialAsync("_EmbedThemeSync")
 <script>
     // ── Tab geçişleri ─────────────────────────────────────────────────────
     document.querySelectorAll('.trf-tab').forEach(function(btn) {

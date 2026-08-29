@@ -1,0 +1,42 @@
+@*
+    Torun iframe tema senkronu — PageComment Seq 1125.
+
+    Tasarim Kurallari ailesi (DocLayoutRule / DocumentNumberRule / CodeRule) IKI KAT
+    iframe icinde acilir: Shell -> workspace sekmesi (host sayfa) -> _DesignRulesTabs
+    icindeki `?embed=1` ic cerceve. Shell.jsx tema degisiminde YALNIZ kendi belgesindeki
+    dogrudan-alt iframe'leri senkronlar (document.querySelectorAll('iframe')) — bu torun
+    cerceveye ULASMAZ. Ilk acilista sunucu dogru sinifi bastigi icin sorun gorunmez;
+    kullanici ekran acikken temayi degistirince bu cerceve eski temada kalir.
+
+    Cozum: ust (dogrudan ebeveyn — ayni origin, Shell tarafindan zaten senkronlanmis)
+    belgenin tema sinifini oku, kendine yansit ve canli degisimi izle.
+
+    Kullanim: yalniz `embed` modunda render eden sayfalarda, @section Scripts icinde:
+        @@await Html.PartialAsync("_EmbedThemeSync")
+*@
+<script>
+(function () {
+    function syncThemeFromParent() {
+        try {
+            if (window.self === window.top) return;   // gomulu degil — yapacak bir sey yok
+            var pDoc = window.parent.document;
+            var pIsDark = pDoc.documentElement.classList.contains('dark')
+                || pDoc.body.classList.contains('app-theme-dark');
+            document.documentElement.classList.toggle('dark', pIsDark);
+            document.documentElement.style.colorScheme = pIsDark ? 'dark' : 'light';
+            document.body.classList.toggle('app-theme-dark', pIsDark);
+            document.body.classList.toggle('app-theme-light', !pIsDark);
+        } catch (e) {
+            // Cross-origin ya da erisilemeyen DOM — sunucunun bastigi SSR temasi kalir.
+            if (window.console && console.warn) console.warn('Tema senkronu yapilamadi:', e);
+        }
+    }
+    syncThemeFromParent();
+    try {
+        new MutationObserver(syncThemeFromParent)
+            .observe(window.parent.document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    } catch (e) {
+        if (window.console && console.warn) console.warn('Tema izleyici kurulamadi:', e);
+    }
+})();
+</script>

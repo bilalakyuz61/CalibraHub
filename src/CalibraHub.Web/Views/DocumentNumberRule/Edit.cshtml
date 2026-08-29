@@ -1,4 +1,4 @@
-@model CalibraHub.Domain.Entities.DocumentNumberRule
+﻿@model CalibraHub.Domain.Entities.DocumentNumberRule
 @{
     ViewData["Title"] = Model.Id == 0 ? "Yeni Numara Kuralı" : "Numara Kuralı Düzenle";
     ViewData["HelpKey"] = "doc-number-rule-edit";
@@ -380,6 +380,7 @@
 </div>
 
 @section Scripts {
+@await Html.PartialAsync("_EmbedThemeSync")
 <script>
 (function() {
     // ── Tab geçişleri ──
