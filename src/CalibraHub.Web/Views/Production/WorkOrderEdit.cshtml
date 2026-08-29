@@ -1395,6 +1395,24 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                         }
                     }
                 </div>
+
+                @* ── İş Emri Ağacı (MRP Faz 4, 2026-08-29) ────────────────────────
+                   MRP çok seviyeli patlatma yaptığında yarı mamul emirleri üst emirlere
+                   WorkOrderPeg ile bağlanır (bir alt emrin BİRDEN ÇOK üstü olabilir —
+                   kümüle politika). Bu bölüm o bağları iki yönlü gösterir. Elle açılmış
+                   emirlerde bağ yoktur → bölüm hiç görünmez. *@
+                @if (!isNew)
+                {
+                    <div id="woePegSection" style="display:none; margin-top:22px;">
+                        <h2 style="margin:0 0 6px;">İş Emri Ağacı</h2>
+                        <div class="pane-hint">
+                            MRP koşusunun kurduğu alt/üst emir bağları. Üst emirler bu emrin ürettiğini
+                            tüketir; alt emirler bu emrin bileşenlerini üretir.
+                        </div>
+                        <div id="woePegParents" style="margin-bottom:14px;"></div>
+                        <div id="woePegChildren"></div>
+                    </div>
+                }
             </section>
 
             @* ── Kaynak Sipariş Ekleme Modalı (Faz 1.5) ────────────────────────
@@ -4034,6 +4052,58 @@ function _woeFmtQty(v) {
     });
     // Eğer rota tabı açık başlıyorsa direkt yükle
     setTimeout(maybeLoad, 100);
+})();
+
+/* ── İş Emri Ağacı (MRP Faz 4, 2026-08-29) ────────────────────────────────────
+   Alt/üst emir bağları WorkOrderPeg'den okunur. Bağ yoksa bölüm gizli kalır —
+   elle açılmış emirlerde boş bir başlık göstermek gürültü olurdu. */
+(function woePegInit() {
+    var section = document.getElementById('woePegSection');
+    if (!section) return;
+    var woId = @(Model?.Id ?? 0);
+    if (!(woId > 0)) return;
+
+    var STATUS_TR = { 0: 'Planlandı', 1: 'Yayımlandı', 2: 'Üretimde', 3: 'Tamamlandı', 4: 'Kapandı', 5: 'İptal' };
+
+    function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+    function qty(v) {
+        try { return Number(v || 0).toLocaleString('tr-TR', { maximumFractionDigits: 4 }); }
+        catch (e) { return String(v); }
+    }
+
+    function renderList(rows, title, emptyText) {
+        if (!rows || rows.length === 0) {
+            return '<div style="font-size:.82rem;font-weight:600;margin-bottom:5px;">' + esc(title) + '</div>' +
+                   '<div class="src-empty">' + esc(emptyText) + '</div>';
+        }
+        var html = '<div style="font-size:.82rem;font-weight:600;margin-bottom:5px;">' + esc(title) +
+                   ' (' + rows.length + ')</div>';
+        rows.forEach(function (r) {
+            html += '<div class="woe-source-row" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
+                      '<a href="/Production/WorkOrderEdit?id=' + r.workOrderId + '">' +
+                        esc(r.docNo || ('#' + r.workOrderId)) + '</a>' +
+                      '<span>' + esc(r.itemCode || '') + ' <span style="opacity:.65;">' + esc(r.itemName || '') + '</span></span>' +
+                      '<span style="opacity:.7;font-size:.78rem;">' + esc(STATUS_TR[r.status] || '') + '</span>' +
+                      (r.rootDocNo ? '<span style="opacity:.65;font-size:.78rem;">kaynak: ' + esc(r.rootDocNo) + '</span>' : '') +
+                      '<strong style="margin-left:auto;">' + qty(r.quantity) + '</strong>' +
+                    '</div>';
+        });
+        return html;
+    }
+
+    fetch('/Production/WorkOrderPegs?workOrderId=' + woId, { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!d || !d.ok) return;                       // hata sunucuda loglandi
+            var hasAny = (d.parents && d.parents.length) || (d.children && d.children.length);
+            if (!hasAny) return;                           // bag yok → bolum gizli kalir
+            document.getElementById('woePegParents').innerHTML =
+                renderList(d.parents, 'Üst İş Emirleri — bu emrin ürettiğini tüketir', 'Üst emir yok.');
+            document.getElementById('woePegChildren').innerHTML =
+                renderList(d.children, 'Alt İş Emirleri — bu emrin bileşenlerini üretir', 'Alt emir yok.');
+            section.style.display = '';
+        })
+        .catch(function (e) { console.warn('[WOE] İş emri ağacı okunamadı:', e); });
 })();
 </script>
 }

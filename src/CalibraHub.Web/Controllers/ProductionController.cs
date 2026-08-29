@@ -93,9 +93,11 @@ public sealed class ProductionController : Controller
         ILogger<ProductionController> logger,
         IUserSettingRepository userSettings,
         CalibraHub.Application.Abstractions.Services.IMrpService mrp,
+        CalibraHub.Application.Abstractions.Persistence.IMrpRepository mrpRepo,
         IPermissionService permService)
     {
         _mrp = mrp;
+        _mrpRepo = mrpRepo;
         _permService = permService;
         _service = service;
         _operations = operations;
@@ -126,6 +128,7 @@ public sealed class ProductionController : Controller
 
     /// <summary>MRP koşusu servisi (Faz 2, 2026-08-29).</summary>
     private readonly CalibraHub.Application.Abstractions.Services.IMrpService _mrp;
+    private readonly CalibraHub.Application.Abstractions.Persistence.IMrpRepository _mrpRepo;
     private readonly IPermissionService _permService;
 
     /// <summary>Yazma (olusturma/duzenleme) icin yeterli sayilan izin kodlari.</summary>
@@ -1886,6 +1889,46 @@ public sealed class ProductionController : Controller
         {
             _logger.LogError(ex, "[MRP] Koşu {RunId} uygulanamadı.", req?.RunId);
             return Json(new { ok = false, error = "MRP planı uygulanamadı." });
+        }
+    }
+
+    /// <summary>
+    /// Bir iş emrinin ağaç bağları (Faz 4): ÜST emirler (bu emir kimleri besliyor) ve ALT
+    /// emirler (bu emri kimler besliyor) + dolaylı kaynak siparişler. Seviye-0 emirlerin
+    /// doğrudan sipariş bağı zaten "Kaynak Sipariş" tablosundadır (WorkOrderSource).
+    /// </summary>
+    [HttpGet("Production/WorkOrderPegs")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
+    public async Task<IActionResult> WorkOrderPegs(int workOrderId, CancellationToken ct)
+    {
+        if (workOrderId <= 0) return Json(new { ok = true, parents = Array.Empty<object>(), children = Array.Empty<object>() });
+        try
+        {
+            var parents = await _mrpRepo.ListPegsByWorkOrderAsync(workOrderId, ct);
+            var children = await _mrpRepo.ListPegsByParentAsync(workOrderId, ct);
+            return Json(new
+            {
+                ok = true,
+                parents = parents.Select(p => new
+                {
+                    workOrderId = p.ParentWorkOrderId, docNo = p.WorkOrderNumber,
+                    itemCode = p.ItemCode, itemName = p.ItemName,
+                    quantity = p.Quantity, level = p.Level, status = p.Status,
+                    rootDocNo = p.RootDocumentNumber, rootLineId = p.RootLineId,
+                }),
+                children = children.Select(p => new
+                {
+                    workOrderId = p.WorkOrderId, docNo = p.WorkOrderNumber,
+                    itemCode = p.ItemCode, itemName = p.ItemName,
+                    quantity = p.Quantity, level = p.Level, status = p.Status,
+                    rootDocNo = p.RootDocumentNumber, rootLineId = p.RootLineId,
+                }),
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[MRP] İş emri ağacı okunamadı. WorkOrderId={Id}", workOrderId);
+            return Json(new { ok = false, error = "İş emri ağacı okunamadı." });
         }
     }
 
