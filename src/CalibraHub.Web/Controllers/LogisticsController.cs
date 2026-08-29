@@ -108,6 +108,30 @@ public sealed class LogisticsController : Controller
     /// </summary>
     private const int MaterialCardPageSize = 50;
 
+    // PageComment Seq 1128: Stok Turu (Items.TypeId) filtre secenekleri — MaterialCardEdit.cshtml
+    // #mceMaterialTypeId select'iyle BIREBIR ayni value/label (gercek kaydedilen veri kaynagi).
+    private static readonly IReadOnlyList<object> MaterialTypeFilterOptions = new List<object>
+    {
+        new Dictionary<string, object?> { ["value"] = "1",  ["label"] = "Hammadde" },
+        new Dictionary<string, object?> { ["value"] = "2",  ["label"] = "Yarı Mamul" },
+        new Dictionary<string, object?> { ["value"] = "3",  ["label"] = "Mamul" },
+        new Dictionary<string, object?> { ["value"] = "4",  ["label"] = "Ticari Mal" },
+        new Dictionary<string, object?> { ["value"] = "5",  ["label"] = "Sarf Malzemesi" },
+        new Dictionary<string, object?> { ["value"] = "10", ["label"] = "Kit" },
+    };
+
+    private static string? ResolveMaterialTypeLabel(int? typeId)
+    {
+        if (typeId is null) return null;
+        foreach (var opt in MaterialTypeFilterOptions)
+        {
+            if (opt is Dictionary<string, object?> d &&
+                string.Equals((string?)d["value"], typeId.Value.ToString(), StringComparison.Ordinal))
+                return (string?)d["label"];
+        }
+        return null;
+    }
+
     private async Task<object> BuildMaterialCardsBoardConfigAsync(CancellationToken ct)
     {
         var (cards, totalCount) = await _logisticsConfigurationService.GetItemsPagedAsync(null, 0, MaterialCardPageSize, ct);
@@ -172,6 +196,13 @@ public sealed class LogisticsController : Controller
             masterWidgets.Add(MakeWidget("w_ad", "Stok Adı", "text", STD_GROUP, STD_LBL));
         if (!handledColumns.Contains("Barcode"))
             masterWidgets.Add(MakeWidget("w_barcode", "Barkod", "text", STD_GROUP, STD_LBL));
+        // PageComment Seq 1128 (2026-08-29): Stok Turu filtresi. Secenekler MaterialCardEdit.cshtml
+        // #mceMaterialTypeId select'inin BIREBIR ayni degerleridir (gercek kaydedilen Items.TypeId
+        // degerleri buradan gelir) — Domain.Enums.ItemType enum'iyla ID eslesmesi FARKLIDIR (orn.
+        // enum'da 1=Mamul iken edit ekraninda 1=Hammadde); bu tutarsizlik backend/db uzmanina
+        // flag'lendi, burada duzeltilmedi. Filtrenin gercek veriyle eslesmesi icin edit ekranindaki
+        // deger seti esas alindi.
+        masterWidgets.Add(MakeWidget("w_tip", "Stok Türü", "options", STD_GROUP, STD_LBL, MaterialTypeFilterOptions));
         masterWidgets.Add(MakeWidget("w_aktif",       "Durum",              "boolean", STD_GROUP, STD_LBL));
         masterWidgets.Add(MakeWidget("w_kombinasyon", "Kombinasyon Takibi", "boolean", STD_GROUP, STD_LBL));
         masterWidgets.Add(MakeWidget("w_vergi",       "KDV Oranı",          "percent", STD_GROUP, STD_LBL));
@@ -510,6 +541,16 @@ public sealed class LogisticsController : Controller
                     alwaysVisible = false,
                 });
             }
+
+            // PageComment Seq 1128: Stok Turu — gercek deger card.TypeId (Items.TypeId).
+            // Label eslemesi MaterialTypeFilterOptions ile birebir (edit ekrani kaynakli).
+            cardWidgets.Add(new {
+                id = "w_tip", type = "data", dataType = "options", label = "Stok Türü",
+                value = (string?)card.TypeId?.ToString(),
+                detail = (string?)ResolveMaterialTypeLabel(card.TypeId),
+                color = "amber",
+                alwaysVisible = false,
+            });
 
             // 2026-05-23: Sistem widget'lari — Ihtiyaç Kaydi pattern'i ile ozdes.
             // FilterPanel entity.widgets'tan auto-discover ettigi icin "standart" alanlar
