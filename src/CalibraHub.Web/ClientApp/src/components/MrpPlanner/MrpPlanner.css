@@ -42,7 +42,10 @@ body.app-theme-dark .mrp-root {
   --mrp-blue:     #60a5fa;
 }
 
-/* ── Header (C-Grid standardı: ikon + başlık/alt başlık → arama → aksiyonlar) ── */
+/* ── Şerit (C-Grid sayfa standardı) ───────────────────────────────────────────
+   Sıra: kimlik (ikon + başlık/alt başlık) → arama → Filtre → Excel → Sütunlar →
+   ana eylem. Ölçüler RoutingTree/SmartBoard ile aynı tutuldu ki ekranlar arasında
+   geçerken şerit "zıplamasın". */
 .mrp-header {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 16px;
@@ -59,11 +62,40 @@ body.app-theme-dark .mrp-root {
 }
 .mrp-header-title { font-size: 14px; font-weight: 700; line-height: 1.2; }
 .mrp-header-sub   { font-size: 11px; color: var(--mrp-text-dim); margin-top: 1px; }
+/* Kimlik bloğu solda, araçlar sağda — arama ikisinin arasında esner. */
+.mrp-header__id { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.mrp-header__tools { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
+
 .mrp-search {
   flex: 0 1 300px; margin-left: auto;
   display: flex; align-items: center; gap: 6px;
   padding: 6px 10px; border-radius: 8px;
   background: var(--mrp-muted); border: 1px solid var(--mrp-border);
+}
+.mrp-search__clear {
+  border: 0; background: transparent; padding: 0; cursor: pointer; line-height: 0;
+  color: var(--mrp-text-dim); flex-shrink: 0;
+}
+.mrp-search__clear:hover { color: var(--mrp-text); }
+
+/* İkon butonlar (Filtre / Excel / Sütunlar / Yenile) — SmartBoard şeridiyle aynı ölçü. */
+.mrp-icon-btn {
+  position: relative;
+  width: 32px; height: 32px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--mrp-border); background: var(--mrp-surface);
+  color: var(--mrp-text-dim); transition: background .12s, color .12s, border-color .12s;
+}
+.mrp-icon-btn:hover:not(:disabled) { background: var(--mrp-muted); color: var(--mrp-text); }
+.mrp-icon-btn:disabled { opacity: .45; cursor: not-allowed; }
+.mrp-icon-btn--active { border-color: var(--mrp-indigo); color: var(--mrp-indigo); }
+.mrp-icon-btn__badge {
+  position: absolute; top: -5px; right: -5px;
+  min-width: 15px; height: 15px; padding: 0 4px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 999px; background: var(--mrp-indigo); color: #fff;
+  font-size: 9px; font-weight: 700; line-height: 1;
 }
 .mrp-search input {
   flex: 1; border: 0; outline: 0; background: transparent;
@@ -113,7 +145,10 @@ body.app-theme-dark .mrp-root {
 }
 .mrp-table td { padding: 8px 10px; border-bottom: 1px solid var(--mrp-border); vertical-align: middle; }
 .mrp-table tbody tr:last-child td { border-bottom: 0; }
+.mrp-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--mrp-muted) 45%, transparent); }
 .mrp-table tbody tr:hover { background: var(--mrp-muted); }
+/* Sticky başlık opak olmalı — altından satır görünmesin (SmartTable ile aynı kural). */
+.mrp-table th { box-shadow: inset 0 -1px 0 var(--mrp-border); }
 .mrp-num { text-align: right; font-variant-numeric: tabular-nums;
   font-family: ui-monospace, Menlo, Consolas, monospace; }
 .mrp-dim { color: var(--mrp-text-dim); }

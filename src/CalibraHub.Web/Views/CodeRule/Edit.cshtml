@@ -6,15 +6,18 @@
     var entityLabel = (string)(ViewBag.EntityLabel ?? (entityType == "Item" ? "Stok Kodu" : (entityType == "Serial" ? "Seri Numarası" : "Cari Kodu")));
     ViewData["Title"] = (Model.Id == 0 ? "Yeni" : "Düzenle") + " — " + entityLabel + " Kuralı";
     ViewData["HelpKey"] = "code-rule-edit";
+    ViewData["BodyClass"] = "page-cr-edit workspace-frame-body";
 
     var resetPeriods = ViewBag.ResetPeriods as System.Collections.IEnumerable;
     var sampleFields = (ViewBag.SampleFields as string[]) ?? Array.Empty<string>();
     var operators    = ViewBag.Operators as System.Collections.IEnumerable;
+    var isSerial      = entityType == "Serial";
 
     var initialJson = JsonSerializer.Serialize(new
     {
         id            = Model.Id,
         entityType    = entityType,
+        entityLabel   = entityLabel,
         name          = Model.Name,
         template      = Model.Template,
         priority      = Model.Priority,
@@ -27,53 +30,131 @@
     }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 }
 
+@* ────────────────────────────────────────────────────────────────────────
+   Görsel düzen kaynağı: Views/DocumentNumberRule/Edit.cshtml (dnr-* pattern).
+   Aynı sınıf isimleri KOPYALANMADI — DocumentNumberRule dosyasına dokunmadan
+   (görev kapsamı dışı) aynı görünümü üreten kendi ön ekli (cr-shell / cr-tab /
+   cr-preview-panel) sınıflar yazıldı. bkz. CLAUDE.md "CSS ve Tema Kuralları".
+   ──────────────────────────────────────────────────────────────────────── *@
 @section Styles {
 <style>
-    .cr-page { padding: 20px 24px; max-width: 1100px; margin: 0 auto; }
-    .cr-header {
-        position: sticky; top: 0; z-index: 5;
-        display: flex; align-items: center; justify-content: space-between;
-        padding: 12px 16px; margin: -20px -24px 16px;
-        background: var(--app-surface, #fff);
-        border-bottom: 1px solid var(--app-border, #e2e8f0);
-    }
-    body.app-theme-dark .cr-header { background: #0b1220; border-color: #1e293b; }
-    .cr-header__title { font-weight: 600; font-size: 14px; }
-    .cr-actions { display: flex; gap: 8px; }
-    .cr-btn {
-        padding: 7px 14px; font-size: 13px; font-weight: 500; border-radius: 6px;
-        border: 1px solid transparent; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-    }
-    .cr-btn--primary { background: #6366f1; color: #fff; }
-    .cr-btn--primary:hover { background: #4f46e5; }
-    .cr-btn--ghost { background: transparent; border-color: var(--app-border, #cbd5e1); color: var(--bs-body-color, #0f172a); }
-    body.app-theme-dark .cr-btn--ghost { color: #e2e8f0; border-color: #334155; }
-    .cr-btn--ghost:hover { background: rgba(99,102,241,0.08); }
+    .cr-wrap {
+        --cr-bg:        var(--app-content-bg);
+        --cr-surface:   var(--app-surface);
+        --cr-surface-2: var(--app-muted-surface);
+        --cr-border:    var(--app-border);
+        --cr-text:      var(--app-text);
+        --cr-muted:     var(--app-text-muted);
+        --cr-accent:    #6366f1;
+        --cr-accent-soft: rgba(99,102,241,0.12);
+        --cr-success:   #10b981;
+        --cr-danger:    #ef4444;
 
-    .cr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px; }
+        display: flex; justify-content: center; align-items: flex-start;
+        padding: 24px 16px; flex: 1 1 auto; overflow-y: auto;
+        background: var(--cr-bg);
+        color: var(--cr-text);
+    }
+
+    /* Shell — yatay 3 kolon: tabs | form | preview (DocumentNumberRule ile aynı iskelet) */
+    .cr-shell {
+        display: grid;
+        grid-template-columns: 200px 1fr 340px;
+        max-width: 1320px; width: 100%;
+        background: var(--cr-surface);
+        border: 1px solid var(--cr-border);
+        border-radius: 12px;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+        overflow: hidden;
+    }
+
+    /* Üst şerit — Aktif switch + entity etiketi */
+    .cr-shell-header {
+        grid-column: 1 / -1;
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 10px 22px;
+        border-bottom: 1px solid var(--cr-border);
+        background: var(--cr-surface-2);
+    }
+    .cr-shell-header__label {
+        font-size: 11px; font-weight: 600; color: var(--cr-muted);
+        letter-spacing: 0.02em;
+    }
+    .cr-switch { display: inline-flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--cr-text); font-weight: 500; cursor: pointer; }
+    .cr-switch__track {
+        width: 38px; height: 22px; border-radius: 11px;
+        background: var(--cr-border); position: relative; transition: background .18s;
+    }
+    .cr-switch__thumb {
+        position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+        border-radius: 50%; background: #fff;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.18); transition: left .18s;
+    }
+    .cr-switch.is-on .cr-switch__track { background: var(--cr-success); }
+    .cr-switch.is-on .cr-switch__thumb { left: 18px; }
+
+    /* Sol — tab listesi (Malzeme Kartı sol-menü paritesi: ring→dolu+glow dot) */
+    .cr-tabs {
+        padding: 14px 8px;
+        background: var(--cr-surface-2);
+        border-right: 1px solid var(--cr-border);
+        display: flex; flex-direction: column; gap: 2px;
+        min-height: 560px;
+    }
+    .cr-tab {
+        display: flex; align-items: center; gap: 10px;
+        padding: 9px 14px; border: none; background: transparent;
+        border-radius: 6px; cursor: pointer; text-align: left;
+        font-size: 13px; font-weight: 500; color: var(--cr-text);
+        border-left: 3px solid transparent; transition: background .12s, color .12s;
+    }
+    .cr-tab:hover { background: var(--cr-accent-soft); }
+    .cr-tab.active { background: var(--cr-accent-soft); color: var(--cr-accent); font-weight: 700; border-left-color: var(--cr-accent); }
+    .cr-tab::before {
+        content: ''; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        border: 1.5px solid #cbd5e1; background: transparent; transition: all .18s;
+    }
+    .cr-tab:hover::before { border-color: #94a3b8; }
+    .cr-tab.active::before { background: #6366f1; border-color: #6366f1; box-shadow: 0 0 7px rgba(99,102,241,.5); }
+    body.app-theme-dark .cr-tab::before { border-color: rgba(255,255,255,.24); }
+    body.app-theme-dark .cr-tab:hover::before { border-color: rgba(255,255,255,.48); }
+    body.app-theme-dark .cr-tab.active::before { background: #6366f1; border-color: #6366f1; box-shadow: 0 0 7px rgba(99,102,241,.55); }
+
+    /* Orta — form panel */
+    .cr-form { padding: 20px 24px; min-width: 0; background: var(--cr-surface); display: flex; flex-direction: column; }
+    .cr-panel { display: none; }
+    .cr-panel.active { display: block; }
+
+    .cr-row { display: grid; grid-template-columns: 160px 1fr; gap: 12px 14px; align-items: start; margin-bottom: 14px; }
+    .cr-row label { font-size: 12.5px; color: var(--cr-text); font-weight: 500; padding-top: 7px; }
+    .cr-row .hint { color: var(--cr-muted); font-weight: 400; font-size: 10.5px; margin-left: 4px; }
+    .cr-row-full { margin-bottom: 14px; }
+    .cr-row-full > label { display: block; font-size: 12.5px; color: var(--cr-text); font-weight: 500; margin-bottom: 6px; }
+
     .cr-field { display: flex; flex-direction: column; gap: 4px; }
-    .cr-field label { font-size: 12px; font-weight: 500; color: var(--bs-body-color, #475569); }
-    body.app-theme-dark .cr-field label { color: #94a3b8; }
     .cr-input, .cr-textarea, .cr-select {
-        padding: 7px 10px; font-size: 13px; border-radius: 5px;
-        border: 1px solid var(--app-border, #cbd5e1);
-        background: var(--app-surface, #fff); color: var(--bs-body-color, #0f172a);
-        color-scheme: light;
+        width: 100%; padding: 8px 10px; font-size: 13px; border-radius: 6px; box-sizing: border-box;
+        border: 1px solid var(--cr-border);
+        background: var(--cr-surface-2); color: var(--cr-text);
+        color-scheme: light; font-family: inherit; transition: border-color .12s, box-shadow .12s;
     }
     body.app-theme-dark .cr-input,
     body.app-theme-dark .cr-textarea,
-    body.app-theme-dark .cr-select {
-        background: #0f172a; border-color: #334155; color: #e2e8f0; color-scheme: dark;
+    body.app-theme-dark .cr-select { color-scheme: dark; }
+    .cr-input:focus, .cr-textarea:focus, .cr-select:focus {
+        outline: none; border-color: var(--cr-accent); box-shadow: 0 0 0 3px rgba(99,102,241,0.18);
     }
-    .cr-textarea { font-family: ui-monospace, Menlo, Consolas, monospace; resize: vertical; min-height: 60px; }
-    .cr-full { grid-column: 1 / -1; }
-    .cr-section {
-        margin: 24px 0; padding: 16px; border-radius: 8px;
-        background: var(--app-surface, #f8fafc);
-        border: 1px solid var(--app-border, #e2e8f0);
+    .cr-textarea { font-family: ui-monospace, Menlo, Consolas, monospace; resize: vertical; min-height: 52px; }
+
+    /* Info kart (dnr-info paritesi) */
+    .cr-info {
+        padding: 10px 12px; border-radius: 6px; font-size: 11.5px; line-height: 1.55;
+        background: var(--cr-accent-soft); border-left: 3px solid var(--cr-accent);
+        color: var(--cr-text); margin-bottom: 14px;
     }
-    body.app-theme-dark .cr-section { background: #0b1220; border-color: #1e293b; }
-    .cr-section__title { font-size: 13px; font-weight: 600; margin: 0 0 12px; }
+    .cr-info strong { color: var(--cr-accent); }
+    .cr-info--warn { background: rgba(239,68,68,0.1); border-left-color: var(--cr-danger); }
+    .cr-info--warn strong { color: var(--cr-danger); }
 
     .cr-tokens { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
     .cr-token {
@@ -84,121 +165,221 @@
     .cr-token:hover { background: rgba(99,102,241,0.2); }
 
     .cr-conds { display: flex; flex-direction: column; gap: 8px; }
-    .cr-cond {
-        display: grid; grid-template-columns: 110px 1fr 130px 1fr 40px; gap: 8px; align-items: end;
-    }
+    .cr-cond { display: grid; grid-template-columns: 110px 1fr 130px 1fr 40px; gap: 8px; align-items: end; }
     .cr-cond__del {
-        padding: 6px 10px; background: rgba(239,68,68,0.1); color: #ef4444;
+        padding: 6px 10px; background: rgba(239,68,68,0.1); color: var(--cr-danger);
         border: 1px solid rgba(239,68,68,0.3); border-radius: 5px; cursor: pointer; font-size: 12px;
     }
     .cr-cond__del:hover { background: rgba(239,68,68,0.2); }
+    .cr-add-btn {
+        margin-top: 8px; padding: 7px 14px; font-size: 12.5px; font-weight: 500; border-radius: 6px;
+        background: transparent; border: 1px solid var(--cr-border); color: var(--cr-text); cursor: pointer;
+    }
+    .cr-add-btn:hover { background: var(--cr-accent-soft); border-color: var(--cr-accent); }
 
-    .cr-preview {
-        margin-top: 12px; padding: 12px; border-radius: 6px;
-        background: rgba(99,102,241,0.06); border: 1px dashed rgba(99,102,241,0.4);
+    /* Sağ — Kod Önizleme paneli (dnr-preview paritesi + iki bölüm: pasif önizleme / gerçek test) */
+    .cr-preview-panel {
+        padding: 18px 18px; background: var(--cr-surface-2); border-left: 1px solid var(--cr-border);
+        min-height: 560px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto;
+    }
+    .cr-preview-title { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; color: var(--cr-muted); }
+    .cr-preview-value {
+        font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 19px; font-weight: 700;
+        color: var(--cr-success); word-break: break-all; min-height: 26px;
+    }
+    body.app-theme-dark .cr-preview-value { color: #34d399; }
+    .cr-preview-meta { font-size: 11px; color: var(--cr-muted); }
+    .cr-preview-parts { display: flex; gap: 6px; flex-wrap: wrap; }
+    .cr-prev-chip {
+        padding: 3px 8px; border-radius: 4px; font-size: 10.5px; font-weight: 600;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+    .cr-prev-chip.literal  { background: var(--cr-border); color: var(--cr-text); }
+    .cr-prev-chip.field    { background: rgba(99,102,241,0.18);  color: #6366f1; }
+    .cr-prev-chip.widget   { background: rgba(139,92,246,0.18);  color: #7c3aed; }
+    .cr-prev-chip.year,
+    .cr-prev-chip.month,
+    .cr-prev-chip.day      { background: rgba(245,158,11,0.18);  color: #d97706; }
+    .cr-prev-chip.counter  { background: rgba(16,185,129,0.18);  color: #059669; }
+    body.app-theme-dark .cr-prev-chip.field   { color: #a5b4fc; }
+    body.app-theme-dark .cr-prev-chip.widget  { color: #c4b5fd; }
+    body.app-theme-dark .cr-prev-chip.year,
+    body.app-theme-dark .cr-prev-chip.month,
+    body.app-theme-dark .cr-prev-chip.day     { color: #fbbf24; }
+    body.app-theme-dark .cr-prev-chip.counter { color: #34d399; }
+
+    .cr-preview-divider { border-top: 1px dashed var(--cr-border); margin: 4px 0; }
+
+    .cr-test-btn {
+        padding: 8px 12px; font-size: 12.5px; font-weight: 600; border-radius: 6px; cursor: pointer;
+        background: rgba(239,68,68,0.1); color: var(--cr-danger); border: 1px solid rgba(239,68,68,0.35);
+    }
+    .cr-test-btn:hover { background: rgba(239,68,68,0.18); }
+    .cr-test-result {
+        padding: 10px 12px; border-radius: 6px; background: var(--cr-surface);
+        border: 1px dashed var(--cr-border);
         font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px;
     }
-    .cr-preview__label { font-size: 11px; color: #6366f1; margin-bottom: 4px; font-weight: 600; }
-    .cr-preview__value { font-size: 16px; font-weight: 600; }
-    .cr-preview__error { color: #ef4444; }
+    .cr-test-result.is-error { color: var(--cr-danger); }
+    .cr-test-result.is-ok { color: var(--cr-success); }
 
-    .cr-switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
-    .cr-switch__track {
-        width: 36px; height: 20px; border-radius: 10px;
-        background: #cbd5e1; position: relative; transition: background .15s;
+    .cr-preview-hint {
+        margin-top: auto; padding: 10px 12px; border-radius: 6px;
+        background: var(--cr-accent-soft); font-size: 11px; line-height: 1.5; color: var(--cr-text);
+        border-left: 3px solid var(--cr-accent);
     }
-    .cr-switch__thumb {
-        position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
-        background: #fff; border-radius: 50%; transition: left .15s;
+    .cr-preview-hint strong { color: var(--cr-accent); }
+
+    @@media (max-width: 1140px) {
+        .cr-shell { grid-template-columns: 180px 1fr; }
+        .cr-preview-panel { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--cr-border); min-height: auto; }
     }
-    .cr-switch.is-on .cr-switch__track { background: #6366f1; }
-    .cr-switch.is-on .cr-switch__thumb { left: 18px; }
 </style>
 }
 
-<div class="cr-page">
-    @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
-    {
-        ["Title"]      = (string)ViewData["Title"],
-        // embed=1 zorunlu — bu Edit ekranı _DesignRulesTabs'in İÇ iframe'i içinde açılıyor;
-        // embed'siz hedef iç iframe'i host moduna düşürüp şerit çiftlenmesine yol açar.
-        ["ListUrl"]    = $"/CodeRule?entity={entitySlug}&embed=1",
-        ["NewUrl"]     = $"/CodeRule/New?entity={entitySlug}&embed=1",
-        ["SaveBtnId"]  = "crSaveBtn",
-        ["ShowDelete"] = false,
-    })
-
-    <div class="cr-grid">
-        <div class="cr-field">
-            <label>Kural Adı *</label>
-            <input type="text" class="cr-input" id="crName" placeholder="Örn. Standart Müşteri 2026" />
-        </div>
-        <div class="cr-field">
-            <label>Öncelik (büyük → önce kontrol)</label>
-            <input type="number" class="cr-input" id="crPriority" value="0" />
-        </div>
-
-        <div class="cr-field">
-            <label>Sayaç Sıfırlama</label>
-            <select class="cr-select" id="crResetPeriod">
-                @if (resetPeriods != null)
-                {
-                    foreach (dynamic rp in resetPeriods)
-                    {
-                        <option value="@rp.value">@rp.label</option>
-                    }
-                }
-            </select>
-        </div>
-        <div class="cr-field">
-            <label>Durum</label>
+<div class="ux-edit-shell">
+@await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+{
+    ["Title"]      = (string)ViewData["Title"],
+    // embed=1 zorunlu — bu Edit ekranı _DesignRulesTabs'in İÇ iframe'i içinde açılıyor;
+    // embed'siz hedef iç iframe'i host moduna düşürüp şerit çiftlenmesine yol açar.
+    ["ListUrl"]    = $"/CodeRule?entity={entitySlug}&embed=1",
+    ["NewUrl"]     = $"/CodeRule/New?entity={entitySlug}&embed=1",
+    ["SaveBtnId"]  = "crSaveBtn",
+    ["ShowDelete"] = false,
+    ["ShowNew"]    = false,
+})
+<div class="cr-wrap">
+    <div class="cr-shell">
+        <!-- Üst şerit — Aktif switch -->
+        <div class="cr-shell-header">
+            <span class="cr-shell-header__label">@entityLabel Kuralı</span>
             <div class="cr-switch is-on" id="crIsActive" onclick="this.classList.toggle('is-on')">
                 <div class="cr-switch__track"><div class="cr-switch__thumb"></div></div>
-                <span style="font-size: 12px;">Aktif</span>
+                <span>Aktif</span>
             </div>
         </div>
 
-        <div class="cr-field cr-full">
-            <label>Template *</label>
-            <textarea class="cr-textarea" id="crTemplate" rows="2"
-                      placeholder="MS-{Field:City}-{Widget:MUSTERI_TIPI}-{Counter:4}"></textarea>
-            <div class="cr-tokens" id="crTokenChips">
-                <span class="cr-token" data-token="{Counter:4}">{Counter:4}</span>
-                <span class="cr-token" data-token="{Year:yyyy}">{Year:yyyy}</span>
-                <span class="cr-token" data-token="{Year:yy}">{Year:yy}</span>
-                <span class="cr-token" data-token="{Month:MM}">{Month:MM}</span>
-                <span class="cr-token" data-token="{Day:dd}">{Day:dd}</span>
-                @foreach (var field in sampleFields)
+        <!-- Sol — tab listesi -->
+        <nav class="cr-tabs" role="tablist" aria-label="@entityLabel Kuralı Bölümleri">
+            <button type="button" class="cr-tab active" data-tab="general" role="tab"><span>Genel</span></button>
+            <button type="button" class="cr-tab" data-tab="format" role="tab"><span>Format</span></button>
+            <button type="button" class="cr-tab" data-tab="filters" role="tab"><span>Filtreler</span></button>
+        </nav>
+
+        <!-- Orta — form -->
+        <div class="cr-form">
+            @Html.AntiForgeryToken()
+
+            <!-- ─── Genel ─── -->
+            <div class="cr-panel active" data-panel="general">
+                <div class="cr-info">
+                    <strong>Kural adı</strong> zorunlu. Bu kural <strong>@entityLabel</strong> üretimi için tanımlanıyor.
+                    Aktif/Pasif durumu üst şeritten kontrol edilir.
+                </div>
+                <div class="cr-row">
+                    <label>Kural Adı *</label>
+                    <input type="text" class="cr-input" id="crName" placeholder="Örn. Standart Müşteri 2026" />
+                </div>
+                <div class="cr-row">
+                    <label>Öncelik <span class="hint">büyük → önce kontrol</span></label>
+                    <input type="number" class="cr-input" id="crPriority" value="0" style="max-width:160px;" />
+                </div>
+            </div>
+
+            <!-- ─── Format ─── -->
+            <div class="cr-panel" data-panel="format">
+                <div class="cr-info">
+                    <strong>Template:</strong> aşağıdaki token'ları kullanarak kod formatını tanımla.
+                    Token'a tıklayınca imleç konumuna eklenir. Sağdaki <em>Kod Önizleme</em> panelinde
+                    canlı olarak görürsün.
+                </div>
+                @if (isSerial)
                 {
-                    <span class="cr-token" data-token="@($"{{Field:{field}}}")">{Field:@field}</span>
+                    <div class="cr-info cr-info--warn">
+                        <strong>Zorunlu:</strong> Seri Numarası kuralında template mutlaka <code>{Counter:N}</code>
+                        içermelidir — aksi halde çoklu seri üretiminde çakışma riski oluşur ve kayıt reddedilir.
+                    </div>
                 }
-                <span class="cr-token" data-token="{Widget:WIDGET_KEY}">{Widget:WIDGET_KEY}</span>
+                <div class="cr-row-full">
+                    <label>Template *</label>
+                    <textarea class="cr-textarea" id="crTemplate" rows="2"
+                              placeholder="MS-{Field:City}-{Widget:MUSTERI_TIPI}-{Counter:4}"></textarea>
+                    <div class="cr-tokens" id="crTokenChips">
+                        <span class="cr-token" data-token="{Counter:4}">{Counter:4}</span>
+                        <span class="cr-token" data-token="{Year:yyyy}">{Year:yyyy}</span>
+                        <span class="cr-token" data-token="{Year:yy}">{Year:yy}</span>
+                        <span class="cr-token" data-token="{Month:MM}">{Month:MM}</span>
+                        <span class="cr-token" data-token="{Day:dd}">{Day:dd}</span>
+                        @foreach (var field in sampleFields)
+                        {
+                            <span class="cr-token" data-token="@($"{{Field:{field}}}")">{Field:@field}</span>
+                        }
+                        <span class="cr-token" data-token="{Widget:WIDGET_KEY}">{Widget:WIDGET_KEY}</span>
+                    </div>
+                </div>
+                <div class="cr-row">
+                    <label>Sayaç Sıfırlama</label>
+                    <select class="cr-select" id="crResetPeriod" style="max-width:220px;">
+                        @if (resetPeriods != null)
+                        {
+                            foreach (dynamic rp in resetPeriods)
+                            {
+                                <option value="@rp.value">@rp.label</option>
+                            }
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <!-- ─── Filtreler ─── -->
+            <div class="cr-panel" data-panel="filters">
+                <div class="cr-info">
+                    <strong>Şartlar</strong> (boş = varsayılan / fallback kural). Tanımlı tüm şartlar
+                    sağlanırsa bu kural eşleşir; birden çok kural eşleşiyorsa <strong>Öncelik</strong>i
+                    yüksek olan kazanır (bkz. Genel sekmesi).
+                </div>
+                <div class="cr-conds" id="crConds"></div>
+                <button type="button" class="cr-add-btn" id="crAddCondBtn">+ Şart Ekle</button>
             </div>
         </div>
-    </div>
 
-    <div class="cr-section">
-        <div class="cr-section__title">Şartlar (boş = varsayılan / fallback kural)</div>
-        <div class="cr-conds" id="crConds"></div>
-        <button type="button" class="cr-btn cr-btn--ghost" style="margin-top: 8px;" id="crAddCondBtn">+ Şart Ekle</button>
-    </div>
+        <!-- Sağ — Kod Önizleme (her zaman görünür) -->
+        <aside class="cr-preview-panel" aria-label="Kod önizleme">
+            <div class="cr-preview-title">Canlı Önizleme</div>
+            <div class="cr-preview-value" id="crPreviewValue">—</div>
+            <div class="cr-preview-meta" id="crPreviewMeta">Template yazdıkça güncellenir · sayaç TÜKETMEZ</div>
+            <div class="cr-preview-parts" id="crPreviewParts"></div>
 
-    <div class="cr-section">
-        <div class="cr-section__title">Canlı Önizleme — Test</div>
-        <div class="cr-field" style="margin-bottom: 8px;">
-            <label>Örnek FieldValues (JSON, örn. {"City":"IST","ContactGroupId":"5"})</label>
-            <textarea class="cr-textarea" id="crSampleFields" rows="2">{}</textarea>
-        </div>
-        <div class="cr-field" style="margin-bottom: 8px;">
-            <label>Örnek WidgetValues (JSON, örn. {"MUSTERI_TIPI":"VIP"})</label>
-            <textarea class="cr-textarea" id="crSampleWidgets" rows="2">{}</textarea>
-        </div>
-        <button type="button" class="cr-btn cr-btn--ghost" id="crTestBtn">⚡ Test Et (sayaç ARTAR)</button>
-        <div class="cr-preview" id="crPreviewBox" style="display:none;">
-            <div class="cr-preview__label">Üretilen Kod</div>
-            <div class="cr-preview__value" id="crPreviewValue">—</div>
-        </div>
+            <div class="cr-preview-divider"></div>
+
+            <div class="cr-preview-title">Gerçek Test</div>
+            <div class="cr-info cr-info--warn" style="margin-bottom:0;">
+                <strong>Dikkat:</strong> aşağıdaki test gerçek sayacı (DB) artırır — her tıklama bir
+                numarayı tüketir. Yalnızca sonucu görmek istediğinde kullan, üstteki canlı önizleme
+                sayaç tüketmeden aynı formatı gösterir.
+            </div>
+            <div class="cr-field">
+                <label style="font-size:11px;">Örnek FieldValues (JSON)</label>
+                <textarea class="cr-textarea" id="crSampleFields" rows="2">{}</textarea>
+            </div>
+            <div class="cr-field">
+                <label style="font-size:11px;">Örnek WidgetValues (JSON)</label>
+                <textarea class="cr-textarea" id="crSampleWidgets" rows="2">{}</textarea>
+            </div>
+            <button type="button" class="cr-test-btn" id="crTestBtn">Test Et (sayaç ARTAR)</button>
+            <div class="cr-test-result" id="crPreviewBox" style="display:none;">
+                <span id="crPreviewValueReal">—</span>
+            </div>
+
+            <div class="cr-preview-hint">
+                <strong>Öncelik:</strong> Aynı şartları sağlayan birden çok kural varsa büyük öncelikli kazanır.<br/>
+                <strong>Benzersizlik:</strong> Üretilen kod zaten kayıtlıysa otomatik <code>-A…-Z</code> son eki eklenir.<br/>
+                <strong>Sıfırlama:</strong> Yıllık/Aylık/Günlük seçilirse sayaç dönem başına ayrı tutulur.
+            </div>
+        </aside>
     </div>
+</div>
 </div>
 
 @section Scripts {
@@ -206,19 +387,18 @@
 <script>
 (function() {
     var INITIAL = @Html.Raw(initialJson);
-    var FIELDS = @Html.Raw(JsonSerializer.Serialize(sampleFields));
     var OPS = @Html.Raw(JsonSerializer.Serialize(((operators as System.Collections.IEnumerable) ?? Array.Empty<object>())));
 
-    var nameEl  = document.getElementById('crName');
-    var tmplEl  = document.getElementById('crTemplate');
-    var prioEl  = document.getElementById('crPriority');
-    var resetEl = document.getElementById('crResetPeriod');
-    var activeEl= document.getElementById('crIsActive');
-    var condsEl = document.getElementById('crConds');
-    var fieldsEl= document.getElementById('crSampleFields');
-    var widgetsEl=document.getElementById('crSampleWidgets');
-    var prevBox = document.getElementById('crPreviewBox');
-    var prevVal = document.getElementById('crPreviewValue');
+    var nameEl   = document.getElementById('crName');
+    var tmplEl   = document.getElementById('crTemplate');
+    var prioEl   = document.getElementById('crPriority');
+    var resetEl  = document.getElementById('crResetPeriod');
+    var activeEl = document.getElementById('crIsActive');
+    var condsEl  = document.getElementById('crConds');
+    var fieldsEl = document.getElementById('crSampleFields');
+    var widgetsEl= document.getElementById('crSampleWidgets');
+    var prevBox  = document.getElementById('crPreviewBox');
+    var prevValReal = document.getElementById('crPreviewValueReal');
 
     // Init from server
     nameEl.value  = INITIAL.name || '';
@@ -228,6 +408,17 @@
     if (!INITIAL.isActive) activeEl.classList.remove('is-on');
     (INITIAL.conditions || []).forEach(addConditionRow);
 
+    // ── Tab geçişleri ──
+    document.querySelectorAll('.cr-tab').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var key = btn.getAttribute('data-tab');
+            document.querySelectorAll('.cr-tab').forEach(function(b) { b.classList.toggle('active', b === btn); });
+            document.querySelectorAll('.cr-panel').forEach(function(c) {
+                c.classList.toggle('active', c.getAttribute('data-panel') === key);
+            });
+        });
+    });
+
     // Token chip click → append to template
     document.querySelectorAll('.cr-token').forEach(function(chip) {
         chip.addEventListener('click', function() {
@@ -235,6 +426,7 @@
             var pos = tmplEl.selectionStart || tmplEl.value.length;
             tmplEl.value = tmplEl.value.substring(0, pos) + tok + tmplEl.value.substring(pos);
             tmplEl.focus();
+            updateClientPreview();
         });
     });
 
@@ -299,16 +491,18 @@
         .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, body: j }; }); })
         .then(function(res) {
             if (res.ok && res.body.ok) {
-                alert('Kaydedildi');
+                if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('Kaydedildi', 'ok');
                 // embed=1 — kaydet sonrası dönüş de iç iframe'i embed modda tutmalı (bkz. ListUrl notu).
                 window.location.href = '/CodeRule?entity=' + INITIAL.entityType.toLowerCase() + '&embed=1';
             } else {
-                alert('Hata: ' + (res.body.error || 'bilinmiyor'));
+                var msg = 'Hata: ' + (res.body.error || 'bilinmiyor');
+                if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(msg, 'err'); else alert(msg);
             }
         })
         .catch(function(e) { alert('Hata: ' + e.message); });
     });
 
+    // ── Gerçek test (sunucu, sayaç ARTAR) ──
     document.getElementById('crTestBtn').addEventListener('click', function() {
         var payload = collectPayload();
         var fieldVals, widgetVals;
@@ -317,6 +511,37 @@
 
         // İlk önce kuralı save et (yoksa test edilemez)
         if (!payload.name || !payload.template) { alert('Önce ad + template gir, sonra "Kaydet" et'); return; }
+
+        // Onay ortak modaldan alinir — native confirm() proje standardinda YASAK
+        // (sayfanin ust kenarinda cikar, tema uyumsuz). window.showConfirm _Layout'ta
+        // global olarak yuklenir; yoksa isi sessizce yapmak yerine kullaniciyi uyarip
+        // dururuz (sayac tuketen bir islemi onaysiz calistirmayiz).
+        var askConfirm = (typeof window.showConfirm === 'function')
+            ? window.showConfirm({
+                title: 'Gerçek Test',
+                message: 'Bu test gerçek sayacı artırır ve bir numarayı tüketir; o numara bir daha kullanılmaz. Devam edilsin mi?',
+                okLabel: 'Evet, Test Et',
+                cancelLabel: 'Vazgeç',
+                danger: true,
+              })
+            : Promise.resolve(false);
+
+        askConfirm.then(function (ok) {
+            if (!ok) {
+                if (typeof window.showConfirm !== 'function' && window.console) {
+                    console.warn('Onay modali yuklenemedi — gercek test calistirilmadi.');
+                }
+                return;
+            }
+            runRealTest();
+        });
+    });
+
+    function runRealTest() {
+        var payload = collectPayload();
+        var fieldVals, widgetVals;
+        try { fieldVals  = JSON.parse(fieldsEl.value || '{}'); } catch(e) { alert('FieldValues JSON geçersiz'); return; }
+        try { widgetVals = JSON.parse(widgetsEl.value || '{}'); } catch(e) { alert('WidgetValues JSON geçersiz'); return; }
 
         fetch('/CodeRule/Preview', {
             method: 'POST',
@@ -331,15 +556,95 @@
         .then(function(j) {
             prevBox.style.display = 'block';
             if (j.success) {
-                prevVal.classList.remove('cr-preview__error');
-                prevVal.textContent = j.code + (j.suffixAttempts > 0 ? ' (suffix ' + j.suffixAttempts + ' deneme)' : '');
+                prevBox.classList.remove('is-error'); prevBox.classList.add('is-ok');
+                prevValReal.textContent = j.code + (j.suffixAttempts > 0 ? ' (suffix ' + j.suffixAttempts + ' deneme)' : '');
             } else {
-                prevVal.classList.add('cr-preview__error');
-                prevVal.textContent = (j.error || 'Hata') + (j.appliedRuleName ? ' [' + j.appliedRuleName + ']' : '');
+                prevBox.classList.remove('is-ok'); prevBox.classList.add('is-error');
+                prevValReal.textContent = (j.error || 'Hata') + (j.appliedRuleName ? ' [' + j.appliedRuleName + ']' : '');
             }
         })
         .catch(function(e) { alert('Test hatası: ' + e.message); });
+    }
+
+    // ── Canlı önizleme (istemci taraflı — sunucuya gitmez, sayaç TÜKETMEZ) ──
+    var previewValue = document.getElementById('crPreviewValue');
+    var previewMeta  = document.getElementById('crPreviewMeta');
+    var previewParts = document.getElementById('crPreviewParts');
+    var TOKEN_RE = /\{(Field|Widget|Counter|Year|Month|Day):([A-Za-z0-9_]+)\}/gi;
+
+    function safeParseJson(raw) {
+        try { var v = JSON.parse(raw || '{}'); return (v && typeof v === 'object') ? v : {}; } catch (e) { return {}; }
+    }
+
+    function updateClientPreview() {
+        var tmpl = tmplEl.value || '';
+        if (!tmpl) {
+            previewValue.textContent = '—';
+            previewMeta.textContent = 'Template yazdıkça güncellenir · sayaç TÜKETMEZ';
+            previewParts.innerHTML = '';
+            return;
+        }
+        var now = new Date();
+        var sampleFieldVals  = safeParseJson(fieldsEl ? fieldsEl.value : '{}');
+        var sampleWidgetVals = safeParseJson(widgetsEl ? widgetsEl.value : '{}');
+
+        var out = '';
+        var chips = [];
+        var lastIndex = 0;
+        var m;
+        TOKEN_RE.lastIndex = 0;
+        while ((m = TOKEN_RE.exec(tmpl)) !== null) {
+            var literal = tmpl.substring(lastIndex, m.index);
+            if (literal) { out += literal; chips.push({ cls: 'literal', text: literal }); }
+            var type = m[1].toLowerCase();
+            var arg = m[2];
+            var resolved = '';
+            var cls = type;
+            switch (type) {
+                case 'year':
+                    resolved = arg.toLowerCase() === 'yy' ? String(now.getFullYear() % 100).padStart(2, '0') : String(now.getFullYear());
+                    break;
+                case 'month':
+                    resolved = String(now.getMonth() + 1).padStart(2, '0');
+                    break;
+                case 'day':
+                    resolved = String(now.getDate()).padStart(2, '0');
+                    break;
+                case 'counter': {
+                    var width = parseInt(arg, 10);
+                    if (!width || width < 1) width = 4;
+                    resolved = '1'.padStart(width, '0');
+                    break;
+                }
+                case 'field':
+                    resolved = (sampleFieldVals[arg] !== undefined && sampleFieldVals[arg] !== null && sampleFieldVals[arg] !== '')
+                        ? String(sampleFieldVals[arg]) : '(' + arg + ')';
+                    break;
+                case 'widget':
+                    resolved = (sampleWidgetVals[arg] !== undefined && sampleWidgetVals[arg] !== null && sampleWidgetVals[arg] !== '')
+                        ? String(sampleWidgetVals[arg]) : '(' + arg + ')';
+                    break;
+                default:
+                    resolved = m[0];
+            }
+            out += resolved;
+            chips.push({ cls: cls, text: resolved });
+            lastIndex = TOKEN_RE.lastIndex;
+        }
+        var tail = tmpl.substring(lastIndex);
+        if (tail) { out += tail; chips.push({ cls: 'literal', text: tail }); }
+
+        previewValue.textContent = out || '—';
+        previewMeta.textContent = 'Örnek — Counter/Field/Widget değerleri gösterimliktir (sayaç TÜKETMEZ)';
+        previewParts.innerHTML = chips.map(function(c) {
+            return '<span class="cr-prev-chip ' + c.cls + '">' + escapeHtml(c.text) + '</span>';
+        }).join('');
+    }
+
+    [tmplEl, fieldsEl, widgetsEl].forEach(function(el) {
+        if (el) el.addEventListener('input', updateClientPreview);
     });
+    updateClientPreview();
 
     function escapeHtml(s) { return String(s).replace(/[&<>"']/g, function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
 })();

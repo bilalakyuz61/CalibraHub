@@ -9,15 +9,27 @@
  * Önizleme HİÇBİR iş emri açmaz; onay TÜM planı uygular (düğüm bazlı seçim yok — alt
  * emri açılmayan üst emir eksik bileşenle kalırdı).
  *
- * SmartBoard değil, bespoke liste (RoutingTree.jsx istisnası): çok seviyeli plan +
- * onay kapısı SmartBoard'un kart/entity modeline sığmıyor. Header düzeni C-Grid
- * standardını izler: ikon + başlık/alt başlık → arama → aksiyonlar.
+ * SmartBoard bileşeni DEĞİL, bespoke liste (RoutingTree.jsx ile aynı istisna): çok
+ * seviyeli plan ağacı + tek seferlik onay kapısı SmartBoard'un kart/entity modeline
+ * sığmıyor. Ama C-Grid SAYFA STANDARDINA birebir uyar (2026-08-29):
+ *
+ *   [ikon] Başlık / alt başlık … [arama] [Filtre] [Excel] [Sütun ayarları] [Ana eylem]
+ *
+ * Filtre ve sütun ayarı panelleri SmartBoard'un paylaşılan bileşenleridir
+ * (SmartBoardFilterPanel / SmartBoardConfigPanel); satırlar bu paneller için
+ * "widget" biçimine çevrilir (buildLineWidgets / buildNodeWidgets). Böylece kullanıcı
+ * diğer liste ekranlarındakiyle AYNI filtre ve sütun deneyimini görür, tercihleri de
+ * aynı yerde (boardKey bazlı) saklanır.
  */
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Workflow, Search, RefreshCw, ChevronRight, ChevronDown, Check, X,
   AlertTriangle, Loader2, PackageCheck, PlusCircle, GitMerge, ShoppingCart, Download,
+  Filter, Settings2,
 } from 'lucide-react'
+import SmartBoardConfigPanel from '../CalibraSmartBoard/SmartBoardConfigPanel'
+import SmartBoardFilterPanel, { entityMatchesFilters } from '../CalibraSmartBoard/SmartBoardFilterPanel'
+import { loadWidgetConfig } from '../../services/widgetConfigService'
 import './MrpPlanner.css'
 
 // ── Biçimlendirme ────────────────────────────────────────────────────────────────
@@ -46,9 +58,95 @@ var ACTION_META = {
   PurchaseRequest: { label: 'Satın Alma',        cls: 'mrp-badge--amber',   Icon: ShoppingCart },
 }
 
+/* ── C-Grid sütun katalogları ─────────────────────────────────────────────────
+   Sütun ayarları paneli (SmartBoardConfigPanel) "master widget" listesi bekler:
+   { id, label, dataType }. Sabit sütunlu bir tabloda bu liste kolonların ta kendisidir.
+   `locked` olanlar panelde gizlenmez — onlar olmadan satır anlamsız kalır
+   (seçim kutusu, malzeme, aksiyon). */
+var LINE_COLUMNS = [
+  { id: 'documentNumber',    label: 'Belge',        dataType: 'text',    locked: true },
+  { id: 'contactName',       label: 'Cari',         dataType: 'text' },
+  { id: 'item',              label: 'Malzeme',      dataType: 'text',    locked: true },
+  { id: 'isProducible',      label: 'Üretilebilir', dataType: 'boolean' },
+  { id: 'splitPolicy',       label: 'Kırılım',      dataType: 'text' },
+  { id: 'orderQuantity',     label: 'Sipariş',      dataType: 'numeric' },
+  { id: 'deliveredQuantity', label: 'Teslim',       dataType: 'numeric' },
+  { id: 'reservedQuantity',  label: 'Rezerve',      dataType: 'numeric' },
+  { id: 'allocatedQuantity', label: 'İş Emrinde',   dataType: 'numeric' },
+  { id: 'openQuantity',      label: 'Açık',         dataType: 'numeric', locked: true },
+  { id: 'deliveryDate',      label: 'Teslim Tarihi', dataType: 'date' },
+]
+
+/* Filtre paneli entity.widgets üzerinden çalışır — satırı o biçime çeviriyoruz.
+   Not: değerler GÖSTERİLDİĞİ gibi (etiketlenmiş) verilir; kullanıcı filtre panelinde
+   "Mamul" yazdığında ekranda gördüğü değerle eşleşsin. */
+function buildLineWidgets(l, policyLabel) {
+  return [
+    { id: 'documentNumber',    label: 'Belge',         dataType: 'text',    value: l.documentNumber || '' },
+    { id: 'contactName',       label: 'Cari',          dataType: 'text',    value: l.contactName || '' },
+    { id: 'item',              label: 'Malzeme',       dataType: 'text',    value: (l.itemCode || '') + ' ' + (l.itemName || '') },
+    { id: 'isProducible',      label: 'Üretilebilir',  dataType: 'boolean', value: l.isProducible ? 'Evet' : 'Hayır' },
+    { id: 'splitPolicy',       label: 'Kırılım',       dataType: 'text',    value: policyLabel },
+    { id: 'orderQuantity',     label: 'Sipariş',       dataType: 'numeric', value: l.orderQuantity },
+    { id: 'deliveredQuantity', label: 'Teslim',        dataType: 'numeric', value: l.deliveredQuantity },
+    { id: 'reservedQuantity',  label: 'Rezerve',       dataType: 'numeric', value: l.reservedQuantity },
+    { id: 'allocatedQuantity', label: 'İş Emrinde',    dataType: 'numeric', value: l.allocatedQuantity },
+    { id: 'openQuantity',      label: 'Açık',          dataType: 'numeric', value: l.openQuantity },
+    { id: 'deliveryDate',      label: 'Teslim Tarihi', dataType: 'date',    value: l.deliveryDate || '' },
+  ]
+}
+
+/** Kullanıcının sütun tercihini uygular; kayıt yoksa katalog sırası aynen döner. */
+function visibleColumns(catalog, userCfg) {
+  var cfg = userCfg || {}
+  var vis = Array.isArray(cfg.visibleIds) ? cfg.visibleIds : null
+  var order = Array.isArray(cfg.order) ? cfg.order : null
+  var list = catalog.filter(function (c) { return c.locked || !vis || vis.indexOf(c.id) >= 0 })
+  if (!order) return list
+  return list.slice().sort(function (a, b) {
+    var ia = order.indexOf(a.id), ib = order.indexOf(b.id)
+    if (ia < 0) ia = 999
+    if (ib < 0) ib = 999
+    return ia - ib
+  })
+}
+
 function csrfToken() {
   var el = document.querySelector('input[name="__RequestVerificationToken"]')
   return el ? el.value : ''
+}
+
+/**
+ * Excel dışa aktarımı — C-Grid standardındaki `/api/export/smartboard-excel` ucuna
+ * form POST'u. fetch DEĞİL: tarayıcı dosyayı doğrudan indirsin, blob bellekte
+ * tutulmasın (RoutingTree deseni).
+ */
+function submitExcel(fileBase, sheetName, headers, rows) {
+  var ts = new Date()
+  var pad = function (x) { return x < 10 ? '0' + x : String(x) }
+  var stamp = ts.getFullYear() + pad(ts.getMonth() + 1) + pad(ts.getDate()) + '_' +
+              pad(ts.getHours()) + pad(ts.getMinutes()) + pad(ts.getSeconds())
+
+  var form = document.createElement('form')
+  form.method = 'POST'; form.action = '/api/export/smartboard-excel'
+  form.target = '_self'; form.style.display = 'none'
+  var hidden = document.createElement('textarea')
+  hidden.name = 'payload'
+  hidden.value = JSON.stringify({
+    fileName: fileBase + '_' + stamp + '.xlsx',
+    sheetName: sheetName,
+    headers: headers, rows: rows,
+  })
+  form.appendChild(hidden)
+  var token = csrfToken()
+  if (token) {
+    var ti = document.createElement('input')
+    ti.type = 'hidden'; ti.name = '__RequestVerificationToken'; ti.value = token
+    form.appendChild(ti)
+  }
+  document.body.appendChild(form)
+  form.submit()
+  setTimeout(function () { try { document.body.removeChild(form) } catch (e) {} }, 1000)
 }
 
 function postJson(url, body) {
@@ -79,6 +177,19 @@ export default function MrpPlanner(props) {
   // kullanici kapatabilir (o zaman yalniz rapor).
   var [createPr, setCreatePr] = useState(true)
 
+  // ── C-Grid araçları (2026-08-29) ──
+  // boardKey: kullanıcı tercihleri (sütun görünürlüğü/sırası, filtreler) bu anahtar
+  // altında saklanır — diğer board'larla çakışmaz.
+  var LINE_BOARD_KEY = 'production-mrp-lines'
+  var [filters, setFilters]           = useState([])
+  var [filterOpen, setFilterOpen]     = useState(false)
+  var [columnsOpen, setColumnsOpen]   = useState(false)
+  var [lineCfg, setLineCfg]           = useState(function () { return loadWidgetConfig(LINE_BOARD_KEY) })
+  var lineColumns = useMemo(function () { return visibleColumns(LINE_COLUMNS, lineCfg) }, [lineCfg])
+  var showCol = useCallback(function (id) {
+    return lineColumns.some(function (c) { return c.id === id })
+  }, [lineColumns])
+
   // ── 1. adım: açık satırları yükle ──
   var loadLines = useCallback(function (q) {
     setLoading(true); setError(null)
@@ -106,16 +217,37 @@ export default function MrpPlanner(props) {
     return Object.keys(selected).filter(function (k) { return selected[k] }).map(Number)
   }, [selected])
 
-  var visibleLines = useMemo(function () {
-    if (!search.trim()) return lines
-    var q = search.trim().toLocaleLowerCase('tr')
-    return lines.filter(function (l) {
-      return (l.itemCode || '').toLocaleLowerCase('tr').indexOf(q) >= 0
-          || (l.itemName || '').toLocaleLowerCase('tr').indexOf(q) >= 0
-          || (l.documentNumber || '').toLocaleLowerCase('tr').indexOf(q) >= 0
-          || (l.contactName || '').toLocaleLowerCase('tr').indexOf(q) >= 0
+  /* Satırlar filtre/sütun panelleri icin entity bicimine cevrilir (widgets dizisi).
+     Ayni donusum hem filtreleme hem panelin alan kesfi icin kullanilir. */
+  var lineEntities = useMemo(function () {
+    return lines.map(function (l) {
+      return {
+        id: l.lineId,
+        title: l.itemCode || '',
+        subtitle: l.documentNumber || '',
+        description: l.itemName || '',
+        widgets: buildLineWidgets(l, POLICY_LABEL[l.splitPolicy] || l.splitPolicy || ''),
+      }
     })
-  }, [lines, search])
+  }, [lines])
+
+  var visibleLines = useMemo(function () {
+    var q = search.trim().toLocaleLowerCase('tr')
+    var byId = {}
+    lineEntities.forEach(function (e) { byId[e.id] = e })
+    return lines.filter(function (l) {
+      if (q) {
+        var hit = (l.itemCode || '').toLocaleLowerCase('tr').indexOf(q) >= 0
+               || (l.itemName || '').toLocaleLowerCase('tr').indexOf(q) >= 0
+               || (l.documentNumber || '').toLocaleLowerCase('tr').indexOf(q) >= 0
+               || (l.contactName || '').toLocaleLowerCase('tr').indexOf(q) >= 0
+        if (!hit) return false
+      }
+      // Filtreler SmartBoard ile AYNI motordan gecer — davranis farki olmasin.
+      if (filters.length > 0 && !entityMatchesFilters(byId[l.lineId], filters)) return false
+      return true
+    })
+  }, [lines, search, filters, lineEntities])
 
   var allVisibleSelected = visibleLines.length > 0 &&
     visibleLines.every(function (l) { return selected[l.lineId] })
@@ -167,6 +299,25 @@ export default function MrpPlanner(props) {
   // ── Excel dışa aktarım (C-Grid standardı) ──
   // Önizlenen planı olduğu gibi indirir. Form POST kullanılır (fetch değil): tarayıcı
   // dosyayı doğrudan indirir, blob'u bellekte tutmaya gerek kalmaz — RoutingTree deseni.
+  /** Adım 1'deki açık sipariş satırlarını dışa aktarır (görünen sütunlar + filtre uygulanmış). */
+  function exportLinesExcel() {
+    if (!visibleLines.length) return
+    var cols = lineColumns
+    var headers = cols.map(function (c) { return { id: c.id, label: c.label } })
+    var rows = visibleLines.map(function (l) {
+      var r = {}
+      cols.forEach(function (c) {
+        if (c.id === 'item') r.item = (l.itemCode || '') + (l.itemName ? ' — ' + l.itemName : '')
+        else if (c.id === 'isProducible') r.isProducible = l.isProducible ? 'Evet' : 'Hayır'
+        else if (c.id === 'splitPolicy') r.splitPolicy = POLICY_LABEL[l.splitPolicy] || l.splitPolicy
+        else if (c.id === 'deliveryDate') r.deliveryDate = fmtDate(l.deliveryDate)
+        else r[c.id] = l[c.id]
+      })
+      return r
+    })
+    submitExcel('mrp-siparis-satirlari', 'Acik Siparis Satirlari', headers, rows)
+  }
+
   function exportExcel() {
     if (!preview || !preview.nodes.length) return
     var headers = [
@@ -202,31 +353,7 @@ export default function MrpPlanner(props) {
       }
     })
 
-    var ts = new Date()
-    var pad = function (x) { return x < 10 ? '0' + x : String(x) }
-    var stamp = ts.getFullYear() + pad(ts.getMonth() + 1) + pad(ts.getDate()) + '_' +
-                pad(ts.getHours()) + pad(ts.getMinutes()) + pad(ts.getSeconds())
-
-    var form = document.createElement('form')
-    form.method = 'POST'; form.action = '/api/export/smartboard-excel'
-    form.target = '_self'; form.style.display = 'none'
-    var hidden = document.createElement('textarea')
-    hidden.name = 'payload'
-    hidden.value = JSON.stringify({
-      fileName: 'mrp-plani_' + stamp + '.xlsx',
-      sheetName: 'MRP Plani',
-      headers: headers, rows: rows,
-    })
-    form.appendChild(hidden)
-    var token = csrfToken()
-    if (token) {
-      var ti = document.createElement('input')
-      ti.type = 'hidden'; ti.name = '__RequestVerificationToken'; ti.value = token
-      form.appendChild(ti)
-    }
-    document.body.appendChild(form)
-    form.submit()
-    setTimeout(function () { try { document.body.removeChild(form) } catch (e) {} }, 1000)
+    submitExcel('mrp-plani', 'MRP Plani', headers, rows)
   }
 
   function restart() {
@@ -240,41 +367,86 @@ export default function MrpPlanner(props) {
 
   return (
     <div className="mrp-root">
-      {/* ── HEADER ── */}
+      {/* ── ŞERİT (C-Grid sayfa standardı) ──────────────────────────────────
+          Sıra sabittir: kimlik → arama → Filtre → Excel → Sütunlar → ana eylem.
+          Kullanıcı hangi liste ekranına giderse gitsin aynı düzeni bulur. */}
       <div className="mrp-header">
-        <div className="mrp-header-icon"><Workflow size={18} strokeWidth={2} /></div>
-        <div style={{ minWidth: 0 }}>
-          <div className="mrp-header-title">Malzeme İhtiyaç Planlama</div>
-          <div className="mrp-header-sub">
-            {step === 1
-              ? (visibleLines.length + ' açık sipariş satırı · ' + selectedIds.length + ' seçili')
-              : step === 2
-                ? ('Koşu #' + preview.runId + ' · ' + preview.nodes.length + ' satır')
-                : 'Plan uygulandı'}
+        <div className="mrp-header__id">
+          <div className="mrp-header-icon"><Workflow size={18} strokeWidth={2} /></div>
+          <div style={{ minWidth: 0 }}>
+            <div className="mrp-header-title">Malzeme İhtiyaç Planlama</div>
+            <div className="mrp-header-sub">
+              {step === 1
+                ? (visibleLines.length + ' açık sipariş satırı · ' + selectedIds.length + ' seçili')
+                : step === 2
+                  ? ('Koşu #' + preview.runId + ' · ' + preview.nodes.length + ' satır')
+                  : 'Plan uygulandı'}
+            </div>
           </div>
         </div>
 
         {step === 1 && (
-          <>
-            <div className="mrp-search">
-              <Search size={13} className="mrp-dim" />
-              <input
-                type="text" value={search} placeholder="Malzeme, belge no veya cari ara…"
-                onChange={function (e) { setSearch(e.target.value) }}
-              />
-            </div>
-            <button type="button" className="mrp-btn" onClick={function () { loadLines(search) }} disabled={loading}>
-              <RefreshCw size={13} /> Yenile
-            </button>
-          </>
+          <div className="mrp-search">
+            <Search size={13} className="mrp-dim" />
+            <input
+              type="text" value={search} placeholder="Malzeme, belge no veya cari ara…"
+              onChange={function (e) { setSearch(e.target.value) }}
+            />
+            {search && (
+              <button type="button" className="mrp-search__clear" title="Aramayı temizle"
+                      onClick={function () { setSearch('') }}><X size={12} /></button>
+            )}
+          </div>
         )}
 
-        {step === 2 && (
-          <button type="button" className="mrp-btn" style={{ marginLeft: 'auto' }}
-                  onClick={exportExcel} title="Planı Excel olarak indir">
-            <Download size={13} /> Excel
-          </button>
-        )}
+        <div className="mrp-header__tools">
+          {step === 1 && (
+            <>
+              <button type="button"
+                      className={'mrp-icon-btn' + (filters.length > 0 ? ' mrp-icon-btn--active' : '')}
+                      title={filters.length > 0 ? (filters.length + ' filtre aktif') : 'Filtreleme'}
+                      onClick={function () { setFilterOpen(true) }}>
+                <Filter size={15} />
+                {filters.length > 0 && <span className="mrp-icon-btn__badge">{filters.length}</span>}
+              </button>
+              <button type="button" className="mrp-icon-btn" title="Excel'e Aktar"
+                      onClick={exportLinesExcel} disabled={visibleLines.length === 0}>
+                <Download size={15} />
+              </button>
+              <button type="button" className="mrp-icon-btn" title="Sütun Ayarları"
+                      onClick={function () { setColumnsOpen(true) }}>
+                <Settings2 size={15} />
+              </button>
+              <button type="button" className="mrp-icon-btn" title="Yenile"
+                      onClick={function () { loadLines(search) }} disabled={loading}>
+                <RefreshCw size={15} />
+              </button>
+              <button type="button" className="mrp-btn mrp-btn--primary"
+                      onClick={runPreview} disabled={loading || selectedIds.length === 0}>
+                {loading ? <Loader2 size={13} /> : <ChevronRight size={13} />} Planı Hesapla
+              </button>
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              <button type="button" className="mrp-icon-btn" title="Planı Excel olarak indir"
+                      onClick={exportExcel}>
+                <Download size={15} />
+              </button>
+              <button type="button" className="mrp-btn mrp-btn--primary"
+                      onClick={function () { setConfirmOpen(true) }} disabled={loading || actionableCount === 0}>
+                <Check size={13} /> Planı Uygula
+              </button>
+            </>
+          )}
+
+          {step === 3 && (
+            <button type="button" className="mrp-btn mrp-btn--primary" onClick={restart}>
+              <RefreshCw size={13} /> Yeni Plan
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── ADIM GÖSTERGESİ ── */}
@@ -310,17 +482,11 @@ export default function MrpPlanner(props) {
                           <input type="checkbox" checked={allVisibleSelected} onChange={toggleAll}
                                  aria-label="Tümünü seç" />
                         </th>
-                        <th>Belge</th>
-                        <th>Cari</th>
-                        <th>Malzeme</th>
-                        <th>Üretilebilir</th>
-                        <th>Kırılım</th>
-                        <th className="mrp-num">Sipariş</th>
-                        <th className="mrp-num">Teslim</th>
-                        <th className="mrp-num">Rezerve</th>
-                        <th className="mrp-num">İş Emrinde</th>
-                        <th className="mrp-num">Açık</th>
-                        <th>Teslim Tarihi</th>
+                        {/* Başlıklar sütun ayarındaki SIRAYA ve görünürlüğe uyar. */}
+                        {lineColumns.map(function (c) {
+                          var numeric = c.dataType === 'numeric'
+                          return <th key={c.id} className={numeric ? 'mrp-num' : undefined}>{c.label}</th>
+                        })}
                       </tr>
                     </thead>
                     <tbody>
@@ -335,29 +501,50 @@ export default function MrpPlanner(props) {
                                        setSelected(n)
                                      }} />
                             </td>
-                            <td style={{ fontWeight: 600 }}>{l.documentNumber}</td>
-                            <td className="mrp-dim">{l.contactName || '—'}</td>
-                            <td>
-                              <div style={{ fontWeight: 600 }}>{l.itemCode}</div>
-                              <div className="mrp-dim" style={{ fontSize: 11 }}>{l.itemName}</div>
-                            </td>
-                            {/* Üretilebilirlik ayrı sütun — malzeme hücresini iki satırdan
-                                üçe çıkarıp satır yüksekliğini şişirmesin (kompakt liste). */}
-                            <td>
-                              <span className={'mrp-badge ' + (l.isProducible ? 'mrp-badge--emerald' : 'mrp-badge--rose')}
-                                    title={l.isProducible
-                                      ? 'Mamul / Yarı Mamul — iş emri açılabilir'
-                                      : 'Üretilebilir tipte değil — iş emri açılamaz, satın alma önerilir'}>
-                                {l.isProducible ? 'Evet' : 'Hayır'}
-                              </span>
-                            </td>
-                            <td><span className="mrp-policy">{POLICY_LABEL[l.splitPolicy] || l.splitPolicy}</span></td>
-                            <td className="mrp-num">{fmtQty(l.orderQuantity)} {l.unitCode || ''}</td>
-                            <td className="mrp-num mrp-dim">{fmtQty(l.deliveredQuantity)}</td>
-                            <td className="mrp-num mrp-dim">{fmtQty(l.reservedQuantity)}</td>
-                            <td className="mrp-num mrp-dim">{fmtQty(l.allocatedQuantity)}</td>
-                            <td className="mrp-num" style={{ fontWeight: 700 }}>{fmtQty(l.openQuantity)}</td>
-                            <td>{fmtDate(l.deliveryDate)}</td>
+                            {lineColumns.map(function (c) {
+                              switch (c.id) {
+                                case 'documentNumber':
+                                  return <td key={c.id} style={{ fontWeight: 600 }}>{l.documentNumber}</td>
+                                case 'contactName':
+                                  return <td key={c.id} className="mrp-dim">{l.contactName || '—'}</td>
+                                case 'item':
+                                  return (
+                                    <td key={c.id}>
+                                      <div style={{ fontWeight: 600 }}>{l.itemCode}</div>
+                                      <div className="mrp-dim" style={{ fontSize: 11 }}>{l.itemName}</div>
+                                    </td>
+                                  )
+                                case 'isProducible':
+                                  // Üretilebilirlik AYRI sütun — malzeme hücresini üç satıra
+                                  // çıkarıp satır yüksekliğini şişirmesin (kompakt liste).
+                                  return (
+                                    <td key={c.id}>
+                                      <span className={'mrp-badge ' + (l.isProducible ? 'mrp-badge--emerald' : 'mrp-badge--rose')}
+                                            title={l.isProducible
+                                              ? 'Mamul / Yarı Mamul — iş emri açılabilir'
+                                              : 'Üretilebilir tipte değil — iş emri açılamaz, satın alma önerilir'}>
+                                        {l.isProducible ? 'Evet' : 'Hayır'}
+                                      </span>
+                                    </td>
+                                  )
+                                case 'splitPolicy':
+                                  return <td key={c.id}><span className="mrp-policy">{POLICY_LABEL[l.splitPolicy] || l.splitPolicy}</span></td>
+                                case 'orderQuantity':
+                                  return <td key={c.id} className="mrp-num">{fmtQty(l.orderQuantity)} {l.unitCode || ''}</td>
+                                case 'deliveredQuantity':
+                                  return <td key={c.id} className="mrp-num mrp-dim">{fmtQty(l.deliveredQuantity)}</td>
+                                case 'reservedQuantity':
+                                  return <td key={c.id} className="mrp-num mrp-dim">{fmtQty(l.reservedQuantity)}</td>
+                                case 'allocatedQuantity':
+                                  return <td key={c.id} className="mrp-num mrp-dim">{fmtQty(l.allocatedQuantity)}</td>
+                                case 'openQuantity':
+                                  return <td key={c.id} className="mrp-num" style={{ fontWeight: 700 }}>{fmtQty(l.openQuantity)}</td>
+                                case 'deliveryDate':
+                                  return <td key={c.id}>{fmtDate(l.deliveryDate)}</td>
+                                default:
+                                  return <td key={c.id} />
+                              }
+                            })}
                           </tr>
                         )
                       })}
@@ -564,16 +751,12 @@ export default function MrpPlanner(props) {
 
       {/* ── FOOTER ── */}
       <div className="mrp-footer">
+        {/* Ana eylemler ŞERİTTE (C-Grid standardı). Burada yalnız bağlam metni ve
+            ikincil eylemler kalır; aynı butonu iki yerde göstermek kafa karıştırırdı. */}
         {step === 1 && (
-          <>
-            <span className="mrp-footer-info">
-              {selectedIds.length === 0 ? 'Planlanacak sipariş satırlarını seçin.' : (selectedIds.length + ' satır seçildi.')}
-            </span>
-            <button type="button" className="mrp-btn mrp-btn--primary"
-                    onClick={runPreview} disabled={loading || selectedIds.length === 0}>
-              {loading ? <Loader2 size={13} /> : <ChevronRight size={13} />} Planı Hesapla
-            </button>
-          </>
+          <span className="mrp-footer-info">
+            {selectedIds.length === 0 ? 'Planlanacak sipariş satırlarını seçin.' : (selectedIds.length + ' satır seçildi.')}
+          </span>
         )}
         {step === 2 && (
           <>
@@ -585,19 +768,10 @@ export default function MrpPlanner(props) {
             <button type="button" className="mrp-btn mrp-btn--ghost" onClick={function () { setDiscardOpen(true) }} disabled={loading}>
               Vazgeç
             </button>
-            <button type="button" className="mrp-btn mrp-btn--primary"
-                    onClick={function () { setConfirmOpen(true) }} disabled={loading || actionableCount === 0}>
-              {loading ? <Loader2 size={13} /> : <Check size={13} />} Onayla ve Oluştur
-            </button>
           </>
         )}
         {step === 3 && (
-          <>
-            <span className="mrp-footer-info">Yeni bir plan çalıştırmak için başa dönün.</span>
-            <button type="button" className="mrp-btn mrp-btn--primary" onClick={restart}>
-              <RefreshCw size={13} /> Yeni Plan
-            </button>
-          </>
+          <span className="mrp-footer-info">Yeni bir plan çalıştırmak için başa dönün.</span>
         )}
       </div>
 
@@ -643,6 +817,27 @@ export default function MrpPlanner(props) {
           </div>
         </div>
       )}
+
+      {/* ── C-Grid paylaşılan panelleri ──────────────────────────────────────
+          SmartBoard ile AYNI bileşenler: filtre mantığı ve sütun tercihi tek
+          yerde yaşar, ekrana özel ikinci bir uygulama yazılmaz. */}
+      <SmartBoardFilterPanel
+        isOpen={filterOpen}
+        onClose={function () { setFilterOpen(false) }}
+        boardKey={LINE_BOARD_KEY}
+        formCode="MRP_PLANNING"
+        masterWidgets={LINE_COLUMNS}
+        entities={lineEntities}
+        filters={filters}
+        onApply={function (next) { setFilters(Array.isArray(next) ? next : []) }}
+      />
+      <SmartBoardConfigPanel
+        isOpen={columnsOpen}
+        onClose={function () { setColumnsOpen(false) }}
+        boardKey={LINE_BOARD_KEY}
+        masterWidgets={LINE_COLUMNS}
+        onSaved={function () { setLineCfg(loadWidgetConfig(LINE_BOARD_KEY)) }}
+      />
     </div>
   )
 }
