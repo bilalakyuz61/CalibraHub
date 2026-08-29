@@ -22,6 +22,7 @@
                 new { T = "Stok Rezervasyonu", D = "Sipariş satırı bazında miktar rezerve edin — rezerve stok kullanılabilir bakiyeden düşer, fiziksel stok değişmez. Yükleme Planlama Merkezi'nden yönetilir." },
                 new { T = "Yükleme Planlama Merkezi", D = "Sevkiyat öncesi stok rezervasyonu, yükleme listesi ve hazırlık takibi." },
                 new { T = "Özellik ve Kombinasyon", D = "Renk, beden gibi ürün özelliklerinden kombinasyon üretimi ve satışı." },
+                new { T = "Belge Soyağacı", D = "Bir belgenin hangi belgeden türediğini ve hangi belgelere yol açtığını \"İlişkili Belgeler\" sekmesinde graf olarak görün; teklif → sipariş → irsaliye zinciri tek bakışta." },
             }
         },
         new
@@ -62,6 +63,7 @@
                 new { T = "Makine Planlama (Gantt)", D = "Sürükle-bırak çizelge, otomatik yerleştirme, hazırlık (setup) blokları, blok kilitleme ve yeniden çizelgeleme." },
                 new { T = "Vardiya Senaryoları ve Takvim", D = "Vardiya pencereleri, tatiller ve çalışma takviminden türeyen gerçek kapasite." },
                 new { T = "Kapasite / Yük Raporu", D = "Makine ve dönem bazlı doluluk ısı haritası ile darboğazları önceden görün." },
+                new { T = "MRP — Siparişten İş Emri", D = "Açık siparişleri tarar, stok ve açık iş emirlerini düşer, kalan ihtiyacı ürün ağacına göre çok seviyeli patlatır ve iş emirlerini toplu oluşturur. Oluşan iş emri sipariş satırına bağlandığı için aynı ihtiyaç ikinci kez üretime düşmez." },
             }
         },
         new
@@ -99,7 +101,9 @@
                 new { T = "Durum Kilidi", D = "Onay akışı tanımlı belge türlerinde \"Onaylandı\" / \"Reddedildi\" durumu elle atanamaz; belge yalnızca akış üzerinden ilerler — kural sunucu tarafında zorlanır." },
                 new { T = "Akışı AI ile Oluştur", D = "Süreci doğal dille tarif edin, adımlar tasarımcıya taslak olarak düşsün; hiçbir şey otomatik kaydedilmez, siz gözden geçirip kaydedersiniz." },
                 new { T = "Tek Tık Onay Bağlantıları", D = "Mail veya WhatsApp'a düşen onayla/reddet bağlantısı; sisteme girmeden karar verin." },
+                new { T = "Zengin Akış Adımları", D = "Onay adımının yanında zamanlayıcı (süre dolunca ilerlet), oylama, alt süreç ve webhook adımları; süreç sadece \"onayla/reddet\" ile sınırlı kalmaz." },
                 new { T = "e-Fatura / e-Arşiv / e-İrsaliye", D = "Gelen elektronik belgelerin görüntülenmesi, onaylanması ve belgeye dönüştürülmesi." },
+                new { T = "Çevrimdışı e-Belge Kaynağı", D = "Entegratöre bağlanmadan, mevcut ERP'nizin e-belge tablolarından okuma; belgenin çevrimiçi mi çevrimdışı mı geldiği kartta görünür." },
                 new { T = "Belge Tasarımcısı", D = "Yazdırılacak belgelerin şablonu sürükle-bırak ile tasarlanır; tasarım kurallarıyla koşullu şablon seçimi yapılır." },
             }
         },
@@ -172,7 +176,8 @@
                 new { T = "Çakışma Koruması", D = "İki kişi aynı belgeyi açıp kaydederse ikincinin kaydı reddedilir — ilk kullanıcının değişikliği sessizce ezilmez, uyarı alıp sayfayı tazeleyerek devam edersiniz." },
                 new { T = "Kayıt Bütünlüğü Kilitleri", D = "Karşılanmış, türetilmiş veya iş emrine tahsis edilmiş belge kalemleri silinemez ve tahsis edilen miktarın altına düşürülemez; yansıtılmış sayım fişleri değiştirilemez, kapalı iş emri yeniden başlatılamaz." },
                 new { T = "Oturum Zaman Aşımı", D = "Şirket parametresiyle belirlenen boşta kalma süresi sonunda güvenli çıkış." },
-                new { T = "Çok Şirketli Yapı", D = "Her şirket kendi veritabanında; veriler ayrık tutulur, tek uygulamadan yönetilir." },
+                new { T = "Çok Şirketli Yapı", D = "Şirketler ayrı veritabanlarında ya da aynı veritabanında tutulabilir; ikinci durumda her sorgu şirket süzgecinden geçer ve benzersizlik kuralları şirket bazlıdır. Tek uygulamadan, şirket değiştirerek yönetirsiniz." },
+                new { T = "Zorunlu Parola Değişimi", D = "Yönetici tarafından üretilen geçici parolayla açılan hesap, kendi parolasını belirlemeden uygulamayı kullanamaz." },
             }
         },
         new
@@ -190,7 +195,7 @@
                 new { T = "Takvim", D = "İş emri, termin ve görev tarihleri tek takvimde; kaynak bazlı filtreler (kişisel, iş emirleri, doğum günleri), ay/hafta görünümü ve resmi tatiller." },
                 new { T = "Notlar", D = "Klasörlü not defteri: dosya eki, hatırlatıcı (bildirime düşer), seçtiğiniz kullanıcılarla paylaşım, çöp kutusu ve geri alma. Not içerikleri şifreli saklanır." },
                 new { T = "Bildirim Merkezi", D = "Görev atamaları, hatırlatmalar ve bakım uyarıları üst çubuktaki zilde toplanır; okundu işaretleme, sabitleme ve ilgili kayda tek tıkla gitme." },
-                new { T = "Mobil Depo ve Üretim", D = "Android uygulamasıyla depo hareketleri ve üretim bildirimleri sahadan girilir." },
+                new { T = "Mobil Uygulama", D = "Android uygulamasıyla depo hareketleri, üretim bildirimi, kalite muayenesi, ihtiyaç kaydı, cari kartı ve onay bekleyenler sahadan yönetilir. Kişisel telefonda çalışan personel için PIN sorma kapatılabilir." },
             }
         },
     };

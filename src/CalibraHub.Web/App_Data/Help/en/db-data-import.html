@@ -1,0 +1,20 @@
+<div class="calibra-help-doc">
+  <p class="help-lead">
+    Database Import lets you bring records from another SQL database into CalibraHub using a
+    mapping definition. An import can be re-run safely: the same record is not inserted twice.
+  </p>
+  <h3>Flow</h3>
+  <ul>
+    <li>You define the source database on the <b>Connections</b> screen.</li>
+    <li>The <b>Wizard</b> selects the source table/query and maps columns to CalibraHub fields.</li>
+    <li>On this screen you see the defined imports, run them and follow their results.</li>
+  </ul>
+  <h3>Things To Watch</h3>
+  <ul>
+    <li>A <b>key field is mandatory</b> — it is how the system knows whether a record was already
+        imported.</li>
+    <li>Stock import is a <b>balance mirror</b>, it does not create movements; if you need
+        movements, create a count sheet and post it.</li>
+    <li>Review the preview before running; invalid rows are listed there.</li>
+  </ul>
+</div>

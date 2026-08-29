@@ -313,6 +313,7 @@ export default function MrpPlanner(props) {
                         <th>Belge</th>
                         <th>Cari</th>
                         <th>Malzeme</th>
+                        <th>Üretilebilir</th>
                         <th>Kırılım</th>
                         <th className="mrp-num">Sipariş</th>
                         <th className="mrp-num">Teslim</th>
@@ -339,11 +340,16 @@ export default function MrpPlanner(props) {
                             <td>
                               <div style={{ fontWeight: 600 }}>{l.itemCode}</div>
                               <div className="mrp-dim" style={{ fontSize: 11 }}>{l.itemName}</div>
-                              {!l.isProducible && (
-                                <span className="mrp-badge mrp-badge--rose" style={{ marginTop: 3 }}>
-                                  Üretilebilir değil
-                                </span>
-                              )}
+                            </td>
+                            {/* Üretilebilirlik ayrı sütun — malzeme hücresini iki satırdan
+                                üçe çıkarıp satır yüksekliğini şişirmesin (kompakt liste). */}
+                            <td>
+                              <span className={'mrp-badge ' + (l.isProducible ? 'mrp-badge--emerald' : 'mrp-badge--rose')}
+                                    title={l.isProducible
+                                      ? 'Mamul / Yarı Mamul — iş emri açılabilir'
+                                      : 'Üretilebilir tipte değil — iş emri açılamaz, satın alma önerilir'}>
+                                {l.isProducible ? 'Evet' : 'Hayır'}
+                              </span>
                             </td>
                             <td><span className="mrp-policy">{POLICY_LABEL[l.splitPolicy] || l.splitPolicy}</span></td>
                             <td className="mrp-num">{fmtQty(l.orderQuantity)} {l.unitCode || ''}</td>

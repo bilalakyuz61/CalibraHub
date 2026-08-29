@@ -246,16 +246,41 @@ public sealed class HealthCheckController : Controller
     // bütünlüğü ve seed sayımları. CheckResult olarak üretilir (ParentLabel = grup),
     // aynı JSON/NDJSON akışına eklenir; frontend değişikliği gerekmez.
 
+    /// <summary>
+    /// Varlığı denetlenen çekirdek tablolar. Yeni bir modül canlıya alındığında ANA tablosu
+    /// buraya eklenir: tablo self-healing ensure adımında oluşturulamazsa ekran çalışmaz ve
+    /// bu tarama olmadan sebep ancak kullanıcı hata aldığında anlaşılır.
+    /// (2026-08-29: makine çizelgesi, rezervasyon, lot/seri, MRP, AR-GE görev, kalite,
+    /// karşılama defteri, form davranışı ve view yönetimi modülleri eklendi.)
+    /// </summary>
     private static readonly string[] CoreTables =
     {
         "Users", "Forms", "Location", "Items", "ItemLocation", "ItemDocumentLock",
-        "Document", "DocumentLine", "Contact", "DecimalSetting", "PermissionDef", "ApprovalFlow"
+        "Document", "DocumentLine", "Contact", "DecimalSetting", "PermissionDef", "ApprovalFlow",
+        // Üretim planlama
+        "MachineScheduleBlock", "MrpRun", "WorkOrderPeg",
+        // Stok izlenebilirlik ve rezervasyon
+        "Lot", "ItemSerial", "DocumentLineSerial", "StockReservation",
+        // İhtiyaç karşılama · kit
+        "DocumentLineFulfillment", "ItemKit",
+        // Kalite · AR-GE
+        "QualityInspection", "Capa", "ProjectTask",
+        // Uyarlama katmanı
+        "FormFieldBehavior", "ViewDefinition",
     };
 
+    /// <summary>
+    /// Sonradan ALTER ile eklenen, eksikliği ekranı sessizce bozan kolonlar. Bir kolonu
+    /// buraya eklemek, "self-healing ensure çalıştı mı" sorusunu tek bakışta yanıtlar.
+    /// </summary>
     private static readonly (string Table, string Column)[] CoreColumns =
     {
         ("Items", "MinStock"), ("ItemLocation", "MinStock"), ("DocumentLine", "BaseQuantity"),
         ("Document", "Status"), ("ItemDocumentLock", "DocType"),
+        // 2026-08-29 eklenenler
+        ("Users", "MustChangePassword"),        // zorunlu parola değişimi (giriş akışı buna bakar)
+        ("Personnel", "IsMobilePinRequired"),   // mobilde PIN sorma tercihi
+        ("Items", "WorkOrderSplitPolicy"),      // MRP iş emri bölme kuralı
     };
 
     private sealed record InfraSpec(
