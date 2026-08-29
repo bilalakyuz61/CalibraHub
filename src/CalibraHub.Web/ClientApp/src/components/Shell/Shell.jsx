@@ -2590,7 +2590,7 @@ function ShortcutsBar(props) {
   var resolved = shortcutKeys.map(function(k) { return optionIndex[k] }).filter(Boolean)
 
   return (
-    <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-x-auto overflow-y-hidden smartcard-widgets-scroll">
+    <div className="flex-1 min-w-0 flex items-center gap-1.5">
       {/* İşlemler — çark ikonu (yazısız), Ana Sayfa'nın SOLUNDA. Menü portal ile
           body'ye render edilir → ShortcutsBar overflow'u kırpmaz, buton altından açılır. */}
       <div className="flex-shrink-0">
@@ -2658,20 +2658,34 @@ function ShortcutsBar(props) {
         <div className={'w-px h-5 flex-shrink-0 ' + (isDark ? 'bg-white/10' : 'bg-slate-200')} />
       )}
 
-      {loaded && resolved.map(function(item) {
-        return (
-          <ShortcutChip
-            key={item.key}
-            isDark={isDark}
-            item={item}
-            editMode={editMode}
-            showLabel={showNames || editMode}
-            onClick={function() { if (!editMode && onNavigate) onNavigate(item) }}
-            onRemove={function() { removeShortcut(item.key) }}
-            removeLabel={tShell('shortcuts_remove', lang)}
-          />
-        )
-      })}
+      {/* Kısayol chip'leri — TAŞMA YALNIZ BURADA olur (sekme şeridiyle aynı ok
+          yapısı). Önceden tüm çubuk kayıyordu; kısayol eklendikçe sağdaki
+          Ekle / İsimler / Kaydet kontrolleri görüntüden çıkıyordu. Bu alan
+          flex-1 olduğu için kısayol yokken de sağ kontrolleri sağa yaslar. */}
+      <TabScrollArea
+        isDark={isDark}
+        itemCount={resolved.length}
+        className="flex-1 min-w-0 h-8"
+        gapClass="gap-1.5"
+        padLeft={0}
+        padRight={0}
+        chevronBg={isDark ? '#0a0d17' : '#ffffff'}
+      >
+        {loaded && resolved.map(function(item) {
+          return (
+            <ShortcutChip
+              key={item.key}
+              isDark={isDark}
+              item={item}
+              editMode={editMode}
+              showLabel={showNames || editMode}
+              onClick={function() { if (!editMode && onNavigate) onNavigate(item) }}
+              onRemove={function() { removeShortcut(item.key) }}
+              removeLabel={tShell('shortcuts_remove', lang)}
+            />
+          )
+        })}
+      </TabScrollArea>
 
       {loaded && editMode && (
         <button
@@ -3688,7 +3702,7 @@ function TabScrollArea(props) {
       <div
         ref={scrollRef}
         onWheel={handleWheel}
-        className="flex items-center gap-1 h-full overflow-x-auto smartcard-widgets-scroll"
+        className={'flex items-center h-full overflow-x-auto smartcard-widgets-scroll ' + (props.gapClass || 'gap-1')}
         style={{ paddingLeft: canLeft ? 34 : padLeft, paddingRight: canRight ? 34 : padRight }}
       >
         {props.children}
