@@ -319,7 +319,8 @@ export default function MrpPlanner(props) {
                     <th className="mrp-num">Eldeki</th>
                     <th className="mrp-num">Açık Arz</th>
                     <th className="mrp-num">Net</th>
-                    <th>Planlanan Bitiş</th>
+                    <th>Başlangıç</th>
+                    <th>Bitiş</th>
                     <th>Not</th>
                   </tr>
                 </thead>
@@ -358,12 +359,13 @@ export default function MrpPlanner(props) {
                         <td className="mrp-num mrp-dim">{fmtQty(n.onHandApplied)}</td>
                         <td className="mrp-num mrp-dim">{fmtQty(n.openSupplyApplied)}</td>
                         <td className="mrp-num" style={{ fontWeight: 700 }}>{fmtQty(n.netQuantity)}</td>
+                        <td>{fmtDate(n.plannedStartDate)}</td>
                         <td>{fmtDate(n.plannedEndDate)}</td>
                         <td className="mrp-dim" style={{ maxWidth: 260, fontSize: 11.5 }}>{n.message || ''}</td>
                       </tr>,
                       isOpen && (
                         <tr key={'p' + n.runLineId} className="mrp-peg-row">
-                          <td colSpan={10}>
+                          <td colSpan={11}>
                             <table className="mrp-peg-table">
                               <thead>
                                 <tr>

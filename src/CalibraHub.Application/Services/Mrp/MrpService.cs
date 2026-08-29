@@ -28,17 +28,29 @@ public sealed class MrpService : IMrpService
 {
     private readonly IMrpRepository _repo;
     private readonly IWorkOrderService _workOrders;
+    private readonly IWorkOrderRepository _workOrderRepo;
+    private readonly IRoutingService _routings;
+    private readonly IOperationMachineTimeService _machineTimes;
+    private readonly IMachineCalendarRepository _calendar;
     private readonly IAuditTrailService? _audit;
     private readonly ILogger<MrpService>? _logger;
 
     public MrpService(
         IMrpRepository repo,
         IWorkOrderService workOrders,
+        IWorkOrderRepository workOrderRepo,
+        IRoutingService routings,
+        IOperationMachineTimeService machineTimes,
+        IMachineCalendarRepository calendar,
         IAuditTrailService? audit = null,
         ILogger<MrpService>? logger = null)
     {
         _repo = repo;
         _workOrders = workOrders;
+        _workOrderRepo = workOrderRepo;
+        _routings = routings;
+        _machineTimes = machineTimes;
+        _calendar = calendar;
         _audit = audit;
         _logger = logger;
     }
@@ -170,6 +182,11 @@ public sealed class MrpService : IMrpService
             .GroupBy(r => r.ItemId)
             .ToDictionary(g2 => g2.Key, g2 => g2.Sum(x => x.OpenQuantity));
 
+        // ── E) TARİHLEME hazırlığı (Faz 3) ───────────────────────────────────────────
+        // Süre rota operasyonlarından hesaplanır, geriye kaydırma çalışma takvimi üzerinden.
+        var leadTime = new MrpLeadTimeCalculator(_workOrderRepo, _routings, _machineTimes, _calendar, _logger);
+        var walker = await leadTime.GetWalkerAsync(ct);
+
         // ── D) NET İHTİYAÇ + AKSİYON ─────────────────────────────────────────────────
         // EDD (en erken teslim önce): kıt stok en acil siparişe gitmeli.
         var ordered = groups.Values
@@ -250,16 +267,51 @@ public sealed class MrpService : IMrpService
                 continue;
             }
 
+            // ── TARİHLEME (Faz 3) ──
+            // Bitiş = kaynak siparişin (grup içindeki en erken) teslim tarihi.
+            // Başlangıç = bitişten, operasyon sürelerinden hesaplanan üretim süresi kadar
+            // GERİYE — kapalı saatler ve tatiller atlanarak.
+            DateTime? plannedStart = null;
+            string? dateMessage = null;
+
+            if (g.DueDate is null)
+            {
+                dateMessage = "Siparişte teslim tarihi yok — planlanan bitiş boş bırakıldı.";
+            }
+            else
+            {
+                var lt = await leadTime.ResolveMinutesAsync(g.ItemId, g.ConfigId, net, ct);
+                if (lt.Minutes is not > 0m)
+                {
+                    plannedStart = g.DueDate;                  // süre yok → aynı gün
+                    dateMessage = lt.Reason;
+                }
+                else if (!walker.HasCalendar)
+                {
+                    plannedStart = g.DueDate;
+                    dateMessage = "Çalışma takvimi tanımlı değil — başlangıç tarihi bitişe eşitlendi "
+                                + $"(hesaplanan üretim süresi {F(lt.Minutes.Value / 60m)} saat).";
+                }
+                else
+                {
+                    plannedStart = walker.WalkBackward(g.DueDate.Value, lt.Minutes.Value);
+                    // Geçmişe düşen başlangıç SESSİZCE bugüne çekilmez — emir yine planlanır,
+                    // kullanıcı gecikmeyi görüp kararı kendisi verir.
+                    if (plannedStart < DateTime.Now.Date)
+                        dateMessage = "Geç kalınmış: hesaplanan başlangıç geçmişte "
+                                    + $"({plannedStart:dd.MM.yyyy}).";
+                }
+            }
+
             records.Add(new MrpRunLineRecord(
                 Id: 0, Level: 0, ParentRunLineId: null, ItemId: g.ItemId, ConfigId: g.ConfigId,
                 ActionType: MrpActionTypes.NewWorkOrder,
                 GrossQuantity: g.Gross, OnHandApplied: onHandUsed, OpenSupplyApplied: supplyUsed,
                 NetQuantity: net,
-                // Faz 3'te operasyon sürelerinden geriye hesaplanacak; şimdilik yalnız bitiş.
-                PlannedStartDate: null, PlannedEndDate: g.DueDate,
+                PlannedStartDate: plannedStart, PlannedEndDate: g.DueDate,
                 TargetWorkOrderId: null, PegJson: pegJson,
                 CreatedWorkOrderId: null, CreatedDocumentId: null,
-                Message: g.DueDate is null ? "Siparişte teslim tarihi yok — planlanan bitiş boş bırakıldı." : null,
+                Message: dateMessage,
                 LocationId: g.LocationId));
             nodeExtras.Add((g.ItemId, g.ItemCode, g.ItemName, g.UnitCode, g.SplitPolicy, g.LocationId, null));
         }
