@@ -1025,107 +1025,107 @@
         40%, 60% { transform: translateX(4px); }
     }
     /* ═══════════════ Reçete Ağacı (çok seviyeli düzenleme, 2026-08-29) ═══════════════
-       Prefix ptt- : pta- bu dosyada BASKA bir bileşene (modal overlay) ait,
+       Prefix pta- : pta- bu dosyada BASKA bir bileşene (modal overlay) ait,
        yeniden tanımlamak onu bozardı.
        Renkler token'lardan (var(--...)) gelir — sabit hex YAZILMAZ, yoksa açık temada
        koyu kalır (CLAUDE.md tema kuralları). */
     #pteTab-agac { display: flex; flex-direction: column; min-height: 0; }
-    .ptt-toolbar {
+    .bomt-toolbar {
         display: flex; align-items: center; gap: var(--space-3);
         flex-wrap: wrap; margin-bottom: var(--space-3);
     }
-    .ptt-hint { font-size: 12px; color: var(--text-muted); }
-    .ptt-warn {
+    .bomt-hint { font-size: 12px; color: var(--text-muted); }
+    .bomt-warn {
         padding: 8px 12px; border-radius: var(--radius-md); font-size: 12px;
         background: var(--warning-soft-bg, rgba(245,158,11,.10));
         border: 1px solid var(--warning, rgba(245,158,11,.45));
         color: var(--text-primary); margin-bottom: var(--space-3);
     }
 
-    .ptt-tree { display: flex; flex-direction: column; gap: 2px; }
+    .bomt-tree { display: flex; flex-direction: column; gap: 2px; }
 
-    .ptt-node {
+    .bomt-node {
         display: grid;
         grid-template-columns: minmax(0,1fr) 96px 84px minmax(120px,1fr) auto;
         gap: var(--space-3); align-items: center;
         padding: 6px 8px; border-radius: var(--radius-md);
         border: 1px solid transparent;
     }
-    .ptt-node:hover { background: var(--surface-elev-2); border-color: var(--border-subtle); }
-    .ptt-node--root { background: var(--accent-soft-bg); border-color: var(--accent); }
+    .bomt-node:hover { background: var(--surface-elev-2); border-color: var(--border-subtle); }
+    .bomt-node--root { background: var(--accent-soft-bg); border-color: var(--accent); }
     /* Döngüde kesilen dal: düzenlenemez, ama GÖRÜNÜR — sessizce gizlemek
        "bileşen yok" yanılgısı üretirdi. */
-    .ptt-node--cycle { opacity: .6; }
+    .bomt-node--cycle { opacity: .6; }
 
-    .ptt-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
-    .ptt-caret {
+    .bomt-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .bomt-caret {
         width: 18px; height: 18px; flex-shrink: 0;
         display: inline-flex; align-items: center; justify-content: center;
         border: none; background: transparent; cursor: pointer;
         color: var(--text-muted); padding: 0; border-radius: 4px;
     }
-    .ptt-caret:hover { background: var(--surface-elev-2); color: var(--text-primary); }
-    .ptt-caret--leaf { visibility: hidden; cursor: default; }
-    .ptt-caret svg { transition: transform var(--motion-fast) var(--motion-ease-out); }
-    .ptt-caret.is-open svg { transform: rotate(90deg); }
-    .ptt-code {
+    .bomt-caret:hover { background: var(--surface-elev-2); color: var(--text-primary); }
+    .bomt-caret--leaf { visibility: hidden; cursor: default; }
+    .bomt-caret svg { transition: transform var(--motion-fast) var(--motion-ease-out); }
+    .bomt-caret.is-open svg { transform: rotate(90deg); }
+    .bomt-code {
         font-family: ui-monospace, Menlo, Consolas, monospace;
         font-size: 12px; font-weight: var(--font-weight-semibold);
         color: var(--text-primary); white-space: nowrap;
     }
-    .ptt-itemname {
+    .bomt-itemname {
         font-size: 12px; color: var(--text-muted);
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
     }
 
-    .ptt-badge {
+    .bomt-badge {
         font-size: 10px; font-weight: var(--font-weight-semibold);
         padding: 2px 7px; border-radius: 20px; white-space: nowrap; flex-shrink: 0;
     }
-    .ptt-badge--shared  { background: rgba(245,158,11,.16); color: #b45309; }
-    .ptt-badge--version { background: rgba(139,92,246,.16); color: #6d28d9; }
-    .ptt-badge--cycle   { background: rgba(239,68,68,.16);  color: #b91c1c; }
-    .ptt-badge--new     { background: rgba(16,185,129,.16); color: #047857; }
-    body.app-theme-dark .ptt-badge--shared  { color: #fcd34d; }
-    body.app-theme-dark .ptt-badge--version { color: #c4b5fd; }
-    body.app-theme-dark .ptt-badge--cycle   { color: #fca5a5; }
-    body.app-theme-dark .ptt-badge--new     { color: #6ee7b7; }
+    .bomt-badge--shared  { background: rgba(245,158,11,.16); color: #b45309; }
+    .bomt-badge--version { background: rgba(139,92,246,.16); color: #6d28d9; }
+    .bomt-badge--cycle   { background: rgba(239,68,68,.16);  color: #b91c1c; }
+    .bomt-badge--new     { background: rgba(16,185,129,.16); color: #047857; }
+    body.app-theme-dark .bomt-badge--shared  { color: #fcd34d; }
+    body.app-theme-dark .bomt-badge--version { color: #c4b5fd; }
+    body.app-theme-dark .bomt-badge--cycle   { color: #fca5a5; }
+    body.app-theme-dark .bomt-badge--new     { color: #6ee7b7; }
 
-    .ptt-node .pte-input { padding: 5px 8px; font-size: 12px; width: 100%; }
-    .ptt-actions { display: flex; gap: 4px; }
-    .ptt-iconbtn {
+    .bomt-node .pte-input { padding: 5px 8px; font-size: 12px; width: 100%; }
+    .bomt-actions { display: flex; gap: 4px; }
+    .bomt-iconbtn {
         width: 26px; height: 26px; border-radius: var(--radius-md);
         display: inline-flex; align-items: center; justify-content: center;
         border: 1px solid var(--border-subtle); background: var(--surface-elev-2);
         color: var(--text-muted); cursor: pointer; padding: 0;
     }
-    .ptt-iconbtn:hover { color: var(--text-primary); border-color: var(--border-strong); }
-    .ptt-iconbtn--danger:hover { color: var(--danger); border-color: var(--danger); }
+    .bomt-iconbtn:hover { color: var(--text-primary); border-color: var(--border-strong); }
+    .bomt-iconbtn--danger:hover { color: var(--danger); border-color: var(--danger); }
 
     /* Bileşen ekleme satırı — düğümün hemen altında açılır */
-    .ptt-adder {
+    .bomt-adder {
         margin: 4px 0 8px; padding: 10px 12px;
         border: 1px dashed var(--border-strong); border-radius: var(--radius-md);
         background: var(--surface-elev-2);
     }
-    .ptt-adder-row { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
-    .ptt-results {
+    .bomt-adder-row { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
+    .bomt-results {
         margin-top: 8px; max-height: 200px; overflow-y: auto;
         border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
     }
-    .ptt-result {
+    .bomt-result {
         display: flex; gap: 10px; align-items: center;
         padding: 6px 10px; cursor: pointer; font-size: 12px;
     }
-    .ptt-result:hover { background: var(--accent-soft-bg); }
-    .ptt-result-code {
+    .bomt-result:hover { background: var(--accent-soft-bg); }
+    .bomt-result-code {
         font-family: ui-monospace, Menlo, Consolas, monospace;
         font-weight: var(--font-weight-semibold); color: var(--text-primary);
     }
-    .ptt-result-name { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .ptt-empty { padding: 10px; font-size: 12px; color: var(--text-muted); font-style: italic; }
+    .bomt-result-name { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bomt-empty { padding: 10px; font-size: 12px; color: var(--text-muted); font-style: italic; }
 
-    .ptt-field-row { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin-top: 8px; }
+    .bomt-field-row { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin-top: 8px; }
 </style>
 }
 
@@ -1395,17 +1395,17 @@
                 <div class="pte-card">
                     <p class="pte-card-title">Reçete Ağacı</p>
 
-                    <div class="ptt-toolbar">
+                    <div class="bomt-toolbar">
                         <button type="button" class="pte-btn pte-btn--secondary pte-btn--sm" id="pttReload">Yenile</button>
                         <button type="button" class="pte-btn pte-btn--secondary pte-btn--sm" id="pttExpandAll">Tümünü Aç</button>
                         <button type="button" class="pte-btn pte-btn--secondary pte-btn--sm" id="pttCollapseAll">Tümünü Kapat</button>
                         <button type="button" class="pte-btn pte-btn--primary pte-btn--sm" id="pttSave">Ağacı Kaydet</button>
-                        <span class="ptt-hint" id="pttHint"></span>
+                        <span class="bomt-hint" id="pttHint"></span>
                     </div>
 
-                    <div class="ptt-warn" id="pttTruncWarn" style="display:none;"></div>
+                    <div class="bomt-warn" id="pttTruncWarn" style="display:none;"></div>
 
-                    <div id="pttTree" class="ptt-tree"></div>
+                    <div id="pttTree" class="bomt-tree"></div>
                 </div>
             </div><!-- /pteTab-agac -->
 
@@ -1417,15 +1417,15 @@
 </section>
 
 <!-- Excel'den Toplu Yapıştırma Modalı (2026-07-05) -->
-<div class="ptt-overlay" id="ptPasteOverlay" role="dialog" aria-labelledby="ptPasteTitle" aria-hidden="true">
-    <div class="ptt-panel" role="document" style="width:min(680px,96vw);">
-        <div class="ptt-header">
+<div class="pta-overlay" id="ptPasteOverlay" role="dialog" aria-labelledby="ptPasteTitle" aria-hidden="true">
+    <div class="pta-panel" role="document" style="width:min(680px,96vw);">
+        <div class="pta-header">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.6;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
             <h3 id="ptPasteTitle">Excel'den Toplu Bileşen Ekle</h3>
-            <button type="button" class="ptt-close" id="ptPasteClose" aria-label="Kapat">&times;</button>
+            <button type="button" class="pta-close" id="ptPasteClose" aria-label="Kapat">&times;</button>
         </div>
-        <div class="ptt-section">
-            <div class="ptt-source">
+        <div class="pta-section">
+            <div class="pta-source">
                 Excel'den <strong>Kod</strong> ve <strong>Miktar</strong> (opsiyonel <strong>Fire</strong>, <strong>Açıklama</strong>) sütunlarını kopyalayıp aşağıya yapıştırın.
                 Miktar verilmeyen satırlar <strong>1</strong> kabul edilir.
             </div>
@@ -1447,7 +1447,7 @@
             </div>
             <div class="pte-paste-summary" id="ptPasteSummary"></div>
         </div>
-        <div class="ptt-actions">
+        <div class="pta-actions">
             <button type="button" class="pte-btn pte-btn--secondary" id="ptPasteCancel">Vazgeç</button>
             <button type="button" class="pte-btn pte-btn--primary" id="ptPasteApply" disabled>Ekle</button>
         </div>
@@ -1455,19 +1455,19 @@
 </div>
 
 <!-- Versiyon Türet Modalı (2026-08-11 reçete versiyonlama) -->
-<div class="ptt-overlay" id="ptDeriveOverlay" role="dialog" aria-labelledby="ptDeriveTitle" aria-hidden="true">
-    <div class="ptt-panel" role="document" style="width:min(460px,96vw);">
-        <div class="ptt-header">
+<div class="pta-overlay" id="ptDeriveOverlay" role="dialog" aria-labelledby="ptDeriveTitle" aria-hidden="true">
+    <div class="pta-panel" role="document" style="width:min(460px,96vw);">
+        <div class="pta-header">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.6;"><path d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2"/></svg>
             <h3 id="ptDeriveTitle">Versiyon Türet</h3>
-            <button type="button" class="ptt-close" id="ptDeriveClose" aria-label="Kapat">&times;</button>
+            <button type="button" class="pta-close" id="ptDeriveClose" aria-label="Kapat">&times;</button>
         </div>
-        <div class="ptt-section">
-            <div class="ptt-source" id="ptDeriveSourceInfo">Açık reçetenin kopyasından yeni bir versiyon oluşturulur; versiyon sonradan serbestçe düzenlenebilir.</div>
+        <div class="pta-section">
+            <div class="pta-source" id="ptDeriveSourceInfo">Açık reçetenin kopyasından yeni bir versiyon oluşturulur; versiyon sonradan serbestçe düzenlenebilir.</div>
             <label class="pte-label" for="ptDeriveCode" style="display:block;margin:10px 0 6px;">Versiyon Kodu *</label>
             <input type="text" id="ptDeriveCode" class="pte-input" maxlength="30" placeholder="örn. V2, FASON, 2026-B..." style="width:100%;" autocomplete="off" />
         </div>
-        <div class="ptt-actions">
+        <div class="pta-actions">
             <button type="button" class="pte-btn pte-btn--secondary" id="ptDeriveCancel">Vazgeç</button>
             <button type="button" class="pte-btn pte-btn--primary" id="ptDeriveApply">Türet</button>
         </div>
@@ -1476,15 +1476,15 @@
 
 <!-- Bileşen Alt Reçete Seçim Modalı (2026-08-11) — yarı mamul bileşenin hangi
      reçete/versiyonunun kullanılacağı; "Aç" ile seçilen reçetenin detayına gidilir. -->
-<div class="ptt-overlay" id="ptCompBomOverlay" role="dialog" aria-labelledby="ptCompBomTitle" aria-hidden="true">
-    <div class="ptt-panel" role="document" style="width:min(520px,96vw);">
-        <div class="ptt-header">
+<div class="pta-overlay" id="ptCompBomOverlay" role="dialog" aria-labelledby="ptCompBomTitle" aria-hidden="true">
+    <div class="pta-panel" role="document" style="width:min(520px,96vw);">
+        <div class="pta-header">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.6;"><path d="M12 3v18M3 12h18"/></svg>
             <h3 id="ptCompBomTitle">Bileşen Reçetesi</h3>
-            <button type="button" class="ptt-close" id="ptCompBomClose" aria-label="Kapat">&times;</button>
+            <button type="button" class="pta-close" id="ptCompBomClose" aria-label="Kapat">&times;</button>
         </div>
-        <div class="ptt-section">
-            <div class="ptt-source" id="ptCompBomInfo"></div>
+        <div class="pta-section">
+            <div class="pta-source" id="ptCompBomInfo"></div>
             <label class="pte-label" for="ptCompBomSelect" style="display:block;margin:10px 0 6px;">Kullanılacak Reçete</label>
             <div style="display:flex;gap:8px;align-items:center;">
                 <select id="ptCompBomSelect" class="pte-input" style="flex:1 1 0;min-width:0;"></select>
@@ -1492,7 +1492,7 @@
             </div>
             <div style="font-size:.74rem;opacity:.6;margin-top:8px;">"Baz Reçete (canlı)" seçiliyse yarı mamulün güncel baz reçetesi izlenir; belirli versiyon seçilirse o versiyona sabitlenir.</div>
         </div>
-        <div class="ptt-actions">
+        <div class="pta-actions">
             <button type="button" class="pte-btn pte-btn--secondary" id="ptCompBomCancel">Vazgeç</button>
             <button type="button" class="pte-btn pte-btn--primary" id="ptCompBomApply">Uygula</button>
         </div>
@@ -1500,19 +1500,19 @@
 </div>
 
 <!-- Kaydedilmemiş Değişiklik Modalı (2026-07-05) -->
-<div class="ptt-overlay" id="ptLeaveOverlay" role="dialog" aria-labelledby="ptLeaveTitle" aria-hidden="true">
-    <div class="ptt-panel" role="document" style="width:min(480px,96vw);">
-        <div class="ptt-header">
+<div class="pta-overlay" id="ptLeaveOverlay" role="dialog" aria-labelledby="ptLeaveTitle" aria-hidden="true">
+    <div class="pta-panel" role="document" style="width:min(480px,96vw);">
+        <div class="pta-header">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
             <h3 id="ptLeaveTitle">Kaydedilmemiş Değişiklikler</h3>
-            <button type="button" class="ptt-close" id="ptLeaveClose" aria-label="Kapat">&times;</button>
+            <button type="button" class="pta-close" id="ptLeaveClose" aria-label="Kapat">&times;</button>
         </div>
-        <div class="ptt-section">
+        <div class="pta-section">
             <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;">
                 Bu reçetede kaydedilmemiş değişiklikler var. Sayfadan ayrılırsanız değişiklikler kaybolur.
             </div>
         </div>
-        <div class="ptt-actions">
+        <div class="pta-actions">
             <button type="button" class="pte-btn pte-btn--secondary" id="ptLeaveCancel">Vazgeç</button>
             <button type="button" class="pte-btn pte-btn--danger" id="ptLeaveDiscard">Kaydetmeden Çık</button>
             <button type="button" class="pte-btn pte-btn--primary" id="ptLeaveSave">Kaydet ve Çık</button>
@@ -3427,7 +3427,7 @@
             pttModel = null; pttLoadedKey = null;
             if (warn) warn.style.display = 'none';
             pttEl('pttTree').innerHTML =
-                '<div class="ptt-empty">Once Genel Bilgiler sekmesinden bir mamul secin.</div>';
+                '<div class="bomt-empty">Once Genel Bilgiler sekmesinden bir mamul secin.</div>';
             pttSetSaveEnabled(false);
             return;
         }
@@ -3464,7 +3464,7 @@
     async function pttLoad() {
         if (!ptCurrentItemId) return;
         var host = pttEl('pttTree');
-        host.innerHTML = '<div class="ptt-empty">Agac yukleniyor...</div>';
+        host.innerHTML = '<div class="bomt-empty">Agac yukleniyor...</div>';
         var url = '/Logistics/BomTree?itemId=' + encodeURIComponent(ptCurrentItemId)
                 + (ptCurrentConfigId != null ? '&configId=' + ptCurrentConfigId : '')
                 + (ptCurrentId ? '&bomId=' + ptCurrentId : '');
@@ -3472,7 +3472,7 @@
             var r = await fetch(url, { credentials: 'include' });
             var data = await r.json();
             if (!r.ok || !data.success) {
-                host.innerHTML = '<div class="ptt-empty">'
+                host.innerHTML = '<div class="bomt-empty">'
                     + escHtml((data && data.message) || 'Agac yuklenemedi.') + '</div>';
                 return;
             }
@@ -3490,7 +3490,7 @@
             }
             pttRender();
         } catch (e) {
-            host.innerHTML = '<div class="ptt-empty">Agac yuklenemedi: '
+            host.innerHTML = '<div class="bomt-empty">Agac yuklenemedi: '
                 + escHtml(e.message || '') + '</div>';
         }
     }
@@ -3520,7 +3520,7 @@
     function pttRender() {
         var host = pttEl('pttTree');
         host.innerHTML = '';
-        if (!pttModel) { host.innerHTML = '<div class="ptt-empty">Agac yok.</div>'; return; }
+        if (!pttModel) { host.innerHTML = '<div class="bomt-empty">Agac yok.</div>'; return; }
         pttRenderNode(pttModel, 0, host, true);
 
         var n = 0;
@@ -3530,17 +3530,17 @@
 
     function pttRenderNode(node, depth, host, isRoot) {
         var row = document.createElement('div');
-        row.className = 'ptt-node' + (isRoot ? ' ptt-node--root' : '')
-                      + (node.isCycle ? ' ptt-node--cycle' : '');
+        row.className = 'bomt-node' + (isRoot ? ' bomt-node--root' : '')
+                      + (node.isCycle ? ' bomt-node--cycle' : '');
         row.dataset.uid = node._uid;
 
         var nameCell = document.createElement('div');
-        nameCell.className = 'ptt-name';
+        nameCell.className = 'bomt-name';
         nameCell.style.paddingLeft = (depth * 20) + 'px';
 
         var caret = document.createElement('button');
         caret.type = 'button';
-        caret.className = 'ptt-caret' + (node.children.length ? '' : ' ptt-caret--leaf')
+        caret.className = 'bomt-caret' + (node.children.length ? '' : ' bomt-caret--leaf')
                         + (node._open ? ' is-open' : '');
         caret.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 6l6 6-6 6"/></svg>';
         if (node.children.length) {
@@ -3549,12 +3549,12 @@
         nameCell.appendChild(caret);
 
         var code = document.createElement('span');
-        code.className = 'ptt-code';
+        code.className = 'bomt-code';
         code.textContent = node.itemCode || ('#' + node.itemId);
         nameCell.appendChild(code);
 
         var nm = document.createElement('span');
-        nm.className = 'ptt-itemname';
+        nm.className = 'bomt-itemname';
         nm.textContent = node.itemName || '';
         nameCell.appendChild(nm);
 
@@ -3579,7 +3579,7 @@
         }
 
         var actions = document.createElement('div');
-        actions.className = 'ptt-actions';
+        actions.className = 'bomt-actions';
         if (!node.isCycle) {
             actions.appendChild(pttIconBtn(
                 '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
@@ -3602,7 +3602,7 @@
 
     function pttBadge(text, kind) {
         var b = document.createElement('span');
-        b.className = 'ptt-badge ptt-badge--' + kind;
+        b.className = 'bomt-badge bomt-badge--' + kind;
         b.textContent = text;
         return b;
     }
@@ -3610,7 +3610,7 @@
     function pttIconBtn(svg, title, danger, onClick) {
         var b = document.createElement('button');
         b.type = 'button';
-        b.className = 'ptt-iconbtn' + (danger ? ' ptt-iconbtn--danger' : '');
+        b.className = 'bomt-iconbtn' + (danger ? ' bomt-iconbtn--danger' : '');
         b.title = title;
         b.innerHTML = svg;
         b.addEventListener('click', onClick);
@@ -3661,25 +3661,25 @@
     }
 
     function pttToggleAdder(node, rowEl, depth) {
-        var existing = document.querySelector('.ptt-adder');
+        var existing = document.querySelector('.bomt-adder');
         if (existing) existing.remove();
         if (pttAdderUid === node._uid) { pttAdderUid = null; return; }
         pttAdderUid = node._uid;
 
         var box = document.createElement('div');
-        box.className = 'ptt-adder';
+        box.className = 'bomt-adder';
         box.style.marginLeft = ((depth + 1) * 20) + 'px';
         box.innerHTML =
-            '<div class="ptt-adder-row">'
-          + '  <input type="text" class="pte-input" style="flex:1 1 240px;" placeholder="Malzeme kodu veya adi ara..." data-ptt-search>'
-          + '  <button type="button" class="pte-btn pte-btn--secondary pte-btn--sm" data-ptt-new>Yeni Malzeme Karti</button>'
+            '<div class="bomt-adder-row">'
+          + '  <input type="text" class="pte-input" style="flex:1 1 240px;" placeholder="Malzeme kodu veya adi ara..." data-bomt-search>'
+          + '  <button type="button" class="pte-btn pte-btn--secondary pte-btn--sm" data-bomt-new>Yeni Malzeme Karti</button>'
           + '</div>'
-          + '<div class="ptt-results" style="display:none;" data-ptt-results></div>'
-          + '<div data-ptt-newform style="display:none;"></div>';
+          + '<div class="bomt-results" style="display:none;" data-bomt-results></div>'
+          + '<div data-bomt-newform style="display:none;"></div>';
         rowEl.insertAdjacentElement('afterend', box);
 
-        var search = box.querySelector('[data-ptt-search]');
-        var results = box.querySelector('[data-ptt-results]');
+        var search = box.querySelector('[data-bomt-search]');
+        var results = box.querySelector('[data-bomt-results]');
         var timer = null;
         search.addEventListener('input', function() {
             clearTimeout(timer);
@@ -3689,8 +3689,8 @@
         });
         search.focus();
 
-        box.querySelector('[data-ptt-new]').addEventListener('click', function() {
-            pttShowNewItemForm(box.querySelector('[data-ptt-newform]'), node);
+        box.querySelector('[data-bomt-new]').addEventListener('click', function() {
+            pttShowNewItemForm(box.querySelector('[data-bomt-newform]'), node);
         });
     }
 
@@ -3700,14 +3700,14 @@
             var cards = await r.json();
             results.innerHTML = '';
             if (!cards.length) {
-                results.innerHTML = '<div class="ptt-empty">Eslesen malzeme yok.</div>';
+                results.innerHTML = '<div class="bomt-empty">Eslesen malzeme yok.</div>';
             } else {
                 cards.slice(0, 50).forEach(function(c) {
                     var d = document.createElement('div');
-                    d.className = 'ptt-result';
-                    d.innerHTML = '<span class="ptt-result-code"></span><span class="ptt-result-name"></span>';
-                    d.querySelector('.ptt-result-code').textContent = c.code;
-                    d.querySelector('.ptt-result-name').textContent = c.name || '';
+                    d.className = 'bomt-result';
+                    d.innerHTML = '<span class="bomt-result-code"></span><span class="bomt-result-name"></span>';
+                    d.querySelector('.bomt-result-code').textContent = c.code;
+                    d.querySelector('.bomt-result-name').textContent = c.name || '';
                     d.addEventListener('click', function() {
                         pttAddChild(node, c.id, c.code, c.name);
                     });
@@ -3716,7 +3716,7 @@
             }
             results.style.display = '';
         } catch (e) {
-            results.innerHTML = '<div class="ptt-empty">Arama basarisiz.</div>';
+            results.innerHTML = '<div class="bomt-empty">Arama basarisiz.</div>';
             results.style.display = '';
         }
     }
@@ -3744,7 +3744,7 @@
         node._open = true;
         pttMarkDirty();
         pttAdderUid = null;
-        var box = document.querySelector('.ptt-adder');
+        var box = document.querySelector('.bomt-adder');
         if (box) box.remove();
         pttRender();
         showMsg('"' + code + '" eklendi. Yazmak icin "Agaci Kaydet".', true);
@@ -3770,21 +3770,21 @@
             return '<option value="' + u.id + '">' + escHtml(u.code + ' - ' + (u.name || '')) + '</option>';
         }).join('');
         host.innerHTML =
-            '<div class="ptt-field-row">'
-          + '  <input type="text" class="pte-input" style="flex:1 1 220px;" placeholder="Malzeme adi" data-ptt-name>'
-          + '  <select class="pte-input" data-ptt-type>'
+            '<div class="bomt-field-row">'
+          + '  <input type="text" class="pte-input" style="flex:1 1 220px;" placeholder="Malzeme adi" data-bomt-name>'
+          + '  <select class="pte-input" data-bomt-type>'
           + '    <option value="1">Hammadde</option><option value="2">Yari Mamul</option>'
           + '    <option value="3">Mamul</option><option value="4">Ticari Mal</option>'
           + '    <option value="5">Sarf Malzemesi</option>'
           + '  </select>'
-          + '  <select class="pte-input" data-ptt-unit>' + unitOpts + '</select>'
-          + '  <button type="button" class="pte-btn pte-btn--primary pte-btn--sm" data-ptt-create>Olustur ve Ekle</button>'
+          + '  <select class="pte-input" data-bomt-unit>' + unitOpts + '</select>'
+          + '  <button type="button" class="pte-btn pte-btn--primary pte-btn--sm" data-bomt-create>Olustur ve Ekle</button>'
           + '</div>';
         host.style.display = '';
-        host.querySelector('[data-ptt-name]').focus();
-        host.querySelector('[data-ptt-create]').addEventListener('click', async function() {
+        host.querySelector('[data-bomt-name]').focus();
+        host.querySelector('[data-bomt-create]').addEventListener('click', async function() {
             var btn = this;
-            var name = host.querySelector('[data-ptt-name]').value.trim();
+            var name = host.querySelector('[data-bomt-name]').value.trim();
             if (!name) { showMsg('Malzeme adi bos olamaz.', false); return; }
             btn.disabled = true;
             try {
@@ -3794,8 +3794,8 @@
                                'RequestVerificationToken': ptCsrfToken() },
                     body: JSON.stringify({
                         name: name,
-                        typeId: parseInt(host.querySelector('[data-ptt-type]').value, 10),
-                        unitId: parseInt(host.querySelector('[data-ptt-unit]').value, 10)
+                        typeId: parseInt(host.querySelector('[data-bomt-type]').value, 10),
+                        unitId: parseInt(host.querySelector('[data-bomt-unit]').value, 10)
                     })
                 });
                 if (r.status === 403) {
