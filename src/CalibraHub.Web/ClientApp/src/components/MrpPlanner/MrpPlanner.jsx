@@ -305,10 +305,34 @@ export default function MrpPlanner(props) {
                 <div className="mrp-summary-lbl">Stoktan Karşılanan</div>
               </div>
               <div className="mrp-summary-card">
+                <div className="mrp-summary-val" style={{ color: 'var(--mrp-amber)' }}>{preview.summary.purchaseRequestCount}</div>
+                <div className="mrp-summary-lbl">Satın Alınacak</div>
+              </div>
+              <div className="mrp-summary-card">
                 <div className="mrp-summary-val" style={{ color: 'var(--mrp-rose)' }}>{preview.summary.shortageCount}</div>
                 <div className="mrp-summary-lbl">Aksiyon Alınamayan</div>
               </div>
             </div>
+
+            {/* Satın alınacak malzeme varsa: tek bir Satın Alma Talebi belgesi önerilir.
+                Kapatılırsa yalnız rapor kalır, belge yazılmaz. */}
+            {preview.summary.purchaseRequestCount > 0 && (
+              <label style={{
+                display: 'flex', alignItems: 'flex-start', gap: 9, marginBottom: 12,
+                padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+                background: 'var(--mrp-surface)', border: '1px solid var(--mrp-border)',
+              }}>
+                <input type="checkbox" checked={createPr}
+                       onChange={function (e) { setCreatePr(e.target.checked) }}
+                       style={{ marginTop: 2, accentColor: 'var(--mrp-amber)' }} />
+                <span style={{ fontSize: 12.5 }}>
+                  <strong>Satın Alma Talebi oluştur</strong>
+                  <span className="mrp-dim">
+                    {' '}— eksik {preview.summary.purchaseRequestCount} malzeme için tek belge açılır.
+                  </span>
+                </span>
+              </label>
+            )}
 
             <div className="mrp-table-wrap">
               <table className="mrp-table">
@@ -412,6 +436,15 @@ export default function MrpPlanner(props) {
               {applyResult.created.length} yeni iş emri açıldı
               {applyResult.merged.length > 0 ? (', ' + applyResult.merged.length + ' mevcut emre eklendi') : ''}.
             </div>
+            {applyResult.purchaseRequestDocumentId > 0 && (
+              <div className="mrp-alert mrp-alert--warn">
+                <ShoppingCart size={13} style={{ verticalAlign: '-2px' }} /> Eksik malzemeler için Satın Alma Talebi oluşturuldu:{' '}
+                <a href={'/Purchase/Edit?type=purchase_demand&id=' + applyResult.purchaseRequestDocumentId}
+                   style={{ color: 'var(--mrp-amber)', fontWeight: 700 }}>
+                  Belge #{applyResult.purchaseRequestDocumentId}
+                </a>
+              </div>
+            )}
             {applyResult.warnings && applyResult.warnings.length > 0 && (
               <div className="mrp-alert mrp-alert--warn">
                 <AlertTriangle size={13} style={{ verticalAlign: '-2px' }} /> Uygulanamayan satırlar:
