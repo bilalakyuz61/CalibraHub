@@ -121,6 +121,18 @@ export default function SmartBoard(props) {
   // "Çalışıyor"), aksi halde kullanıcı "Yenile"ye basmadıkça anlık durumu göremez.
   var autoRefreshMs = Number(props.autoRefreshMs) || 0
 
+  // ── Sunucu filtreleri (2026-08-29, opt-in) ──
+  // Filtre panelinin en ustunde cizilen, listeyi YENIDEN CEKTIREN secimler
+  // (ornek: Onayda Bekleyenler → Bekleyen/Tamamlanan + kapsam). Board sadece
+  // tasiyicidir; yeniden cekmeyi sayfa yapar cunku sorgu parametrelerinin adini
+  // yalnizca o bilir. onServerFilterChange bir FONKSIYON oldugundan JSON config'te
+  // tasinmaz — mountSmartBoard'a sayfa JS'inden eklenir. Verilmezse bolum cizilmez.
+  var serverFilters = Array.isArray(props.serverFilters) ? props.serverFilters.filter(Boolean) : []
+  var onServerFilterChange = typeof props.onServerFilterChange === 'function'
+    ? props.onServerFilterChange
+    : null
+  if (!onServerFilterChange) serverFilters = []
+
   // ── Satir secimi + acilir detay (opt-in, YALNIZCA tablo modu) ───────────
   // selectable:true      → satir basi onay kutusu + baslikta "tumunu sec"
   // bulkActions:[...]    → secim varken alttan cikan toplu aksiyon seridi
@@ -1621,7 +1633,14 @@ export default function SmartBoard(props) {
         masterWidgets={masterWidgets}
         entities={entities}
         filters={filters}
-        onApply={function (next) { setFilters(next) }}
+        serverFilters={serverFilters}
+        onApply={function (next, serverNext) {
+          setFilters(next)
+          // serverNext yalnizca sunucu filtresi DEGISTIYSE gelir. Board bu secimi
+          // kendisi uygulayamaz (hangi sorgu parametresi oldugunu bilmez) — sayfaya
+          // devreder; sayfa config'i yeniden ceker.
+          if (serverNext && onServerFilterChange) onServerFilterChange(serverNext)
+        }}
       />
 
       {/* ── Excel Aktar Onay Modalı ─────────── */}

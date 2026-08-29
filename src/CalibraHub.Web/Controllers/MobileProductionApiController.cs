@@ -196,10 +196,15 @@ public sealed class MobileProductionApiController : ControllerBase
     /// numarası/malzeme kodu/malzeme adında LIKE benzeri (Contains, case-insensitive) arama
     /// yapılır — sunucu tarafında IWorkOrderService.ListAsync (ProductionController.WorkOrders
     /// ile aynı kaynak) sonucu üzerinde in-memory filtre (web SmartBoard board'unun kendisi de
-    /// aynı yaklaşımı kullanıyor). Durum bazlı gizli filtre YOK (Cancelled/Closed dahil tüm
-    /// emirler döner) — bu endpoint web board'un aksine bilinçli olarak "iptal/kapalı da
-    /// görünsün" tercih edildi, çünkü mobil tarafta ayrı bir durum filtresi parametresi
-    /// tanımlanmadı; gerekirse lider kararıyla eklenir.
+    /// aynı yaklaşımı kullanıyor).
+    ///
+    /// İPTAL EDİLEN emirler listede GÖRÜNMEZ (kullanıcı kararı). Mobil ekranın tek amacı
+    /// "şimdi ne yapacağım" sorusudur; iptal edilmiş bir emir üzerinde yapılacak iş yoktur ve
+    /// operatörün yanlışlıkla ona başlaması gerçek bir risktir. Mobilde durum filtresi
+    /// parametresi olmadığı için bu, gizlenebilir değil SABİT bir kuraldır.
+    ///
+    /// Kapatılmış (Closed) emirler görünmeye DEVAM eder — web board ikisini de gizler, ama
+    /// kullanıcı yalnızca iptali istedi; kapalı emir en azından "yapıldı" kaydıdır.
     /// </summary>
     [HttpGet("work-orders")]
     public async Task<IActionResult> WorkOrders([FromQuery] string? q, [FromQuery] int? take, CancellationToken ct)
@@ -213,8 +218,11 @@ public sealed class MobileProductionApiController : ControllerBase
 
         var all = await _workOrderService.ListAsync(status: null, ct);
 
+        // İptal edilenler mobilde hiç görünmez (bkz. metot dokümanı) — aramayla da bulunamaz.
+        var visible = all.Where(o => o.Status != WorkOrderStatus.Cancelled).ToList();
+
         var query = (q ?? string.Empty).Trim();
-        IEnumerable<WorkOrderListItemDto> filtered = all;
+        IEnumerable<WorkOrderListItemDto> filtered = visible;
         if (query.Length > 0)
         {
             filtered = all.Where(o =>
@@ -266,6 +274,11 @@ public sealed class MobileProductionApiController : ControllerBase
         var wo = await _workOrderService.GetAsync(id, ct);
         if (wo is null)
             return NotFound(new { error = $"İş emri bulunamadı (Id: {id})." });
+
+        // Liste iptalleri zaten süzüyor; burası derin bağlantı / barkod okutma yolunu kapatır —
+        // aksi halde iptal edilmiş emir listede yok ama detayı açılabilir olurdu.
+        if (wo.Status == WorkOrderStatus.Cancelled)
+            return NotFound(new { error = "Bu iş emri iptal edilmiş." });
 
         var ops = await _workOrderOperations.GetByWorkOrderAsync(id, ct);
         var (woCode, woLabel) = MapWorkOrderStatus(wo.Status);

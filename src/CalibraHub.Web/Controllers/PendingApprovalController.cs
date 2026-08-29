@@ -24,15 +24,7 @@ public sealed class PendingApprovalController : Controller
 
     [HttpGet("/PendingApproval")]
     [HttpGet]
-    public async Task<IActionResult> Index(CancellationToken ct)
-    {
-        var scopes = await _service.GetAvailableScopesAsync(ct);
-        ViewBag.AvailableScopes = scopes;
-        ViewBag.DefaultScope = scopes.Contains(PendingApprovalScope.Mine)
-            ? PendingApprovalScope.Mine
-            : scopes[0];
-        return View();
-    }
+    public IActionResult Index() => View();
 
     /// <summary>
     /// 2026-08-01 — CalibraSmartBoard donusumu: SmartBoard config JSON'i.
@@ -43,7 +35,8 @@ public sealed class PendingApprovalController : Controller
     [HttpGet]
     public async Task<IActionResult> BoardConfig(string? scope, string? mode, CancellationToken ct)
     {
-        var resolvedScope = string.IsNullOrWhiteSpace(scope) ? PendingApprovalScope.Mine : scope;
+        var availableScopes = await _service.GetAvailableScopesAsync(ct);
+        var resolvedScope = ResolveScope(scope, availableScopes);
         var isCompleted = string.Equals(mode, "completed", StringComparison.OrdinalIgnoreCase);
 
         var items = isCompleted
@@ -76,7 +69,10 @@ public sealed class PendingApprovalController : Controller
             },
         }).ToArray();
 
-        var boardKey = isCompleted ? "pending-approval-completed" : "pending-approval-pending";
+        // 2026-08-29 — boardKey artik moda gore DEGISMEZ. Durum/kapsam secimi filtre
+        // panelinin bir parcasi oldugundan, anahtar mod basina ayrisirsa kullanicinin
+        // alan filtreleri ve sutun ayarlari her mod degisiminde sifirlanirdi.
+        const string boardKey = "pending-approval";
         var subtitle = isCompleted
             ? $"{entities.Length} tamamlanmış kayıt"
             : $"{entities.Length} bekleyen kayıt";
@@ -92,6 +88,11 @@ public sealed class PendingApprovalController : Controller
             searchPlaceholder = "Belge no, cari, onaylayıcı ara…",
             emptyText = isCompleted ? "Tamamlanmış onay kaydı bulunamadı." : "Bekleyen onay kaydı bulunamadı.",
             actions = Array.Empty<object>(),
+            // Sunucu sorgusunu degistiren secimler — filtre panelinin en ustunde
+            // "Liste Kapsami" bolumu olarak cizilir. Alan filtrelerinden farki:
+            // istemcide suzmez, listeyi YENIDEN CEKER (bkz. Index.cshtml
+            // onServerFilterChange). Tek secenegi kalan kapsam gosterilmez.
+            serverFilters = BuildServerFilters(isCompleted, resolvedScope, availableScopes),
             masterWidgets = new object[]
             {
                 new { id = "w_typ",  label = "Belge Türü", dataType = "text" },
@@ -104,6 +105,65 @@ public sealed class PendingApprovalController : Controller
             entities,
         };
         return Json(config);
+    }
+
+    /// <summary>
+    /// Istenen kapsami yetkili kapsamlara gore cozer. <see cref="IPendingApprovalService"/>
+    /// zaten ayni dusmeyi yapiyor; burada TEKRARLANMASININ sebebi filtre panelinde SECILI
+    /// gostermek icin cozulmus degerin bilinmesi gerekmesi (servis onu geri dondurmuyor).
+    /// </summary>
+    private static string ResolveScope(string? requested, IReadOnlyList<string> available)
+    {
+        if (available.Count == 0) return PendingApprovalScope.Mine;
+        if (!string.IsNullOrWhiteSpace(requested) &&
+            available.Contains(requested, StringComparer.OrdinalIgnoreCase))
+            return requested.ToLowerInvariant();
+        return available.Contains(PendingApprovalScope.Mine, StringComparer.OrdinalIgnoreCase)
+            ? PendingApprovalScope.Mine
+            : available[0];
+    }
+
+    private static object[] BuildServerFilters(
+        bool isCompleted, string resolvedScope, IReadOnlyList<string> availableScopes)
+    {
+        var list = new List<object>
+        {
+            new
+            {
+                id = "mode",
+                label = "Durum",
+                value = isCompleted ? "completed" : "pending",
+                options = new object[]
+                {
+                    new { value = "pending",   label = "Bekleyenler" },
+                    new { value = "completed", label = "Tamamlananlar" },
+                },
+            },
+        };
+
+        // Tek kapsami olan kullaniciya secim sunmak anlamsiz — satiri hic cizme.
+        if (availableScopes.Count > 1)
+        {
+            list.Add(new
+            {
+                id = "scope",
+                label = "Kapsam",
+                value = resolvedScope,
+                options = availableScopes.Select(s => new
+                {
+                    value = s,
+                    label = s switch
+                    {
+                        PendingApprovalScope.Mine       => "Sadece Benim",
+                        PendingApprovalScope.Department => "Departmanım",
+                        PendingApprovalScope.All        => "Tümü",
+                        _ => s,
+                    },
+                }).Cast<object>().ToArray(),
+            });
+        }
+
+        return list.ToArray();
     }
 
     private static object? BuildStatusBadge(PendingApprovalItemDto it, bool isCompleted, DateTime now)

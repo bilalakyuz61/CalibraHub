@@ -1,36 +1,28 @@
-@inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
+﻿@inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
 @{
     ViewData["Title"] = "Onayda Bekleyenler";
     ViewData["HelpKey"] = "pending-approval";
     ViewData["BodyClass"] = "page-pending-approval";
-    var scopes = ViewBag.AvailableScopes as IReadOnlyList<string> ?? new[] { "mine" };
-    var defaultScope = (string)(ViewBag.DefaultScope ?? "mine");
 }
 
 @*
     2026-08-01 — CalibraSmartBoard (C-Grid) donusumu (PageComment Seq 1057).
-    Eski custom pa-table/sidebar/sutun-ayarlari kaldirildi; liste artik standart
-    SmartBoard (kart) ile render ediliyor — arama/filtre/excel/widget-ayarlari
-    standart C-Grid header'indan gelir (bkz. CLAUDE.md "CalibraSmartBoard (C-Grid)
-    kurallari"). Bekleyen/Tamamlanan + Kapsam (Sadece Benim/Departmanim/Tumu)
-    SERVER SORGUSU degistirdigi icin (client-side filtre degil) ince bir arac
-    seridinde kalir; belge turu/cari/tutar/adim gibi alan-bazli filtreler
-    standart "Filtre" panelinden (SmartBoardFilterPanel) yonetilir.
+    Eski custom pa-table/sidebar/sutun-ayarlari kaldirildi; liste standart
+    SmartBoard ile render ediliyor — arama/filtre/excel/widget-ayarlari standart
+    C-Grid header'indan gelir (bkz. CLAUDE.md "CalibraSmartBoard (C-Grid) kurallari").
+
+    2026-08-29 — Ust arac seridi (Bekleyenler/Tamamlananlar + Kapsam) KALDIRILDI;
+    ikisi de artik filtre penceresinde "Liste Kapsami" bolumunde. Bunlar client-side
+    suzgec DEGIL, farkli bir SQL sorgusu oldugu icin SmartBoard tek basina uygulayamaz:
+    board config'i `serverFilters` ile secenekleri bildirir, kullanici uygulayinca
+    SmartBoard asagidaki onServerFilterChange'i cagirir ve BU SAYFA config'i yeniden
+    ceker. Fonksiyon JSON config'te tasinamayacagi icin mount aninda eklenir.
 
     Onay/Red is mantigi DEGISMEDI: detay + onay sureci zaman cizelgesi + Onayla/
     Reddet, karttaki "Incele" aksiyonu (type:'trigger') ile acilan AYNI custom
     modalda kalmaya devam ediyor (Approval/ApproveStep, Approval/RejectApproval,
     PendingApproval/Detail, PendingApproval/CompletedDetail — hicbiri degismedi).
-
-    NOT (backend ihtiyaci — bu view'in calismasi icin gerekli):
-    PendingApprovalController'a yeni bir GET action eklenmeli:
-        BoardConfig(string? scope, string? mode, CancellationToken ct)
-    → SmartBoard JSON config'i doner (boardKey/title/subtitle/icon/refreshUrl/
-      masterWidgets/entities). Tam sozlesme bu dosyanin sonundaki JS yorumunda
-      ve gorev raporunda verildi. Bu controller degisikligi bu ajanin sinirlari
-      disinda (Views/ClientApp) oldugu icin BURADA YAZILMADI.
 *@
-
 <style>
     .page-pending-approval .app-content-area--workspace-frame,
     .workspace-frame-body.page-pending-approval .app-content-area--workspace-frame {
@@ -41,45 +33,6 @@
         padding: 0; flex: 1 1 auto; min-height: 0; overflow: hidden;
         display: flex; flex-direction: column;
     }
-
-    /* ── İnce araç şeridi: Bekleyen/Tamamlanan + Kapsam ── */
-    .pa-toolbar {
-        display: flex; align-items: center; gap: 10px;
-        padding: 8px 18px; flex: 0 0 auto;
-        border-bottom: 1px solid rgba(148,163,184,.14);
-        background: var(--app-surface, #fff);
-    }
-    body.app-theme-dark .pa-toolbar {
-        background: rgba(15,23,42,.35);
-        border-bottom-color: rgba(255,255,255,.06);
-    }
-    .pa-header-sep { width: 1px; height: 18px; background: rgba(148,163,184,.25); flex-shrink: 0; }
-    body.app-theme-dark .pa-header-sep { background: rgba(255,255,255,.12); }
-
-    .pa-mode-tabs, .pa-scope-radio {
-        display: flex; align-items: center; gap: 1px;
-        background: rgba(148,163,184,.12); border-radius: 8px; padding: 2px;
-        flex-shrink: 0;
-    }
-    body.app-theme-dark .pa-mode-tabs, body.app-theme-dark .pa-scope-radio { background: rgba(255,255,255,.07); }
-    .pa-mode-tab {
-        padding: 5px 14px; border-radius: 6px; border: none; background: transparent;
-        font-size: 12px; font-weight: 500; color: #64748b; cursor: pointer;
-        white-space: nowrap; user-select: none; transition: background .12s, color .12s;
-    }
-    .pa-mode-tab.active { background: #6366f1; color: #fff; }
-    body.app-theme-dark .pa-mode-tab { color: #94a3b8; }
-    body.app-theme-dark .pa-mode-tab.active { background: #6366f1; color: #fff; }
-
-    .pa-scope-opt { display: flex; align-items: center; cursor: pointer; }
-    .pa-scope-opt input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
-    .pa-scope-opt span {
-        padding: 5px 13px; border-radius: 6px; font-size: 12px; font-weight: 500; color: #64748b;
-        cursor: pointer; white-space: nowrap; user-select: none; transition: background .12s, color .12s;
-    }
-    .pa-scope-opt input[type="radio"]:checked + span { background: #6366f1; color: #fff; }
-    body.app-theme-dark .pa-scope-opt span { color: #94a3b8; }
-    body.app-theme-dark .pa-scope-opt input[type="radio"]:checked + span { background: #6366f1; color: #fff; }
 
     /* ── Modal (Onay detayı + zaman çizelgesi) — korunan bespoke UI ── */
     .pa-modal-backdrop {
@@ -193,47 +146,6 @@
 </style>
 
 <div class="pa-wrap">
-    <div class="pa-toolbar">
-        <div class="pa-mode-tabs" id="paModeTabsGroup">
-            <button type="button" class="pa-mode-tab active" data-mode="pending" onclick="paSetMode('pending')">Bekleyenler</button>
-            <button type="button" class="pa-mode-tab" data-mode="completed" onclick="paSetMode('completed')">Tamamlananlar</button>
-        </div>
-        @if (scopes.Count > 1)
-        {
-            <div class="pa-header-sep"></div>
-            <div class="pa-scope-radio" id="paScopeGroup">
-                @foreach (var s in scopes)
-                {
-                    var label = s switch
-                    {
-                        "mine" => "Sadece Benim",
-                        "department" => "Departmanım",
-                        "all" => "Tümü",
-                        _ => s
-                    };
-                    var isDefault = string.Equals(s, defaultScope, StringComparison.OrdinalIgnoreCase);
-                    <label class="pa-scope-opt">
-                        <input type="radio" name="paScope" value="@s" @(isDefault ? "checked" : "")>
-                        <span>@label</span>
-                    </label>
-                }
-            </div>
-        }
-        else
-        {
-            <div style="display:none;" id="paScopeGroup">
-                @foreach (var s in scopes)
-                {
-                    var isDefault = string.Equals(s, defaultScope, StringComparison.OrdinalIgnoreCase);
-                    <label class="pa-scope-opt">
-                        <input type="radio" name="paScope" value="@s" @(isDefault ? "checked" : "")>
-                        <span>@s</span>
-                    </label>
-                }
-            </div>
-        }
-    </div>
-
     <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
 </div>
 
@@ -277,12 +189,10 @@
 
     var mountEl = document.getElementById('reactSmartBoard');
     var boardHandle = null;
-    var _currentMode = 'pending'; // 'pending' | 'completed' — sunucu sorgusu degisir
-
-    function getScope() {
-        var c = document.querySelector('input[name="paScope"]:checked');
-        return c ? c.value : 'mine';
-    }
+    // Sunucu sorgusunu belirleyen secimler. Baslangicta bos → sunucu varsayilani
+    // (mode=pending, kapsam=yetkili en kisitli) uygular ve cozdugu degerleri
+    // cfg.serverFilters ile geri bildirir; asagida oradan senkronlaniyor.
+    var _serverFilters = { mode: '', scope: '' };
 
     function showError(msg) {
         mountEl.innerHTML = '<div class="cb-mount-error">'
@@ -292,46 +202,29 @@
     }
 
     /*
-     * Board config sozlesmesi (backend PendingApprovalController.BoardConfig
-     * GET action'i tarafindan uretilmesi gereken JSON — bkz. dosya ustu yorum +
-     * gorev raporu):
+     * Board config sozlesmesi (PendingApprovalController.BoardConfig):
      *   {
-     *     boardKey: 'pending-approval-pending' | 'pending-approval-completed',
-     *     title: 'Onay Takibi',
-     *     subtitle: '<n> bekleyen kayıt' | '<n> tamamlanmış kayıt',
-     *     icon: 'ClipboardList', iconColor: 'indigo',  // 'ClipboardList' whitelisted in
-     *                                                   // DynamicWidgetFactory.js iconMap
-     *                                                   // ('ClipboardCheck' YOK — CircleDot'a düşer)
-     *     refreshUrl: '/PendingApproval/BoardConfig?scope=<scope>&mode=<mode>',
-     *     searchPlaceholder: 'Belge no, cari, onaylayıcı ara…',
-     *     emptyText: '...',
-     *     actions: [],
-     *     masterWidgets: [
-     *       { id:'w_typ',  label:'Belge Türü',  dataType:'text' },
-     *       { id:'w_cari', label:'Cari',        dataType:'text' },
-     *       { id:'w_amt',  label:'Tutar',       dataType:'numeric' },
-     *       { id:'w_step', label:'Adım',        dataType:'text' },
-     *       { id:'w_apvr', label:'Onaylayıcı',  dataType:'text' },
-     *       { id:'w_dt',   label:'Bekliyor'|'Tamamlanma', dataType:'datetime' },
-     *     ],
-     *     entities: [{
-     *       id: instanceId, title: documentNumber, subtitle: documentTypeName,
-     *       description: flowName + ' • ' + stepName,
-     *       statusBadge: null | { label:'Gecikti'|'Onaylandı'|'Reddedildi', color:'rose'|'emerald' },
-     *       widgets: [ ...yukaridaki id'lerle esleşen deger nesneleri... ],
-     *       extraActions: [{
-     *         id:'inspect', type:'trigger', trigger:'paOpenDetail', label:'İncele',
-     *         icon:'Eye', color:'indigo', payload:{ instanceId: <id> }
-     *       }]
-     *     }]
+     *     boardKey: 'pending-approval',          // moda gore DEGISMEZ (filtre/sutun
+     *                                            // tercihleri mod degisiminde korunur)
+     *     title, subtitle, icon:'ClipboardList', iconColor:'indigo',
+     *     refreshUrl: '/PendingApproval/BoardConfig?...',
+     *     serverFilters: [                        // filtre penceresi "Liste Kapsami"
+     *       { id:'mode',  label:'Durum',  value:'pending',
+     *         options:[{value:'pending',label:'Bekleyenler'},
+     *                  {value:'completed',label:'Tamamlananlar'}] },
+     *       { id:'scope', label:'Kapsam', value:'mine', options:[...] }  // tek kapsam
+     *     ],                                       // varsa bu satir HIC gelmez
+     *     masterWidgets: [ w_typ, w_cari, w_amt, w_step, w_apvr, w_dt ],
+     *     entities: [{ id, title, subtitle, description, statusBadge, widgets,
+     *                  extraActions:[{ type:'trigger', trigger:'paOpenDetail',
+     *                                  payload:{ instanceId } }] }]
      *   }
-     * scope=mine/department/all, mode=pending/completed — GetListAsync/
-     * GetCompletedListAsync (IPendingApprovalService, DEĞİŞMEDİ) üzerinden
-     * kurulur; documentTypeId artik server-side gruplama icin gonderilmez
-     * (sidebar kaldirildi — "Belge Türü" alan-bazli filtre panelinden secilir).
      */
     function boardConfigUrl() {
-        return '/PendingApproval/BoardConfig?scope=' + encodeURIComponent(getScope()) + '&mode=' + _currentMode;
+        var qs = [];
+        if (_serverFilters.mode)  qs.push('mode='  + encodeURIComponent(_serverFilters.mode));
+        if (_serverFilters.scope) qs.push('scope=' + encodeURIComponent(_serverFilters.scope));
+        return '/PendingApproval/BoardConfig' + (qs.length ? ('?' + qs.join('&')) : '');
     }
 
     function loadBoard() {
@@ -342,6 +235,19 @@
                     showError('SmartBoard mount fonksiyonu bulunamadı');
                     return;
                 }
+                // Sunucunun COZDUGU degerleri geri al: istenen kapsama yetki yoksa
+                // sunucu daha kisitlisina duser, panelde de o secili gorunmelidir.
+                (cfg.serverFilters || []).forEach(function(sf) {
+                    if (sf && sf.id) _serverFilters[sf.id] = sf.value;
+                });
+                // Fonksiyon JSON'dan gelemez — mount aninda ekleniyor.
+                cfg.onServerFilterChange = function(values) {
+                    var changed = false;
+                    Object.keys(values || {}).forEach(function(k) {
+                        if (_serverFilters[k] !== values[k]) { _serverFilters[k] = values[k]; changed = true; }
+                    });
+                    if (changed) loadBoard();
+                };
                 if (!boardHandle) {
                     boardHandle = window.CalibraHub.mountSmartBoard(mountEl, cfg);
                 } else {
@@ -378,17 +284,6 @@
     } else {
         loadScript(loadBoard);
     }
-
-    window.paSetMode = function(mode) {
-        if (_currentMode === mode) return;
-        _currentMode = mode;
-        document.querySelectorAll('.pa-mode-tab').forEach(function(btn) {
-            btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
-        });
-        loadBoard();
-    };
-    var scopeGroupEl = document.getElementById('paScopeGroup');
-    if (scopeGroupEl) scopeGroupEl.addEventListener('change', loadBoard);
 
     // ── Onay detay modalı — kart "İncele" aksiyonundan (type:'trigger') açılır ──
     var backdropEl = document.getElementById('paModalBackdrop');
@@ -442,15 +337,17 @@
         modalBodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:#94a3b8;">Yükleniyor…</div>';
         modalTitleEl.textContent = 'Belge Detayı';
         modalSubEl.textContent = '';
-        if (_currentMode === 'completed') {
+        if (_serverFilters.mode === 'completed') {
             modalApproveEl.style.display = 'none';
             modalRejectEl.style.display  = 'none';
         } else {
             modalApproveEl.style.display = '';
             modalRejectEl.style.display  = '';
         }
-        var scope = getScope();
-        var ep = _currentMode === 'completed' ? '/PendingApproval/CompletedDetail' : '/PendingApproval/Detail';
+        // Detay ucu kapsam yetkisini kendisi dogrular; listeyi hangi kapsamla
+        // cektiysek onu gonderiyoruz (bos ise sunucu varsayilana duser).
+        var scope = _serverFilters.scope || 'mine';
+        var ep = _serverFilters.mode === 'completed' ? '/PendingApproval/CompletedDetail' : '/PendingApproval/Detail';
         fetch(ep + '?instanceId=' + instanceId + '&scope=' + encodeURIComponent(scope), { credentials: 'same-origin' })
             .then(function(resp) { return resp.json(); })
             .then(function(data) {
@@ -562,9 +459,9 @@
         _currentChoiceArmId = null;
         if (!choiceArmsEl) return;
         choiceArmsEl.innerHTML = '';
-        if (_currentMode === 'completed' || !arms || arms.length === 0) {
-            modalApproveEl.style.display = _currentMode === 'completed' ? 'none' : '';
-            modalRejectEl.style.display  = _currentMode === 'completed' ? 'none' : '';
+        if (_serverFilters.mode === 'completed' || !arms || arms.length === 0) {
+            modalApproveEl.style.display = _serverFilters.mode === 'completed' ? 'none' : '';
+            modalRejectEl.style.display  = _serverFilters.mode === 'completed' ? 'none' : '';
             return;
         }
         modalRejectEl.style.display = '';

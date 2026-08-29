@@ -156,6 +156,20 @@ export default function SmartBoardFilterPanel(props) {
   var entities = Array.isArray(props.entities) ? props.entities : []
   var initialFilters = Array.isArray(props.filters) ? props.filters : null
 
+  // ── Sunucu filtreleri (2026-08-29) ──
+  // Alan filtreleri istemcide suzer; BUNLAR listeyi yeniden CEKTIRIR (ornek:
+  // Onayda Bekleyenler'de Bekleyen/Tamamlanan ve kapsam secimi — ikisi de farkli
+  // bir SQL sorgusu). Board config'inde tanimlanmamissa bu bolum hic cizilmez,
+  // yani diger board'lar etkilenmez.
+  //   serverFilters: [{ id, label, value, options:[{value,label}] }]
+  // Uygulandiginda onApply'in IKINCI argumani olarak { id: value } gonderilir;
+  // hicbiri degismediyse ikinci arguman verilmez (gereksiz yeniden cekme olmaz).
+  var serverFilters = Array.isArray(props.serverFilters)
+    ? props.serverFilters.filter(function (sf) {
+        return sf && sf.id && Array.isArray(sf.options) && sf.options.length > 1
+      })
+    : []
+
   // ── Form widget schema (admin tanimlamis dinamik alanlar) ──
   // Backend: GET /api/widgets/forms/{formCode}/schema → WidgetFormSchemaDto
   // Standart alanlar (entity kolonlari) zaten masterWidgets ile geliyor; biz bunun
@@ -326,6 +340,22 @@ export default function SmartBoardFilterPanel(props) {
   // 2026-05-24: Tek noktada sync — asagidaki diger useEffect (filterableFields ile
   // birebir hizalama) artik tum durumlari ele aliyor (initial / saved / bos).
 
+  // Sunucu filtresi degerleri. KAYNAK her zaman board config'idir (localStorage'a
+  // yazilmaz): deger sunucu sorgusunu belirledigi icin, listede gorunen veri ile
+  // panelde secili gorunen sik ayrisamamalidir. Panel her acilista yeniden tohumlanir.
+  var serverSignature = JSON.stringify(serverFilters.map(function (sf) { return [sf.id, sf.value] }))
+  var [serverValues, setServerValues] = useState(function () {
+    var init = {}
+    serverFilters.forEach(function (sf) { init[sf.id] = sf.value })
+    return init
+  })
+  useEffect(function () {
+    var init = {}
+    serverFilters.forEach(function (sf) { init[sf.id] = sf.value })
+    setServerValues(init)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, serverSignature])
+
   // ESC
   useEffect(function () {
     if (!isOpen) return undefined
@@ -418,7 +448,12 @@ export default function SmartBoardFilterPanel(props) {
     // 2026-05-24: bool icin op='any' → filtre yok; options icin secim bos → filtre yok.
     var valid = filters.filter(isActiveFilter)
     saveFilters(boardKey, valid)
-    onApply(valid)
+    // Sunucu filtresi degistiyse ikinci arguman olarak gonder; degismediyse GONDERME
+    // (aksi halde her "Uygula" listeyi bosuna yeniden cektirirdi).
+    var serverChanged = serverFilters.some(function (sf) {
+      return serverValues[sf.id] !== sf.value
+    })
+    onApply(valid, serverChanged ? Object.assign({}, serverValues) : undefined)
     onClose()
   }
 
@@ -547,6 +582,77 @@ export default function SmartBoardFilterPanel(props) {
             2026-05-24: Field dropdown + X (sil) + "+ Filtre Ekle" KALDIRILDI.
             Her alan icin sabit bir satir, kullanici sadece op + value duzenler. */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px' }}>
+          {/* Sunucu filtreleri — alan filtrelerinin USTUNDE, ayri bir bolum olarak.
+              Ayri durmasi bilincli: bunlar listeyi istemcide suzmez, YENIDEN CEKER. */}
+          {serverFilters.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{
+                fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em',
+                color: textMuted, marginBottom: 7,
+              }}>
+                Liste Kapsamı
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {serverFilters.map(function (sf) {
+                  var current = serverValues[sf.id] != null ? serverValues[sf.id] : sf.value
+                  return (
+                    <div
+                      key={sf.id}
+                      style={{
+                        padding: '7px 10px', borderRadius: 9,
+                        background: rowBg, border: '1px solid ' + rowBorder,
+                        display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.6fr)',
+                        gap: 8, alignItems: 'center',
+                      }}
+                    >
+                      <div
+                        title={sf.label}
+                        style={{
+                          fontSize: 11.5, color: textPrimary, fontWeight: 600,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {sf.label}
+                      </div>
+                      <div style={{
+                        display: 'flex', flexWrap: 'wrap', gap: 4,
+                        background: inputBg, border: '1px solid ' + inputBorder,
+                        borderRadius: 8, padding: 2,
+                      }}>
+                        {sf.options.map(function (opt) {
+                          var on = String(opt.value) === String(current)
+                          return (
+                            <button
+                              key={String(opt.value)}
+                              type="button"
+                              onClick={function () {
+                                setServerValues(function (prev) {
+                                  var n = Object.assign({}, prev)
+                                  n[sf.id] = opt.value
+                                  return n
+                                })
+                              }}
+                              style={{
+                                flex: '1 1 auto', padding: '4px 9px', borderRadius: 6,
+                                border: '1px solid transparent', cursor: 'pointer',
+                                fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+                                background: on ? '#6366f1' : 'transparent',
+                                color: on ? '#fff' : textMuted,
+                                transition: 'background .12s, color .12s',
+                              }}
+                            >
+                              {opt.label || String(opt.value)}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {filterableFields.length === 0 ? (
             <div style={{
               padding: 16, textAlign: 'center', fontSize: 12, color: textSubtle, fontStyle: 'italic',
