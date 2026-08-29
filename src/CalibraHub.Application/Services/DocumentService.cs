@@ -24,6 +24,9 @@ public sealed class DocumentService : IDocumentService
     private readonly IWorkOrderRepository? _workOrders;
     private readonly ILogisticsConfigurationRepository? _itemLocks;
     private readonly IPriceListService? _priceListService;
+    /// <summary>Tekliften siparişe dönüşümde stok rezervasyonu (opsiyonel — kayıtlı değilse
+    /// ReserveStock talebi net hata ile reddedilir, sessizce rezervasyonsuz sipariş üretilmez).</summary>
+    private readonly IStockReservationRepository? _stockReservations;
     private readonly ILogger<DocumentService>? _logger;
     private const string DefaultSalesQuoteTypeCode = "satis_teklifi";
     private const string DefaultSalesOrderTypeCode = "satis_siparisi";
@@ -42,8 +45,10 @@ public sealed class DocumentService : IDocumentService
         IWorkOrderRepository? workOrders = null,
         ILogisticsConfigurationRepository? itemLocks = null,
         IPriceListService? priceListService = null,
-        ILogger<DocumentService>? logger = null)
+        ILogger<DocumentService>? logger = null,
+        IStockReservationRepository? stockReservations = null)
     {
+        _stockReservations = stockReservations;
         _repo = repo;
         _financeService = financeService;
         _documentTypeRepo = documentTypeRepo;
@@ -1678,6 +1683,44 @@ public sealed class DocumentService : IDocumentService
     ///   5) document_source koprusu kayit ekle, kaynak teklif statusunu Converted yap
     /// Service-level transaction yok; document_source UNIQUE INDEX cift insert riskini engeller.
     /// </summary>
+    /// <summary>
+    /// Rezervasyon ön kontrolünün blok mesajı — kullanıcı hangi malzemenin hangi depoda ne kadar
+    /// eksik olduğunu tek bakışta görür. Kit satırlarında eksik olan BİLEŞEN gösterilir; hangi
+    /// kitten geldiği parantez içinde belirtilir (yoksa kullanıcı "bu malzeme teklifte yok" der).
+    /// </summary>
+    private static string BuildShortageMessage(IReadOnlyList<StockShortageDto> shortages)
+    {
+        var lines = shortages.Select(s =>
+        {
+            var name = string.IsNullOrWhiteSpace(s.ItemCode) ? s.ItemName : $"{s.ItemCode} — {s.ItemName}";
+            var via  = string.IsNullOrWhiteSpace(s.SourceItemName) ? string.Empty : $" (kit: {s.SourceItemName})";
+            var loc  = string.IsNullOrWhiteSpace(s.LocationName) ? $"#{s.LocationId}" : s.LocationName;
+            return $"• {name}{via} — {loc}: gerekli {s.Required:0.####}, kullanılabilir {s.Available:0.####} " +
+                   $"(eksik {(s.Required - s.Available):0.####})";
+        });
+        return "Stok rezervasyonu yapılamadığı için sipariş oluşturulmadı — yetersiz stok:\n"
+             + string.Join("\n", lines);
+    }
+
+    /// <summary>
+    /// Dönüşüm ortasında rezervasyon başarısız olursa oluşan sipariş(ler)i geri alır. Kaynak
+    /// teklifler bu noktada HENÜZ "Converted" yapılmadığı için tek yapılacak iş siparişleri
+    /// silmektir (satırlar + rezervasyonlar cascade/servis içinde temizlenir). Silme hatası
+    /// yutulmaz; loglanır — çağıran zaten kullanıcıya blok mesajı döner.
+    /// </summary>
+    private async Task RollbackConvertedOrdersAsync(IEnumerable<int> orderIds, CancellationToken ct)
+    {
+        foreach (var id in orderIds.Where(x => x > 0).Distinct())
+        {
+            try { await _repo.DeleteAsync(id, ct); }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex,
+                    "Rezervasyon başarısız olduktan sonra sipariş {OrderId} geri alınamadı — taslak sipariş elle silinmeli.", id);
+            }
+        }
+    }
+
     public async Task<CreateOrdersFromQuotesResult> CreateOrdersFromQuotesAsync(
         CreateOrdersFromQuotesRequest req, int? createdById, CancellationToken ct)
     {
@@ -1721,9 +1764,29 @@ public sealed class DocumentService : IDocumentService
             quotes.Add((doc, lines));
         }
 
+        // ── 1b) Stok rezervasyonu ON KONTROLU (2026-08-29) ──
+        // Rezervasyon istendiyse HICBIR SEY OLUSTURULMADAN once yeterlilik denetlenir: tum
+        // tekliflerin TUM satirlari tek seferde degerlendirilir (ayni malzemeyi isteyen iki
+        // kalem toplanir), yetersiz varsa islem blok halinde kesilir ve hangi malzemenin ne
+        // kadar eksik oldugu tek tek bildirilir. Kismi donusturme (bir kismi rezerveli) YOK.
+        if (req.ReserveStock)
+        {
+            if (_stockReservations is null)
+                return new CreateOrdersFromQuotesResult(false,
+                    "Stok rezervasyonu servisi kullanılamıyor — rezervasyonlu sipariş oluşturulamadı.", 0, Array.Empty<int>());
+
+            var quoteLineIds = quotes.SelectMany(t => t.Lines).Select(l => l.Id).Where(id => id > 0).ToArray();
+            var shortages = await _stockReservations.CheckLinesAvailabilityAsync(quoteLineIds, null, ct);
+            if (shortages.Count > 0)
+                return new CreateOrdersFromQuotesResult(false, BuildShortageMessage(shortages), 0, Array.Empty<int>());
+        }
+
         // ── 2) Cari bazli grupla ──
         var groups = quotes.GroupBy(t => t.Quote.ContactId!.Value).ToArray();
         var orderIds = new List<int>(groups.Length);
+        // Kaynak teklif durumu/koprusu — TUM siparisler kurulduktan SONRA yazilir (bkz. adim 5).
+        var pendingFinalize = new List<(int OrderId, string OrderNumber, Document Order,
+            List<(Document Quote, IReadOnlyCollection<DocumentLine> Lines)> Quotes)>();
 
         foreach (var grp in groups)
         {
@@ -1876,8 +1939,51 @@ public sealed class DocumentService : IDocumentService
                 }
             }
 
-            // ── 5) document_source koprusu + status update ──
-            foreach (var (quote, _) in grp)
+            // ── 4c) Stok rezervasyonu (hepsi-ya-hic) ──
+            // Kaynak teklifin durumu/koprusu HENUZ yazilmadi (adim 5 donguden SONRAYA alindi):
+            // burada bir sey ters giderse olusan siparisleri silmek yeterli — teklifler ellenmemis
+            // ve kopru satiri yazilmamis olur, yani gercekten "blok halinde kesme" saglanir.
+            if (req.ReserveStock && _stockReservations is not null)
+            {
+                var reserveLines = savedByLineNo
+                    .Where(l => l.Quantity > 0m)
+                    .Select(l => new CreateReservationLineRequest(l.Id, l.Quantity))
+                    .ToList();
+                if (reserveLines.Count > 0)
+                {
+                    var rsv = await _stockReservations.CreateReservationsAsync(
+                        new CreateReservationRequest(reserveLines, null, null,
+                            $"Tekliften dönüşüm: {orderNumber}", AllOrNothing: true),
+                        createdById, ct);
+                    if (!rsv.Ok)
+                    {
+                        // On kontrol gecmisti → arada baska bir islem stogu tuketti (yaris) ya da
+                        // kalemin deposu cozulemedi. Olusan TUM siparisleri geri al.
+                        await RollbackConvertedOrdersAsync(orderIds.Append(newOrderId), ct);
+                        var reasons = rsv.Skipped.Select(s =>
+                        {
+                            var ln = savedByLineNo.FirstOrDefault(x => x.Id == s.OrderLineId);
+                            var label = ln is null ? $"Satır #{s.OrderLineId}" : $"{ln.MaterialCode} — {ln.MaterialName}";
+                            return $"• {label}: {s.Reason}";
+                        });
+                        return new CreateOrdersFromQuotesResult(false,
+                            "Stok rezervasyonu kurulamadığı için sipariş oluşturulmadı:\n" + string.Join("\n", reasons),
+                            0, Array.Empty<int>());
+                    }
+                }
+            }
+
+            pendingFinalize.Add((newOrderId, orderNumber, order, grp.ToList()));
+            orderIds.Add(newOrderId);
+        }
+
+        // ── 5) document_source koprusu + status update ──
+        // Donguden SONRA: tum siparisler (ve varsa rezervasyonlari) basariyla kuruldugunda
+        // kaynak teklifler "Converted" yapilir. Onceden dongu icindeydi; toplu donusturmede
+        // ikinci grup rezervasyonda takilirsa birinci grubun teklifi ZATEN cevrilmis oluyordu.
+        foreach (var (newOrderId, orderNumber, order, grpList) in pendingFinalize)
+        {
+            foreach (var (quote, _) in grpList)
             {
                 await _docSourceRepo.AddAsync(newOrderId, quote.Id, ct);
                 var prevStatus = quote.Status;
@@ -1892,10 +1998,8 @@ public sealed class DocumentService : IDocumentService
 
             _audit?.LogInsert(
                 await ResolveAuditEntityAsync(orderTypeId, ct), newOrderId, orderNumber,
-                detail: $"Tekliften dönüştürüldü: {string.Join(", ", grp.Select(t => t.Quote.DocumentNumber))}",
+                detail: $"Tekliften dönüştürüldü: {string.Join(", ", grpList.Select(t => t.Quote.DocumentNumber))}",
                 snapshot: SnapHeader(order));
-
-            orderIds.Add(newOrderId);
         }
 
         return new CreateOrdersFromQuotesResult(true, null, orderIds.Count, orderIds);

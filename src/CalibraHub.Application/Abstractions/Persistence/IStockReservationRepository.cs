@@ -23,6 +23,18 @@ public interface IStockReservationRepository
     Task<CreateReservationResult> CreateReservationsAsync(
         CreateReservationRequest request, int? userId, CancellationToken ct);
 
+    /// <summary>
+    /// Rezervasyon ÖN KONTROLÜ (2026-08-29) — verilen belge satırları için kullanılabilir stok
+    /// yeterli mi? Yetersiz kalan her (malzeme, depo) çifti için bir kayıt döner; liste BOŞ ise
+    /// rezervasyon kurulabilir. Teklif satırlarıyla da çalışır (tekliften siparişe dönüşümde,
+    /// HİÇBİR ŞEY OLUŞTURULMADAN önce blok kararı verilebilsin diye). Kit satırı bileşenlerine
+    /// patlatılır — snapshot yoksa freeze-on-first ile dondurulur (SaveQuoteAsync ile aynı kaynak).
+    /// Talep aynı (malzeme, depo) için satırlar arasında TOPLANIR: iki kalem aynı stoğu isterse
+    /// tek tek yeterli görünüp toplamda yetersiz kalması engellenir.
+    /// </summary>
+    Task<IReadOnlyList<StockShortageDto>> CheckLinesAvailabilityAsync(
+        IReadOnlyCollection<int> documentLineIds, int? locationId, CancellationToken ct);
+
     /// <summary>Yalnız Status=Active olan rezervasyonları iptal eder (Status=Cancelled, IsActive=0). Döner:
     /// iptal edilen kayıt sayısı. Faz 1.5: verilen id'lerden biri kit bileşeniyse, aynı KitOrderLineId'ye
     /// ait TÜM aktif bileşenler de otomatik iptal kapsamına genişletilir (set bütünlüğü).</summary>

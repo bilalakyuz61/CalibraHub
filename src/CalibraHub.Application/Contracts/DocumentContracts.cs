@@ -215,7 +215,11 @@ public sealed record SaveQuoteLineDetailItem(
 /// </summary>
 public sealed record CreateOrdersFromQuotesRequest(
     IReadOnlyCollection<int> QuoteIds,
-    DateTime OrderDate);
+    DateTime OrderDate,
+    /// <summary>true ise oluşan sipariş kalemleri için stok rezervasyonu kurulur. Yetersiz stok
+    /// BLOK eder: hiçbir sipariş oluşturulmaz ve hangi malzemenin ne kadar eksik olduğu Error
+    /// metninde satır satır bildirilir (kısmi dönüştürme YOK).</summary>
+    bool ReserveStock = false);
 
 public sealed record CreateOrdersFromQuotesResult(
     bool Success,
@@ -228,7 +232,9 @@ public sealed record CreateOrdersFromQuotesResult(
 public sealed record ConvertSingleQuoteToOrderRequest(
     int QuoteId,
     DateTime OrderDate,
-    bool CreateWorkOrders);
+    bool CreateWorkOrders,
+    /// <summary>Sipariş kalemleri stok rezervasyonlu oluşturulsun mu (bkz. <see cref="CreateOrdersFromQuotesRequest"/>.ReserveStock).</summary>
+    bool ReserveStock = false);
 
 public sealed record ConvertSingleQuoteToOrderResult(
     bool Success,

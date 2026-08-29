@@ -494,6 +494,15 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
                 created.Add(new CreateReservationResultItem(req.OrderLineId, req.Qty, null));
             }
 
+            // Hepsi-ya-hiç: bir kalem bile atlandıysa yazılanları geri al. Kısmi başarı
+            // (varsayılan davranış) Yükleme Planlama ekranı içindir; dönüşüm gibi çağıranlar
+            // "yarısı rezerve" bir sipariş üretmemek için bu bayrağı açar.
+            if (request!.AllOrNothing && skipped.Count > 0)
+            {
+                await tx.RollbackAsync(ct);
+                return new CreateReservationResult(false, Array.Empty<CreateReservationResultItem>(), skipped);
+            }
+
             await tx.CommitAsync(ct);
             return new CreateReservationResult(true, created, skipped);
         }
@@ -661,6 +670,117 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
         cmd.Parameters.AddWithValue("@L", locationId);
         var v = await cmd.ExecuteScalarAsync(ct);
         return v is null or DBNull ? 0m : Convert.ToDecimal(v);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<StockShortageDto>> CheckLinesAvailabilityAsync(
+        IReadOnlyCollection<int> documentLineIds, int? locationId, CancellationToken ct)
+    {
+        var ids = (documentLineIds ?? Array.Empty<int>()).Where(id => id > 0).Distinct().ToList();
+        if (ids.Count == 0) return Array.Empty<StockShortageDto>();
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+
+        // 1) Satırlar — belge TÜRÜNDEN bağımsız (teklif satırı da geçerli). Depo: satırın
+        //    kendi deposu, yoksa belge başlığının deposu, o da yoksa çağıranın verdiği depo.
+        var lines = new List<(int LineId, int ItemId, int? TypeId, decimal Qty, decimal BaseQty,
+                              int? LocId, string Code, string Name)>();
+        await using (var fetch = conn.CreateCommand())
+        {
+            var paramList = string.Join(",", ids.Select((_, i) => $"@lid{i}"));
+            fetch.CommandText = $"""
+                SELECT dl.[Id], dl.[ItemId], i.[TypeId], dl.[Quantity], dl.[BaseQuantity],
+                       ISNULL(dl.[LocationId], d.[LocationId]) AS EffLocationId,
+                       ISNULL(i.[Code], N''), ISNULL(i.[Name], N'')
+                FROM {T("DocumentLine")} dl
+                INNER JOIN {T("Document")} d ON d.[Id] = dl.[DocumentId]
+                INNER JOIN {T("Items")}    i ON i.[Id] = dl.[ItemId]
+                WHERE dl.[Id] IN ({paramList}) AND d.[IsActive] = 1;
+                """;
+            for (var i = 0; i < ids.Count; i++)
+                fetch.Parameters.Add(new SqlParameter($"@lid{i}", ids[i]));
+            await using var rd = await fetch.ExecuteReaderAsync(ct);
+            while (await rd.ReadAsync(ct))
+                lines.Add((rd.GetInt32(0), rd.GetInt32(1), rd.IsDBNull(2) ? null : rd.GetInt32(2),
+                           rd.GetDecimal(3), rd.GetDecimal(4),
+                           rd.IsDBNull(5) ? null : rd.GetInt32(5), rd.GetString(6), rd.GetString(7)));
+        }
+        if (lines.Count == 0) return Array.Empty<StockShortageDto>();
+
+        // 2) Talebi (malzeme, depo) bazında TOPLA — kit satırı bileşenlerine patlatılır.
+        //    Depo çözülemeyen satır kontrol DIŞINDA kalır: burada "yetersiz" demek yanlış
+        //    olurdu, rezervasyon adımı bunu kendi net mesajıyla zaten reddeder.
+        var demand = new Dictionary<(int ItemId, int LocationId), decimal>();
+        var sourceOf = new Dictionary<(int ItemId, int LocationId), string>();
+        var itemInfo = new Dictionary<int, (string Code, string Name)>();
+
+        foreach (var ln in lines)
+        {
+            var loc = locationId ?? ln.LocId;
+            if (loc is null or <= 0) continue;
+
+            if (ItemTypeCatalog.IsKit(ln.TypeId))
+            {
+                var comps = await EnsureKitSnapshotAsync(conn, null, ln.LineId, ln.ItemId, ct);
+                foreach (var c in comps.Where(c => c.PerKit > 0m))
+                {
+                    var key = (c.CompItemId, loc.Value);
+                    demand[key] = demand.TryGetValue(key, out var d0) ? d0 + (ln.Qty * c.PerKit) : ln.Qty * c.PerKit;
+                    if (!sourceOf.ContainsKey(key)) sourceOf[key] = ln.Name;
+                    if (!itemInfo.ContainsKey(c.CompItemId))
+                        itemInfo[c.CompItemId] = (string.Empty, c.CompName ?? string.Empty);
+                }
+                continue;
+            }
+
+            var k = (ln.ItemId, loc.Value);
+            var need = ln.BaseQty != 0m ? ln.BaseQty : ln.Qty;
+            demand[k] = demand.TryGetValue(k, out var d1) ? d1 + need : need;
+            itemInfo[ln.ItemId] = (ln.Code, ln.Name);
+        }
+        if (demand.Count == 0) return Array.Empty<StockShortageDto>();
+
+        // 3) Eksik kalan bileşenlerin kod/adını tamamla + depo adlarını çöz.
+        var missingInfo = itemInfo.Where(kv => string.IsNullOrEmpty(kv.Value.Code)).Select(kv => kv.Key).ToList();
+        if (missingInfo.Count > 0)
+        {
+            await using var q = conn.CreateCommand();
+            var ps = string.Join(",", missingInfo.Select((_, i) => $"@it{i}"));
+            q.CommandText = $"SELECT [Id], ISNULL([Code], N''), ISNULL([Name], N'') FROM {T("Items")} WHERE [Id] IN ({ps});";
+            for (var i = 0; i < missingInfo.Count; i++) q.Parameters.Add(new SqlParameter($"@it{i}", missingInfo[i]));
+            await using var rd = await q.ExecuteReaderAsync(ct);
+            while (await rd.ReadAsync(ct)) itemInfo[rd.GetInt32(0)] = (rd.GetString(1), rd.GetString(2));
+        }
+
+        var locNames = new Dictionary<int, string>();
+        var locIds = demand.Keys.Select(k => k.LocationId).Distinct().ToList();
+        await using (var q = conn.CreateCommand())
+        {
+            var ps = string.Join(",", locIds.Select((_, i) => $"@lo{i}"));
+            q.CommandText = $"SELECT [Id], ISNULL([Name], N'') FROM {T("Location")} WHERE [Id] IN ({ps});";
+            for (var i = 0; i < locIds.Count; i++) q.Parameters.Add(new SqlParameter($"@lo{i}", locIds[i]));
+            await using var rd = await q.ExecuteReaderAsync(ct);
+            while (await rd.ReadAsync(ct)) locNames[rd.GetInt32(0)] = rd.GetString(1);
+        }
+
+        // 4) Karşılaştır — kullanılabilir = fiziksel − aktif rezervasyon (metod XML doc'undaki tanım).
+        var shortages = new List<StockShortageDto>();
+        foreach (var (key, required) in demand)
+        {
+            var physical = await GetPhysicalBalanceAsync(conn, null, key.ItemId, key.LocationId, ct);
+            var reserved = await GetActiveReservedAsync(conn, null, key.ItemId, key.LocationId, ct);
+            var available = physical - reserved;
+            if (required <= available + 0.0001m) continue;
+            itemInfo.TryGetValue(key.ItemId, out var info);
+            sourceOf.TryGetValue(key, out var src);
+            shortages.Add(new StockShortageDto(
+                key.ItemId, info.Code ?? string.Empty, info.Name ?? string.Empty,
+                key.LocationId, locNames.TryGetValue(key.LocationId, out var ln2) ? ln2 : string.Empty,
+                Math.Round(required, 4), Math.Round(available, 4), src));
+        }
+        return shortages
+            .OrderBy(x => x.ItemCode, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     public async Task<int> CancelReservationsAsync(

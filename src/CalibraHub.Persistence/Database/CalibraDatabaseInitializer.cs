@@ -10309,6 +10309,38 @@ END;
                 EXEC(N'CREATE INDEX [IX_ItemSerial_ReservedForDocument] ON [{s}].[ItemSerial]([ReservedForDocumentId])
                     WHERE [ReservedForDocumentId] IS NOT NULL;');
 
+            -- 2026-08-29: Seri rezervasyonu SATIR bazına çekildi. Belge kolonu KALIYOR (satır
+            -- cascade-delete edilse bile belge bazlı serbest bırakma orphan Reserved bırakmaz);
+            -- bu kolon "hangi sipariş SATIRI rezerve etti" sorusunu ItemSerial'in kendisinden
+            -- yanıtlar — önceden yalnız DocumentLineSerial join'i ile bulunabiliyordu ve aynı
+            -- serinin AYNI belgenin iki farklı satırına bağlanmasını hiçbir kontrol engellemiyordu.
+            IF COL_LENGTH(N'[{s}].[ItemSerial]', N'ReservedForLineId') IS NULL
+                ALTER TABLE [{s}].[ItemSerial] ADD [ReservedForLineId] INT NULL;
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_ItemSerial_ReservedForLine'
+                           AND object_id = OBJECT_ID(N'[{s}].[ItemSerial]'))
+               AND COL_LENGTH(N'[{s}].[ItemSerial]', N'ReservedForLineId') IS NOT NULL
+                EXEC(N'CREATE INDEX [IX_ItemSerial_ReservedForLine] ON [{s}].[ItemSerial]([ReservedForLineId])
+                    WHERE [ReservedForLineId] IS NOT NULL;');
+
+            -- Backfill (tek sefer etkili): mevcut rezerve serilerin satırı, rezerve eden belgenin
+            -- o seriye bağlı satırından okunur. Aynı belgede birden çok satıra bağlıysa (eski
+            -- kontrolsüz veri) en küçük satır Id'si seçilir — deterministik, ve sonraki kayıtta
+            -- yeni çift-bağ guard'ı zaten devreye girer.
+            IF COL_LENGTH(N'[{s}].[ItemSerial]', N'ReservedForLineId') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[DocumentLineSerial]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+                EXEC(N'
+                    UPDATE s SET s.[ReservedForLineId] = x.[LineId]
+                    FROM [{s}].[ItemSerial] s
+                    CROSS APPLY (
+                        SELECT MIN(dl.[Id]) AS [LineId]
+                        FROM [{s}].[DocumentLineSerial] dls
+                        INNER JOIN [{s}].[DocumentLine] dl ON dl.[Id] = dls.[DocumentLineId]
+                        WHERE dls.[SerialId] = s.[Id] AND dl.[DocumentId] = s.[ReservedForDocumentId]
+                    ) x
+                    WHERE s.[Status] = 4 AND s.[ReservedForDocumentId] IS NOT NULL
+                      AND s.[ReservedForLineId] IS NULL AND x.[LineId] IS NOT NULL;');
+
             -- 2026-07-14: Seri-lokasyon takibi — serinin fiziksel bulunduğu depo/lokasyon.
             -- Giriş(2)=hedef, Transfer(3)=hedef, Çıkış(1)=NULL (stoktan çıktı). Sayım yansıtması
             -- lokasyon-scope'lu seri farkını (fazla/eksik) bu kolonla çözer. NULL = konumsuz

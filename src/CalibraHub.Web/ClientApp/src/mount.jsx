@@ -1112,6 +1112,7 @@ function openConvertSingleQuoteModal(opts) {
         grandTotal: opts.grandTotal,
         currency: opts.currency,
         lineCount: opts.lineCount,
+        stockReservationEnabled: opts.stockReservationEnabled,
         onClose: handleClose,
         onSuccess: handleSuccess,
       })

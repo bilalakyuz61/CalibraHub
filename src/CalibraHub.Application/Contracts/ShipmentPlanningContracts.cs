@@ -88,11 +88,15 @@ public sealed record CreateReservationLineRequest(int OrderLineId, decimal Qty);
 
 /// <param name="Lines">Rezerve edilecek kalemler.</param>
 /// <param name="LocationId">Verilirse tüm kalemler bu depoya rezerve edilir; null ise her kalemin kendi deposu (LocationId ?? Document.LocationId) kullanılır.</param>
+/// <param name="AllOrNothing">true ise KISMİ başarı yoktur: bir kalem bile atlanırsa (Skipped)
+/// tüm rezervasyonlar geri alınır ve <c>Ok=false</c> döner (Skipped listesi gerekçeleri taşır).
+/// Tekliften siparişe dönüşüm bunu kullanır — "yarısı rezerve, yarısı değil" sipariş üretmemek için.</param>
 public sealed record CreateReservationRequest(
     List<CreateReservationLineRequest> Lines,
     int? LocationId,
     DateTime? PlannedShipDate,
-    string? Notes);
+    string? Notes,
+    bool AllOrNothing = false);
 
 public sealed record CreateReservationResultItem(int OrderLineId, decimal Reserved, string? Reason);
 
@@ -129,3 +133,19 @@ public sealed record ShipReservationsResult(
     bool Ok,
     IReadOnlyList<ShipReservationsDeliveryDto> Deliveries,
     IReadOnlyList<ShipReservationsSkippedItem> Skipped);
+
+/// <summary>
+/// Rezervasyon ÖN KONTROL sonucu — kullanılabilir stoğu yetersiz kalan bir (malzeme, depo) çifti.
+/// Miktarlar BAZ birimdedir (StockReservation.BaseQuantity ile aynı ölçek). Kit satırları
+/// bileşenlerine patlatılarak kontrol edilir; bu yüzden burada görünen malzeme, sipariş
+/// kalemindeki kitin KENDİSİ değil eksik kalan BİLEŞENİ olabilir (SourceItemName doldurulur).
+/// </summary>
+public sealed record StockShortageDto(
+    int ItemId,
+    string ItemCode,
+    string ItemName,
+    int LocationId,
+    string LocationName,
+    decimal Required,
+    decimal Available,
+    string? SourceItemName);

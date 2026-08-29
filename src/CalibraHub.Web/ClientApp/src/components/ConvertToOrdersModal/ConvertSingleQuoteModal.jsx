@@ -11,7 +11,7 @@
  *  6) Success → onSuccess({orderId, workOrderIds})
  */
 import { useState, useEffect } from 'react'
-import { ShoppingCart, X, Check, Loader2, AlertTriangle, Factory } from 'lucide-react'
+import { ShoppingCart, X, Check, Loader2, AlertTriangle, Factory, PackageCheck } from 'lucide-react'
 
 function todayIso() {
   var d = new Date()
@@ -33,6 +33,9 @@ export default function ConvertSingleQuoteModal(props) {
   var lineCount     = props.lineCount != null ? Number(props.lineCount) : null
   var onClose       = props.onClose || function () {}
   var onSuccess     = props.onSuccess || function () {}
+  // Stok rezervasyonu sirket parametresine bagli — kapaliyken secenek hic gosterilmez
+  // (sunucu zaten reddeder; gosterip reddetmek yaniltici olurdu).
+  var reservationAvailable = props.stockReservationEnabled === true
 
   // Theme
   var [isDark, setIsDark] = useState(function () {
@@ -55,6 +58,9 @@ export default function ConvertSingleQuoteModal(props) {
 
   var [orderDate, setOrderDate]   = useState(todayIso())
   var [createWO, setCreateWO]     = useState(false)
+  // Parametre acikken VARSAYILAN ACIK: rezervasyon ozelligi acilmissa siparis normalde
+  // rezervasyonlu kurulmalidir; kullanici stok yetersizken bilinçli olarak kapatabilir.
+  var [reserveStock, setReserveStock] = useState(function () { return props.stockReservationEnabled === true })
   var [confirmOpen, setConfirmOpen] = useState(false)
   var [submitting, setSubmitting]   = useState(false)
   var [resultMsg, setResultMsg]     = useState(null)
@@ -85,6 +91,7 @@ export default function ConvertSingleQuoteModal(props) {
         quoteId: Number(quoteId),
         orderDate: orderDate,
         createWorkOrders: !!createWO,
+        reserveStock: reservationAvailable && !!reserveStock,
       }),
     })
       .then(function (r) { return r.json() })
@@ -247,6 +254,33 @@ export default function ConvertSingleQuoteModal(props) {
             </div>
           </label>
 
+          {/* Stok rezervasyonu opsiyonu — yalnizca sirket parametresi acikken gorunur.
+              Yetersiz stokta islem BLOK edilir; hangi malzemenin eksik oldugu hata
+              metninde satir satir doner (bkz. DocumentService.BuildShortageMessage). */}
+          {reservationAvailable && (
+            <label style={{
+              display: 'flex', alignItems: 'flex-start', gap: '10px',
+              background: palette.cardBg, border: '1px solid ' + palette.cardBorder,
+              borderRadius: '10px', padding: '11px 13px', cursor: 'pointer',
+            }}>
+              <input
+                type="checkbox" checked={reserveStock}
+                onChange={function (e) { setReserveStock(e.target.checked) }}
+                style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: palette.accentGreen, marginTop: '2px' }}
+              />
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 600 }}>
+                  <PackageCheck size={13} style={{ color: palette.accentGreen }} />
+                  <span>Stok rezervasyonu yapilsin</span>
+                </div>
+                <div style={{ fontSize: '11px', color: palette.textSecondary, marginTop: '2px', lineHeight: 1.4 }}>
+                  Siparis kalemleri icin stok rezerve edilir. Herhangi bir malzemede bakiye
+                  yetersizse siparis HIC olusturulmaz; eksik malzemeler listelenir.
+                </div>
+              </div>
+            </label>
+          )}
+
           {resultMsg && (
             <div style={{
               padding: '9px 12px', borderRadius: '8px', fontSize: '12px',
@@ -256,10 +290,15 @@ export default function ConvertSingleQuoteModal(props) {
               border: '1px solid ' + (resultMsg.type === 'success'
                 ? 'rgba(16,185,129,0.35)' : 'rgba(244,63,94,0.30)'),
               color: resultMsg.type === 'success' ? palette.accentGreen : palette.accentDanger,
-              display: 'flex', alignItems: 'center', gap: '7px',
+              display: 'flex', alignItems: 'flex-start', gap: '7px',
+              maxHeight: '190px', overflowY: 'auto',
             }}>
-              {resultMsg.type === 'success' ? <Check size={13} /> : <AlertTriangle size={13} />}
-              <span>{resultMsg.text}</span>
+              {resultMsg.type === 'success'
+                ? <Check size={13} style={{ flexShrink: 0, marginTop: '2px' }} />
+                : <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: '2px' }} />}
+              {/* Yetersiz stok listesi satir satir doner ('\n') — pre-line olmadan tek satira
+                  yapisip okunamaz hale gelirdi. */}
+              <span style={{ whiteSpace: 'pre-line', lineHeight: 1.45 }}>{resultMsg.text}</span>
             </div>
           )}
         </div>

@@ -422,6 +422,10 @@ public sealed class SalesController : Controller
         var quotesKind = CalibraHub.Application.Approval.EntityTypes.DocumentEntityTypes.ResolveKind("satis_teklifi");
         var quotesApprovalGoverned = await IsApprovalGovernedAsync(quotesKind, ct);
 
+        // Stok rezervasyonu açık mı — "Siparişe Dönüştür" modalındaki rezervasyon seçeneği
+        // yalnız açıkken gösterilir (kapalıyken sunucu zaten reddeder). Board başına TEK okuma.
+        var stockReservationEnabled = await IsStockReservationEnabledAsync(ct);
+
         // 2026-05-24: SmartBoardFilterHelpers ile standardize.
         var sqSchema = await _widgetService.GetFormSchemaByCodeAsync("SALES_QUOTE_EDIT", ct);
         var masterWidgets = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.BuildAdminFormWidgets(sqSchema);
@@ -544,6 +548,8 @@ public sealed class SalesController : Controller
                             currencyId = quote.CurrencyId,
                             currency = quote.CurrencyCode,    // display-only
                             lineCount = quote.LineCount,
+                            // Rezervasyon seçeneği: parametre kapalıysa modal bu satırı hiç göstermez.
+                            stockReservationEnabled,
                         },
                     },
                     new
@@ -936,6 +942,12 @@ public sealed class SalesController : Controller
         return Json(new { success = true, id = newId, targetLabel, editUrl = $"/Purchase/Edit?type={editType}&id={newId}" });
     }
 
+    /// <summary>Şirket parametresi: satış siparişi stok bakiyesini rezervasyonla etkiler mi
+    /// (StockReservation modülünün ana anahtarı). Kapalıyken dönüşümde rezervasyon istenemez.</summary>
+    private async Task<bool> IsStockReservationEnabledAsync(CancellationToken ct)
+        => await _companyParams.GetBoolAsync(
+            StockParameters.FormCode, StockParameters.SalesOrderAffectsStockKey, ct) ?? false;
+
     /// <summary>
     /// Tek bir teklifi siparise donusturur — kart aksiyonundan tetiklenir.
     /// Mevcut CreateOrdersFromQuotesAsync altyapisini tek-elemanli QuoteIds ile cagirir;
@@ -958,8 +970,15 @@ public sealed class SalesController : Controller
             && !await HasFormPermissionAsync(FormCodes.WorkOrderEdit, WriteActionCodes, ct))
             return Json(new { success = false, error = "İş emri oluşturmak için yetkiniz bulunmuyor." });
 
+        // Rezervasyon yalnız şirket parametresi (stok rezervasyonu) AÇIKKEN yapılabilir —
+        // kapalıyken istemci bayrağı yok sayılmaz, açıkça reddedilir (sessizce rezervasyonsuz
+        // sipariş üretmek "istedim ama olmadı"yı gizlerdi).
+        var reserveStock = req.ReserveStock;
+        if (reserveStock && !await IsStockReservationEnabledAsync(ct))
+            return Json(new { success = false, error = "Stok rezervasyonu şirket parametrelerinde kapalı (Stok → Satış Siparişi Stok Bakiyesini Etkiler)." });
+
         var orderResult = await _quoteService.CreateOrdersFromQuotesAsync(
-            new CreateOrdersFromQuotesRequest(new[] { req.QuoteId }, req.OrderDate),
+            new CreateOrdersFromQuotesRequest(new[] { req.QuoteId }, req.OrderDate, reserveStock),
             CurrentUserId(), ct);
 
         if (!orderResult.Success || orderResult.OrderIds.Count == 0)
@@ -1436,7 +1455,9 @@ public sealed class SalesController : Controller
                 label          = "Seri",
                 type           = "serial-entry",
                 serialMode     = "pick",
-                serialsUrl     = $"/Sales/GetOrderSerials?itemId={{stockCardId}}&documentId={documentId ?? 0}",
+                // {id} = satır Id'si (yeni satırda boş/0) — rezervasyon satır bazlı olduğu için
+                // havuz o satıra göre süzülür (bkz. GetOrderSerials).
+                serialsUrl     = $"/Sales/GetOrderSerials?itemId={{stockCardId}}&documentId={documentId ?? 0}&lineId={{id}}",
                 width          = 90,
                 align          = "center",
                 icon           = "Barcode",
@@ -1644,11 +1665,12 @@ public sealed class SalesController : Controller
         }));
     }
 
-    // Sipariş seri seçim havuzu — stoktaki (InStock) + BU siparişin rezerve serileri.
-    // documentId: mevcut sipariş id'si (0=yeni). Düzenlemede sipariş kendi rezerve serilerini
-    // de seçili görür; başka siparişin rezervesi görünmez.
+    // Sipariş seri seçim havuzu — stoktaki (InStock) + BU SİPARİŞ SATIRININ rezerve serileri.
+    // documentId: mevcut sipariş id'si (0=yeni). lineId: seçim yapılan sipariş satırı (0=yeni satır).
+    // Rezervasyon satır bazlı olduğundan, aynı siparişin BAŞKA bir satırına rezerve seri bu havuzda
+    // görünmez — önceden görünüyordu ve aynı fiziksel parça iki kaleme birden bağlanabiliyordu.
     [HttpGet]
-    public async Task<IActionResult> GetOrderSerials(int itemId, int documentId, CancellationToken ct)
+    public async Task<IActionResult> GetOrderSerials(int itemId, int documentId, int? lineId, CancellationToken ct)
     {
         if (itemId <= 0) return Json(Array.Empty<object>());
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
@@ -1658,11 +1680,16 @@ public sealed class SalesController : Controller
             FROM [{_schema}].[ItemSerial] s
             LEFT JOIN [{_schema}].[Lot] lot ON lot.[Id] = s.[LotId]
             WHERE s.[ItemId] = @ItemId AND s.[IsActive] = 1
-              AND (s.[Status] = 1 OR (s.[Status] = 4 AND s.[ReservedForDocumentId] = @Doc))
+              AND (s.[Status] = 1
+                   OR (s.[Status] = 4 AND s.[ReservedForDocumentId] = @Doc
+                       -- Satır bilinmiyorsa (yeni satır) belge kapsamı korunur; biliniyorsa
+                       -- yalnız bu satırın (veya satırı belirsiz eski kaydın) serileri gelir.
+                       AND (@Line = 0 OR s.[ReservedForLineId] IS NULL OR s.[ReservedForLineId] = @Line)))
             ORDER BY s.[SerialNo];
             """;
         cmd.Parameters.AddWithValue("@ItemId", itemId);
         cmd.Parameters.AddWithValue("@Doc", documentId);
+        cmd.Parameters.AddWithValue("@Line", lineId ?? 0);
         var result = new List<object>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
@@ -2921,13 +2948,19 @@ public sealed class SalesController : Controller
         var ids = req?.Ids ?? [];
         if (ids.Count == 0) return Json(new { ok = false, error = "Seçim yapılmadı." });
 
+        // Toplu aksiyonda ayrıca seçenek sorulmaz: stok rezervasyonu şirket parametresinde
+        // AÇIKSA sipariş rezervasyonlu üretilir (yetersiz stok tüm işlemi bloklar), kapalıysa
+        // eski davranış birebir korunur.
+        var reserveStock = req?.ReserveStock ?? await IsStockReservationEnabledAsync(ct);
+
         var result = await _quoteService.CreateOrdersFromQuotesAsync(
-            new CreateOrdersFromQuotesRequest(ids, DateTime.Today), CurrentUserId(), ct);
+            new CreateOrdersFromQuotesRequest(ids, DateTime.Today, reserveStock), CurrentUserId(), ct);
         if (!result.Success) return Json(new { ok = false, error = result.Error ?? "Sipariş oluşturulamadı." });
-        return Json(new { ok = true, message = $"{result.OrdersCreated} sipariş oluşturuldu." });
+        return Json(new { ok = true, message = $"{result.OrdersCreated} sipariş oluşturuldu." + (reserveStock ? " Kalemler stok rezervasyonlu." : "") });
     }
 
-    public sealed record BulkIdsRequest(IReadOnlyCollection<int> Ids);
+    /// <param name="ReserveStock">null = şirket parametresine göre karar ver (varsayılan).</param>
+    public sealed record BulkIdsRequest(IReadOnlyCollection<int> Ids, bool? ReserveStock = null);
 
     /// <summary>
     /// Yükleme Planlama Merkezi ekranı. Board/veri yükü frontend tarafından

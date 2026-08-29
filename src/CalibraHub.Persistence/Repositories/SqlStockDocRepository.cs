@@ -1486,7 +1486,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     DELETE dls FROM {T("DocumentLineSerial")} dls
                       INNER JOIN {T("DocumentLine")} dl ON dl.[Id] = dls.[DocumentLineId]
                       WHERE dl.[DocumentId] = @Doc;
-                    UPDATE {T("ItemSerial")} SET [Status] = 1, [ReservedForDocumentId] = NULL, [Updated] = SYSUTCDATETIME()
+                    UPDATE {T("ItemSerial")} SET [Status] = 1, [ReservedForDocumentId] = NULL,
+                                                [ReservedForLineId] = NULL, [Updated] = SYSUTCDATETIME()
                       WHERE [ReservedForDocumentId] = @Doc AND [Status] = 4;
                     """;
                 reset.Parameters.AddWithValue("@Doc", documentId);
@@ -1494,6 +1495,11 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             }
 
             // 2) Payload'dan yeniden bağla (+ rezerve)
+            // Aynı seri belgenin İKİ ayrı satırına bağlanamaz: reset sonrası seri serbest
+            // (Status=1) olduğu için belge bazlı guard bunu YAKALAMIYORDU — aynı fiziksel
+            // parça iki satırda birden sevk edilebilir görünüyordu. Rezervasyon satır bazına
+            // çekildiğinden bu çakışma artık açıkça reddedilir.
+            var claimedByLine = new Dictionary<int, int>();   // serialId → lineId
             foreach (var (lineId, itemId, serials) in lineSerials)
             {
                 if (serials == null || lineId <= 0 || itemId <= 0) continue;
@@ -1518,6 +1524,10 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                         status   = fr.GetByte(1);
                         resFor   = fr.IsDBNull(2) ? null : fr.GetInt32(2);
                     }
+                    if (claimedByLine.TryGetValue(serialId, out var otherLineId) && otherLineId != lineId)
+                    { await tx.RollbackAsync(ct); return (false, $"'{sn}' aynı belgede birden fazla kaleme eklenemez — tek bir kaleme bağlanmalı."); }
+                    claimedByLine[serialId] = lineId;
+
                     if (reserve)
                     {
                         if (status == 2)
@@ -1542,8 +1552,9 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     {
                         await using var upd = conn.CreateCommand();
                         upd.Transaction = tx;
-                        upd.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=4, [ReservedForDocumentId]=@Doc, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Sr;";
+                        upd.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=4, [ReservedForDocumentId]=@Doc, [ReservedForLineId]=@Ln, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Sr;";
                         upd.Parameters.AddWithValue("@Doc", documentId);
+                        upd.Parameters.AddWithValue("@Ln", lineId);
                         upd.Parameters.AddWithValue("@Sr", serialId);
                         await upd.ExecuteNonQueryAsync(ct);
                     }
@@ -1565,7 +1576,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=1, [ReservedForDocumentId]=NULL, [Updated]=SYSUTCDATETIME() WHERE [ReservedForDocumentId]=@Doc AND [Status]=4;";
+        cmd.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=1, [ReservedForDocumentId]=NULL, [ReservedForLineId]=NULL, [Updated]=SYSUTCDATETIME() WHERE [ReservedForDocumentId]=@Doc AND [Status]=4;";
         cmd.Parameters.AddWithValue("@Doc", documentId);
         await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -2016,7 +2027,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 await using (var upd = conn.CreateCommand())
                 {
                     upd.Transaction = tx;
-                    upd.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=2, [ReservedForDocumentId]=NULL, [CurrentLocationId]=NULL, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Sr AND [Status] IN (1,4);";
+                    upd.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=2, [ReservedForDocumentId]=NULL, [ReservedForLineId]=NULL, [CurrentLocationId]=NULL, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Sr AND [Status] IN (1,4);";
                     upd.Parameters.AddWithValue("@Sr", sid);
                     await upd.ExecuteNonQueryAsync(ct);
                 }
@@ -2230,7 +2241,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         {
             await using var rel = conn.CreateCommand();
             rel.Transaction = tx;
-            rel.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=1, [ReservedForDocumentId]=NULL, [Updated]=SYSUTCDATETIME() WHERE [ItemId]=@It AND [SerialNo]=@Sn AND [Status]=4;";
+            rel.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=1, [ReservedForDocumentId]=NULL, [ReservedForLineId]=NULL, [Updated]=SYSUTCDATETIME() WHERE [ItemId]=@It AND [SerialNo]=@Sn AND [Status]=4;";
             rel.Parameters.AddWithValue("@It", itemId);
             rel.Parameters.AddWithValue("@Sn", sn);
             await rel.ExecuteNonQueryAsync(ct);
@@ -2274,7 +2285,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 await using (var iss = conn.CreateCommand())
                 {
                     iss.Transaction = tx;
-                    iss.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=2, [ReservedForDocumentId]=NULL, [CurrentLocationId]=NULL, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Id;";
+                    iss.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=2, [ReservedForDocumentId]=NULL, [ReservedForLineId]=NULL, [CurrentLocationId]=NULL, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Id;";
                     iss.Parameters.AddWithValue("@Id", serialId);
                     await iss.ExecuteNonQueryAsync(ct);
                 }
