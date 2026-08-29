@@ -246,7 +246,7 @@ public static class AuditFieldLabels
             ["Combinations"] = "Kombinasyon Özellikleri",
             ["TrackingType"] = "Takip Tipi",
             ["AutoSerial"] = "Otomatik Seri",
-            ["WorkOrderSplitPolicy"] = "İş Emri Kırılımı",
+            ["WorkOrderSplitPolicy"] = "Satın Alma / İş Emri Kırılımı",
             // Tanımlar (Personel / Makine / Departman / Kullanıcı)
             ["HourlyCapacity"] = "Saatlik Kapasite",
             ["SortOrder"] = "Sıralama",
