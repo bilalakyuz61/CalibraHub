@@ -408,7 +408,8 @@ public sealed partial class LogisticsConfigurationService : ILogisticsConfigurat
                     TrackingType: x.TrackingType,
                     MinStock: x.MinStock,
                     AutoSerial: x.AutoSerial,
-                    Barcode: x.Barcode))
+                    Barcode: x.Barcode,
+                    WorkOrderSplitPolicy: x.WorkOrderSplitPolicy))
                 .ToArray(),
             Properties: properties
                 .Select(x => new FeatureDto(
@@ -1128,6 +1129,7 @@ public sealed partial class LogisticsConfigurationService : ILogisticsConfigurat
             TrackingType = NormalizeTrackingType(request.TrackingType) ?? "None",
             MinStock = request.MinStock,
             AutoSerial = request.AutoSerial,
+            WorkOrderSplitPolicy = WorkOrderSplitPolicyCatalog.Normalize(request.WorkOrderSplitPolicy),
             Created = DateTime.Now
         };
 
@@ -1205,6 +1207,10 @@ public sealed partial class LogisticsConfigurationService : ILogisticsConfigurat
             TrackingType = NormalizeTrackingType(request.TrackingType) ?? existing.TrackingType ?? "None",
             MinStock = request.MinStock,
             AutoSerial = request.AutoSerial,
+            // Boş/geçersiz gelirse MEVCUT değer korunur — istemcinin alanı hiç göndermemesi
+            // kullanıcının seçtiği politikayı sessizce varsayılana düşürmemeli.
+            WorkOrderSplitPolicy = WorkOrderSplitPolicyCatalog.Normalize(
+                request.WorkOrderSplitPolicy ?? existing.WorkOrderSplitPolicy),
             Created = existing.Created,
             Updated = DateTime.Now
         };

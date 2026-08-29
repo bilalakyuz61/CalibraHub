@@ -19030,7 +19030,7 @@ END;
                     [PlannedEndDate]    DATETIME       NULL,
                     [ParentRunLineId]   INT            NULL,   -- ağaç; self-FK YOK (yazım sırası serbest kalsın)
                     [TargetWorkOrderId] INT            NULL,   -- MergeWorkOrder ise hedef emir
-                    [PegJson]           NVARCHAR(MAX)  NULL,   -- [{{rootDocumentId, rootLineId, qty}}]
+                    [PegJson]           NVARCHAR(MAX)  NULL,   -- JSON dizisi: rootDocumentId + rootLineId + qty alanlari
                     [CreatedWorkOrderId] INT           NULL,   -- apply sonrası
                     [CreatedDocumentId]  INT           NULL,   -- apply sonrası (satın alma talebi)
                     -- Atlanan/karşılanan satırın GEREKÇESİ. Sessiz continue yasak (CLAUDE.md #3):

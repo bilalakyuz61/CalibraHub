@@ -1913,6 +1913,21 @@
                     <span style="font-size:.72rem;color:var(--mce-t40, rgba(255,255,255,.4));flex:1 1 200px;">Ana birim cinsinden. Depo bazında ayrı bir asgari stok girilmezse bu değer geçerlidir.</span>
                 </div>
 
+                <!-- İş Emri Kırılımı (MRP, 2026-08-29) — bu malzemenin ihtiyacı iş emrine
+                     dönüşürken nasıl gruplanacağı. Yalnız ÜRETİLEBİLİR tiplerde (Mamul=1,
+                     Yarı Mamul=2) anlamlıdır; diğer tiplerde alan disabled + açıklama. -->
+                <div id="mceSplitPolicyRow" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 14px;border-radius:10px;background:var(--mce-panel-bg, rgba(255,255,255,0.04));border:1px solid var(--mce-panel-border, rgba(255,255,255,0.08));margin-bottom:22px;">
+                    <label for="mceWorkOrderSplitPolicy" style="font-size:.8rem;color:rgba(148,163,184,.9);font-weight:600;">İş Emri Kırılımı</label>
+                    <select id="mceWorkOrderSplitPolicy" class="mce-input" data-field-key="workOrderSplitPolicy" style="width:230px;">
+                        <option value="PerOrderLine">Sipariş Satırı Bazında</option>
+                        <option value="PerOrder">Sipariş Bazında</option>
+                        <option value="Cumulative">Kümüle (Tüm Siparişler)</option>
+                    </select>
+                    <span id="mceSplitPolicyHint" style="font-size:.72rem;color:var(--mce-t40, rgba(255,255,255,.4));flex:1 1 240px;">
+                        Siparişlerden iş emri üretilirken bu malzemenin ihtiyacı nasıl gruplansın?
+                    </span>
+                </div>
+
                 <!-- Belge Kilitleri — salt-okunur özet. Düzenleme merkezi ekrana taşındı:
                      /Logistics/ItemDocumentLocks (Seq 30, 2026-07-25). Eski switch-grid +
                      mceDocLockSave() kaldırıldı; bu kart artık yalnızca GET ile okuyup
@@ -2741,6 +2756,25 @@
         var w = document.getElementById('mceTrackingModeWrap'); if (w) w.style.display = on ? 'inline-flex' : 'none';
         var a = document.getElementById('mceAutoSerialWrap');   if (a) a.style.display = seri ? 'inline-flex' : 'none';
     };
+    // İş Emri Kırılımı yalnız ÜRETİLEBİLİR malzemede anlamlıdır (Mamul / Yarı Mamul).
+    // Diğer tiplerde alan pasifleşir ve sebebi yazılır — gizlemiyoruz, çünkü kullanıcı
+    // "bu ayar nerede" diye aramak yerine neden kullanılamadığını görmeli.
+    // Tip id'leri ItemTypeCatalog.ProducibleTypeIds ile aynı: 1=Mamul, 2=Yarı Mamul.
+    window.mceSyncSplitPolicyUi = function () {
+        var sel  = $('mceWorkOrderSplitPolicy');
+        var hint = $('mceSplitPolicyHint');
+        if (!sel) return;
+        var typeEl = $('mceMaterialTypeId');
+        var typeId = typeEl && typeEl.value ? parseInt(typeEl.value, 10) : 0;
+        var producible = (typeId === 1 || typeId === 2);
+        sel.disabled = !producible;
+        sel.style.opacity = producible ? '' : '.5';
+        if (hint) {
+            hint.textContent = producible
+                ? 'Siparişlerden iş emri üretilirken bu malzemenin ihtiyacı nasıl gruplansın?'
+                : 'Yalnızca üretilebilir malzemelerde (Mamul / Yarı Mamul) geçerlidir.';
+        }
+    };
     function _setDisp(id, val)   { var el = $(id); if (el) el.style.display = val; }
     function populate(data) {
         // Defansif sarma: widget config tutarsizliklari (orn. ColSpan/field referans
@@ -2755,6 +2789,8 @@
             _setChk('mceTrackCombinations',    !!data.trackCombinations);
             _setVal('mceTaxRate',              data.taxRate != null ? data.taxRate : 20);
             _setVal('mceGeneralMinStock',      data.minStock != null ? data.minStock : 0);
+            _setVal('mceWorkOrderSplitPolicy', data.workOrderSplitPolicy || 'PerOrderLine');
+            if (window.mceSyncSplitPolicyUi) window.mceSyncSplitPolicyUi();
             (function (tt) {
                 var on = tt && tt !== 'None';
                 if ($('mceTraceability')) $('mceTraceability').checked = on;
@@ -3297,7 +3333,10 @@
             trackingType: (($('mceTraceability') && $('mceTraceability').checked) ? (($('mceTrackingMode') && $('mceTrackingMode').checked) ? 'Serial' : 'Lot') : 'None'),
             autoSerial: !!($('mceTraceability') && $('mceTraceability').checked &&
                            $('mceTrackingMode') && $('mceTrackingMode').checked &&
-                           $('mceAutoSerial') && $('mceAutoSerial').checked)
+                           $('mceAutoSerial') && $('mceAutoSerial').checked),
+            // MRP is emri kirilimi. Alan yoksa null gonderilir → sunucu MEVCUT degeri korur
+            // (bos string gonderip kullanicinin secimini varsayilana dusurmeyelim).
+            workOrderSplitPolicy: ($('mceWorkOrderSplitPolicy') ? $('mceWorkOrderSplitPolicy').value : null) || null
         };
 
         $('mceSaveBtn').disabled = true;
@@ -5752,7 +5791,10 @@
         if (!sel) return;
         sel.addEventListener('change', function () {
             if (typeof window.mceRecipeSyncVisibility === 'function') window.mceRecipeSyncVisibility();
+            // Is Emri Kirilimi yalniz uretilebilir tipte etkin — tip degisince yenile.
+            if (typeof window.mceSyncSplitPolicyUi === 'function') window.mceSyncSplitPolicyUi();
         });
+        if (typeof window.mceSyncSplitPolicyUi === 'function') window.mceSyncSplitPolicyUi();
     })();
 
     // TrackCombinations toggle degisirse Recete sekmesi yenilenmeli (tek kart <-> liste)

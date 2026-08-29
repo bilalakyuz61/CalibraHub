@@ -111,4 +111,7 @@ public sealed class SaveMaterialCardJsonInput
     public decimal? MinStock { get; set; }
     /// <summary>Seri takibinde giriş serisi otomatik üretilsin (yalnız TrackingType='Serial').</summary>
     public bool AutoSerial { get; set; }
+    /// <summary>MRP iş emri kırılımı: "PerOrderLine" | "PerOrder" | "Cumulative".
+    /// null gelirse mevcut değer KORUNUR (istemci alanı göndermezse sıfırlanmaz).</summary>
+    public string? WorkOrderSplitPolicy { get; set; }
 }

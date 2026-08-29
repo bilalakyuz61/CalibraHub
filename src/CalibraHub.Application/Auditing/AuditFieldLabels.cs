@@ -246,6 +246,7 @@ public static class AuditFieldLabels
             ["Combinations"] = "Kombinasyon Özellikleri",
             ["TrackingType"] = "Takip Tipi",
             ["AutoSerial"] = "Otomatik Seri",
+            ["WorkOrderSplitPolicy"] = "İş Emri Kırılımı",
             // Tanımlar (Personel / Makine / Departman / Kullanıcı)
             ["HourlyCapacity"] = "Saatlik Kapasite",
             ["SortOrder"] = "Sıralama",
@@ -403,6 +404,16 @@ public static class AuditFieldLabels
             ["Serial"] = "Seri",
         };
 
+    /// <summary>Item.WorkOrderSplitPolicy — MRP iş emri kırılımı (2026-08-29). Kaynak:
+    /// Domain/Enums/WorkOrderSplitPolicy.cs.</summary>
+    private static readonly Dictionary<string, string> WorkOrderSplitPolicyValueLabels =
+        new(StringComparer.Ordinal)
+        {
+            ["PerOrderLine"] = "Sipariş Satırı Bazında",
+            ["PerOrder"] = "Sipariş Bazında",
+            ["Cumulative"] = "Kümüle (Tüm Siparişler)",
+        };
+
     /// <summary>ItemKit.PriceMode — 4 sabit değer (2026-08-03, PageComment Seq 1078). Kaynak:
     /// Domain/Entities/ItemKit.cs KitPriceMode sınıfı.</summary>
     private static readonly Dictionary<string, string> KitPriceModeValueLabels =
@@ -484,6 +495,9 @@ public static class AuditFieldLabels
                 break;
             case "TrackingType":
                 if (TrackingTypeValueLabels.TryGetValue(raw, out var tracking)) return tracking;
+                break;
+            case "WorkOrderSplitPolicy":
+                if (WorkOrderSplitPolicyValueLabels.TryGetValue(raw, out var splitPolicy)) return splitPolicy;
                 break;
             case "PriceMode":
                 if (KitPriceModeValueLabels.TryGetValue(raw, out var kitMode)) return kitMode;

@@ -108,6 +108,9 @@ public sealed class MaterialController : Controller
             trackingType      = card.TrackingType ?? "None",
             autoSerial        = card.AutoSerial,
             minStock          = card.MinStock,
+            // MRP iş emri kırılım politikası (Planlama sekmesi)
+            workOrderSplitPolicy = CalibraHub.Domain.Enums.WorkOrderSplitPolicyCatalog
+                                       .Normalize(card.WorkOrderSplitPolicy),
             meta              = new { createdDate = card.Created, modifiedDate = card.Updated },
             combinations
         });
@@ -293,14 +296,14 @@ public sealed class MaterialController : Controller
                 await _logisticsConfigurationService.UpdateItemAsync(
                     new UpdateItemRequest(input.ItemId!.Value, input.Code, input.Name,
                         input.TypeId, input.UnitId, input.Combinations, input.TaxRate, input.TrackingType,
-                        input.MinStock ?? 0m, input.AutoSerial, input.Barcode), ct);
+                        input.MinStock ?? 0m, input.AutoSerial, input.Barcode, input.WorkOrderSplitPolicy), ct);
             }
             else
             {
                 await _logisticsConfigurationService.CreateItemAsync(
                     new CreateItemRequest(input.Code, input.Name,
                         input.TypeId, input.UnitId, input.Combinations, input.TaxRate, input.TrackingType,
-                        input.MinStock ?? 0m, input.AutoSerial, input.Barcode), ct);
+                        input.MinStock ?? 0m, input.AutoSerial, input.Barcode, input.WorkOrderSplitPolicy), ct);
             }
 
             // Yeni kart icin id'yi turet

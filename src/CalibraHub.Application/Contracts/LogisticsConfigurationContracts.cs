@@ -73,7 +73,9 @@ public sealed record ItemDto(
     string? TrackingType = "None",
     decimal MinStock = 0m,
     bool AutoSerial = false,
-    string? Barcode = null);
+    string? Barcode = null,
+    /// <summary>MRP iş emri kırılımı: "PerOrderLine" | "PerOrder" | "Cumulative".</summary>
+    string? WorkOrderSplitPolicy = "PerOrderLine");
 
 /// <summary>Toplu belge kilidi işlemi (Kilitle/Kaldır) sonucu — Malzeme Belge Kilitleri ekranı.</summary>
 public sealed record BulkItemDocumentLockResultDto(
@@ -118,7 +120,9 @@ public sealed record CreateItemRequest(
     string? TrackingType = "None",
     decimal MinStock = 0m,
     bool AutoSerial = false,
-    string? Barcode = null);
+    string? Barcode = null,
+    /// <summary>MRP iş emri kırılımı: "PerOrderLine" | "PerOrder" | "Cumulative".</summary>
+    string? WorkOrderSplitPolicy = "PerOrderLine");
 
 public sealed record UpdateItemRequest(
     int ItemId,
@@ -131,7 +135,9 @@ public sealed record UpdateItemRequest(
     string? TrackingType = "None",
     decimal MinStock = 0m,
     bool AutoSerial = false,
-    string? Barcode = null);
+    string? Barcode = null,
+    /// <summary>MRP iş emri kırılımı: "PerOrderLine" | "PerOrder" | "Cumulative".</summary>
+    string? WorkOrderSplitPolicy = "PerOrderLine");
 
 public sealed record CreateFeatureRequest(
     string Name,
