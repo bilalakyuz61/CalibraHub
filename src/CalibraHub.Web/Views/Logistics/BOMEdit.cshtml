@@ -470,6 +470,35 @@
         border-bottom-color: transparent;   /* çizgiyi sarmalayıcı çiziyor */
         box-shadow: none;
     }
+    /* ── Rehber alanlari (LookupCard) alt cizgi standardina ──
+       .gl-card PAYLASILAN bir bilesendir (widget renderer, diger ekranlar) ve
+       kendi kutu stilini tasir: beyaz zemin + 1px kenarlik + 10px yaricap + golge.
+       Genel olarak degistirmek butun ekranlari etkilerdi; bu yuzden YALNIZ bu
+       ekranin .pte-lookup sarmalayicisi icinde eziliyor. Alt cizgiyi sarmalayici
+       cizer (bkz. .pte-lookup), kart yalnizca icerigi tasir.
+
+       Ozgulluk notu: guideLookup.css'te `body.app-theme-dark .gl-card` (0,2,1) ve
+       `:focus-within:not(...)` (0,3,0) kurallari var; asagidaki secicilerin her biri
+       onlarin dengi ya da ustunde tutuldu, yoksa koyu temada kutu geri gelirdi. */
+    .pte-lookup .gl-card,
+    body.app-theme-dark .pte-lookup .gl-card {
+        background-color: transparent;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+    }
+    .pte-lookup .gl-card:hover:not(.gl-card--disabled),
+    body.app-theme-dark .pte-lookup .gl-card:hover:not(.gl-card--disabled) {
+        border: none;
+        background-color: transparent;
+    }
+    .pte-lookup .gl-card:focus-within:not(.gl-card--disabled),
+    body.app-theme-dark .pte-lookup .gl-card:focus-within:not(.gl-card--disabled) {
+        border: none;
+        box-shadow: none;
+        background-color: transparent;
+    }
+
     /* LookupCard mount edildiginde gl-wrapper/gl-card pte-lookup container'ini doldursun. */
     .pte-lookup .gl-wrapper { width: 100%; flex: 1 1 auto; }
     .pte-lookup .gl-card    { width: 100%; }
