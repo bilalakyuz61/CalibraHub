@@ -1076,15 +1076,18 @@
        "bileşen yok" yanılgısı üretirdi.
        Vurgu SOLUKLAŞTIRMA DEĞİL: hata olan satır göze çarpmalı, geri çekilmemeli.
        Önceki sürüm opacity:.6 ile tam tersini yapıyordu. */
+    /* Kademe 1 — döngünün KAPANDIĞI düğüm: tek suçlu, güçlü vurgu. */
     .bomt-node--cycle {
-        background: rgba(239,68,68,.10);
-        border-color: rgba(239,68,68,.45);
+        background: rgba(239,68,68,.12);
+        border-color: rgba(239,68,68,.5);
         box-shadow: inset 3px 0 0 0 #ef4444;
     }
-    .bomt-node--cycle:hover { background: rgba(239,68,68,.16); }
-    body.app-theme-light .bomt-node--cycle { background: rgba(239,68,68,.07); }
-    /* Zincirin sorumlusu olarak sunucunun işaretlediği satır — daha güçlü. */
-    .bomt-node--cyclehit { box-shadow: inset 3px 0 0 0 #ef4444, 0 0 0 1px rgba(239,68,68,.5); }
+    .bomt-node--cycle:hover { background: rgba(239,68,68,.18); }
+    body.app-theme-light .bomt-node--cycle { background: rgba(239,68,68,.08); }
+
+    /* Kademe 2 — zincirdeki atalar: yalnız ince sol çizgi, zemin YOK.
+       Zincirin tamamını kırmızıya boyamak ekranı okunmaz yapıyordu. */
+    .bomt-node--cyclepath { box-shadow: inset 2px 0 0 0 rgba(239,68,68,.42); }
     @@keyframes bomtCycleFlash {
         0%, 100% { box-shadow: inset 3px 0 0 0 #ef4444; }
         50%      { box-shadow: inset 3px 0 0 0 #ef4444, 0 0 0 4px rgba(239,68,68,.35); }
@@ -3516,28 +3519,46 @@
        calisir; boylece kullanici KAYDETMEDEN once gorur.
        Sunucu yine de dogrular (istemciye guvenilmez), ama hatayi kaydetme aninda
        ogrenmek gec — kullanici o ana kadar ustune bes satir daha eklemis olur. */
+    /* Agacta dongu var mi — sunucudaki kuralin AYNISI: bir dugumun malzemesi kendi
+       atalari arasinda geciyorsa dongudur.
+
+       ISARETLEME YOLA GORE, kimlige gore DEGIL. Kimlige gore isaretlemek, ayni
+       malzemenin agacin baska yerindeki masum gecislerini de kirmiziya boyuyordu
+       (kullanici bildirimi: "ortalik karisiyor").
+
+       Ayrica dongunun kapandigi dugumun ALTI BUDANIR: oradan asagisi zaten ayni
+       zincirin tekrari; birakilirsa agac kendini tekrar ederek uzar. */
     function pttMarkCycles() {
-        pttCycleIds = new Set();
         pttCycleText = '';
         if (!pttModel) return;
         var chain = null;
 
         (function walk(node, ancestors, labels) {
-            var hitAt = ancestors.indexOf(node.itemId);
+            node.isCycle = false;
+            node._onCyclePath = false;
+
+            var hitAt = ancestors.map(function(n) { return n.itemId; }).indexOf(node.itemId);
             if (hitAt >= 0) {
                 node.isCycle = true;
-                var ids = ancestors.slice(hitAt).concat([node.itemId]);
-                ids.forEach(function(id) { pttCycleIds.add(id); });
-                if (!chain) chain = labels.slice(hitAt).concat([node.itemCode || ('#' + node.itemId)]);
-                return;   // daha derine INME — sonsuz donguye girerdi
+                // Alt dal SILINMEZ, yalniz KAPATILIR. Silmek modeli kalici bozardi:
+                // kullanici donguyu duzeltince o dal geri gelmez, yeniden yukleme
+                // gerekirdi. Render zaten dongu dugumunun altini cizmiyor.
+                node._open = false;
+                for (var i = hitAt; i < ancestors.length; i++) ancestors[i]._onCyclePath = true;
+                if (!chain) {
+                    chain = labels.slice(hitAt).concat([node.itemCode || ('#' + node.itemId)]);
+                }
+                return;
             }
-            node.isCycle = false;
-            var nextA = ancestors.concat([node.itemId]);
+            var nextA = ancestors.concat([node]);
             var nextL = labels.concat([node.itemCode || ('#' + node.itemId)]);
             node.children.forEach(function(c) { walk(c, nextA, nextL); });
         })(pttModel, [], []);
 
         if (chain) pttCycleText = chain.join(' \u2192 ');
+        // Yerel yol bulunduysa sunucudan gelen kimlik listesi ARTIK GEREKMEZ; onu
+        // birakmak ayni asiri-boyamayi geri getirirdi.
+        if (chain) pttCycleIds = new Set();
     }
 
     function pttSetOpenAll(node, open) {
@@ -3561,10 +3582,13 @@
        isLast: bu dugum atasinin SON cocugu mu (koseli L mi, T mi). */
     function pttRenderNode(node, depth, host, isRoot, guides, isLast) {
         var row = document.createElement('div');
-        var inCycle = node.isCycle || pttCycleIds.has(node.itemId);
+        // Dongu vurgusu iki kademeli: dongunun KAPANDIGI dugum guclu (kirmizi),
+        // zincirdeki atalar SAKIN (yalniz ince sol cizgi). Hepsini kirmizi yapmak
+        // ekrani okunmaz hale getiriyordu.
+        var onPath = node._onCyclePath || (!node.isCycle && pttCycleIds.has(node.itemId));
         row.className = 'bomt-node' + (isRoot ? ' bomt-node--root' : '')
-                      + (inCycle ? ' bomt-node--cycle' : '')
-                      + (node.isCycle ? ' bomt-node--cyclehit' : '');
+                      + (node.isCycle ? ' bomt-node--cycle' : '')
+                      + (onPath ? ' bomt-node--cyclepath' : '');
         row.dataset.uid = node._uid;
 
         var nameCell = document.createElement('div');
@@ -3587,10 +3611,11 @@
 
         var caret = document.createElement('button');
         caret.type = 'button';
-        caret.className = 'bomt-caret' + (node.children.length ? '' : ' bomt-caret--leaf')
-                        + (node._open ? ' is-open' : '');
+        var canExpand = node.children.length > 0 && !node.isCycle;
+        caret.className = 'bomt-caret' + (canExpand ? '' : ' bomt-caret--leaf')
+                        + (node._open && canExpand ? ' is-open' : '');
         caret.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 6l6 6-6 6"/></svg>';
-        if (node.children.length) {
+        if (canExpand) {
             caret.addEventListener('click', function() { node._open = !node._open; pttRender(); });
         }
         nameCell.appendChild(caret);
@@ -3612,8 +3637,9 @@
             var comboBadge = pttConfigBadge(node);
             if (comboBadge) nameCell.appendChild(comboBadge);
         }
-        if (node.isCycle) nameCell.appendChild(pttBadge('Döngü - burada kapanıyor', 'cycle'));
-        else if (inCycle) nameCell.appendChild(pttBadge('Döngü zincirinde', 'cycle'));
+        // Rozet YALNIZ kapanan dugumde. Zincirdeki her satira rozet koymak
+        // gorsel gurultu uretiyordu; zincirin tamami zaten ustteki seritte yazili.
+        if (node.isCycle) nameCell.appendChild(pttBadge('Döngü burada kapanıyor', 'cycle'));
         if (node.bomVersionCode) nameCell.appendChild(pttBadge('Versiyon: ' + node.bomVersionCode, 'version'));
         // Paylasimli uyarisi: burada yapilan degisiklik kaydedilirken versiyon turetilir.
         if (!isRoot && node.referenceCount > 1) {
@@ -3635,7 +3661,7 @@
 
         var actions = document.createElement('div');
         actions.className = 'bomt-actions';
-        if (!inCycle) {
+        if (!node.isCycle) {
             actions.appendChild(pttIconBtn(
                 '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
                 'Bu dugumun altina bilesen ekle', false,
@@ -3650,7 +3676,9 @@
         row.appendChild(actions);
         host.appendChild(row);
 
-        if (node._open) {
+        // Dongu dugumunun ALTI CIZILMEZ: oradan asagisi ayni zincirin tekrari olur
+        // ve agac kendini tekrarlayarak uzar (kullanici bildirimi: "ortalik karisiyor").
+        if (node._open && !node.isCycle) {
             // Cocuklarin ata sutunu: kokun cocuklarinda ata sutunu YOKTUR; daha
             // derinlerde ise "bu dugumun daha kardesi var mi" (yani !isLast) bilgisi
             // dikey cizgi olarak tasinir.
@@ -3888,6 +3916,8 @@
             if (kids.length === 0) return;
             node.children = kids.map(function(k) { return pttDecorate(k, 1); });
             node._open = true;
+            // pttRender icinde pttMarkCycles calisir; dongu kapaniyorsa alt dal
+            // budanir, boylece getirilen recete agaci tekrara girmez.
             pttRender();
             if (pttCycleText) {
                 pttShowCycleWarning();
