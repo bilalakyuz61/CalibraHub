@@ -10,5 +10,11 @@ public sealed class ApprovalDocumentViewerViewModel
     public string? SenderName { get; init; }
     public required string EnvelopeId { get; init; }
     public required string XmlContent { get; init; }
+
+    /// <summary>
+    /// Belgede gercek UBL XML var mi. OFFLINE (ERP) kayitlarda YOKTUR — o durumda
+    /// "Resmi (GIB) Goruntusu" ve "XML" sekmeleri anlamsizdir, gosterilmez.
+    /// </summary>
+    public bool HasXmlPayload { get; init; }
     public InvoiceRenderData? RenderData { get; init; }
 }

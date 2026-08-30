@@ -112,6 +112,21 @@ public sealed class ApprovalController : Controller
             xmlContent = raw;
         }
 
+        // XML yalniz ONLINE (entegrator) kayitlarda vardir. OFFLINE (ERP/Netsis) kayitta
+        // PayloadRaw bir JSON izleme kaydidir; UBL YOKTUR. Bu yuzden ekranin uc sekmesi de
+        // (GIB gorunumu, ozet, XML) bos kaliyordu — veri aslinda yerli/legacy kalem
+        // tablolarinda duruyor. XML ayristirilamazsa ozet o tablolardan uretilir.
+        var hasXml = xmlContent.TrimStart().StartsWith('<');
+        var renderData = ParseInvoiceRenderData(xmlContent);
+        if (renderData is null || renderData.Lines.Count == 0)
+        {
+            var lines = await _incomingDocumentRepository.GetLinesAsync(id, cancellationToken);
+            if (lines.Count > 0)
+            {
+                renderData = BuildRenderDataFromLines(document, lines);
+            }
+        }
+
         var vm = new ApprovalDocumentViewerViewModel
         {
             Id = document.Id,
@@ -122,7 +137,8 @@ public sealed class ApprovalController : Controller
             SenderName = document.SenderName,
             EnvelopeId = document.EnvelopeId ?? string.Empty,
             XmlContent = xmlContent,
-            RenderData = ParseInvoiceRenderData(xmlContent)
+            HasXmlPayload = hasXml,
+            RenderData = renderData
         };
 
         ViewData["Title"] = $"Belge: {document.DocumentNumber}";
@@ -173,6 +189,75 @@ public sealed class ApprovalController : Controller
 
         // 3. Bulunan satırlar o yaratılan kompakt görünüme (_DocumentLines) çizilerek yollanır
         return PartialView("_DocumentLines", rd.Lines);
+    }
+
+    /// <summary>
+    /// UBL XML olmayan belgeler icin ozet gorunumu YERLI (IncomingDocumentLine) ya da
+    /// LEGACY (CBT_EBELGEKALEM) kalem verisinden uretir. Toplamlar kalemlerden toplanir;
+    /// belge basligi zaten ana kayitta vardir.
+    /// </summary>
+    private static Web.Models.Approval.InvoiceRenderData BuildRenderDataFromLines(
+        Domain.Entities.IncomingDocument document,
+        IReadOnlyList<CalibraHub.Application.Services.EDocument.EDocumentLineData> lines)
+    {
+        static string Num(decimal value) => value.ToString(CultureInfo.InvariantCulture);
+
+        var mappedLines = lines.Select(l => new Web.Models.Approval.InvoiceLineItem
+        {
+            LineNo     = l.LineNumber.ToString(CultureInfo.InvariantCulture),
+            ItemName   = l.ItemName ?? l.ItemCode,
+            Quantity   = Num(l.Quantity),
+            UnitCode   = l.UnitCode,
+            UnitPrice  = Num(l.UnitPrice),
+            LineAmount = l.LineAmount.HasValue ? Num(l.LineAmount.Value) : null,
+            TaxRate    = l.VatRate.HasValue ? Num(l.VatRate.Value) : null,
+            TaxAmount  = l.Taxes.FirstOrDefault(t => t.TaxAmount.HasValue)?.TaxAmount is { } ta
+                            ? Num(ta)
+                            : null,
+        }).ToArray();
+
+        // Kalem tutari yoksa miktar x birim fiyat ile TURETME yapilmaz: ikisi de kaynaktan
+        // gelmedigi durumda uydurma toplam gostermek, eksik veriyi gizlerdi.
+        var lineTotal = lines.Where(l => l.LineAmount.HasValue).Sum(l => l.LineAmount!.Value);
+        var taxTotal = lines.SelectMany(l => l.Taxes)
+                            .Where(t => t.TaxAmount.HasValue)
+                            .Sum(t => t.TaxAmount!.Value);
+
+        var taxSummaries = lines
+            .SelectMany(l => l.Taxes)
+            .Where(t => t.TaxAmount.HasValue || t.TaxableAmount.HasValue)
+            .GroupBy(t => new { Name = t.Name ?? "KDV", t.TaxPercent })
+            .Select(g => new Web.Models.Approval.InvoiceTaxSummary
+            {
+                TaxName       = g.Key.Name,
+                Rate          = g.Key.TaxPercent.HasValue ? Num(g.Key.TaxPercent.Value) : null,
+                TaxableAmount = g.Any(t => t.TaxableAmount.HasValue)
+                                    ? Num(g.Where(t => t.TaxableAmount.HasValue).Sum(t => t.TaxableAmount!.Value))
+                                    : null,
+                TaxAmount     = g.Any(t => t.TaxAmount.HasValue)
+                                    ? Num(g.Where(t => t.TaxAmount.HasValue).Sum(t => t.TaxAmount!.Value))
+                                    : null,
+            })
+            .ToArray();
+
+        return new Web.Models.Approval.InvoiceRenderData
+        {
+            TypeCode = document.Kind.ToString(),
+            Currency = lines.Select(l => l.CurrencyCode).FirstOrDefault(c => !string.IsNullOrWhiteSpace(c)),
+            Supplier = new Web.Models.Approval.InvoiceParty
+            {
+                Name = document.SenderName,
+                TaxNumber = string.IsNullOrWhiteSpace(document.SenderTaxNumber) ? null : document.SenderTaxNumber,
+            },
+            Customer = string.IsNullOrWhiteSpace(document.RecipientTaxNumber)
+                ? null
+                : new Web.Models.Approval.InvoiceParty { TaxNumber = document.RecipientTaxNumber },
+            Lines = mappedLines,
+            TaxSummaries = taxSummaries,
+            LineExtensionAmount = lineTotal == 0m ? null : Num(lineTotal),
+            TaxAmount = taxTotal == 0m ? null : Num(taxTotal),
+            PayableAmount = lineTotal == 0m && taxTotal == 0m ? null : Num(lineTotal + taxTotal),
+        };
     }
 
     private static Web.Models.Approval.InvoiceRenderData? ParseInvoiceRenderData(string xmlContent)

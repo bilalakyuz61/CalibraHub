@@ -461,6 +461,13 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         if (documentId <= 0) return Array.Empty<EDocumentLineData>();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+
+        // LEGACY semada (CBT_EBELGE*) kalemler IncomingDocumentLine'a HIC yazilmaz —
+        // AddAsync o kurulumlarda CBT_EBELGEKALEM'e yazar. Yalniz yerli tabloya bakmak,
+        // legacy kurulumlarda belgeyi kalemsiz (bos) gosteriyordu.
+        if (await LegacyTablesExistAsync(connection, cancellationToken))
+            return await GetLegacyLinesAsync(connection, documentId, cancellationToken);
+
         if (!await TableExistsAsync(connection, "IncomingDocumentLine", cancellationToken))
             return Array.Empty<EDocumentLineData>();
 
@@ -538,6 +545,62 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
                         ? tx
                         : (IReadOnlyList<EDocumentTaxData>)Array.Empty<EDocumentTaxData>()));
             }
+        }
+
+        return lines;
+    }
+
+    /// <summary>
+    /// LEGACY (CBT_EBELGEKALEM) kalem okuyucusu. Kalemler EBELGEMAS = CBT_EBELGEMAS.INCKEYNO
+    /// ile baglidir; GetByIdAsync legacy dalinda belge Id'si de INCKEYNO'dur, yani ayni anahtar.
+    /// </summary>
+    private async Task<IReadOnlyList<EDocumentLineData>> GetLegacyLinesAsync(
+        SqlConnection connection, int documentId, CancellationToken cancellationToken)
+    {
+        var lines = new List<EDocumentLineData>();
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [STOK_KODU],[STOK_ADI],[STRA_BF],[STRA_GCMIK],[OLCUBR],[KDV],
+                   [ISKTUT],[ACIKLAMA],[F_YEDEK1],[F_YEDEK2],[URETICI_KODU],[ALICI_STOK_KODU]
+              FROM {_ebelgeKalemTableName}
+             WHERE [EBELGEMAS] = @DocId;
+            """;
+        cmd.Parameters.Add(CreateParameter("@DocId", documentId));
+
+        await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
+        var lineNumber = 0;
+        while (await r.ReadAsync(cancellationToken))
+        {
+            lineNumber++;
+            var vatRate = NullableDecimal(r["KDV"]);
+            var lineAmount = NullableDecimal(r["F_YEDEK1"]);
+            var taxAmount = NullableDecimal(r["F_YEDEK2"]);
+
+            var taxes = taxAmount.HasValue || vatRate.HasValue
+                ? new List<EDocumentTaxData>
+                  {
+                      new(TaxTypeCode: null, Name: "KDV", TaxableAmount: lineAmount,
+                          TaxAmount: taxAmount, TaxPercent: vatRate, CurrencyTaxAmount: null,
+                          ExemptionReason: null, ExemptionReasonCode: null)
+                  }
+                : (IReadOnlyList<EDocumentTaxData>)Array.Empty<EDocumentTaxData>();
+
+            lines.Add(new EDocumentLineData(
+                LineNumber: lineNumber,
+                ItemCode: NullableString(r["STOK_KODU"]),
+                ItemName: NullableString(r["STOK_ADI"]),
+                BuyerItemCode: NullableString(r["ALICI_STOK_KODU"]),
+                ManufacturerCode: NullableString(r["URETICI_KODU"]),
+                Quantity: NullableDecimal(r["STRA_GCMIK"]) ?? 0m,
+                UnitCode: NullableString(r["OLCUBR"]),
+                UnitPrice: NullableDecimal(r["STRA_BF"]) ?? 0m,
+                CurrencyCode: null,
+                DiscountAmount: NullableDecimal(r["ISKTUT"]),
+                VatRate: vatRate,
+                LineAmount: lineAmount,
+                Description: NullableString(r["ACIKLAMA"]),
+                Taxes: taxes));
         }
 
         return lines;

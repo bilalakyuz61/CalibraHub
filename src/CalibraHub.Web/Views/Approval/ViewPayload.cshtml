@@ -10,6 +10,7 @@
     ViewData["HelpKey"] = "electronic-documents";
     ViewData["BodyClass"] = "page-document-viewer";
     var rd = Model.RenderData;
+    var hasXml = Model.HasXmlPayload;
 
     string Fmt(string? val)
     {
@@ -222,6 +223,8 @@
             </div>
         </div>
         <div class="doc-viewer__actions" id="docViewerActions">
+            @if (hasXml)
+            {
             <button type="button" class="btn btn-outline-secondary btn-sm" id="btnCopyXml" title="XML'i panoya kopyala">
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
                 Kopyala
@@ -231,17 +234,28 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 XML Indir
             </a>
+            }
             <a href="javascript:history.back()" class="btn btn-secondary btn-sm" id="btnGoBack">Geri</a>
         </div>
     </div>
 
+    @* XML olmayan (ERP kaynakli) belgede GİB görüntüsü ve XML sekmesi ANLAMSIZDIR:
+       ikisi de boş açılıyordu. Bu belgelerde tek sekme kalır ve özet varsayılan olur. *@
     <div class="doc-viewer__tabs">
-        <button class="doc-viewer__tab is-active" data-tab="resmi">Resmi (GİB) Görüntüsü</button>
-        <button class="doc-viewer__tab" data-tab="gorsel">Özet Görünüm</button>
-        <button class="doc-viewer__tab" data-tab="xml">XML</button>
+        @if (hasXml)
+        {
+            <button class="doc-viewer__tab is-active" data-tab="resmi">Resmi (GİB) Görüntüsü</button>
+        }
+        <button class="doc-viewer__tab@(hasXml ? "" : " is-active")" data-tab="gorsel">Özet Görünüm</button>
+        @if (hasXml)
+        {
+            <button class="doc-viewer__tab" data-tab="xml">XML</button>
+        }
     </div>
 
     @* ---- Resmi Görünüm pane ---- *@
+    @if (hasXml)
+    {
     <div class="doc-viewer__tab-pane is-active" id="pane-resmi" style="background-color: #525659; overflow: hidden;">
         <div id="zoomToolbar" style="flex: 0 0 auto; background: #323639; padding: 8px 16px; display: flex; justify-content: center; align-items: center; gap: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.25); z-index: 10;">
             <button type="button" class="btn btn-sm btn-dark" id="btnZoomOut" style="border: 1px solid #5f6368;" title="Uzaklaş">
@@ -262,13 +276,14 @@
             </div>
         </div>
     </div>
+    }
 
     @* ---- Görsel pane ---- *@
-    <div class="doc-viewer__tab-pane" id="pane-gorsel">
+    <div class="doc-viewer__tab-pane@(hasXml ? "" : " is-active")" id="pane-gorsel">
         @if (rd is null)
         {
             <div class="inv__no-render">
-                <p>Belge goruntulenemedi — XML parse edilemedi.</p>
+                <p>Bu belge için görüntülenebilir içerik bulunamadı — ne UBL XML'i ne de kalem kaydı var.</p>
             </div>
         }
         else
@@ -409,16 +424,23 @@
     </div>
 
     @* ---- XML pane ---- *@
+    @if (hasXml)
+    {
     <div class="doc-viewer__tab-pane" id="pane-xml">
         <div class="doc-viewer__xml-wrap">
             <pre class="doc-viewer__xml" id="xmlContent">@Model.XmlContent</pre>
         </div>
     </div>
+    }
 </div>
 
 @section Scripts {
 <script>
 (function () {
+    // XML olmayan (ERP kaynakli) belgede XML/GİB ile ilgili DOM YOKTUR; bu betik onlara
+    // kosulsuz eristigi icin null hatasi verip sekme mantigini da kirardi.
+    var HAS_XML = @(Model.HasXmlPayload ? "true" : "false");
+
     // Tab switching (Güçlü DOM Müdahalesi)
     document.querySelectorAll('.doc-viewer__tab').forEach(function (btn) {
         btn.addEventListener('click', function () {
@@ -454,7 +476,8 @@
         }).join('\n');
     }
 
-    document.querySelector('[data-tab="xml"]').addEventListener('click', function () {
+    var xmlTabBtn = document.querySelector('[data-tab="xml"]');
+    if (xmlTabBtn) xmlTabBtn.addEventListener('click', function () {
         if (xmlHighlighted) return;
         xmlHighlighted = true;
         var pre = document.getElementById('xmlContent');
@@ -465,7 +488,8 @@
     });
 
     // Copy button always copies raw XML text
-    document.getElementById('btnCopyXml').addEventListener('click', function () {
+    var btnCopyXml = document.getElementById('btnCopyXml');
+    if (btnCopyXml) btnCopyXml.addEventListener('click', function () {
         var pre = document.getElementById('xmlContent');
         var text = pre ? pre.textContent : '';
         navigator.clipboard.writeText(text).then(function () {
@@ -476,6 +500,7 @@
         });
     });
 
+    if (HAS_XML) {
     // -------- Resmi Fatura Goruntusu (XSLT) Okuyucusu (PDF Viewer Tarzi) --------
     var wrap = document.getElementById('iframeWrapper');
     var container = document.getElementById('iframeContainer');
@@ -544,9 +569,11 @@
         applyZoom();
     });
 
+    }
+
     // -------- PUSH ACTIONS TO GLOBAL SPA WORKSPACE TOOLBAR --------
     var isWorkspace = window !== window.top;
-    var activeTab = 'resmi';
+    var activeTab = HAS_XML ? 'resmi' : 'gorsel';
     
     function triggerToolbarSync() {
         if (isWorkspace && window.parent && typeof window.parent.calibraGetWorkspaceToolbarContext !== "undefined") {
@@ -582,8 +609,9 @@
         // 1. Köprü Oluşturma Fonksiyonu: Üst ebeveyn bu iframe içinden bu fonksiyonu çağırır
         window.calibraGetWorkspaceToolbarContext = function() {
             var actions = [];
-            
-            // Sabit PDF/XML Düğmeleri 
+
+            // XML yoksa XML indir/kopyala eylemleri de yoktur (tiklaninca hicbir sey yapmazdi).
+            if (HAS_XML) {
             actions.push({ 
                 id: "downloadXml", 
                 className: "btn btn-outline-primary btn-sm", 
@@ -610,11 +638,13 @@
 
         // 2. Köprü Tetikleme Fonksiyonu: Ana Çubuktan bir şeye basıldığında Buraya Döner!
         window.calibraInvokeWorkspaceToolbarAction = function(actionId) {
-            if (actionId === "copyXml") document.getElementById("btnCopyXml").click();
-            else if (actionId === "downloadXml") document.getElementById("btnDownloadXml").click();
-            else if (actionId === "zoomOut") document.getElementById("btnZoomOut").click();
-            else if (actionId === "zoomIn") document.getElementById("btnZoomIn").click();
-            else if (actionId === "fitWidth") document.getElementById("btnFitWidth").click();
+            var el = null;
+            if (actionId === "copyXml") el = document.getElementById("btnCopyXml");
+            else if (actionId === "downloadXml") el = document.getElementById("btnDownloadXml");
+            else if (actionId === "zoomOut") el = document.getElementById("btnZoomOut");
+            else if (actionId === "zoomIn") el = document.getElementById("btnZoomIn");
+            else if (actionId === "fitWidth") el = document.getElementById("btnFitWidth");
+            if (el) el.click();
         };
     }
 })();
