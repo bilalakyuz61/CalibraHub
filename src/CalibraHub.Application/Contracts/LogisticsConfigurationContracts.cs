@@ -805,3 +805,15 @@ public sealed record BomTreeSaveNoteDto(
 public sealed record SaveBomTreeResultDto(
     int RootBomId,
     IReadOnlyList<BomTreeSaveNoteDto> Notes);
+
+/// <summary>
+/// Bir reçeteyi İZLEYEN ata satırının sahibi (Reçete Ağacı "Paylaşımlı ×N" detayı).
+/// Kullanıcı sayıyı görüp "hangi ürünler?" diye soruyordu; bu liste onu yanıtlar.
+/// </summary>
+public sealed record BomReferenceDto(
+    int BomId,            // ata reçetenin kimliği
+    int ItemId,           // ata mamul
+    string ItemCode,
+    string ItemName,
+    string? VersionCode,  // ata reçetenin versiyonu (NULL = baz)
+    bool IsPinned);       // satır bu reçeteye SABİTLENMİŞ mi (yoksa bazı izliyor)

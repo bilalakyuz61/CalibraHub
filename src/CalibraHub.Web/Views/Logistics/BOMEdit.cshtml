@@ -1063,6 +1063,21 @@
 
     .bomt-tree { display: flex; flex-direction: column; gap: 2px; }
 
+    /* Sütun başlıkları. Grid tanımı .bomt-node ile BİREBİR aynı olmalı —
+       ayrışırsa başlıklar sütunlarla hizalanmaz. */
+    .bomt-head {
+        display: grid;
+        grid-template-columns: minmax(0,1fr) 96px 84px minmax(120px,1fr) auto;
+        gap: var(--space-3); align-items: center;
+        padding: 4px 8px 6px;
+        border-bottom: 1px solid var(--border-subtle);
+        margin-bottom: 4px;
+        font-size: 11px; font-weight: var(--font-weight-semibold);
+        color: var(--text-muted); letter-spacing: .01em;
+    }
+    .bomt-head-num { text-align: center; }
+    .bomt-head-act { min-width: 60px; text-align: right; }
+
     .bomt-node {
         display: grid;
         grid-template-columns: minmax(0,1fr) 96px 84px minmax(120px,1fr) auto;
@@ -1163,6 +1178,24 @@
         padding: 2px 7px; border-radius: 20px; white-space: nowrap; flex-shrink: 0;
     }
     .bomt-badge--shared  { background: rgba(245,158,11,.16); color: #b45309; }
+    .bomt-badge--click   { cursor: pointer; border: 1px solid transparent; }
+    .bomt-badge--click:hover { border-color: currentColor; }
+
+    /* Paylaşım listesi modalı */
+    .bomt-reflist { display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow-y: auto; }
+    .bomt-refrow {
+        display: flex; align-items: center; gap: 10px;
+        padding: 7px 10px; border-radius: var(--radius-md);
+        background: var(--surface-elev-2); border: 1px solid var(--border-subtle);
+        font-size: 12px;
+    }
+    .bomt-refrow.is-current { border-color: var(--accent); background: var(--accent-soft-bg); }
+    .bomt-refcode {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-weight: var(--font-weight-semibold); color: var(--text-primary); white-space: nowrap;
+    }
+    .bomt-refname { flex: 1 1 auto; color: var(--text-muted);
+                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .bomt-badge--version { background: rgba(139,92,246,.16); color: #6d28d9; }
     .bomt-badge--cycle   { background: rgba(239,68,68,.16);  color: #b91c1c; }
     .bomt-badge--new     { background: rgba(16,185,129,.16); color: #047857; }
@@ -1500,6 +1533,14 @@
                     </div>
 
                     <div class="bomt-warn" id="pttTruncWarn" style="display:none;"></div>
+
+                    <div class="bomt-head" id="pttHead">
+                        <div>Bileşen</div>
+                        <div class="bomt-head-num">Miktar</div>
+                        <div class="bomt-head-num" title="Oran olarak girilir: 0,05 = %5 fire. Patlatmada miktar (1 + fire) ile çarpılır.">Fire Oranı</div>
+                        <div>Açıklama</div>
+                        <div class="bomt-head-act">İşlem</div>
+                    </div>
 
                     <div id="pttTree" class="bomt-tree"></div>
                 </div>
@@ -3360,10 +3401,48 @@
     // Donguye karisan malzeme kimlikleri (istemci taramasi VEYA sunucu yaniti) ve
     // kullaniciya gosterilecek zincir metni.
     var pttCycleIds = new Set();
+    // Ondalik ayarlari (form: PRODUCT_TREES). Ulasilamazsa guvenli varsayilan —
+    // ekran ASLA bloklanmaz (decimalSettings.js ile ayni ilke).
+    var pttDec = { quantity: 2, rate: 2 };
+    var pttDecLoaded = false;
     var pttCycleText = '';
     function pttMarkDirty() { pttDirtyOwn = true; ptMarkDirty(); }
 
     function pttEl(id) { return document.getElementById(id); }
+
+    /* Miktar/fire hassasiyeti sirket + form ayarindan gelir (Ondalik Ayarlari
+       ekrani). Sabit 2 hane varsaymak, gram/metre gibi 3-4 haneli calisan
+       kullanicida degeri SESSIZCE yuvarlardi. */
+    function pttLoadDecimals() {
+        if (pttDecLoaded) return Promise.resolve(pttDec);
+        pttDecLoaded = true;
+        var p = (window.CalibraHub && window.CalibraHub.decimals
+                 && typeof window.CalibraHub.decimals.load === 'function')
+            ? window.CalibraHub.decimals.load('PRODUCT_TREES')
+            : fetch('/Decimals/Effective?formCode=PRODUCT_TREES', { credentials: 'same-origin' })
+                .then(function (r) { return r.ok ? r.json() : null; });
+        return Promise.resolve(p).then(function (d) {
+            if (d) {
+                if (d.quantity != null) pttDec.quantity = d.quantity;
+                if (d.rate != null) pttDec.rate = d.rate;
+            }
+            return pttDec;
+        }).catch(function () { return pttDec; });
+    }
+
+    function pttRound(v, digits) {
+        var n = Number(v) || 0;
+        if (window.CalibraHub && window.CalibraHub.decimals
+            && typeof window.CalibraHub.decimals.roundTo === 'function') {
+            return window.CalibraHub.decimals.roundTo(n, digits);
+        }
+        var f = Math.pow(10, digits);
+        return Math.sign(n) * Math.round(Math.abs(n) * f) / f;
+    }
+
+    function pttStep(digits) {
+        return digits > 0 ? '0.' + new Array(digits).join('0') + '1' : '1';
+    }
     function pttRootKey() { return (ptCurrentItemId || 0) + '|' + (ptCurrentId || 0); }
 
     function pttOnTabShown() {
@@ -3396,6 +3475,7 @@
         }
 
         pttSetSaveEnabled(true);
+        pttLoadDecimals().then(function() { if (pttModel) pttRender(); });
         var hint = pttEl('pttHint');
         if (hint && !pttModel) hint.textContent = 'mamul #' + ptCurrentItemId
             + (ptCurrentId ? ' / recete #' + ptCurrentId : ' / recete kaydedilmemis');
@@ -3647,7 +3727,16 @@
         if (node.bomVersionCode) nameCell.appendChild(pttBadge('Versiyon: ' + node.bomVersionCode, 'version'));
         // Paylasimli uyarisi: burada yapilan degisiklik kaydedilirken versiyon turetilir.
         if (!isRoot && node.referenceCount > 1) {
-            nameCell.appendChild(pttBadge('Paylasimli x' + node.referenceCount, 'shared'));
+            // Rozet TIKLANABILIR: sayiyi gormek yetmiyordu, "hangi urunler?"
+            // sorusu cevapsiz kaliyordu. Tiklayinca listeyi modalda gosterir.
+            var sb = pttBadge('Paylaşımlı ×' + node.referenceCount, 'shared');
+            sb.classList.add('bomt-badge--click');
+            sb.title = 'Bu reçeteyi kullanan ürünleri gör';
+            sb.addEventListener('click', function (e) {
+                e.stopPropagation();
+                pttShowReferences(node);
+            });
+            nameCell.appendChild(sb);
         }
         if (node._isNew) nameCell.appendChild(pttBadge('Yeni', 'new'));
         row.appendChild(nameCell);
@@ -3766,15 +3855,27 @@
     }
 
     function pttNumInput(node, field, placeholder) {
+        var digits = (field === 'scrapRatio') ? pttDec.rate : pttDec.quantity;
         var wrap = document.createElement('div');
         var i = document.createElement('input');
-        i.type = 'number'; i.className = 'pte-input'; i.step = 'any'; i.min = '0';
+        i.type = 'number'; i.className = 'pte-input'; i.min = '0';
+        i.step = pttStep(digits);
         i.placeholder = placeholder;
-        i.value = (node[field] != null) ? node[field] : '';
+        i.style.textAlign = 'center';
+        var v0 = (node[field] != null) ? pttRound(node[field], digits) : '';
+        i.value = (v0 === '') ? '' : v0;
+        // Yazarken serbest birak (kullanici "0,12" yazarken kesilmesin),
+        // odak cikinca ayarli haneye yuvarla — ekranda gorunen ile kaydedilen ayni olsun.
         i.addEventListener('input', function() {
             var v = parseFloat(i.value);
             node[field] = isNaN(v) ? 0 : v;
             pttMarkDirty();
+        });
+        i.addEventListener('blur', function() {
+            if (i.value === '') { node[field] = 0; i.value = pttRound(0, digits); return; }
+            var r = pttRound(parseFloat(i.value), digits);
+            node[field] = r;
+            i.value = r;
         });
         wrap.appendChild(i);
         return wrap;
@@ -4128,6 +4229,87 @@
             + ' alt recete yerinde degistirilmedi; her biri icin yeni versiyon turetildi '
             + 've bu urunun satiri ona sabitlendi: ' + lines.join(' | ');
         showMsg('Agac kaydedildi - ' + derived.length + ' versiyon turetildi.', true);
+    }
+
+    /* "Paylasimli xN" detayi — bu alt receteyi HANGI urunlerin kullandigi.
+       Sayi tek basina eyleme donusmuyordu: kullanici degisikligin kimleri
+       etkileyecegini bilmeden karar veremez. */
+    async function pttShowReferences(node) {
+        if (!node.bomId) { showMsg('Bu bileşenin kayıtlı reçetesi yok.', false); return; }
+
+        var body = '<div class="bomt-empty">Yükleniyor…</div>';
+        var back = pttModal(
+            (node.itemCode || '') + ' — Bu Reçeteyi Kullanan Ürünler', body);
+
+        try {
+            var r = await fetch('/Logistics/BomReferences?bomId=' + encodeURIComponent(node.bomId),
+                                { credentials: 'include' });
+            var d = await r.json();
+            var host = back.querySelector('[data-body]');
+            if (!r.ok || !d.success) {
+                host.innerHTML = '<div class="bomt-empty">Liste alınamadı.</div>';
+                return;
+            }
+            var items = d.items || [];
+            if (!items.length) {
+                host.innerHTML = '<div class="bomt-empty">Bu reçeteyi kullanan başka ürün yok.</div>';
+                return;
+            }
+            var wrap = document.createElement('div');
+            wrap.className = 'bomt-reflist';
+            items.forEach(function (it) {
+                var row = document.createElement('div');
+                row.className = 'bomt-refrow'
+                    + (it.bomId === ptCurrentId ? ' is-current' : '');
+                var code = document.createElement('span');
+                code.className = 'bomt-refcode'; code.textContent = it.itemCode;
+                var name = document.createElement('span');
+                name.className = 'bomt-refname'; name.textContent = it.itemName || '';
+                row.appendChild(code); row.appendChild(name);
+                if (it.versionCode) row.appendChild(pttBadge('Versiyon: ' + it.versionCode, 'version'));
+                // Sabitlenmis satir, BAZ recete degisince ETKILENMEZ — ayrimi goster.
+                row.appendChild(pttBadge(it.isPinned ? 'Sabitlenmiş' : 'Bazı izliyor',
+                                         it.isPinned ? 'version' : 'shared'));
+                if (it.bomId === ptCurrentId) row.appendChild(pttBadge('Açık olan', 'new'));
+                wrap.appendChild(row);
+            });
+            host.innerHTML = '';
+            var note = document.createElement('div');
+            note.style.cssText = 'font-size:11.5px;color:var(--text-muted);margin-bottom:10px;line-height:1.5;';
+            note.textContent = 'Bu alt reçeteyi ağaçta değiştirirseniz yerinde ezilmez: '
+                + 'otomatik yeni bir versiyon türetilir ve yalnız açık olan ürünün satırı '
+                + 'ona sabitlenir. Aşağıdaki diğer ürünler etkilenmez.';
+            host.appendChild(note);
+            host.appendChild(wrap);
+        } catch (e) {
+            var h2 = back.querySelector('[data-body]');
+            if (h2) h2.innerHTML = '<div class="bomt-empty">Liste alınamadı: '
+                + escHtml(e.message || '') + '</div>';
+        }
+    }
+
+    /* Basit bilgi modali — ekranin mevcut overlay desenini kullanir
+       (native alert YASAK; tema uyumu ve Esc/backdrop kapatma buradan gelir). */
+    function pttModal(title, bodyHtml) {
+        var back = document.createElement('div');
+        back.className = 'pta-overlay is-open';
+        back.innerHTML =
+            '<div class="pta-panel" style="max-width:560px;">'
+          + '  <div class="pta-header"><h3></h3></div>'
+          + '  <div class="pta-section" data-body></div>'
+          + '  <div class="pta-section" style="display:flex;justify-content:flex-end;">'
+          + '    <button type="button" class="bomt-btn" data-close>Kapat</button>'
+          + '  </div>'
+          + '</div>';
+        back.querySelector('h3').textContent = title;
+        back.querySelector('[data-body]').innerHTML = bodyHtml;
+        document.body.appendChild(back);
+        function close() { back.remove(); document.removeEventListener('keydown', onKey); }
+        function onKey(e) { if (e.key === 'Escape') close(); }
+        back.querySelector('[data-close]').addEventListener('click', close);
+        back.addEventListener('click', function (e) { if (e.target === back) close(); });
+        document.addEventListener('keydown', onKey);
+        return back;
     }
 
     /* Silme onayi - native confirm() YASAK (CLAUDE.md silme onay standardi):

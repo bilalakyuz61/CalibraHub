@@ -213,6 +213,14 @@ public interface ILogisticsConfigurationRepository
         IReadOnlyCollection<int> bomIds, CancellationToken cancellationToken);
 
     /// <summary>
+    /// 2026-08-30: <see cref="GetBomReferenceCountsAsync"/> ile AYNI eslesme kuralinin
+    /// ayrintili hali — sayiyi degil, receteyi izleyen ATA MAMULLERI doner.
+    /// "Paylasimli x3" rozetine tiklayinca hangi urunler oldugunu gostermek icin.
+    /// </summary>
+    Task<IReadOnlyList<BomReferenceDto>> GetBomReferencesAsync(
+        int bomId, CancellationToken cancellationToken);
+
+    /// <summary>
     /// 2026-08-29 (Recete Agaci): verilen malzemelerin BAZ recete Id'si (VersionCode IS NULL,
     /// IsActive=1) — ItemId+ConfigId anahtariyla. Agac gezinirken her dugum icin ayri
     /// sorgu atmamak icin toplu. Recetesi olmayan malzeme sonucta yer almaz.

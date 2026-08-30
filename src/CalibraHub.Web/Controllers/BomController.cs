@@ -365,6 +365,24 @@ public sealed class BomController : Controller
     }
 
     /// <summary>
+    /// "Paylasimli xN" detayi: bu receteyi izleyen ata mamullerin listesi.
+    /// GET /Logistics/BomReferences?bomId=42
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> BomReferences(int bomId, CancellationToken ct)
+    {
+        try
+        {
+            var rows = await _logisticsConfigurationService.GetBomReferencesAsync(bomId, ct);
+            return Ok(new { success = true, items = rows });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Agaci kaydeder. Paylasimli bir alt recete degistiyse yerinde EZILMEZ — otomatik
     /// versiyon turetilir ve ata satiri ona sabitlenir (kullanici karari 2026-08-29).
     /// Yapilan her islem `notes` altinda raporlanir; istemci bunu kullaniciya gosterir.

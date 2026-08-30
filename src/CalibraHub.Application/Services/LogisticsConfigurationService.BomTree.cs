@@ -143,6 +143,10 @@ public sealed partial class LogisticsConfigurationService
     /// <summary>
     /// Toplu okunan gerçekleri (referans sayısı, malzeme tipi) ağaca tek gezinmede işler.
     /// </summary>
+    public Task<IReadOnlyList<BomReferenceDto>> GetBomReferencesAsync(
+        int bomId, CancellationToken cancellationToken)
+        => _repository.GetBomReferencesAsync(bomId, cancellationToken);
+
     private static BomTreeNodeDto ApplyNodeFacts(
         BomTreeNodeDto node,
         IReadOnlyDictionary<int, int> counts,

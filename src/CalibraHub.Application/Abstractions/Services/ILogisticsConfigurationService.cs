@@ -140,6 +140,10 @@ public interface ILogisticsConfigurationService
     Task<BomTreeDto?> GetBomTreeAsync(
         int itemId, int? configId, int? bomId, CancellationToken cancellationToken);
 
+    /// <summary>Bir receteyi izleyen ata mamuller ("Paylasimli xN" rozetinin detayi).</summary>
+    Task<IReadOnlyList<BomReferenceDto>> GetBomReferencesAsync(
+        int bomId, CancellationToken cancellationToken);
+
     /// <summary>
     /// Agaci kaydeder: her dugum icin BOM upsert. Yalniz DEGISEN dugumler yazilir.
     /// Paylasimli (ReferenceCount &gt; 1) bir alt recete degistiyse yerinde EZILMEZ —

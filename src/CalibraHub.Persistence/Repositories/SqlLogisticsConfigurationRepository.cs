@@ -3885,6 +3885,56 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     }
 
     /// <summary>
+    /// Bkz. ILogisticsConfigurationRepository.GetBomReferencesAsync.
+    /// Eslesme kurali GetBomReferenceCountsAsync ile AYNI olmali — ayrisirsa rozetteki
+    /// sayi ile modaldaki satir sayisi tutmaz ve kullanici hangisine inanacagini bilemez.
+    /// </summary>
+    public async Task<IReadOnlyList<BomReferenceDto>> GetBomReferencesAsync(
+        int bomId, CancellationToken cancellationToken)
+    {
+        if (bomId <= 0) return Array.Empty<BomReferenceDto>();
+
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT p.[Id], p.[ItemId], pi.[Code], ISNULL(pi.[Name], pi.[Code]),
+                   p.[VersionCode],
+                   CASE WHEN l.[ComponentBomId] IS NULL THEN 0 ELSE 1 END
+            FROM {_productTreesTableName} b
+            -- tenant-ok: BOMLine'in kiracisi ata recetesinden gelir; p JOIN'i
+            -- p.[CompanyId] ile suzuyor.
+            INNER JOIN {_productTreeLinesTableName} l
+                ON  l.[ComponentBomId] = b.[Id]
+                OR (l.[ComponentBomId] IS NULL
+                    AND b.[VersionCode] IS NULL
+                    AND l.[ItemId] = b.[ItemId]
+                    AND ISNULL(l.[ConfigId], -1) = ISNULL(b.[ConfigId], -1))
+            INNER JOIN {_productTreesTableName} p
+                ON p.[Id] = l.[BOMId] AND p.[IsActive] = 1 AND p.[CompanyId] = @CompanyId
+            INNER JOIN {_stockCardsTableName} pi ON pi.[Id] = p.[ItemId]
+            WHERE b.[Id] = @BomId AND b.[IsActive] = 1 AND b.[CompanyId] = @CompanyId
+            ORDER BY pi.[Code];
+            """;
+        command.Parameters.Add(new SqlParameter("@BomId", bomId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
+
+        var rows = new List<BomReferenceDto>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            rows.Add(new BomReferenceDto(
+                BomId:       reader.GetInt32(0),
+                ItemId:      reader.GetInt32(1),
+                ItemCode:    reader.GetString(2),
+                ItemName:    reader.GetString(3),
+                VersionCode: reader.IsDBNull(4) ? null : reader.GetString(4),
+                IsPinned:    reader.GetInt32(5) == 1));
+        }
+        return rows;
+    }
+
+    /// <summary>
     /// Bkz. ILogisticsConfigurationRepository.GetBaseBomIdsAsync.
     /// Anahtar (ItemId, ConfigKey) — ConfigKey = ConfigId ?? 0, cunku NULL sozluk
     /// anahtari olarak esitlik karsilastirmasinda tuzak uretir.
