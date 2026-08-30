@@ -565,23 +565,62 @@ export default function SmartBoard(props) {
     var wrap = body.querySelector('.cst-wrap')
     if (wrap) targets.push(wrap)
 
-    function maybeLoad(el) {
-      if (!hasMore || loading) return
-      if (el.scrollHeight - el.scrollTop - el.clientHeight <= 320) handleLoadMore()
+    /* GORUNMEYEN ve KAYDIRILMAYAN kap sayfa CEKMEZ (2026-08-30 hata duzeltmesi).
+
+       Workspace sekmeleri kapatilmaz, yalnizca GIZLENIR (display:none iframe).
+       Gizli kapta scrollHeight = clientHeight = 0 oldugundan "dibe geldik" kosulu
+       (0 - 0 - 0 <= 320) HER ZAMAN dogruydu: arka plandaki liste kendi kendine
+       sayfa sayfa TUM kayitlari cekiyordu. Olculdu: gizli e-Fatura sekmesi 15
+       saniyede 2.801 -> 4.151 satira cikti, JS yigini 83 -> 301 MB. Kullanici bunu
+       "e-Fatura sekmesi 4,9 GB RAM yiyor" olarak bildirdi.
+
+       Ayrica karar TEK kural haline getirildi: kaydirilan kap hangisiyse (tablo
+       modunda .cst-wrap, kart modunda govde) yalnizca ONUN dibi olculur. Her hedefi
+       tek tek "dibe geldi mi" diye sinamak, kaydirmayan dis kabi (scrollHeight ==
+       clientHeight) surekli "dipte" sayip ayni donguyu geri getiriyordu. */
+    function isVisible(el) {
+      // offsetParent null => kendisi ya da bir atasi display:none (gizli sekme).
+      return el.offsetParent !== null && el.clientHeight > 0
     }
-    function onScroll(e) { maybeLoad(e.currentTarget) }
+
+    function maybeLoad() {
+      if (!hasMore || loading) return
+
+      var visible = targets.filter(isVisible)
+      if (visible.length === 0) return          // gizli sekme: hicbir sey yukleme
+
+      var scrollables = visible.filter(function (el) {
+        return el.scrollHeight > el.clientHeight + 8
+      })
+
+      // Hicbiri kaydirilamiyorsa icerik ekrani doldurmamistir -> bir sayfa daha.
+      if (scrollables.length === 0) { handleLoadMore(); return }
+
+      for (var i = 0; i < scrollables.length; i++) {
+        var el = scrollables[i]
+        if (el.scrollHeight - el.scrollTop - el.clientHeight <= 320) { handleLoadMore(); return }
+      }
+    }
+
+    function onScroll() { maybeLoad() }
     targets.forEach(function (t) { t.addEventListener('scroll', onScroll, { passive: true }) })
 
-    // Icerik henuz kaydirilamiyorsa (ilk sayfa ekrani doldurmadi) bir sonrakini iste.
-    var t = setTimeout(function () {
-      for (var i = 0; i < targets.length; i++) {
-        if (targets[i].scrollHeight > targets[i].clientHeight + 8) return
-      }
-      if (hasMore && !loading) handleLoadMore()
-    }, 250)
+    // Ilk sayfa ekrani doldurmadiysa bir sonrakini iste.
+    var t = setTimeout(maybeLoad, 250)
+
+    /* Gizli sekme GORUNUR olunca kap yuksekligi 0'dan gercek degere ciker; bu an
+       ResizeObserver ile yakalanir ve kontrol o zaman calisir. Aksi halde gizliyken
+       atlanan yukleme, sekmeye donuldugunde kullanici kaydirana kadar hic
+       tetiklenmezdi. */
+    var ro = null
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(function () { maybeLoad() })
+      targets.forEach(function (x) { ro.observe(x) })
+    }
 
     return function () {
       clearTimeout(t)
+      if (ro) ro.disconnect()
       targets.forEach(function (x) { x.removeEventListener('scroll', onScroll) })
     }
   }, [isPaginated, hasActiveFilter, hasMore, loading, handleLoadMore, entities.length, viewMode])
