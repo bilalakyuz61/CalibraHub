@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Auditing;
 using CalibraHub.Application.Constants;
@@ -798,6 +798,10 @@ public sealed class WorkOrderService : IWorkOrderService
                 UnitId           = null, // BOMLineWithName birim taşımıyor; ileride Item default birimi sızdırılabilir
                 FromLocationId   = fromLocationId,
                 Notes            = null,
+                // Mamule OZEL yari mamul recetesi burada korunur. Kopyalanmazsa, bu
+                // bilesen icin ayri bir is emri acildiginda yari mamulun BAZ recetesine
+                // dusulur ve ozellestirme SESSIZCE kaybolur.
+                ComponentBomId   = l.ComponentBomId,
             });
         }
 

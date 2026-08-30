@@ -18626,6 +18626,19 @@ END;
                 ALTER TABLE [{schemaForSql}].[WorkOrderComponent] ADD [FromLocationId] INT NULL;
             END;
 
+            -- WorkOrderComponent.ComponentBomId (2026-08-30) — bilesen yari mamulse,
+            -- ATA RECETE SATIRINDA sabitlenmis alt recete/versiyon (BOMLine.ComponentBomId)
+            -- buraya KOPYALANIR. Neden kopya: is emri, o gun hangi receteyle uretildigini
+            -- kendi uzerinde tasimali; recete sonradan degisince gecmis emrin anlami kaymasin.
+            -- Kopyalanmasaydi mamule ozel yari mamul recetesi uretim zincirinde KAYBOLURDU
+            -- (is emri servisi yari mamulun BAZ recetesine duser).
+            -- FK yok (KISS): salt izlenebilirlik/secim ipucu; recete secimi ayrica dogrulanir.
+            IF OBJECT_ID(N'[{schemaForSql}].[WorkOrderComponent]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[WorkOrderComponent]', N'ComponentBomId') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[WorkOrderComponent] ADD [ComponentBomId] INT NULL;
+            END;
+
             -- ===== Faz 3a: WorkOrderOperation (is emri operasyon adimlari) =====
             -- Release sirasinda Routing'in operasyonlari kopyalanir, shop-floor uzerinden takip edilir.
             -- StartedBy/CompletedBy referansi Personnel.Id (INT) — User degil, ciddi bicimde uretim katindaki

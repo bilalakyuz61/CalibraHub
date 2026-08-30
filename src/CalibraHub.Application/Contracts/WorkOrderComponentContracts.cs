@@ -1,4 +1,4 @@
-namespace CalibraHub.Application.Contracts;
+﻿namespace CalibraHub.Application.Contracts;
 
 /// <summary>
 /// İş emri bileşen DTO — Faz 2 BOM patlatma çıktısı + display alanları.
@@ -28,7 +28,12 @@ public sealed record WorkOrderComponentDto(
     // `line.FromLocationId ?? woLocationId` ile bunu okur. Display alanları Location JOIN'inden.
     int? FromLocationId = null,
     string? FromLocationCode = null,
-    string? FromLocationName = null);
+    string? FromLocationName = null,
+    // Sabitlenmiş alt reçete (2026-08-30). NULL = bileşen kendi BAZ reçetesini izler.
+    // VersionCode display amaçlı (BOM JOIN'inden) — kullanıcı hangi sürümle
+    // üretildiğini görebilsin.
+    int? ComponentBomId = null,
+    string? ComponentBomVersionCode = null);
 
 /// <summary>
 /// Patlatma sonucu özeti — Frontend toast/log için.

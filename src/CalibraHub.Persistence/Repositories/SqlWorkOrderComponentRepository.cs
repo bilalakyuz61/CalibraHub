@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
@@ -39,12 +39,14 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                    c.[UnitId], u.[Code] AS UnitCode,
                    c.[Notes], c.[Created], c.[Updated],
                    ISNULL(i.[TrackingType], 'None') AS TrackingType, ISNULL(i.[AutoSerial], 0) AS AutoSerial,
-                   c.[FromLocationId], loc.[LocationCode] AS FromLocationCode, loc.[LocationName] AS FromLocationName
+                   c.[FromLocationId], loc.[LocationCode] AS FromLocationCode, loc.[LocationName] AS FromLocationName,
+                   c.[ComponentBomId], cb.[VersionCode] AS ComponentBomVersionCode
             FROM {_table} c
             LEFT JOIN [{_schema}].[Items] i ON i.[Id] = c.[ItemId]
             LEFT JOIN [{_schema}].[ItemConfiguration] cfg ON cfg.[Id] = c.[ConfigId]
             LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = c.[UnitId]
             LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = c.[FromLocationId]
+            LEFT JOIN [{_schema}].[BOM] cb ON cb.[Id] = c.[ComponentBomId]
             WHERE c.[WorkOrderId] = @WorkOrderId AND c.[CompanyId] = @CompanyId
             ORDER BY c.[Id];";
         cmd.Parameters.AddWithValue("@WorkOrderId", workOrderId);
@@ -74,7 +76,9 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                 AutoSerial:       !r.IsDBNull(16) && r.GetBoolean(16),
                 FromLocationId:   r.IsDBNull(17) ? null : r.GetInt32(17),
                 FromLocationCode: r.IsDBNull(18) ? null : r.GetString(18),
-                FromLocationName: r.IsDBNull(19) ? null : r.GetString(19)));
+                FromLocationName: r.IsDBNull(19) ? null : r.GetString(19),
+                ComponentBomId:   r.IsDBNull(20) ? null : r.GetInt32(20),
+                ComponentBomVersionCode: r.IsDBNull(21) ? null : r.GetString(21)));
         }
         return list;
     }
@@ -90,12 +94,14 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                    c.[UnitId], u.[Code] AS UnitCode,
                    c.[Notes], c.[Created], c.[Updated],
                    ISNULL(i.[TrackingType], 'None') AS TrackingType, ISNULL(i.[AutoSerial], 0) AS AutoSerial,
-                   c.[FromLocationId], loc.[LocationCode] AS FromLocationCode, loc.[LocationName] AS FromLocationName
+                   c.[FromLocationId], loc.[LocationCode] AS FromLocationCode, loc.[LocationName] AS FromLocationName,
+                   c.[ComponentBomId], cb.[VersionCode] AS ComponentBomVersionCode
             FROM {_table} c
             LEFT JOIN [{_schema}].[Items] i ON i.[Id] = c.[ItemId]
             LEFT JOIN [{_schema}].[ItemConfiguration] cfg ON cfg.[Id] = c.[ConfigId]
             LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = c.[UnitId]
             LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = c.[FromLocationId]
+            LEFT JOIN [{_schema}].[BOM] cb ON cb.[Id] = c.[ComponentBomId]
             WHERE c.[Id] = @Id AND c.[CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
         cmd.Parameters.AddWithValue("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId());
@@ -122,7 +128,9 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
             AutoSerial:       !r.IsDBNull(16) && r.GetBoolean(16),
             FromLocationId:   r.IsDBNull(17) ? null : r.GetInt32(17),
             FromLocationCode: r.IsDBNull(18) ? null : r.GetString(18),
-            FromLocationName: r.IsDBNull(19) ? null : r.GetString(19));
+            FromLocationName: r.IsDBNull(19) ? null : r.GetString(19),
+            ComponentBomId:   r.IsDBNull(20) ? null : r.GetInt32(20),
+            ComponentBomVersionCode: r.IsDBNull(21) ? null : r.GetString(21));
     }
 
     public async Task ReplaceForWorkOrderAsync(int workOrderId, IReadOnlyCollection<WorkOrderComponent> components, CancellationToken ct)
@@ -149,10 +157,10 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                 ins.CommandText = $@"
                     INSERT INTO {_table}
                         ([WorkOrderId],[ItemId],[ConfigId],[RequiredQuantity],
-                         [IssuedQuantity],[ScrapRate],[UnitId],[FromLocationId],[Notes],[Created],[CompanyId])
+                         [IssuedQuantity],[ScrapRate],[UnitId],[FromLocationId],[Notes],[ComponentBomId],[Created],[CompanyId])
                     VALUES
                         (@WorkOrderId,@ItemId,@ConfigId,@RequiredQuantity,
-                         @IssuedQuantity,@ScrapRate,@UnitId,@FromLocationId,@Notes,SYSUTCDATETIME(),
+                         @IssuedQuantity,@ScrapRate,@UnitId,@FromLocationId,@Notes,@ComponentBomId,SYSUTCDATETIME(),
                          (SELECT p.[CompanyId] FROM [{_schema}].[WorkOrder] p WHERE p.[Id] = @WorkOrderId));";
                 ins.Parameters.AddWithValue("@WorkOrderId", workOrderId);
                 ins.Parameters.AddWithValue("@ItemId", c.ItemId);
@@ -163,6 +171,7 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                 ins.Parameters.AddWithValue("@UnitId", (object?)c.UnitId ?? DBNull.Value);
                 ins.Parameters.AddWithValue("@FromLocationId", (object?)c.FromLocationId ?? DBNull.Value);
                 ins.Parameters.AddWithValue("@Notes", (object?)c.Notes ?? DBNull.Value);
+                ins.Parameters.AddWithValue("@ComponentBomId", (object?)c.ComponentBomId ?? DBNull.Value);
                 await ins.ExecuteNonQueryAsync(ct);
             }
 
@@ -194,15 +203,16 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
         cmd.CommandText = $@"
             INSERT INTO {_table}
                 ([WorkOrderId],[ItemId],[ConfigId],[RequiredQuantity],
-                 [IssuedQuantity],[ScrapRate],[UnitId],[FromLocationId],[Notes],[Created],[CompanyId])
+                 [IssuedQuantity],[ScrapRate],[UnitId],[FromLocationId],[Notes],[ComponentBomId],[Created],[CompanyId])
             VALUES
                 (@WorkOrderId,@ItemId,@ConfigId,@RequiredQuantity,
-                 0,@ScrapRate,@UnitId,@FromLocationId,@Notes,SYSUTCDATETIME(),
+                 0,@ScrapRate,@UnitId,@FromLocationId,@Notes,@ComponentBomId,SYSUTCDATETIME(),
                  (SELECT p.[CompanyId] FROM [{_schema}].[WorkOrder] p WHERE p.[Id] = @WorkOrderId));
             SELECT CAST(SCOPE_IDENTITY() AS INT);";
         cmd.Parameters.AddWithValue("@WorkOrderId", c.WorkOrderId);
         cmd.Parameters.AddWithValue("@ItemId", c.ItemId);
         cmd.Parameters.AddWithValue("@ConfigId", (object?)c.ConfigId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ComponentBomId", (object?)c.ComponentBomId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@RequiredQuantity", c.RequiredQuantity);
         cmd.Parameters.AddWithValue("@ScrapRate", c.ScrapRate);
         cmd.Parameters.AddWithValue("@UnitId", (object?)c.UnitId ?? DBNull.Value);

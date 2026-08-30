@@ -44,6 +44,16 @@ public sealed class WorkOrderComponent
 
     public string? Notes { get; init; }
 
+    /// <summary>
+    /// Bileşen yarı mamulse, ata reçete satırında SABİTLENMİŞ alt reçete (BOM.Id).
+    /// Patlatma anında <c>BOMLine.ComponentBomId</c>'den kopyalanır; NULL ise bileşen
+    /// kendi BAZ reçetesini izler.
+    ///
+    /// <para>Kopya olması bilinçli: iş emri hangi reçeteyle üretildiğini kendi üzerinde
+    /// taşır. Reçete sonradan değişse bile geçmiş emrin anlamı kaymaz.</para>
+    /// </summary>
+    public int? ComponentBomId { get; init; }
+
     public DateTime Created { get; init; }
     public DateTime? Updated { get; init; }
 }
