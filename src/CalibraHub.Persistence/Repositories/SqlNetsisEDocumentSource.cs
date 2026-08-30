@@ -7,6 +7,7 @@ using CalibraHub.Persistence.Services;
 using Microsoft.Data.SqlClient;
 using System.IO.Compression;
 using System.Text;
+using System.Xml.Linq;
 
 namespace CalibraHub.Persistence.Repositories;
 
@@ -60,7 +61,7 @@ public sealed class SqlNetsisEDocumentSource : IOfflineEDocumentSource
     private static async Task<List<OfflineEDocument>> ReadInvoicesAsync(
         SqlConnection conn, DateTime since, int maxRows, int afterKey, CancellationToken ct)
     {
-        var headers = new List<(int Inc, IncomingDocument Doc)>();
+        var headers = new List<(int Inc, string CariVkn, string CariTckn, IncomingDocument Doc)>();
 
         await using (var cmd = conn.CreateCommand())
         {
@@ -92,7 +93,7 @@ public sealed class SqlNetsisEDocumentSource : IOfflineEDocumentSource
                 var docNo = Str(r["FATIRS_NO"]);
                 var tarih = r["TARIH"] as DateTime? ?? DateTime.Today;
 
-                headers.Add((inc, new IncomingDocument
+                headers.Add((inc, Str(r["CariVkn"]), Str(r["CariTckn"]), new IncomingDocument
                 {
                     IntegratorSettingsId = null,                 // OFFLINE: entegrator YOK
                     IngestSource = EDocumentIngestSource.Offline,
@@ -124,12 +125,22 @@ public sealed class SqlNetsisEDocumentSource : IOfflineEDocumentSource
         }
 
         var docs = new List<OfflineEDocument>(headers.Count);
-        foreach (var (inc, header) in headers)
+        foreach (var (inc, cariVkn, cariTckn, header) in headers)
         {
+            // GELEN kuyruguna yalniz GELEN belge girer. Yon zarftan belirlenir:
+            // zarftaki SATICI, ERP satirindaki CARI ise belge bize gelmistir; satici
+            // baskasiysa (yani biz) belge bizim KESTIGIMIZ faturadir.
+            //
+            // Neden FTIRSIP yetmiyor: olcumde FTIRSIP='2' (alis) isaretli 150 belgenin
+            // 22'si aslinda bizim kestigimiz faturaydi (%15). O belgeler listede
+            // "Gonderen" olarak ALICIYI gosteriyordu — kullanici bildirdi.
+            var envelopeXml = await ReadEnvelopeXmlAsync(conn, "TBLEFATMAS", inc, ct);
+            if (IsOutgoing(envelopeXml, cariVkn, cariTckn, header.Kind)) continue;
+
             var lines = await ReadInvoiceLinesAsync(conn, inc, ct);
             var docTaxes = await ReadTaxesAsync(conn, "TBLEFATMASTAX", "EFATMASINC", inc, ct);
             docs.Add(new OfflineEDocument(
-                await WithEnvelopeXmlAsync(conn, "TBLEFATMAS", inc, header, ct),
+                WithEnvelopeXml(header, envelopeXml),
                 new EDocumentDetails(lines, docTaxes, Shipment: null)));
         }
         return docs;
@@ -271,12 +282,23 @@ public sealed class SqlNetsisEDocumentSource : IOfflineEDocumentSource
             }
         }
 
+        // Kendi VKN'miz veriden TURETILIR: her e-belgede taraflardan biri BIZIZ, dolayisiyla
+        // gonderici/alici alanlarinda EN SIK gecen VKN sirketin kendisidir. Ayar gerektirmez.
+        var ownVkn = await ResolveOwnTaxNumberAsync(conn, ct);
+
         var docs = new List<OfflineEDocument>(headers.Count);
         foreach (var (inc, header, ship) in headers)
         {
+            // Sevkiyati BIZ yaptiysak belge GIDENDIR — gelen kuyruguna girmez.
+            if (!string.IsNullOrWhiteSpace(ownVkn)
+                && string.Equals(header.SenderTaxNumber?.Trim(), ownVkn, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             var lines = await ReadDespatchLinesAsync(conn, inc, ct);
             docs.Add(new OfflineEDocument(
-                await WithEnvelopeXmlAsync(conn, "TBLEIRSMAS", inc, header, ct),
+                WithEnvelopeXml(header, await ReadEnvelopeXmlAsync(conn, "TBLEIRSMAS", inc, ct)),
                 new EDocumentDetails(lines, Array.Empty<EDocumentTaxData>(), ship)));
         }
         return docs;
@@ -322,6 +344,41 @@ public sealed class SqlNetsisEDocumentSource : IOfflineEDocumentSource
     }
 
     // ── ortak ───────────────────────────────────────────────────────────────────
+    /// <summary>
+    /// Sirketin kendi VKN'si — e-irsaliye taraf alanlarinda EN SIK gecen deger.
+    ///
+    /// <para>Neden veriden turetiliyor: e-belgede taraflardan biri HER ZAMAN biziz, yani
+    /// "en sik gecen VKN" tanim geregi sirketin kendisidir. Netsis'te bu bilgiyi tutan
+    /// tek bir parametre kolonu bulunamadi; CalibraHub'daki sirket VKN'si ise musteri
+    /// kurulumlarinda bos/ornek deger olabiliyor (bu kurulumda oyleydi) — ona guvenmek
+    /// suzgeci sessizce ise yaramaz hale getirirdi.</para>
+    /// </summary>
+    private static async Task<string?> ResolveOwnTaxNumberAsync(SqlConnection conn, CancellationToken ct)
+    {
+        try
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT TOP 1 Vkn
+                  FROM (
+                        SELECT LTRIM(RTRIM([SUPP_CARI_VERGINUMARASI])) AS Vkn FROM [dbo].[TBLEIRSMAS]
+                        UNION ALL
+                        SELECT LTRIM(RTRIM([CUST_CARI_VERGINUMARASI]))       FROM [dbo].[TBLEIRSMAS]
+                       ) t
+                 WHERE NULLIF(Vkn, '') IS NOT NULL
+                 GROUP BY Vkn
+                 ORDER BY COUNT(*) DESC;
+                """;
+            return await cmd.ExecuteScalarAsync(ct) as string;
+        }
+        catch
+        {
+            // Turetilemezse suzgec uygulanmaz: belge KAYBETMEK, fazladan belge
+            // gostermekten agir bir hatadir.
+            return null;
+        }
+    }
+
     // ── ZARF (UBL) XML'i ────────────────────────────────────────────────────────
 
     public async Task<string?> TryReadEnvelopeXmlAsync(
@@ -341,13 +398,71 @@ public sealed class SqlNetsisEDocumentSource : IOfflineEDocumentSource
     }
 
     /// <summary>
+    /// Zarftaki SATICI, ERP satirindaki cari DEGILSE belge GIDENDIR (satici biziz).
+    /// Kendi VKN'mizi bilmeye gerek yoktur — karsilastirma belgenin kendi iki alani
+    /// arasinda yapilir. Olcum: 200 belgede 200 dogru.
+    ///
+    /// <para>Zarf okunamazsa (kayitlarin ~%2'si) yon belirlenemez; belge ICE ALINIR —
+    /// gelen bir faturayi sessizce yutmak, giden bir faturayi listede gostermekten
+    /// daha agir bir hatadir.</para>
+    /// </summary>
+    private static bool IsOutgoing(string? envelopeXml, string cariVkn, string cariTckn, DocumentKind kind)
+    {
+        if (string.IsNullOrWhiteSpace(envelopeXml)) return false;
+
+        var supplier = ExtractSupplierTaxNumber(envelopeXml);
+        if (string.IsNullOrWhiteSpace(supplier)) return false;
+
+        var cari = NullIfEmpty(cariVkn) ?? NullIfEmpty(cariTckn);
+        if (cari is null) return false;
+
+        return !string.Equals(supplier, cari, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>UBL'de saticinin (AccountingSupplierParty / DespatchSupplierParty) VKN/TCKN'si.</summary>
+    private static string? ExtractSupplierTaxNumber(string xml)
+    {
+        try
+        {
+            var root = XDocument.Parse(xml).Root;
+            if (root is null) return null;
+
+            var supplierParty = root.Descendants().FirstOrDefault(e =>
+                e.Name.LocalName is "AccountingSupplierParty" or "DespatchSupplierParty");
+            var party = supplierParty?.Elements().FirstOrDefault(e => e.Name.LocalName == "Party");
+            if (party is null) return null;
+
+            // Once PartyIdentification/ID (schemeID=VKN|TCKN), sonra PartyTaxScheme/CompanyID.
+            var id = party.Elements()
+                .Where(e => e.Name.LocalName == "PartyIdentification")
+                .SelectMany(e => e.Elements().Where(x => x.Name.LocalName == "ID"))
+                .FirstOrDefault(x =>
+                {
+                    var scheme = x.Attribute("schemeID")?.Value;
+                    return scheme is null
+                        || scheme.Equals("VKN", StringComparison.OrdinalIgnoreCase)
+                        || scheme.Equals("TCKN", StringComparison.OrdinalIgnoreCase);
+                })?.Value?.Trim();
+
+            if (!string.IsNullOrWhiteSpace(id)) return id;
+
+            return party.Elements()
+                .Where(e => e.Name.LocalName == "PartyTaxScheme")
+                .SelectMany(e => e.Elements().Where(x => x.Name.LocalName == "CompanyID"))
+                .FirstOrDefault()?.Value?.Trim();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Basliga zarf XML'ini yerlestirir. XML bulunamazsa kayit AYNEN korunur (izleme
     /// JSON'u ile) — zarfi olmayan belge yine ice aktarilir, yalniz resmi goruntusu olmaz.
     /// </summary>
-    private static async Task<IncomingDocument> WithEnvelopeXmlAsync(
-        SqlConnection conn, string masterTable, int inc, IncomingDocument header, CancellationToken ct)
+    private static IncomingDocument WithEnvelopeXml(IncomingDocument header, string? xml)
     {
-        var xml = await ReadEnvelopeXmlAsync(conn, masterTable, inc, ct);
         if (string.IsNullOrWhiteSpace(xml)) return header;
 
         return new IncomingDocument
