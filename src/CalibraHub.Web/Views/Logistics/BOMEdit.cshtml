@@ -2959,6 +2959,10 @@
                     // yeni eklenen bileşenlerin "Alt Reçete" bayrağı (componentHasBom)
                     // ve versiyon çubuğu (bileşen sayısı) güncellensin. Tab değişmez.
                     ptLoadExistingTreeById(data.id, false);
+                    // Ters yon: bilesen sekmesinden kaydedilince Recete Agaci da
+                    // bayatlar. Anahtari dusurunce sekmeye donuldugunde yeniden okunur.
+                    // (Kok id degismedigi icin anahtar kendiliginden degismezdi.)
+                    pttLoadedKey = null;
                 }
             } else if (data && data.message) {
                 showMsg('Kayıt hatası: ' + data.message, false);
@@ -4054,12 +4058,24 @@
             }
 
             ptClearDirty(); pttDirtyOwn = false;
-            pttReportNotes(d.result);
+
+            // Iki sekme AYRI bellek tutuyor. Agac kaydedildikten sonra "Bilesen
+            // Bilgileri" sekmesi hala eski listeyi gosteriyordu; kullanici eklenen
+            // bilesenleri orada goremiyordu. Kok receteyi sunucudan yeniden yukleyip
+            // o sekmenin verisini (ve baslik/versiyon cubugunu) tazeliyoruz.
+            var savedRootId = (d.result && d.result.rootBomId) || ptCurrentId;
+            if (savedRootId) await ptLoadExistingTreeById(savedRootId, false);
+
             // Sunucu versiyon turetmis olabilir; agaci YENIDEN OKU ki ekranda gorunen
             // ile veritabanindaki ayni olsun (bayat bomId ile ikinci kaydetme yanlis
             // receteyi hedefler).
             pttLoadedKey = null;
             await pttLoad();
+
+            // RAPOR EN SONDA. pttLoad bilgi seridini (pttTruncWarn) temizliyor —
+            // raporu once yazsaydik, turetilen versiyon bildirimi ekrana gelir gelmez
+            // silinirdi ve kullanici versiyon aciladigini HIC gormezdi.
+            pttReportNotes(d.result);
         } catch (e) {
             showMsg('Agac kaydedilemedi: ' + (e.message || ''), false);
         } finally {
