@@ -337,43 +337,66 @@
     }
     .pte-label--req::after { content: ' *'; color: var(--danger); margin-left: 1px; }
 
-    /* ── Inputs (premium polish) ──
-       Hover'da hafif elevation, focus'ta accent ring (3px), placeholder muted. */
+    /* ── Inputs — ALT ÇİZGİ standardı (2026-08-30) ──
+       Malzeme Kartı ekranıyla aynı görünüm. Renk/ölçü değişkenleri
+       widgetField.css'teki .mce-input ile AYNI kaynaktan (--wf-*) gelir;
+       buraya sabit hex yazmak açık/koyu temada ayrışma üretirdi.
+       Önceki hâli kutuydu (border + radius + dolgulu zemin). */
     .pte-input {
-        padding: 9px 12px;
-        border-radius: var(--radius-md);
-        background: var(--surface-elev-2);
-        border: 1px solid var(--border-subtle);
-        color: var(--text-primary);
+        height: var(--wf-input-h, 38px);
+        padding: 0 var(--wf-px, 12px);
+        border: none;
+        border-bottom: 1px solid var(--wf-border, var(--border-subtle));
+        border-radius: 0;
+        /* KISAYOL DEĞİL: `background` shorthand background-image'i de sıfırlar ve
+           select'lerin chevron'unu siler (aynı tuzak bu oturumda iki kez yaşandı). */
+        background-color: transparent;
+        color: var(--wf-text, var(--text-primary));
         font-family: var(--font-stack);
         font-size: 13px;
         font-weight: var(--font-weight-medium);
         letter-spacing: -0.005em;
+        box-shadow: none;
+        box-sizing: border-box;
         transition: border-color var(--motion-fast) var(--motion-ease-out),
-                    background   var(--motion-fast) var(--motion-ease-out),
                     box-shadow   var(--motion-fast) var(--motion-ease-out);
         outline: none;
     }
     .pte-input:hover:not(:focus):not([readonly]) {
-        border-color: var(--border-strong);
+        border-bottom-color: var(--wf-border-hover, var(--border-strong));
     }
     .pte-input:focus {
-        border-color: var(--border-focus);
-        box-shadow: 0 0 0 var(--ring-width) var(--ring-color);
+        border-bottom-color: var(--wf-border-focus, var(--border-focus));
+        background-color: transparent;
+        /* İkinci 1px çizgi — kutu gölgesi yerine; layout kaymaz. */
+        box-shadow: 0 1px 0 0 var(--wf-border-focus, var(--border-focus));
+    }
+    /* Native select kutusu appearance sıfırlanmadan (özellikle açık temada)
+       çizilmeye devam eder; ok da appearance:none ile kalktığı için geri eklenir. */
+    select.pte-input {
+        appearance: none; -webkit-appearance: none; -moz-appearance: none;
+        padding-right: 26px;
+        background-image: var(--wf-chevron);
+        background-repeat: no-repeat;
+        background-position: right var(--wf-px, 12px) center;
+        background-size: 10px 6px;
     }
     .pte-input::placeholder {
-        color: var(--text-muted);
+        color: var(--wf-placeholder, var(--text-muted));
         font-weight: var(--font-weight-regular);
         font-style: italic;
         opacity: 0.7;
     }
+    /* Salt-okunur "ad/açıklama" alanı: çizgisi de yok — kod alanı asıl,
+       ad ondan türetilen gösterimdir; bu hiyerarşi görsel olarak korunur. */
     .pte-input[readonly] {
-        background: transparent;
+        background-color: transparent;
+        border-bottom-color: transparent;
         cursor: default;
     }
     .pte-input.is-invalid {
-        border-color: var(--danger);
-        background: var(--danger-soft-bg);
+        border-bottom-color: var(--wf-error-color, var(--danger));
+        box-shadow: 0 1px 0 0 var(--wf-error-color, var(--danger));
         animation: pteShake 0.4s cubic-bezier(.36,.07,.19,.97) both;
     }
     .pte-input[type="number"] {
@@ -434,15 +457,18 @@
     /* ── Lookup ──
        pte-lookup: input + (optional) buyutec butonu — tek border'li capsule.
        Bridge LookupCard'i veya FixedFieldLookupBridge'i icine mount edebilir. */
+    /* Alt çizgi standardında "kutu dikişi" yok: sarmalayıcı radius/overflow
+       kırpması ve inputun sağ kenar birleşimi kaldırıldı. Alan alt çizgili
+       kalır, rehber butonu içine gömülü düz bir ikon gibi durur. */
     .pte-lookup {
         display: inline-flex;
         align-items: stretch;
-        border-radius: var(--radius-md);
-        overflow: hidden;
+        border-bottom: 1px solid var(--wf-border, var(--border-subtle));
     }
+    .pte-lookup:focus-within { border-bottom-color: var(--wf-border-focus, var(--border-focus)); }
     .pte-lookup .pte-input {
-        border-radius: var(--radius-md) 0 0 var(--radius-md);
-        border-right: 0;
+        border-bottom-color: transparent;   /* çizgiyi sarmalayıcı çiziyor */
+        box-shadow: none;
     }
     /* LookupCard mount edildiginde gl-wrapper/gl-card pte-lookup container'ini doldursun. */
     .pte-lookup .gl-wrapper { width: 100%; flex: 1 1 auto; }
@@ -450,11 +476,11 @@
 
     .pte-lookup-btn {
         display: flex; align-items: center; justify-content: center;
-        width: 36px;
-        background: var(--accent-soft-bg);
-        border: 1px solid var(--border-subtle);
-        border-left: 0;
-        border-radius: 0 var(--radius-md) var(--radius-md) 0;
+        width: 30px;
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        color: var(--text-muted);
         cursor: pointer;
         color: var(--accent-soft-fg);
         transition: background var(--motion-fast) var(--motion-ease-out),
