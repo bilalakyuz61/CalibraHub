@@ -61,6 +61,13 @@ public sealed class InMemoryIncomingDocumentRepository : IIncomingDocumentReposi
         => Task.FromResult<IReadOnlyList<CalibraHub.Application.Services.EDocument.EDocumentLineData>>(
             Array.Empty<CalibraHub.Application.Services.EDocument.EDocumentLineData>());
 
+    public Task UpdatePayloadRawAsync(int id, string payloadRaw, CancellationToken cancellationToken)
+        => Task.CompletedTask;
+
+    public Task<CalibraHub.Application.Services.EDocument.EDocumentHeaderExtras?> GetHeaderExtrasAsync(
+        int documentId, CancellationToken cancellationToken)
+        => Task.FromResult<CalibraHub.Application.Services.EDocument.EDocumentHeaderExtras?>(null);
+
     public Task<int> GetMaxOfflineSourceKeyAsync(DocumentKind kind, CancellationToken cancellationToken)
         => Task.FromResult(0);
 

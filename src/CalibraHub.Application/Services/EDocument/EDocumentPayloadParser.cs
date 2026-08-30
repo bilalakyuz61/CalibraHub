@@ -48,6 +48,33 @@ public sealed record EDocumentShipmentData(
     string? Driver2FirstName, string? Driver2LastName, string? Driver2NationalId,
     string? Driver3FirstName, string? Driver3LastName, string? Driver3NationalId);
 
+/// <summary>
+/// Belge BASLIK bilgileri — kalem tablolarinin disinda kalan taraf/toplam alanlari.
+/// XML'i olmayan (ERP kaynakli) belgede fatura gorunumu bunlardan cizilir; alanlarin
+/// bir kismi yalniz LEGACY (CBT_EBELGEMAS) semada doludur, digerinde null kalir.
+/// </summary>
+public sealed record EDocumentHeaderExtras(
+    string? SupplierName,
+    string? SupplierTaxNumber,
+    string? CustomerName,
+    string? CustomerTaxNumber,
+    string? CustomerTaxOffice,
+    string? CustomerAddress,
+    string? CustomerCity,
+    string? CustomerDistrict,
+    string? CustomerCountry,
+    string? ProfileId,
+    string? DocumentTypeCode,
+    string? CurrencyCode,
+    string? Note,
+    string? OrderNumber,
+    DateTime? OrderDate,
+    decimal? GrossAmount,
+    decimal? DiscountTotal,
+    decimal? VatAmount,
+    decimal? PayableAmount,
+    IReadOnlyList<EDocumentTaxData> DocumentTaxes);
+
 public sealed record EDocumentDetails(
     IReadOnlyList<EDocumentLineData> Lines,
     IReadOnlyList<EDocumentTaxData> DocumentTaxes,
@@ -72,6 +99,57 @@ public sealed record EDocumentDetails(
 /// </summary>
 public static class EDocumentPayloadParser
 {
+    /// <summary>
+    /// Zarf sarmalayicisini acar: kok <c>StandardBusinessDocument</c> ise ICINDEKI belgeyi
+    /// (Invoice / DespatchAdvice / CreditNote / ApplicationResponse) tek basina dondurur.
+    ///
+    /// <para><b>Neden sart:</b> Netsis zarfindan cikan XML SBD sarmalayicisiyla gelir.
+    /// Sarmalayici korundugunda belgeye gomulu GIB XSLT'si (kok olarak <c>Invoice</c>
+    /// bekler) HICBIR sablonu eslestiremez ve resmi goruntu BOS bir iskelet olarak
+    /// uretilir — hata vermez, sessizce bos cikar. Ozet gorunum ayristiricisi da ayni
+    /// sebeple bos doner (kalemler kokun DOGRUDAN cocugu degildir).</para>
+    ///
+    /// <para>Sarmalayici yoksa ya da ayristirilamiyorsa girdi AYNEN geri verilir.</para>
+    /// </summary>
+    /// <param name="documentUuid">
+    /// Aranan belgenin ETTN'si. Bir zarf birden cok fatura tasiyabilir; verilirse UUID'si
+    /// eslesen belge secilir, verilmezse (ya da bulunamazsa) ilk belge dondurulur.
+    /// </param>
+    public static string UnwrapEnvelope(string? xml, string? documentUuid = null)
+    {
+        if (string.IsNullOrWhiteSpace(xml)) return xml ?? string.Empty;
+
+        var trimmed = xml.TrimStart('﻿', '​');
+        if (!trimmed.TrimStart().StartsWith('<')) return xml;
+
+        try
+        {
+            var root = XDocument.Parse(trimmed).Root;
+            if (root is null) return xml;
+            if (!root.Name.LocalName.Equals("StandardBusinessDocument", StringComparison.OrdinalIgnoreCase))
+                return xml;
+
+            var candidates = root.Descendants()
+                .Where(e => e.Name.LocalName is "Invoice" or "DespatchAdvice"
+                                             or "CreditNote" or "ApplicationResponse")
+                .ToArray();
+            if (candidates.Length == 0) return xml;
+
+            var inner = candidates.Length == 1 || string.IsNullOrWhiteSpace(documentUuid)
+                ? candidates[0]
+                : candidates.FirstOrDefault(e => string.Equals(
+                      e.Elements().FirstOrDefault(c => c.Name.LocalName == "UUID")?.Value?.Trim(),
+                      documentUuid.Trim(), StringComparison.OrdinalIgnoreCase))
+                  ?? candidates[0];
+
+            return new XDocument(new XDeclaration("1.0", "UTF-8", null), inner).ToString();
+        }
+        catch
+        {
+            return xml;
+        }
+    }
+
     public static EDocumentDetails? Parse(string? payloadRaw)
     {
         if (string.IsNullOrWhiteSpace(payloadRaw) || !payloadRaw.TrimStart().StartsWith('<'))

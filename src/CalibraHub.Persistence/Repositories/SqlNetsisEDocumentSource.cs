@@ -5,6 +5,8 @@ using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Persistence.Services;
 using Microsoft.Data.SqlClient;
+using System.IO.Compression;
+using System.Text;
 
 namespace CalibraHub.Persistence.Repositories;
 
@@ -126,7 +128,9 @@ public sealed class SqlNetsisEDocumentSource : IOfflineEDocumentSource
         {
             var lines = await ReadInvoiceLinesAsync(conn, inc, ct);
             var docTaxes = await ReadTaxesAsync(conn, "TBLEFATMASTAX", "EFATMASINC", inc, ct);
-            docs.Add(new OfflineEDocument(header, new EDocumentDetails(lines, docTaxes, Shipment: null)));
+            docs.Add(new OfflineEDocument(
+                await WithEnvelopeXmlAsync(conn, "TBLEFATMAS", inc, header, ct),
+                new EDocumentDetails(lines, docTaxes, Shipment: null)));
         }
         return docs;
     }
@@ -272,7 +276,8 @@ public sealed class SqlNetsisEDocumentSource : IOfflineEDocumentSource
         {
             var lines = await ReadDespatchLinesAsync(conn, inc, ct);
             docs.Add(new OfflineEDocument(
-                header, new EDocumentDetails(lines, Array.Empty<EDocumentTaxData>(), ship)));
+                await WithEnvelopeXmlAsync(conn, "TBLEIRSMAS", inc, header, ct),
+                new EDocumentDetails(lines, Array.Empty<EDocumentTaxData>(), ship)));
         }
         return docs;
     }
@@ -317,6 +322,130 @@ public sealed class SqlNetsisEDocumentSource : IOfflineEDocumentSource
     }
 
     // ── ortak ───────────────────────────────────────────────────────────────────
+    // ── ZARF (UBL) XML'i ────────────────────────────────────────────────────────
+
+    public async Task<string?> TryReadEnvelopeXmlAsync(
+        ExternalDbConnection connection, DocumentKind kind, int sourceKey, CancellationToken ct)
+    {
+        if (sourceKey <= 0) return null;
+
+        var hostConn = _connectionFactory.ResolveConnectionStringForCompany(
+            _connectionFactory.ResolveEffectiveCompanyId());
+        var connStr = ExternalDbConnectionStringBuilder.Build(connection, AppName, hostConn);
+
+        await using var conn = new SqlConnection(connStr);
+        await conn.OpenAsync(ct);
+
+        var masterTable = kind == DocumentKind.EDispatch ? "TBLEIRSMAS" : "TBLEFATMAS";
+        return await ReadEnvelopeXmlAsync(conn, masterTable, sourceKey, ct);
+    }
+
+    /// <summary>
+    /// Basliga zarf XML'ini yerlestirir. XML bulunamazsa kayit AYNEN korunur (izleme
+    /// JSON'u ile) — zarfi olmayan belge yine ice aktarilir, yalniz resmi goruntusu olmaz.
+    /// </summary>
+    private static async Task<IncomingDocument> WithEnvelopeXmlAsync(
+        SqlConnection conn, string masterTable, int inc, IncomingDocument header, CancellationToken ct)
+    {
+        var xml = await ReadEnvelopeXmlAsync(conn, masterTable, inc, ct);
+        if (string.IsNullOrWhiteSpace(xml)) return header;
+
+        return new IncomingDocument
+        {
+            IntegratorSettingsId = header.IntegratorSettingsId,
+            IngestSource = header.IngestSource,
+            EnvelopeId = header.EnvelopeId,
+            DocumentNumber = header.DocumentNumber,
+            Kind = header.Kind,
+            IssueDate = header.IssueDate,
+            SenderTaxNumber = header.SenderTaxNumber,
+            SenderName = header.SenderName,
+            RecipientTaxNumber = header.RecipientTaxNumber,
+            PayloadRaw = xml,
+            ImportedAt = header.ImportedAt,
+            IsProcessed = header.IsProcessed,
+        };
+    }
+
+    /// <summary>
+    /// Zarf UBL'ini okur: <c>TBLEFATZARF.XMLBYTES</c> ZIP arsividir, icindeki <c>*.xml</c>
+    /// girdisi zarf belgesidir (SBD sarmalayici + gomulu GIB XSLT'si).
+    ///
+    /// <para><c>XMLVERI</c> kolonuna BAKILMAZ: olcumde tum satirlarda 1 bayt (bos).</para>
+    ///
+    /// <para><b>Baglanti anahtari UUID uzerindendir</b> —
+    /// <c>{master}.UUID -> TBLEFATURA.UUID -> TBLEFATURA.ZARFID -> TBLEFATZARF.ZARFID</c>.
+    /// <c>EFATINCKEYNO</c> ile baglamak YANLIS zarfi getiriyordu: olcumde denenen 6 belgenin
+    /// 6'sinda da baska bir faturanin icerigi geldi (Eker Sut belgesinde Ozdemir Celik
+    /// faturasi gorundu). O kolon zarfa isaret ETMIYOR.</para>
+    ///
+    /// <para><b>Bir zarf BIRDEN COK fatura tasiyabilir</b> (olculdu: iki farkli master ayni
+    /// dosyayi paylasiyor). Bu yuzden sarmalayici acilirken belge UUID'si ile eslesen
+    /// <c>Invoice</c> secilir — ilk belgeyi almak komsu faturayi gosterirdi.</para>
+    ///
+    /// <para>Asla firlatmaz: bozuk/eksik zarf ice aktarimi ya da ekrani cokertmemelidir.</para>
+    /// </summary>
+    private static async Task<string?> ReadEnvelopeXmlAsync(
+        SqlConnection conn, string masterTable, int inc, CancellationToken ct)
+    {
+        try
+        {
+            byte[]? zip;
+            string? documentUuid;
+            await using (var cmd = conn.CreateCommand())
+            {
+                // Tablo adi SABIT literal (istemci girdisi degil) — injection yolu yok.
+                // TOP 1 + buyukten kucuge: TBLEFATURA ayni UUID icin birden cok satir
+                // tasiyabiliyor (olculdu: 7.221 eslesme / 7.144 fatura); dolu zarf secilir.
+                cmd.CommandText = $"""
+                    SELECT TOP 1 m.[UUID] AS DocUuid, z.[XMLBYTES] AS Zip
+                      FROM [dbo].[{masterTable}] m
+                      JOIN [dbo].[TBLEFATURA]   f ON f.[UUID]   = m.[UUID]
+                      JOIN [dbo].[TBLEFATZARF] z ON z.[ZARFID] = f.[ZARFID]
+                     WHERE m.[INCKEYNO] = @Inc AND DATALENGTH(z.[XMLBYTES]) > 100
+                     ORDER BY DATALENGTH(z.[XMLBYTES]) DESC;
+                    """;
+                cmd.Parameters.Add(new SqlParameter("@Inc", inc));
+
+                await using var rr = await cmd.ExecuteReaderAsync(ct);
+                if (!await rr.ReadAsync(ct)) return null;
+                documentUuid = rr["DocUuid"] as string;
+                zip = rr["Zip"] as byte[];
+            }
+
+            if (zip is null || zip.Length < 8) return null;
+
+            // ZIP degilse duz metin olabilir (kaynak surumune gore) — oyleyse oldugu gibi.
+            if (!(zip[0] == 0x50 && zip[1] == 0x4B))
+            {
+                var text = Encoding.UTF8.GetString(zip).TrimStart('﻿', '​');
+                return text.TrimStart().StartsWith('<')
+                    ? EDocumentPayloadParser.UnwrapEnvelope(text, documentUuid)
+                    : null;
+            }
+
+            using var ms = new MemoryStream(zip);
+            using var archive = new ZipArchive(ms, ZipArchiveMode.Read);
+            var entry = archive.Entries.FirstOrDefault(e =>
+                            e.Name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+                        ?? archive.Entries.FirstOrDefault();
+            if (entry is null) return null;
+
+            await using var es = entry.Open();
+            using var reader = new StreamReader(es, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            var xml = (await reader.ReadToEndAsync(ct)).TrimStart('﻿', '​');
+            if (!xml.TrimStart().StartsWith('<')) return null;
+
+            // Zarf sarmalayicisi (StandardBusinessDocument) burada acilir: korunursa hem
+            // gomulu GIB XSLT'si hem ozet ayristirici BOS uretir (bkz. UnwrapEnvelope).
+            return EDocumentPayloadParser.UnwrapEnvelope(xml, documentUuid);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static async Task<List<EDocumentTaxData>> ReadTaxesAsync(
         SqlConnection conn, string table, string keyColumn, int masterInc, CancellationToken ct)
     {

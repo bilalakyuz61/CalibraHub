@@ -1,5 +1,6 @@
 using CalibraHub.Application.Services.EDocument;
 using CalibraHub.Domain.Entities;
+using CalibraHub.Domain.Enums;
 
 namespace CalibraHub.Application.Abstractions.Services;
 
@@ -13,11 +14,14 @@ public sealed record OfflineSourceWatermark(int LastInvoiceKey, int LastDespatch
 /// CEVRIMDISI e-belge kaynagi: ERP veritabanindan (bugun Netsis) gelen e-fatura /
 /// e-arsiv / e-irsaliye kayitlarini okur.
 ///
-/// <para><b>Neden XML degil iliskisel okuma:</b> ilk tasarimda zarf tablosundaki ham UBL
-/// (<c>TBLEFATZARF.XMLVERI</c>) okunup mevcut ayristiriciya verilecekti. Olcum bunu
-/// curuttu: 14.382 zarf satirinin TAMAMINDA bu kolon 1 bayt — yani pratikte BOS. Veri
-/// iliskisel tablolarda (TBLEFATMAS/KALEM/MASTAX, TBLEIRSMAS/KALEM) duruyor, dolayisiyla
-/// kaynak onlardan okunur ve dogrudan yapisal veri uretir.</para>
+/// <para><b>Yapisal veri iliskisel tablolardan okunur</b> (TBLEFATMAS/KALEM/MASTAX,
+/// TBLEIRSMAS/KALEM): kalem/vergi kirilimi orada sorgulanabilir haldedir.</para>
+///
+/// <para><b>Zarf XML'i AYRICA okunur (2026-08-30 duzeltmesi):</b> onceki olcum zarfin
+/// <c>XMLVERI</c> kolonuna bakip "1 bayt, pratikte bos" sonucuna varmisti — DOGRU kolon o
+/// degil. Gercek UBL, <c>TBLEFATZARF.XMLBYTES</c> icinde ZIP'lenmis durur (arsivdeki
+/// <c>efatura_&lt;uuid&gt;.xml</c>) ve olcumde kayitlarin %97.8'inde doludur. Bu XML olmadan
+/// ekranda "Resmi (GIB) Goruntusu" (UBL'e gomulu XSLT) ve XML sekmesi URETILEMEZ.</para>
 ///
 /// <para>Bu arayuzun implementasyonlari kaynak veritabanina YALNIZCA okuma amacli baglanir.</para>
 /// </summary>
@@ -42,5 +46,18 @@ public interface IOfflineEDocumentSource
         DateTime since,
         int maxRows,
         OfflineSourceWatermark afterSourceKey,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Tek bir belgenin zarf UBL XML'ini okur (ERP anahtarina gore). Bulunamazsa null.
+    ///
+    /// <para>Daha once ice aktarilmis, XML'siz kayitlar bu yolla tamamlanir — 10 binin
+    /// uzerinde belge yeniden aktarilmadan resmi goruntusune kavusur.</para>
+    /// </summary>
+    /// <param name="sourceKey">Belgenin ERP birincil anahtari (INCKEYNO).</param>
+    Task<string?> TryReadEnvelopeXmlAsync(
+        ExternalDbConnection connection,
+        DocumentKind kind,
+        int sourceKey,
         CancellationToken ct);
 }

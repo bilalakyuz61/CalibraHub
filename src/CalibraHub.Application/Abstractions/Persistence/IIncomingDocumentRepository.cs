@@ -26,6 +26,12 @@ public interface IIncomingDocumentRepository
     Task UpdateIsProcessedAsync(int id, bool isProcessed, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Belgenin ham payload'ini gunceller. Zarf UBL'i sonradan tamamlandiginda kullanilir
+    /// (ilk goruntulemede kaynaktan okunur, bir daha okunmasin diye kayda yazilir).
+    /// </summary>
+    Task UpdatePayloadRawAsync(int id, string payloadRaw, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Belgenin YERLI tablolardaki kalemleri (kalem vergileri dahil).
     ///
     /// <para>Ekran eskiden kalemleri her istekte PayloadRaw icindeki UBL XML'ini ayristirarak
@@ -35,6 +41,16 @@ public interface IIncomingDocumentRepository
     /// online kayitlar icin).</para>
     /// </summary>
     Task<IReadOnlyList<EDocumentLineData>> GetLinesAsync(int documentId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Belgenin baslik ek bilgileri (taraflar, toplamlar, belge seviyesi vergiler).
+    ///
+    /// <para>XML'i olmayan (ERP kaynakli) belgede ekran fatura gorunumunu bunlardan cizer:
+    /// ana kayit yalniz gonderici/alici VKN'sini tasir, alicinin adi/adresi ve belge
+    /// toplamlari kaynak tablolarda durur. Bilgi yoksa alanlar null doner — cagiran taraf
+    /// kalemlerden hesaplamaya geri duser.</para>
+    /// </summary>
+    Task<EDocumentHeaderExtras?> GetHeaderExtrasAsync(int documentId, CancellationToken cancellationToken);
 
     /// <summary>
     /// Cevrimdisi kaynaktan ice aktarilmis EN BUYUK ERP anahtari (PayloadRaw icindeki

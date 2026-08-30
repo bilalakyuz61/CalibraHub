@@ -70,9 +70,24 @@
         .xml-tag { color: #569cd6; } .xml-attr { color: #9cdcfe; } .xml-value { color: #ce9178; }
     }
 
-    /* Invoice visual */
-    .inv { max-width: 860px; margin: 24px auto; padding: 0 16px 40px; font-size: .875rem; color: var(--bs-body-color); }
+    /* Invoice visual — kağıt (A4) görünümü.
+       Kağıt her iki temada da BEYAZ kalır: bu bir belge yüzeyi, arayüz yüzeyi değil
+       (GİB görüntüsü sekmesi de aynı şekilde beyaz kağıt gösterir). */
+    #pane-gorsel { background: #525659; }
+    .inv-sheet-toolbar {
+        flex: 0 0 auto; background: #323639; padding: 8px 16px;
+        display: flex; justify-content: center; align-items: center; gap: 8px;
+        box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    }
+    .inv-sheet-scroll { flex: 1 1 auto; overflow: auto; padding: 24px 16px; }
+    .inv {
+        width: 210mm; min-height: 297mm; box-sizing: border-box;
+        margin: 0 auto; padding: 16mm 14mm; font-size: .875rem;
+        background: #fff; color: #0f172a;
+        box-shadow: 0 6px 24px rgba(0,0,0,.35);
+    }
     .inv__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 24px; }
+    .inv__kind { font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #6c757d; margin-bottom: 2px; }
     .inv__title { font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em; }
     .inv__badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; background: color-mix(in srgb, var(--bs-primary,#0d6efd) 12%, transparent); color: var(--bs-primary,#0d6efd); border: 1px solid color-mix(in srgb, var(--bs-primary,#0d6efd) 25%, transparent); }
     .inv__meta-grid { display: flex; gap: 32px; flex-wrap: wrap; margin-bottom: 20px; }
@@ -95,7 +110,20 @@
     .inv__totals-table tr.inv__total-grand td { font-size: .95rem; font-weight: 700; border-top: 2px solid var(--bs-border-color,#dee2e6); padding-top: 8px; }
     .inv__divider { border: none; border-top: 1px solid var(--bs-border-color,#dee2e6); margin: 16px 0; }
     .inv__note { font-size: .8rem; color: var(--bs-secondary-color,#6c757d); font-style: italic; margin-top: 16px; }
-    .inv__no-render { padding: 48px 24px; text-align: center; color: var(--bs-secondary-color,#6c757d); }
+    .inv__no-render { padding: 48px 24px; margin: auto; text-align: center; color: #e2e8f0; }
+
+    /* Yazdırma: yalnız kağıt basılır, uygulama kabuğu basılmaz. */
+    @@media print {
+        body * { visibility: hidden !important; }
+        #pane-gorsel, #pane-gorsel * { visibility: visible !important; }
+        #pane-gorsel {
+            position: absolute !important; inset: 0 !important;
+            background: #fff !important; overflow: visible !important; display: block !important;
+        }
+        .inv-sheet-toolbar { display: none !important; }
+        .inv-sheet-scroll { overflow: visible !important; padding: 0 !important; }
+        .inv { box-shadow: none !important; margin: 0 !important; width: auto !important; min-height: 0 !important; padding: 0 !important; }
+    }
     @@media (max-width: 600px) {
         .inv__parties { grid-template-columns: 1fr; }
         .inv__head { flex-direction: column; }
@@ -162,36 +190,9 @@
     body.app-theme-dark .xml-attr { color: #9cdcfe; }
     body.app-theme-dark .xml-value { color: #ce9178; }
     body.app-theme-dark .xml-pi { color: #94a3b8; }
-    /* Ozet gorunum */
-    body.app-theme-dark .inv { color: #e2e8f0; }
-    body.app-theme-dark .inv__title { color: #f1f5f9; }
-    body.app-theme-dark .inv__badge {
-        background: rgba(129,140,248,.12);
-        color: #818cf8;
-        border-color: rgba(129,140,248,.3);
-    }
-    body.app-theme-dark .inv__meta-item label { color: rgba(255,255,255,.5); }
-    body.app-theme-dark .inv__meta-item span { color: #e2e8f0; }
-    body.app-theme-dark .inv__party {
-        border-color: rgba(255,255,255,.1);
-        background: rgba(255,255,255,.03);
-    }
-    body.app-theme-dark .inv__party-role { color: rgba(255,255,255,.5); }
-    body.app-theme-dark .inv__party-name { color: #f1f5f9; }
-    body.app-theme-dark .inv__party-detail { color: rgba(255,255,255,.6); }
-    body.app-theme-dark .inv__lines th {
-        color: rgba(255,255,255,.5);
-        border-bottom-color: rgba(255,255,255,.12);
-    }
-    body.app-theme-dark .inv__lines td {
-        border-bottom-color: rgba(255,255,255,.06);
-        color: #e2e8f0;
-    }
-    body.app-theme-dark .inv__totals-table td { color: #e2e8f0; }
-    body.app-theme-dark .inv__total-grand td { border-top-color: rgba(255,255,255,.12); }
-    body.app-theme-dark .inv__divider { border-top-color: rgba(255,255,255,.08); }
-    body.app-theme-dark .inv__note { color: rgba(255,255,255,.5); }
-    body.app-theme-dark .inv__no-render { color: rgba(255,255,255,.5); }
+    /* NOT: fatura kağıdı beyaz sabittir; .inv icin koyu tema override'i YOKTUR
+       (varsa koyu metin beyaz kağıda düşer ve okunmaz olur).
+    */
 </style>
 }
 
@@ -246,7 +247,7 @@
         {
             <button class="doc-viewer__tab is-active" data-tab="resmi">Resmi (GİB) Görüntüsü</button>
         }
-        <button class="doc-viewer__tab@(hasXml ? "" : " is-active")" data-tab="gorsel">Özet Görünüm</button>
+        <button class="doc-viewer__tab@(hasXml ? "" : " is-active")" data-tab="gorsel">Fatura Görünümü</button>
         @if (hasXml)
         {
             <button class="doc-viewer__tab" data-tab="xml">XML</button>
@@ -288,9 +289,17 @@
         }
         else
         {
+            <div class="inv-sheet-toolbar">
+                <button type="button" class="btn btn-sm btn-dark" id="btnPrintInvoice" style="border: 1px solid #5f6368;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:4px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                    Yazdır
+                </button>
+            </div>
+            <div class="inv-sheet-scroll">
             <div class="inv">
                 <div class="inv__head">
                     <div>
+                        <div class="inv__kind">@kindLabel</div>
                         <div class="inv__title">@Model.DocumentNumber</div>
                         @if (!string.IsNullOrWhiteSpace(rd.ProfileId))
                         {
@@ -419,6 +428,7 @@
                 {
                     <p class="inv__note">Not: @rd.Note</p>
                 }
+            </div>
             </div>
         }
     </div>
@@ -571,6 +581,9 @@
 
     }
 
+    var btnPrintInvoice = document.getElementById('btnPrintInvoice');
+    if (btnPrintInvoice) btnPrintInvoice.addEventListener('click', function () { window.print(); });
+
     // -------- PUSH ACTIONS TO GLOBAL SPA WORKSPACE TOOLBAR --------
     var isWorkspace = window !== window.top;
     var activeTab = HAS_XML ? 'resmi' : 'gorsel';
@@ -591,6 +604,9 @@
         
         var zoomDiv = document.getElementById("zoomToolbar");
         if (zoomDiv) zoomDiv.style.display = "none";
+
+        var sheetBar = document.querySelector(".inv-sheet-toolbar");
+        if (sheetBar) sheetBar.style.display = "none";
         
         // Tab değişimini yakala (Hangi eylemlerin gösterileceğine karar ver)
         document.querySelectorAll('.doc-viewer__tab').forEach(function(b) {
@@ -625,6 +641,15 @@
                 title: "XML\'i panoya kopyala" 
             });
 
+            if (activeTab === 'gorsel' && document.getElementById('btnPrintInvoice')) {
+                actions.push({
+                    id: "printInvoice",
+                    className: "btn btn-outline-secondary btn-sm",
+                    html: '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right: 4px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Yazdır',
+                    title: "Fatura görünümünü yazdır"
+                });
+            }
+
             // Resimaktif olduğunda gösterilecek ekstra Zoom kontrolleri!
             if (activeTab === 'resmi') {
                 actions.push({ id: "zoomOut", className: "btn btn-light btn-sm ms-3", html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>', title: "Uzaklaş" });
@@ -644,6 +669,7 @@
             else if (actionId === "zoomOut") el = document.getElementById("btnZoomOut");
             else if (actionId === "zoomIn") el = document.getElementById("btnZoomIn");
             else if (actionId === "fitWidth") el = document.getElementById("btnFitWidth");
+            else if (actionId === "printInvoice") el = document.getElementById("btnPrintInvoice");
             if (el) el.click();
         };
     }

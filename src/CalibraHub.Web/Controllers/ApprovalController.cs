@@ -22,6 +22,7 @@ public sealed class ApprovalController : Controller
     private readonly IUiConfigurationService _uiConfigurationService;
     private readonly IDocumentImportService _documentImportService;
     private readonly IIncomingDocumentRepository _incomingDocumentRepository;
+    private readonly IEDocumentEnvelopeService _envelopeService;
     private readonly IApprovalFlowService _approvalFlowService;
     private readonly IDocumentService _documentService;
     private readonly ICapaService _capaService;
@@ -32,6 +33,7 @@ public sealed class ApprovalController : Controller
         IUiConfigurationService uiConfigurationService,
         IDocumentImportService documentImportService,
         IIncomingDocumentRepository incomingDocumentRepository,
+        IEDocumentEnvelopeService envelopeService,
         IApprovalFlowService approvalFlowService,
         IDocumentService documentService,
         ICapaService capaService,
@@ -41,6 +43,7 @@ public sealed class ApprovalController : Controller
         _uiConfigurationService = uiConfigurationService;
         _documentImportService = documentImportService;
         _incomingDocumentRepository = incomingDocumentRepository;
+        _envelopeService = envelopeService;
         _approvalFlowService = approvalFlowService;
         _documentService = documentService;
         _capaService = capaService;
@@ -102,6 +105,21 @@ public sealed class ApprovalController : Controller
         }
 
         var raw = document.PayloadRaw ?? string.Empty;
+
+        // ERP kaynakli kayitta zarf UBL'i ice aktarimda okunmamis olabilir (uzun sure
+        // yanlis kolona bakildi). Ilk goruntulemede kaynaktan tamamlanir ve kayda yazilir;
+        // sonraki acilislar veritabanindan gelir. Kaynak kapaliysa null doner, ekran
+        // kalem verisinden urettigi fatura gorunumune duser.
+        if (!raw.TrimStart().StartsWith('<'))
+        {
+            var fetched = await _envelopeService.TryFetchAndPersistXmlAsync(document, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(fetched)) raw = fetched;
+        }
+
+        // Zarf sarmalayicisi acilir — daha once sarmalayiciyla yazilmis kayitlar da
+        // dogru gorunsun (kaynak tarafi artik acilmis halde yazar).
+        raw = CalibraHub.Application.Services.EDocument.EDocumentPayloadParser.UnwrapEnvelope(raw);
+
         string xmlContent;
         try
         {
@@ -121,9 +139,10 @@ public sealed class ApprovalController : Controller
         if (renderData is null || renderData.Lines.Count == 0)
         {
             var lines = await _incomingDocumentRepository.GetLinesAsync(id, cancellationToken);
-            if (lines.Count > 0)
+            var extras = await _incomingDocumentRepository.GetHeaderExtrasAsync(id, cancellationToken);
+            if (lines.Count > 0 || extras is not null)
             {
-                renderData = BuildRenderDataFromLines(document, lines);
+                renderData = BuildRenderDataFromLines(document, lines, extras);
             }
         }
 
@@ -198,7 +217,8 @@ public sealed class ApprovalController : Controller
     /// </summary>
     private static Web.Models.Approval.InvoiceRenderData BuildRenderDataFromLines(
         Domain.Entities.IncomingDocument document,
-        IReadOnlyList<CalibraHub.Application.Services.EDocument.EDocumentLineData> lines)
+        IReadOnlyList<CalibraHub.Application.Services.EDocument.EDocumentLineData> lines,
+        CalibraHub.Application.Services.EDocument.EDocumentHeaderExtras? extras)
     {
         static string Num(decimal value) => value.ToString(CultureInfo.InvariantCulture);
 
@@ -223,8 +243,13 @@ public sealed class ApprovalController : Controller
                             .Where(t => t.TaxAmount.HasValue)
                             .Sum(t => t.TaxAmount!.Value);
 
-        var taxSummaries = lines
-            .SelectMany(l => l.Taxes)
+        // Belge seviyesi vergi kaydi varsa KDV kirilimi ONDAN gelir: kaynagin kendi
+        // ozeti, kalemlerden toplanan degerden daha dogrudur (yuvarlama farki tasimaz).
+        var taxSource = extras is { DocumentTaxes.Count: > 0 }
+            ? extras.DocumentTaxes
+            : lines.SelectMany(l => l.Taxes).ToArray();
+
+        var taxSummaries = taxSource
             .Where(t => t.TaxAmount.HasValue || t.TaxableAmount.HasValue)
             .GroupBy(t => new { Name = t.Name ?? "KDV", t.TaxPercent })
             .Select(g => new Web.Models.Approval.InvoiceTaxSummary
@@ -240,23 +265,46 @@ public sealed class ApprovalController : Controller
             })
             .ToArray();
 
+        // Kaynakta hazir duran toplam varsa O gosterilir; yoksa kalemlerden toplanan
+        // deger kullanilir (ikisi de yoksa satir hic cizilmez).
+        var grossAmount = extras?.GrossAmount ?? (lineTotal == 0m ? (decimal?)null : lineTotal);
+        var vatAmount = extras?.VatAmount ?? (taxTotal == 0m ? (decimal?)null : taxTotal);
+        var payableAmount = extras?.PayableAmount
+            ?? (grossAmount.HasValue || vatAmount.HasValue
+                    ? (grossAmount ?? 0m) + (vatAmount ?? 0m)
+                    : (decimal?)null);
+
         return new Web.Models.Approval.InvoiceRenderData
         {
-            TypeCode = document.Kind.ToString(),
-            Currency = lines.Select(l => l.CurrencyCode).FirstOrDefault(c => !string.IsNullOrWhiteSpace(c)),
+            ProfileId = extras?.ProfileId,
+            TypeCode = extras?.DocumentTypeCode ?? document.Kind.ToString(),
+            Currency = extras?.CurrencyCode
+                ?? lines.Select(l => l.CurrencyCode).FirstOrDefault(c => !string.IsNullOrWhiteSpace(c)),
+            Note = extras?.Note,
             Supplier = new Web.Models.Approval.InvoiceParty
             {
-                Name = document.SenderName,
-                TaxNumber = string.IsNullOrWhiteSpace(document.SenderTaxNumber) ? null : document.SenderTaxNumber,
+                Name = document.SenderName ?? extras?.SupplierName,
+                TaxNumber = string.IsNullOrWhiteSpace(document.SenderTaxNumber)
+                    ? extras?.SupplierTaxNumber
+                    : document.SenderTaxNumber,
             },
-            Customer = string.IsNullOrWhiteSpace(document.RecipientTaxNumber)
-                ? null
-                : new Web.Models.Approval.InvoiceParty { TaxNumber = document.RecipientTaxNumber },
+            Customer = new Web.Models.Approval.InvoiceParty
+            {
+                Name = extras?.CustomerName,
+                TaxNumber = string.IsNullOrWhiteSpace(document.RecipientTaxNumber)
+                    ? extras?.CustomerTaxNumber
+                    : document.RecipientTaxNumber,
+                TaxOfficeName = extras?.CustomerTaxOffice,
+                AddressLine = extras?.CustomerAddress,
+                City = string.Join(" / ", new[] { extras?.CustomerDistrict, extras?.CustomerCity }
+                        .Where(x => !string.IsNullOrWhiteSpace(x))),
+                Country = extras?.CustomerCountry,
+            },
             Lines = mappedLines,
             TaxSummaries = taxSummaries,
-            LineExtensionAmount = lineTotal == 0m ? null : Num(lineTotal),
-            TaxAmount = taxTotal == 0m ? null : Num(taxTotal),
-            PayableAmount = lineTotal == 0m && taxTotal == 0m ? null : Num(lineTotal + taxTotal),
+            LineExtensionAmount = grossAmount.HasValue ? Num(grossAmount.Value) : null,
+            TaxAmount = vatAmount.HasValue ? Num(vatAmount.Value) : null,
+            PayableAmount = payableAmount.HasValue ? Num(payableAmount.Value) : null,
         };
     }
 
@@ -387,7 +435,8 @@ public sealed class ApprovalController : Controller
             return NotFound();
         }
 
-        var raw = document.PayloadRaw ?? string.Empty;
+        var raw = CalibraHub.Application.Services.EDocument.EDocumentPayloadParser
+                      .UnwrapEnvelope(document.PayloadRaw ?? string.Empty);
         string xmlContent;
         try
         {
@@ -416,7 +465,8 @@ public sealed class ApprovalController : Controller
 
         try
         {
-            var html = ExtractHtmlFromUbl(document.PayloadRaw);
+            var html = ExtractHtmlFromUbl(
+                CalibraHub.Application.Services.EDocument.EDocumentPayloadParser.UnwrapEnvelope(document.PayloadRaw));
             if (html == null)
             {
                 return Content("Bu evrak için XSLT (Tasarım) şablonu bulunamadı.", "text/plain", Encoding.UTF8);

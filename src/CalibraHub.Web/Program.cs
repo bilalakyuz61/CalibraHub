@@ -100,6 +100,9 @@ var dataProtectionKeysPath = CalibraHub.Infrastructure.Security.DataProtectionKe
     .ResolveAndMigrate(builder.Environment.ContentRootPath, msg => Console.WriteLine(msg));
 
 builder.Services.AddScoped<IDocumentImportService, DocumentImportService>();
+// Zarf UBL'ini sonradan tamamlar (ilk goruntulemede ERP'den okur, kayda yazar).
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IEDocumentEnvelopeService,
+                           CalibraHub.Application.Services.EDocument.EDocumentEnvelopeService>();
 // Tum belge basimlari Belge Tasarimcisi (DocDesigner) uzerinden yapilir.
 builder.Services.AddScoped<IDocumentTypeRepository, SqlDocumentTypeRepository>();
 // Sistem Ayarlari gate + lisans dogrulama

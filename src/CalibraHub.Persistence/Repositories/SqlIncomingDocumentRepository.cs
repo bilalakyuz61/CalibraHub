@@ -550,6 +550,112 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         return lines;
     }
 
+    public async Task<EDocumentHeaderExtras?> GetHeaderExtrasAsync(
+        int documentId, CancellationToken cancellationToken)
+    {
+        if (documentId <= 0) return null;
+
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+
+        return await LegacyTablesExistAsync(connection, cancellationToken)
+            ? await GetLegacyHeaderExtrasAsync(connection, documentId, cancellationToken)
+            : await GetNativeHeaderExtrasAsync(connection, documentId, cancellationToken);
+    }
+
+    /// <summary>
+    /// YERLI semada baslikta taraf/toplam kolonu YOKTUR; elde olan tek ek bilgi belge
+    /// seviyesi vergilerdir (IncomingDocumentTax, IncomingDocumentLineId IS NULL).
+    /// </summary>
+    private async Task<EDocumentHeaderExtras?> GetNativeHeaderExtrasAsync(
+        SqlConnection connection, int documentId, CancellationToken cancellationToken)
+    {
+        if (!await TableExistsAsync(connection, "IncomingDocumentTax", cancellationToken))
+            return null;
+
+        var taxes = new List<EDocumentTaxData>();
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [TaxTypeCode],[Name],[TaxableAmount],[TaxAmount],[TaxPercent],
+                   [CurrencyTaxAmount],[ExemptionReason],[ExemptionReasonCode]
+              FROM [{_schema}].[IncomingDocumentTax]
+             WHERE [IncomingDocumentId] = @DocId AND [CompanyId] = @CompanyId
+               AND [IncomingDocumentLineId] IS NULL;
+            """;
+        cmd.Parameters.Add(CreateParameter("@DocId", documentId));
+        cmd.Parameters.Add(CreateParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
+
+        await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await r.ReadAsync(cancellationToken))
+        {
+            taxes.Add(new EDocumentTaxData(
+                TaxTypeCode: NullableString(r["TaxTypeCode"]),
+                Name: NullableString(r["Name"]),
+                TaxableAmount: NullableDecimal(r["TaxableAmount"]),
+                TaxAmount: NullableDecimal(r["TaxAmount"]),
+                TaxPercent: NullableDecimal(r["TaxPercent"]),
+                CurrencyTaxAmount: NullableDecimal(r["CurrencyTaxAmount"]),
+                ExemptionReason: NullableString(r["ExemptionReason"]),
+                ExemptionReasonCode: r["ExemptionReasonCode"] is int c ? c : null));
+        }
+
+        if (taxes.Count == 0) return null;
+
+        return new EDocumentHeaderExtras(
+            SupplierName: null, SupplierTaxNumber: null,
+            CustomerName: null, CustomerTaxNumber: null, CustomerTaxOffice: null,
+            CustomerAddress: null, CustomerCity: null, CustomerDistrict: null, CustomerCountry: null,
+            ProfileId: null, DocumentTypeCode: null, CurrencyCode: null, Note: null,
+            OrderNumber: null, OrderDate: null,
+            GrossAmount: null, DiscountTotal: null,
+            VatAmount: taxes.Where(t => t.TaxAmount.HasValue).Sum(t => t.TaxAmount!.Value),
+            PayableAmount: null,
+            DocumentTaxes: taxes);
+    }
+
+    /// <summary>
+    /// LEGACY (CBT_EBELGEMAS) baslik okuyucusu: alici bilgisi ve belge toplamlari orada
+    /// hazir durur — kalemlerden yeniden hesaplamak yerine kaynaktaki degeri gosteririz.
+    /// </summary>
+    private async Task<EDocumentHeaderExtras?> GetLegacyHeaderExtrasAsync(
+        SqlConnection connection, int documentId, CancellationToken cancellationToken)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [SENDERNAME],[SENDERVNO],[CARI_ISIM],[CARI_VERGINUMARASI],[CARI_TCKIMLIKNO],
+                   [CARI_VERGIDAIRESI],[CARI_ADRES],[CARI_IL],[CARI_ILCE],[CARI_ULKEKODU],
+                   [YEDEK11],[YEDEK12],[S_YEDEK1],[S_YEDEK2],[SIPARISNO],[SIPARIS_TARIH],
+                   [BRUTTUTAR],[F_YEDEK1],[KDV],[GENELTOPLAM]
+              FROM {_ebelgeMasTableName}
+             WHERE [INCKEYNO] = @DocId;
+            """;
+        cmd.Parameters.Add(CreateParameter("@DocId", documentId));
+
+        await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
+        if (!await r.ReadAsync(cancellationToken)) return null;
+
+        return new EDocumentHeaderExtras(
+            SupplierName: NullableString(r["SENDERNAME"]),
+            SupplierTaxNumber: NullableString(r["SENDERVNO"]),
+            CustomerName: NullableString(r["CARI_ISIM"]),
+            CustomerTaxNumber: NullableString(r["CARI_VERGINUMARASI"]) ?? NullableString(r["CARI_TCKIMLIKNO"]),
+            CustomerTaxOffice: NullableString(r["CARI_VERGIDAIRESI"]),
+            CustomerAddress: NullableString(r["CARI_ADRES"]),
+            CustomerCity: NullableString(r["CARI_IL"]),
+            CustomerDistrict: NullableString(r["CARI_ILCE"]),
+            CustomerCountry: NullableString(r["CARI_ULKEKODU"]),
+            ProfileId: NullableString(r["S_YEDEK1"]),
+            DocumentTypeCode: NullableString(r["YEDEK12"]),
+            CurrencyCode: NullableString(r["S_YEDEK2"]),
+            Note: NullableString(r["YEDEK11"]),
+            OrderNumber: NullableString(r["SIPARISNO"]),
+            OrderDate: r["SIPARIS_TARIH"] is DateTime od ? od : null,
+            GrossAmount: NullableDecimal(r["BRUTTUTAR"]),
+            DiscountTotal: NullableDecimal(r["F_YEDEK1"]),
+            VatAmount: NullableDecimal(r["KDV"]),
+            PayableAmount: NullableDecimal(r["GENELTOPLAM"]),
+            DocumentTaxes: Array.Empty<EDocumentTaxData>());
+    }
+
     /// <summary>
     /// LEGACY (CBT_EBELGEKALEM) kalem okuyucusu. Kalemler EBELGEMAS = CBT_EBELGEMAS.INCKEYNO
     /// ile baglidir; GetByIdAsync legacy dalinda belge Id'si de INCKEYNO'dur, yani ayni anahtar.
@@ -626,8 +732,15 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
+        // Anahtar ONCE EnvelopeId'den ('NETSIS-EFAT-<inc>') okunur, JSON yalniz geri dusustur.
+        // Gerekli: PayloadRaw artik zarf UBL XML'i olabiliyor (JSON izleme kaydinin yerini
+        // alir) — yalniz JSON_VALUE'ye bakan imlec o kayitlarda NULL gorup SIFIRA duser ve
+        // her turda tum arsivi bastan tarardi.
         cmd.CommandText = $"""
-            SELECT ISNULL(MAX(TRY_CAST(JSON_VALUE([PayloadRaw], '$.incKeyNo') AS INT)), 0)
+            SELECT ISNULL(MAX(COALESCE(
+                       TRY_CAST(REVERSE(LEFT(REVERSE([EnvelopeId]),
+                           NULLIF(CHARINDEX('-', REVERSE([EnvelopeId])), 0) - 1) ) AS INT),
+                       TRY_CAST(JSON_VALUE([PayloadRaw], '$.incKeyNo') AS INT))), 0)
               FROM {_tableName}
              WHERE [Kind] = @Kind AND [IngestSource] = 'Offline' AND [CompanyId] = @CompanyId;
             """;
@@ -2048,6 +2161,37 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         }
 
         return document;
+    }
+
+    public async Task UpdatePayloadRawAsync(int id, string payloadRaw, CancellationToken cancellationToken)
+    {
+        if (id <= 0 || string.IsNullOrWhiteSpace(payloadRaw)) return;
+
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+
+        if (await LegacyTablesExistAsync(connection, cancellationToken))
+        {
+            // Legacy semada payload kolonu opsiyoneldir; yoksa sessizce cikilir (yazilacak
+            // yer yok — belge yine kalem tablolarindan gosterilir).
+            if (!await ColumnExistsAsync(connection, "CBT_EBELGEMAS", "PAYLOAD_RAW", cancellationToken))
+                return;
+
+            await using var legacy = connection.CreateCommand();
+            legacy.CommandText = $"UPDATE {_ebelgeMasTableName} SET [PAYLOAD_RAW] = @Payload WHERE [INCKEYNO] = @Id";
+            legacy.Parameters.Add(CreateParameter("@Payload", payloadRaw));
+            legacy.Parameters.Add(CreateParameter("@Id", id));
+            await legacy.ExecuteNonQueryAsync(cancellationToken);
+            return;
+        }
+
+        if (!await TableExistsAsync(connection, "IncomingDocument", cancellationToken)) return;
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"UPDATE {_tableName} SET [PayloadRaw] = @Payload WHERE [Id] = @Id AND [CompanyId] = @CompanyId";
+        command.Parameters.Add(CreateParameter("@Payload", payloadRaw));
+        command.Parameters.Add(CreateParameter("@Id", id));
+        command.Parameters.Add(CreateParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task UpdateIsProcessedAsync(int id, bool isProcessed, CancellationToken cancellationToken)
