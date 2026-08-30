@@ -281,6 +281,88 @@ public sealed class BomTreeSharedComponentTests
         }
     }
 
+    /// <summary>
+    /// AYNI İÇERİK İKİNCİ KEZ İSTENİRSE yeni sürüm AÇILMAZ — mevcut sürüme bağlanır.
+    ///
+    /// <para><b>Neden önemli:</b> yalnızca kayıt tasarrufu değil. MRP kümüle iş emirlerini
+    /// reçeteye göre gruplayacağı için, aynı içeriğin iki ayrı sürümde durması aynı işi
+    /// İKİ AYRI iş emrine bölerdi. Tekilleştirme bunu kaynağında engeller.</para>
+    ///
+    /// <para>Senaryo: P1 ve P2 aynı yarı mamulü (S) kullanıyor. Önce P1'in ağacında S
+    /// özelleştiriliyor → sürüm türüyor. Sonra P2'nin ağacında S AYNI hâle getiriliyor →
+    /// ikinci sürüm DOĞMAMALI, P2'nin satırı da ilk sürüme sabitlenmeli.</para>
+    /// </summary>
+    [SkippableFact]
+    public async Task Ayni_icerikli_surum_varsa_yenisi_acilmaz_mevcut_surume_baglanir()
+    {
+        Skip.IfNot(DbReachable(), "CalibraHub veritabanina erisilemedi.");
+
+        var factory = BuildFactory();
+        var repo = new SqlLogisticsConfigurationRepository(
+            factory,
+            new CalibraDatabaseOptions { ConnectionString = Conn!, Schema = "dbo" },
+            new NoDataVisibilityFilter());
+        var service = new LogisticsConfigurationService(repo);
+        var ct = CancellationToken.None;
+
+        var tag = "ZZTREE" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        var itemIds = new List<int>();
+
+        try
+        {
+            var unitId = await FirstActiveUnitIdAsync();
+            Skip.If(unitId is null, "Aktif olcu birimi yok — fikstur kurulamiyor.");
+
+            var p1 = await InsertItemAsync(tag + "-P1", "Test Mamul 1", 3, unitId!.Value); itemIds.Add(p1);
+            var p2 = await InsertItemAsync(tag + "-P2", "Test Mamul 2", 3, unitId.Value);  itemIds.Add(p2);
+            var s  = await InsertItemAsync(tag + "-S",  "Test Yari Mamul", 2, unitId.Value); itemIds.Add(s);
+            var c1 = await InsertItemAsync(tag + "-C1", "Test Hammadde 1", 1, unitId.Value); itemIds.Add(c1);
+            var x  = await InsertItemAsync(tag + "-X",  "Test Hammadde 2", 1, unitId.Value); itemIds.Add(x);
+
+            var bomS  = await AddBomAsync(repo, s,  (c1, 2m), ct);
+            var bomP1 = await AddBomAsync(repo, p1, (s, 1m), ct);
+            var bomP2 = await AddBomAsync(repo, p2, (s, 1m), ct);
+
+            // ── 1) P1'in agacinda S'ye X ekle → surum turemeli ──
+            var t1 = await service.GetBomTreeAsync(p1, null, bomP1, ct);
+            var pay1 = ToSave(t1!.Root);
+            pay1.Children[0].Children.Add(new MutableNode { ItemId = x, Quantity = 3m, ScrapRatio = 0m });
+            var r1 = await service.SaveBomTreeAsync(new SaveBomTreeRequest(Freeze(pay1)), null, ct);
+            var derived = Assert.Single(r1.Notes, n => n.Action == "derived");
+            var versionBomId = derived.BomId;
+
+            // ── 2) P2'nin agacinda S'yi AYNI hale getir → YENI SURUM ACILMAMALI ──
+            var t2 = await service.GetBomTreeAsync(p2, null, bomP2, ct);
+            var pay2 = ToSave(t2!.Root);
+            pay2.Children[0].Children.Add(new MutableNode { ItemId = x, Quantity = 3m, ScrapRatio = 0m });
+            var r2 = await service.SaveBomTreeAsync(new SaveBomTreeRequest(Freeze(pay2)), null, ct);
+
+            Assert.DoesNotContain(r2.Notes, n => n.Action == "derived");
+            var reused = Assert.Single(r2.Notes, n => n.Action == "reused");
+            Assert.Equal(versionBomId, reused.BomId);
+
+            // ── 3) S'nin toplam recete sayisi 2 olmali (baz + TEK surum) ──
+            var versions = await repo.GetBomVersionsAsync(s, null, ct);
+            Assert.Equal(2, versions.Count);
+
+            // ── 4) HER IKI mamulun satiri da AYNI surume sabitlenmis olmali ──
+            // MRP kumule gruplamasi recete kimligine bakacagi icin bu esitlik,
+            // iki talebin TEK is emrinde birlesmesinin on kosulu.
+            var p1Line = Assert.Single((await repo.GetBOMByIdWithNamesAsync(bomP1, ct))!.Lines);
+            var p2Line = Assert.Single((await repo.GetBOMByIdWithNamesAsync(bomP2, ct))!.Lines);
+            Assert.Equal(versionBomId, p1Line.ComponentBomId);
+            Assert.Equal(versionBomId, p2Line.ComponentBomId);
+
+            // ── 5) BAZ recete hala dokunulmamis ──
+            var baseAfter = await repo.GetBOMByIdWithNamesAsync(bomS, ct);
+            Assert.Single(baseAfter!.Lines);
+        }
+        finally
+        {
+            await CleanupAsync(itemIds, new List<int>());
+        }
+    }
+
     // ── Fikstur yardimcilari ────────────────────────────────────────────
 
     private static async Task<int?> FirstActiveUnitIdAsync()

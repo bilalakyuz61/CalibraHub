@@ -3781,6 +3781,15 @@
         if (node.isCycle) nameCell.appendChild(pttBadge('Döngü burada kapanıyor', 'cycle'));
         if (node.bomVersionCode) nameCell.appendChild(pttBadge('Versiyon: ' + node.bomVersionCode, 'version'));
         // Paylasimli uyarisi: burada yapilan degisiklik kaydedilirken versiyon turetilir.
+        // Rozet paylaşımlı olmayan düğümde de gerekli: kullanıcı "bu yarı mamulün
+        // sürümleri hangi ürünlere bağlı" sorusunu her zaman sorabilmeli.
+        if (!isRoot && node.bomId && node.referenceCount <= 1) {
+            var ub = pttBadge('Kullanım', 'version');
+            ub.classList.add('bomt-badge--click');
+            ub.title = 'Reçeteleri ve kullanan ürünleri gör';
+            ub.addEventListener('click', function (e) { e.stopPropagation(); pttShowReferences(node); });
+            nameCell.appendChild(ub);
+        }
         if (!isRoot && node.referenceCount > 1) {
             // Rozet TIKLANABILIR: sayiyi gormek yetmiyordu, "hangi urunler?"
             // sorusu cevapsiz kaliyordu. Tiklayinca listeyi modalda gosterir.
@@ -4268,10 +4277,25 @@
     function pttReportNotes(result) {
         var notes = (result && result.notes) || [];
         var derived = notes.filter(function(n) { return n.action === 'derived'; });
+        // "reused": ayni icerikli surum zaten vardi, yenisi ACILMADI. Kullanici
+        // "versiyon turedi mi?" diye merak etmesin diye bu da bildirilir.
+        var reused = notes.filter(function(n) { return n.action === 'reused'; });
         var written = notes.filter(function(n) { return n.action === 'created' || n.action === 'updated'; });
 
         if (!derived.length) {
-            showMsg('Agac kaydedildi (' + written.length + ' recete yazildi).', true);
+            var extra = reused.length
+                ? ' — ' + reused.length + ' alt recete icin AYNI icerikli mevcut surum kullanildi.'
+                : '';
+            showMsg('Agac kaydedildi (' + written.length + ' recete yazildi)' + extra, true);
+            if (reused.length) {
+                var w0 = pttEl('pttTruncWarn');
+                if (w0) {
+                    w0.style.display = '';
+                    w0.textContent = 'Yeni sürüm açılmadı: ' + reused.map(function(n) {
+                        return n.itemCode + ' → mevcut "' + (n.versionCode || 'baz reçete') + '"';
+                    }).join(' · ') + '. Aynı içerikli bir reçete zaten vardı, satır ona bağlandı.';
+                }
+            }
             return;
         }
         var lines = derived.map(function(n) {
@@ -4286,59 +4310,82 @@
         showMsg('Agac kaydedildi - ' + derived.length + ' versiyon turetildi.', true);
     }
 
-    /* "Paylasimli xN" detayi — bu alt receteyi HANGI urunlerin kullandigi.
-       Sayi tek basina eyleme donusmuyordu: kullanici degisikligin kimleri
-       etkileyecegini bilmeden karar veremez. */
+    /* "Paylaşımlı ×N" detayı — bu yarı mamulün TÜM reçeteleri (baz + sürümler) ve
+       her birini hangi mamullerin kullandığı. Önceki sürüm yalnız o an izlenen
+       reçetenin kullanıcılarını gösteriyordu; "özelleştirilmiş sürüm hangi ürüne
+       bağlı?" sorusu için sürüm sürüm ekran gezmek gerekiyordu. */
     async function pttShowReferences(node) {
-        if (!node.bomId) { showMsg('Bu bileşenin kayıtlı reçetesi yok.', false); return; }
+        if (!node.itemId) { showMsg('Malzeme okunamadı.', false); return; }
 
-        var body = '<div class="bomt-empty">Yükleniyor…</div>';
         var back = pttModal(
-            (node.itemCode || '') + ' — Bu Reçeteyi Kullanan Ürünler', body);
+            (node.itemCode || '') + ' — Reçeteleri ve Kullanan Ürünler',
+            '<div class="bomt-empty">Yükleniyor…</div>');
+        var host = back.querySelector('[data-body]');
 
         try {
-            var r = await fetch('/Logistics/BomReferences?bomId=' + encodeURIComponent(node.bomId),
-                                { credentials: 'include' });
+            var url = '/Logistics/BomUsageMap?itemId=' + encodeURIComponent(node.itemId)
+                    + (node.configId != null ? '&configId=' + node.configId : '')
+                    + (node.bomId ? '&currentBomId=' + node.bomId : '');
+            var r = await fetch(url, { credentials: 'include' });
             var d = await r.json();
-            var host = back.querySelector('[data-body]');
             if (!r.ok || !d.success) {
                 host.innerHTML = '<div class="bomt-empty">Liste alınamadı.</div>';
                 return;
             }
-            var items = d.items || [];
-            if (!items.length) {
-                host.innerHTML = '<div class="bomt-empty">Bu reçeteyi kullanan başka ürün yok.</div>';
+            var groups = d.groups || [];
+            if (!groups.length) {
+                host.innerHTML = '<div class="bomt-empty">Bu malzemenin tanımlı reçetesi yok.</div>';
                 return;
             }
-            var wrap = document.createElement('div');
-            wrap.className = 'bomt-reflist';
-            items.forEach(function (it) {
-                var row = document.createElement('div');
-                row.className = 'bomt-refrow'
-                    + (it.bomId === ptCurrentId ? ' is-current' : '');
-                var code = document.createElement('span');
-                code.className = 'bomt-refcode'; code.textContent = it.itemCode;
-                var name = document.createElement('span');
-                name.className = 'bomt-refname'; name.textContent = it.itemName || '';
-                row.appendChild(code); row.appendChild(name);
-                if (it.versionCode) row.appendChild(pttBadge('Versiyon: ' + it.versionCode, 'version'));
-                // Sabitlenmis satir, BAZ recete degisince ETKILENMEZ — ayrimi goster.
-                row.appendChild(pttBadge(it.isPinned ? 'Sabitlenmiş' : 'Bazı izliyor',
-                                         it.isPinned ? 'version' : 'shared'));
-                if (it.bomId === ptCurrentId) row.appendChild(pttBadge('Açık olan', 'new'));
-                wrap.appendChild(row);
-            });
+
             host.innerHTML = '';
             var note = document.createElement('div');
-            note.style.cssText = 'font-size:11.5px;color:var(--text-muted);margin-bottom:10px;line-height:1.5;';
-            note.textContent = 'Bu alt reçeteyi ağaçta değiştirirseniz yerinde ezilmez: '
-                + 'otomatik yeni bir versiyon türetilir ve yalnız açık olan ürünün satırı '
-                + 'ona sabitlenir. Aşağıdaki diğer ürünler etkilenmez.';
+            note.style.cssText = 'font-size:11.5px;color:var(--text-muted);margin-bottom:12px;line-height:1.5;';
+            note.textContent = 'Bir sürümü ağaçta değiştirirseniz yerinde ezilmez: '
+                + 'aynı içerikli bir sürüm zaten varsa ona bağlanır, yoksa yeni sürüm '
+                + 'türetilir ve yalnız açık olan ürünün satırı ona sabitlenir.';
             host.appendChild(note);
-            host.appendChild(wrap);
+
+            groups.forEach(function (g) {
+                var sec = document.createElement('div');
+                sec.style.cssText = 'margin-bottom:14px;';
+
+                var head = document.createElement('div');
+                head.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;';
+                var title = document.createElement('span');
+                title.className = 'bomt-refcode';
+                title.textContent = g.versionCode ? ('Sürüm: ' + g.versionCode) : 'Baz Reçete';
+                head.appendChild(title);
+                head.appendChild(pttBadge(g.lineCount + ' bileşen', 'version'));
+                if (g.isCurrent) head.appendChild(pttBadge('Ağaçta izlenen', 'new'));
+                // Kimse kullanmıyorsa bunu SÖYLE — boş bırakmak "veri gelmedi" sanılır.
+                if (!g.references.length) head.appendChild(pttBadge('Kullanılmıyor', 'warnsoft'));
+                sec.appendChild(head);
+
+                if (g.references.length) {
+                    var list = document.createElement('div');
+                    list.className = 'bomt-reflist';
+                    g.references.forEach(function (it) {
+                        var row = document.createElement('div');
+                        row.className = 'bomt-refrow' + (it.bomId === ptCurrentId ? ' is-current' : '');
+                        var code = document.createElement('span');
+                        code.className = 'bomt-refcode'; code.textContent = it.itemCode;
+                        var name = document.createElement('span');
+                        name.className = 'bomt-refname'; name.textContent = it.itemName || '';
+                        row.appendChild(code); row.appendChild(name);
+                        if (it.versionCode) row.appendChild(pttBadge('Versiyon: ' + it.versionCode, 'version'));
+                        // Sabitlenmiş satır bazı takip ETMEZ — ayrım kullanıcı için kritik.
+                        row.appendChild(pttBadge(it.isPinned ? 'Sabitlenmiş' : 'Bazı izliyor',
+                                                 it.isPinned ? 'version' : 'shared'));
+                        if (it.bomId === ptCurrentId) row.appendChild(pttBadge('Açık olan', 'new'));
+                        list.appendChild(row);
+                    });
+                    sec.appendChild(list);
+                }
+                host.appendChild(sec);
+            });
         } catch (e) {
-            var h2 = back.querySelector('[data-body]');
-            if (h2) h2.innerHTML = '<div class="bomt-empty">Liste alınamadı: '
+            host.innerHTML = '<div class="bomt-empty">Liste alınamadı: '
                 + escHtml(e.message || '') + '</div>';
         }
     }

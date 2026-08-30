@@ -817,3 +817,15 @@ public sealed record BomReferenceDto(
     string ItemName,
     string? VersionCode,  // ata reçetenin versiyonu (NULL = baz)
     bool IsPinned);       // satır bu reçeteye SABİTLENMİŞ mi (yoksa bazı izliyor)
+
+/// <summary>
+/// Bir malzemenin TÜM reçeteleri (baz + sürümler) ve her birini kullanan ata mamuller.
+/// Reçete Ağacında "bu yarı mamulün hangi sürümü hangi ürüne bağlı" sorusunu tek
+/// bakışta cevaplar — sürüm sürüm ayrı ekran gezmeye gerek kalmaz.
+/// </summary>
+public sealed record BomUsageGroupDto(
+    int BomId,
+    string? VersionCode,      // NULL = baz reçete
+    int LineCount,
+    bool IsCurrent,           // ağaçta şu an izlenen reçete mi
+    IReadOnlyList<BomReferenceDto> References);

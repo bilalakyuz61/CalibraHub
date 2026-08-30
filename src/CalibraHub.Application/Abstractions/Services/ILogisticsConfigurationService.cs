@@ -145,6 +145,13 @@ public interface ILogisticsConfigurationService
         int bomId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Bir malzemenin TUM receteleri (baz + surumler) ve her birini kullanan ata mamuller.
+    /// <paramref name="currentBomId"/> agacta izlenen receteyi isaretlemek icin.
+    /// </summary>
+    Task<IReadOnlyList<BomUsageGroupDto>> GetBomUsageMapAsync(
+        int itemId, int? configId, int? currentBomId, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Agaci kaydeder: her dugum icin BOM upsert. Yalniz DEGISEN dugumler yazilir.
     /// Paylasimli (ReferenceCount &gt; 1) bir alt recete degistiyse yerinde EZILMEZ —
     /// otomatik yeni versiyon turetilir ve ata satiri ona sabitlenir; boylece

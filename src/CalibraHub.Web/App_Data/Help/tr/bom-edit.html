@@ -5,18 +5,102 @@
   </p>
   <h3>Başlık</h3>
   <ul>
-    <li><b>Mamul</b> (reçetenin ait olduğu ürün) ve varsa <b>konfigürasyon</b> (varyant).</li>
+    <li><b>Mamul</b> (reçetenin ait olduğu ürün) ve varsa <b>kombinasyon</b> (varyant).</li>
   </ul>
   <h3>Bileşen Satırları</h3>
   <ul>
-    <li>Her satırda <b>bileşen</b>, <b>miktar</b>, birim ve <b>fire %</b>.</li>
+    <li>Her satırda <b>bileşen</b>, <b>miktar</b>, birim ve <b>fire oranı</b>.</li>
     <li>Bir bileşen yarı mamulse, onun da kendi reçetesi vardır — ağaç çok seviyeli derinleşir.</li>
     <li>Hızlı giriş: Enter ile satır zinciri, Excel'den yapıştırma ve geri al desteklenir.</li>
   </ul>
+  <p class="help-note">
+    <b>Fire oranı bir ORANDIR, miktar değil.</b> 0,05 yazarsanız %5 fire demektir;
+    patlatmada ihtiyaç <code>miktar × (1 + fire)</code> ile hesaplanır. %5 için 5 yazmak
+    fireyi %500 yapar.
+  </p>
+
+  <h3>Reçete Ağacı sekmesi</h3>
+  <p>
+    Mamulün tüm alt seviyelerini tek ekranda gösterir ve düzenlemenizi sağlar. Bir yarı
+    mamul seçtiğinizde onun kayıtlı reçetesi de ağaca gelir; oradan doğrudan
+    değiştirebilirsiniz.
+  </p>
+
+  <h4>İki farklı "varyasyon" ekseni</h4>
+  <ul>
+    <li><b>Kombinasyon</b> — malzemenin kendisi farklıdır (kırmızı gövde / mavi gövde).
+        Satırda <i>+ Kombinasyon</i> düğmesiyle seçilir. Her kombinasyonun kendi baz
+        reçetesi vardır.</li>
+    <li><b>Reçete sürümü</b> — malzeme aynıdır, yapılış biçimi farklıdır (aynı gövde,
+        farklı bağlantı parçasıyla). Satır bir sürüme <i>sabitlenir</i>.</li>
+  </ul>
+  <p>Bu ikisi birlikte kullanılabilir: <i>"Mavi gövdenin, MAMUL-01 için özelleştirilmiş
+     reçetesi."</i></p>
+
+  <h4>Paylaşımlı alt reçete ve otomatik sürüm</h4>
+  <p>
+    Bir yarı mamulün reçetesi birden çok mamul tarafından kullanılıyorsa, satırda
+    <b>Paylaşımlı ×N</b> rozeti çıkar. Böyle bir alt reçeteyi ağaçta değiştirirseniz
+    <b>yerinde ezilmez</b> — çünkü bu, diğer mamulleri de sessizce değiştirirdi.
+  </p>
+
+  <p><b>Örnek.</b> MASA ve DOLAP ürünlerinin ikisi de AYAK-TAKIMI yarı mamulünü kullanıyor:</p>
+  <pre>Başlangıç
+  AYAK-TAKIMI (baz)  →  vida ×4
+  MASA   → AYAK-TAKIMI   (bazı izliyor)
+  DOLAP  → AYAK-TAKIMI   (bazı izliyor)      Rozet: Paylaşımlı ×2
+
+MASA'nın ağacında AYAK-TAKIMI'na "takoz ×2" eklendi ve kaydedildi
+  AYAK-TAKIMI (baz)   →  vida ×4             ← DEĞİŞMEDİ
+  AYAK-TAKIMI "MASA"  →  vida ×4, takoz ×2   ← yeni sürüm
+  MASA   → AYAK-TAKIMI ["MASA" sürümü]       ← sabitlendi
+  DOLAP  → AYAK-TAKIMI (bazı izliyor)        ← ETKİLENMEDİ</pre>
+  <p>
+    Kaydettikten sonra üst şeritte <i>"yeni sürüm türetildi"</i> bildirimi çıkar. Hangi
+    sürümün hangi ürünlere bağlı olduğunu görmek için satırdaki <b>Paylaşımlı</b> ya da
+    <b>Kullanım</b> rozetine tıklayın: yarı mamulün tüm reçeteleri (baz + sürümler) ve her
+    birini kullanan ürünler listelenir.
+  </p>
+
+  <h4>Aynı içerik ikinci kez: yeni sürüm AÇILMAZ</h4>
+  <p>
+    Başka bir mamulde aynı özelleştirmeyi yaparsanız ikinci bir sürüm oluşturulmaz; satır
+    <b>mevcut sürüme bağlanır</b>. Bildirimde <i>"aynı içerikli mevcut sürüm kullanıldı"</i>
+    yazar.
+  </p>
+  <pre>DOLAP'ın ağacında da AYAK-TAKIMI'na "takoz ×2" eklendi
+  AYAK-TAKIMI "MASA"  →  vida ×4, takoz ×2   ← YENİ SÜRÜM AÇILMADI
+  MASA   → AYAK-TAKIMI ["MASA" sürümü]
+  DOLAP  → AYAK-TAKIMI ["MASA" sürümü]       ← aynı sürüme bağlandı</pre>
+  <p class="help-note">
+    <b>Bu neden önemli:</b> yalnızca kayıt tasarrufu değil. Kümüle iş emri açılırken talepler
+    <i>reçeteye göre</i> gruplanır. Aynı içerik iki ayrı sürümde dursaydı, aynı iş
+    <b>iki ayrı iş emrine</b> bölünürdü. Tek sürüm → tek iş emri.
+  </p>
+
+  <h4>Yarı mamul yalnız tek üründe kullanılıyorsa</h4>
+  <p>
+    Sürüm türetilmez, baz reçete doğrudan düzenlenir — korunacak başka kullanıcı yoktur.
+    Sürüm ancak <b>ikinci bir kullanan çıktığında</b> anlam kazanır. Yani "özelleştirilmiş
+    olmak" ayrı bir işaretle değil, satırın bir sürüme sabitlenmiş olmasıyla tanımlanır.
+  </p>
+
+  <h4>Döngü koruması</h4>
+  <p>
+    Bir malzeme doğrudan ya da dolaylı olarak kendi bileşeni olamaz. Ağaç bunu kaydetmeden
+    önce yakalar, zinciri adıyla gösterir
+    (<code>MASA → AYAK-TAKIMI → MASA</code>) ve döngünün kapandığı satırı kırmızı işaretler.
+    Böyle bir ağaç kaydedilemez.
+  </p>
+
   <h3>Kaydetme</h3>
   <ul>
-    <li><b>Kaydet</b> ile reçete saklanır; <b>Geri</b> kaydetmeden listeye döner.</li>
+    <li><b>Ağacı Kaydet</b> yalnız <i>değişen</i> düğümleri yazar; dokunulmamış alt reçeteler
+        olduğu gibi kalır.</li>
+    <li><b>Kaydet</b> ile başlık ve bileşen listesi saklanır; <b>Geri</b> kaydetmeden döner.</li>
   </ul>
   <p class="help-note">Not: İş emri açılıp yayımlandığında bu reçete "patlatılarak" bileşen
-     ihtiyacı ve alt yarı mamuller oluşturulur.</p>
+     ihtiyacı ve alt yarı mamuller oluşturulur. Satırdaki sabitlenmiş sürüm iş emri
+     bileşenine kopyalanır — böylece iş emri, hangi reçeteyle üretildiğini kendi üzerinde
+     taşır ve reçete sonradan değişse bile geçmiş emrin anlamı kaymaz.</p>
 </div>

@@ -383,6 +383,26 @@ public sealed class BomController : Controller
     }
 
     /// <summary>
+    /// Bir malzemenin TUM receteleri + her birini kullanan mamuller.
+    /// GET /Logistics/BomUsageMap?itemId=5&amp;configId=&amp;currentBomId=42
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> BomUsageMap(
+        int itemId, int? configId, int? currentBomId, CancellationToken ct)
+    {
+        try
+        {
+            var groups = await _logisticsConfigurationService
+                .GetBomUsageMapAsync(itemId, configId, currentBomId, ct);
+            return Ok(new { success = true, groups });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Agaci kaydeder. Paylasimli bir alt recete degistiyse yerinde EZILMEZ — otomatik
     /// versiyon turetilir ve ata satiri ona sabitlenir (kullanici karari 2026-08-29).
     /// Yapilan her islem `notes` altinda raporlanir; istemci bunu kullaniciya gosterir.

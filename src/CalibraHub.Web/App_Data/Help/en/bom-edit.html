@@ -1,23 +1,100 @@
 <div class="calibra-help-doc">
   <p class="help-lead">
-    The BOM Edit screen is where you define the bill of materials (component list) of a
-    finished product. Each line specifies a component required to produce the product and
-    its quantity.
+    The Bill of Materials (BOM) editor is where you define a product's component list.
+    Each line states one component required to build the product, and how much of it.
   </p>
   <h3>Header</h3>
   <ul>
-    <li><b>Finished product</b> (the product the BOM belongs to) and, if any, the <b>configuration</b> (variant).</li>
+    <li><b>Product</b> (the item this recipe belongs to) and, if any, its <b>combination</b> (variant).</li>
   </ul>
-  <h3>Component Lines</h3>
+  <h3>Component lines</h3>
   <ul>
-    <li>Each line has a <b>component</b>, <b>quantity</b>, unit and <b>scrap %</b>.</li>
-    <li>If a component is a semi-finished product, it has its own BOM — the tree becomes multi-level.</li>
-    <li>Fast entry: Enter-key line chaining, paste from Excel and undo are supported.</li>
+    <li>Each line carries a <b>component</b>, a <b>quantity</b>, a unit and a <b>scrap ratio</b>.</li>
+    <li>If a component is a semi-finished item it has its own recipe — the tree goes deeper.</li>
+    <li>Fast entry: Enter chains to the next line; Excel paste and undo are supported.</li>
   </ul>
+  <p class="help-note">
+    <b>Scrap is a RATIO, not a quantity.</b> Enter 0.05 for 5% scrap; the explosion computes
+    <code>quantity × (1 + scrap)</code>. Entering 5 for "5%" would mean 500% scrap.
+  </p>
+
+  <h3>The BOM Tree tab</h3>
+  <p>
+    Shows every level of the product in one place and lets you edit it there. When you pick a
+    semi-finished component, its stored recipe is loaded into the tree so you can change it
+    directly.
+  </p>
+
+  <h4>Two independent kinds of "variation"</h4>
+  <ul>
+    <li><b>Combination</b> — the material itself differs (red body vs blue body). Chosen with
+        the <i>+ Combination</i> button on the line. Each combination has its own base recipe.</li>
+    <li><b>Recipe version</b> — same material, different way of making it (same body, different
+        connector). The line is <i>pinned</i> to a version.</li>
+  </ul>
+  <p>The two combine: <i>"the blue body, built with the recipe customised for PRODUCT-01."</i></p>
+
+  <h4>Shared sub-recipes and automatic versioning</h4>
+  <p>
+    If a semi-finished item's recipe is used by more than one product, the line shows a
+    <b>Shared ×N</b> badge. Editing such a sub-recipe in the tree does <b>not</b> overwrite it
+    in place — that would silently change the other products too.
+  </p>
+
+  <p><b>Example.</b> TABLE and CABINET both use the LEG-SET semi-finished item:</p>
+  <pre>Before
+  LEG-SET (base)  →  screw ×4
+  TABLE   → LEG-SET   (follows base)
+  CABINET → LEG-SET   (follows base)      Badge: Shared ×2
+
+"shim ×2" added to LEG-SET inside TABLE's tree, then saved
+  LEG-SET (base)    →  screw ×4            ← UNCHANGED
+  LEG-SET "TABLE"   →  screw ×4, shim ×2   ← new version
+  TABLE   → LEG-SET ["TABLE" version]      ← pinned
+  CABINET → LEG-SET (follows base)         ← UNAFFECTED</pre>
+  <p>
+    After saving, a banner reports that a version was derived. To see which version is tied to
+    which products, click the <b>Shared</b> or <b>Usage</b> badge on the line: every recipe of
+    that semi-finished item (base plus versions) is listed together with the products using it.
+  </p>
+
+  <h4>Same content a second time: no new version</h4>
+  <p>
+    If you make the same customisation under another product, a second version is not created —
+    the line is <b>bound to the existing version</b> instead, and the banner says so.
+  </p>
+  <pre>"shim ×2" also added to LEG-SET inside CABINET's tree
+  LEG-SET "TABLE"   →  screw ×4, shim ×2   ← NO NEW VERSION
+  TABLE   → LEG-SET ["TABLE" version]
+  CABINET → LEG-SET ["TABLE" version]      ← bound to the same version</pre>
+  <p class="help-note">
+    <b>Why this matters:</b> it is not just about saving records. When cumulative work orders are
+    created, demand is grouped <i>by recipe</i>. Had the same content lived in two separate
+    versions, the same job would be split into <b>two work orders</b>. One version → one work order.
+  </p>
+
+  <h4>When the semi-finished item is used by a single product</h4>
+  <p>
+    No version is derived; the base recipe is edited directly — there is nobody else to protect.
+    A version only becomes meaningful once a <b>second</b> consumer appears. In other words,
+    "being customised" is not a separate flag: it is the line being pinned to a version.
+  </p>
+
+  <h4>Cycle protection</h4>
+  <p>
+    A material cannot be its own component, directly or indirectly. The tree catches this before
+    saving, names the chain (<code>TABLE → LEG-SET → TABLE</code>) and marks the row where the
+    cycle closes in red. Such a tree cannot be saved.
+  </p>
+
   <h3>Saving</h3>
   <ul>
-    <li><b>Save</b> stores the BOM; <b>Back</b> returns to the list without saving.</li>
+    <li><b>Save Tree</b> writes only the nodes that actually changed; untouched sub-recipes are
+        left alone.</li>
+    <li><b>Save</b> stores the header and component list; <b>Back</b> returns without saving.</li>
   </ul>
-  <p class="help-note">Note: When a work order is opened and released, this BOM is "exploded"
-     to create the component requirements and lower-level semi-finished products.</p>
+  <p class="help-note">Note: when a work order is released, this recipe is exploded into component
+     requirements and sub-assemblies. The pinned version on the line is copied onto the work order
+     component, so the work order carries the recipe it was built from — later recipe changes do
+     not distort past orders.</p>
 </div>

@@ -147,6 +147,34 @@ public sealed partial class LogisticsConfigurationService
         int bomId, CancellationToken cancellationToken)
         => _repository.GetBomReferencesAsync(bomId, cancellationToken);
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<BomUsageGroupDto>> GetBomUsageMapAsync(
+        int itemId, int? configId, int? currentBomId, CancellationToken cancellationToken)
+    {
+        if (itemId <= 0) return Array.Empty<BomUsageGroupDto>();
+
+        // Surum sayisi bir malzeme icin kucuktur (baz + kullanici turetimleri), bu yuzden
+        // surum basina referans sorgusu kabul edilebilir. Toplu bir sorguya cevirmek
+        // erken optimizasyon olurdu.
+        var versions = await _repository.GetBomVersionsAsync(itemId, configId, cancellationToken);
+        var result = new List<BomUsageGroupDto>(versions.Count);
+        foreach (var v in versions)
+        {
+            var refs = await _repository.GetBomReferencesAsync(v.Id, cancellationToken);
+            result.Add(new BomUsageGroupDto(
+                BomId:       v.Id,
+                VersionCode: v.VersionCode,
+                LineCount:   v.LineCount,
+                IsCurrent:   currentBomId.HasValue && currentBomId.Value == v.Id,
+                References:  refs));
+        }
+        // Baz once, sonra surumler — kullanici once "asil" olani gormeli.
+        return result
+            .OrderBy(x => x.VersionCode is null ? 0 : 1)
+            .ThenBy(x => x.VersionCode, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     private static BomTreeNodeDto ApplyNodeFacts(
         BomTreeNodeDto node,
         IReadOnlyDictionary<int, int> counts,
@@ -248,6 +276,29 @@ public sealed partial class LogisticsConfigurationService
                     "unchanged", existing.VersionCode, refCounts.GetValueOrDefault(existing.Id, 0)));
                 // Sabitleme kuralı: ata satırı yalnız versiyonlu reçeteye sabitlenir.
                 return existing.VersionCode is null ? null : existing.Id;
+            }
+
+            // ── Aynı içerikli bir reçete ZATEN var mı? ──
+            // Paylaşım durumundan BAĞIMSIZ çalışır. Önce yalnız "paylaşımlı" dalında
+            // çalışıyordu; test şunu gösterdi: ilk ürün kendi sürümüne sabitlenince
+            // baz reçete tek kullanıcılı kalıyor, ikinci ürün "paylaşımlı değil" sayılıp
+            // bazı yerinde düzenliyordu — sonuçta yine İKİ eş-içerikli reçete oluşuyordu.
+            // MRP kümüle iş emirlerini reçeteye göre grupladığı için bu, aynı işin iki
+            // ayrı iş emrine bölünmesi demekti.
+            if (!isRoot)
+            {
+                var reuse = await FindEquivalentBomAsync(
+                    node.ItemId, node.ConfigId, lines, cancellationToken);
+                if (reuse is not null)
+                {
+                    notes.Add(new BomTreeSaveNoteDto(
+                        node.ItemId, codeById.GetValueOrDefault(node.ItemId, ""), reuse.Id,
+                        "reused", reuse.VersionCode,
+                        refCounts.GetValueOrDefault(existing?.Id ?? 0, 0)));
+                    // Eşleşen BAZ reçeteyse sabitleme YAPILMAZ (null döner): satır bazı
+                    // izlemeye devam eder, baz güncellenince otomatik güncel kalır.
+                    return reuse.VersionCode is null ? null : reuse.Id;
+                }
             }
 
             // ── Paylaşımlı mı? Öyleyse yerinde EZME, versiyon türet ──
@@ -409,6 +460,34 @@ public sealed partial class LogisticsConfigurationService
             if (!string.Equals(st.Note ?? "", s.Note ?? "", StringComparison.Ordinal)) return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Bu malzeme+kombinasyon için, istenen bileşen kümesiyle BİREBİR aynı içeriğe sahip
+    /// bir reçete (baz ya da sürüm) zaten var mı? Varsa onu döner.
+    ///
+    /// <para>Karşılaştırma <see cref="LinesDiffer"/> ile yapılır — yani "değişti mi"
+    /// kontrolüyle AYNI kural: sıra önemsiz, (malzeme, kombinasyon, miktar, fire, not,
+    /// alt reçete) beşlisi eşleşmeli. İki ayrı kural kullanmak, bir yerde "değişmedi"
+    /// sayılanın diğerinde "farklı" sayılmasına yol açardı.</para>
+    ///
+    /// <para>Önce satır SAYISI ile eleme yapılır; ancak sayısı tutan adaylar okunur.
+    /// Aksi halde çok sürümlü bir malzemede her kaydetme tüm sürümleri çekerdi.</para>
+    /// </summary>
+    private async Task<BOMWithNames?> FindEquivalentBomAsync(
+        int itemId, int? configId,
+        IReadOnlyList<SaveBOMLineRequest> lines,
+        CancellationToken cancellationToken)
+    {
+        var versions = await _repository.GetBomVersionsAsync(itemId, configId, cancellationToken);
+        foreach (var v in versions)
+        {
+            if (v.LineCount != lines.Count) continue;   // ucuz eleme
+            var candidate = await _repository.GetBOMByIdWithNamesAsync(v.Id, cancellationToken);
+            if (candidate is null) continue;
+            if (!LinesDiffer(candidate.Lines, lines)) return candidate;
+        }
+        return null;
     }
 
     /// <summary>
