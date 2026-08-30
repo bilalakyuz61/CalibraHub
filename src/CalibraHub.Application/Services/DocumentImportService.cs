@@ -159,6 +159,25 @@ public sealed class DocumentImportService : IDocumentImportService
             }
         }
 
+
+        // Ice aktarim biter bitmez CARI eslestirmesi yapilir: gonderen VKN/TC ile TEK bir
+        // aktif cariye eslesen belgeler baglanir. Birden cok aday varsa kayit BAGLANMAZ —
+        // kullanici ekrandan secer. Eslestirme AYRICA elle de tetiklenebilir (cari
+        // sonradan acilan faturalar icin), bu yuzden burada hata TARAMAYI durdurmaz.
+        try
+        {
+            var match = await _incomingDocumentRepository.MatchContactsByTaxNumberAsync(cancellationToken);
+            if (match.Matched > 0 || match.Ambiguous > 0)
+            {
+                notes.Add($"Cari eşleştirme: {match.Matched} belge bağlandı, " +
+                          $"{match.Ambiguous} belgede birden fazla aday var (seçim bekliyor), " +
+                          $"{match.Unmatched} belgede eşleşen cari yok.");
+            }
+        }
+        catch (Exception ex)
+        {
+            notes.Add($"Cari eşleştirme yapılamadı: {ex.Message}");
+        }
         return new ImportResultDto(imported, skipped, notes);
     }
 
@@ -302,6 +321,25 @@ public sealed class DocumentImportService : IDocumentImportService
             }
         }
 
+
+        // Ice aktarim biter bitmez CARI eslestirmesi yapilir: gonderen VKN/TC ile TEK bir
+        // aktif cariye eslesen belgeler baglanir. Birden cok aday varsa kayit BAGLANMAZ —
+        // kullanici ekrandan secer. Eslestirme AYRICA elle de tetiklenebilir (cari
+        // sonradan acilan faturalar icin), bu yuzden burada hata TARAMAYI durdurmaz.
+        try
+        {
+            var match = await _incomingDocumentRepository.MatchContactsByTaxNumberAsync(cancellationToken);
+            if (match.Matched > 0 || match.Ambiguous > 0)
+            {
+                notes.Add($"Cari eşleştirme: {match.Matched} belge bağlandı, " +
+                          $"{match.Ambiguous} belgede birden fazla aday var (seçim bekliyor), " +
+                          $"{match.Unmatched} belgede eşleşen cari yok.");
+            }
+        }
+        catch (Exception ex)
+        {
+            notes.Add($"Cari eşleştirme yapılamadı: {ex.Message}");
+        }
         return new ImportResultDto(importedCount, skippedCount, notes);
     }
 

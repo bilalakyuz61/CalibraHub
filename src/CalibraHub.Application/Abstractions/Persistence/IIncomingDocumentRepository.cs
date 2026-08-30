@@ -1,3 +1,4 @@
+using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Services.EDocument;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
@@ -23,6 +24,17 @@ public interface IIncomingDocumentRepository
                   EDocumentDetails? details = null);
     Task<IReadOnlyCollection<IncomingDocument>> GetPendingApprovalsAsync(bool? isProcessed, CancellationToken cancellationToken);
     Task<IncomingDocument?> GetByIdAsync(int id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Kuyrugun TEK SAYFASI (tur + islenmis + arama suzgecleriyle, SQL tarafinda).
+    ///
+    /// <para><b>Neden:</b> ekran bugune kadar TUM belgeleri (olculdu: 10.590 kayit) tek
+    /// seferde okuyup ~12 MB JSON uretiyordu; e-Fatura listesi 21 saniyede aciliyordu.
+    /// Sayfalama olmadan bu maliyet kayit sayisiyla dogru orantili buyur.</para>
+    /// </summary>
+    Task<(IReadOnlyList<IncomingDocument> Items, int TotalCount)> GetPendingPageAsync(
+        string? kind, bool? isProcessed, string? search, int page, int pageSize,
+        CancellationToken cancellationToken);
     Task UpdateIsProcessedAsync(int id, bool isProcessed, CancellationToken cancellationToken);
 
     /// <summary>
@@ -30,6 +42,28 @@ public interface IIncomingDocumentRepository
     /// (ilk goruntulemede kaynaktan okunur, bir daha okunmasin diye kayda yazilir).
     /// </summary>
     Task UpdatePayloadRawAsync(int id, string payloadRaw, CancellationToken cancellationToken);
+
+    // ── Cari (Contact) eslestirme ────────────────────────────────────────────
+
+    /// <summary>
+    /// Gonderen VKN/TC ile TEK bir aktif cariye eslesen, henuz bagli OLMAYAN belgeleri
+    /// toplu baglar. Birden cok aday varsa kayit BAGLANMAZ (kullanici secer).
+    /// </summary>
+    Task<EDocumentContactMatchResultDto> MatchContactsByTaxNumberAsync(CancellationToken cancellationToken);
+
+    /// <summary>Verilen belgelerin bagli cari ozetleri (bagli olmayan belge sozlukte YOKTUR).</summary>
+    Task<IReadOnlyDictionary<int, EDocumentContactLinkDto>> GetContactLinksAsync(
+        IReadOnlyCollection<int> documentIds, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Bir belgenin cari adaylari. <paramref name="search"/> bossa belgenin VKN/TC'siyle
+    /// eslesenler, doluysa kod/unvan/VKN aramasi sonucu doner.
+    /// </summary>
+    Task<IReadOnlyList<EDocumentContactCandidateDto>> GetContactCandidatesAsync(
+        int documentId, string? search, CancellationToken cancellationToken);
+
+    /// <summary>Belgeyi bir cariye baglar; <paramref name="contactId"/> null ise bagi kaldirir.</summary>
+    Task UpdateContactAsync(int documentId, int? contactId, CancellationToken cancellationToken);
 
     /// <summary>
     /// Belgenin YERLI tablolardaki kalemleri (kalem vergileri dahil).

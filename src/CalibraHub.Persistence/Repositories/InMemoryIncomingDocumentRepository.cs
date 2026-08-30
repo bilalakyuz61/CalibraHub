@@ -61,6 +61,29 @@ public sealed class InMemoryIncomingDocumentRepository : IIncomingDocumentReposi
         => Task.FromResult<IReadOnlyList<CalibraHub.Application.Services.EDocument.EDocumentLineData>>(
             Array.Empty<CalibraHub.Application.Services.EDocument.EDocumentLineData>());
 
+    public Task<CalibraHub.Application.Contracts.EDocumentContactMatchResultDto> MatchContactsByTaxNumberAsync(
+        CancellationToken cancellationToken)
+        => Task.FromResult(new CalibraHub.Application.Contracts.EDocumentContactMatchResultDto(0, 0, 0));
+
+    public Task<IReadOnlyDictionary<int, CalibraHub.Application.Contracts.EDocumentContactLinkDto>> GetContactLinksAsync(
+        IReadOnlyCollection<int> documentIds, CancellationToken cancellationToken)
+        => Task.FromResult<IReadOnlyDictionary<int, CalibraHub.Application.Contracts.EDocumentContactLinkDto>>(
+            new Dictionary<int, CalibraHub.Application.Contracts.EDocumentContactLinkDto>());
+
+    public Task<IReadOnlyList<CalibraHub.Application.Contracts.EDocumentContactCandidateDto>> GetContactCandidatesAsync(
+        int documentId, string? search, CancellationToken cancellationToken)
+        => Task.FromResult<IReadOnlyList<CalibraHub.Application.Contracts.EDocumentContactCandidateDto>>(
+            Array.Empty<CalibraHub.Application.Contracts.EDocumentContactCandidateDto>());
+
+    public Task UpdateContactAsync(int documentId, int? contactId, CancellationToken cancellationToken)
+        => Task.CompletedTask;
+
+    public Task<(IReadOnlyList<IncomingDocument> Items, int TotalCount)> GetPendingPageAsync(
+        string? kind, bool? isProcessed, string? search, int page, int pageSize,
+        CancellationToken cancellationToken)
+        => Task.FromResult<(IReadOnlyList<IncomingDocument>, int)>(
+            (Array.Empty<IncomingDocument>(), 0));
+
     public Task UpdatePayloadRawAsync(int id, string payloadRaw, CancellationToken cancellationToken)
         => Task.CompletedTask;
 

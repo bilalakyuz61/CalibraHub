@@ -1,4 +1,5 @@
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Services.EDocument;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
@@ -224,6 +225,12 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
             var ingestSourceSelectSql = hasIngestSourceColumn
                 ? "[IngestSource]"
                 : "CAST(N'Online' AS NVARCHAR(20)) AS [IngestSource]";
+            // ContactId eski musteri semalarinda YOK — kosulsuz SELECT "Invalid column
+            // name" ile kirardi (IngestSource ile ayni kalip).
+            var contactIdSelectSql =
+                await ColumnExistsAsync(connection, "IncomingDocument", "ContactId", cancellationToken)
+                    ? "[ContactId]"
+                    : "CAST(NULL AS INT) AS [ContactId]";
             var isProcessedFilterSql = string.Empty;
             if (isProcessed.HasValue && hasProcessedColumn)
             {
@@ -234,7 +241,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
             // Kiraci suzgeci: IncomingDocument kendi CompanyId kolonunu tasir (bkz.
             // InsertIncomingDocumentAsync INSERT) — listeleme sorgusu buna gore sinirlanir.
             command.CommandText = $"""
-                SELECT [Id], [IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [RecipientTaxNumber], CAST(SUBSTRING([PayloadRaw], 1, 1000) AS NVARCHAR(MAX)) AS [PayloadRaw], [ApprovalStatus], [ImportedAt], ISNULL([SenderName], N'') AS [SenderName], {isProcessedSelectSql}, {ingestSourceSelectSql}
+                SELECT [Id], [IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [RecipientTaxNumber], CAST(SUBSTRING([PayloadRaw], 1, 1000) AS NVARCHAR(MAX)) AS [PayloadRaw], [ApprovalStatus], [ImportedAt], ISNULL([SenderName], N'') AS [SenderName], {isProcessedSelectSql}, {ingestSourceSelectSql}, {contactIdSelectSql}
                 FROM {_tableName}
                 WHERE [ApprovalStatus] = @ApprovalStatus AND [CompanyId] = @CompanyId {isProcessedFilterSql}
                 ORDER BY [ImportedAt] DESC;
@@ -250,6 +257,105 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         }
 
         return documents;
+    }
+
+    public async Task<(IReadOnlyList<IncomingDocument> Items, int TotalCount)> GetPendingPageAsync(
+        string? kind, bool? isProcessed, string? search, int page, int pageSize,
+        CancellationToken cancellationToken)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 50;
+        if (pageSize > 500) pageSize = 500;
+
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+
+        // LEGACY sema: sayfalama SQL'e tasinmadi (o kurulumlarda kayit sayisi kucuk ve
+        // sorgu sekli farkli). Mevcut tam okuma + bellek ici dilimleme korunur.
+        if (await LegacyTablesExistAsync(connection, cancellationToken))
+        {
+            var all = await GetPendingApprovalsAsync(isProcessed, cancellationToken);
+            IEnumerable<IncomingDocument> q = all;
+            if (!string.IsNullOrWhiteSpace(kind))
+                q = q.Where(x => string.Equals(x.Kind.ToString(), kind, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s2 = search.Trim();
+                q = q.Where(x =>
+                    (x.DocumentNumber?.Contains(s2, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || (x.SenderName?.Contains(s2, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || (x.SenderTaxNumber?.Contains(s2, StringComparison.OrdinalIgnoreCase) ?? false));
+            }
+            var ordered = q.OrderByDescending(x => x.ImportedAt).ToArray();
+            return (ordered.Skip((page - 1) * pageSize).Take(pageSize).ToArray(), ordered.Length);
+        }
+
+        if (!await TableExistsAsync(connection, "IncomingDocument", cancellationToken))
+            return (Array.Empty<IncomingDocument>(), 0);
+
+        var hasProcessedColumn = await ColumnExistsAsync(connection, "IncomingDocument", "IsProcessed", cancellationToken);
+        var isProcessedSelectSql = hasProcessedColumn ? "[IsProcessed]" : "CAST(0 AS BIT) AS [IsProcessed]";
+        var hasIngestSourceColumn = await ColumnExistsAsync(connection, "IncomingDocument", "IngestSource", cancellationToken);
+        var ingestSourceSelectSql = hasIngestSourceColumn
+            ? "[IngestSource]"
+            : "CAST(N'Online' AS NVARCHAR(20)) AS [IngestSource]";
+        var contactIdSelectSql =
+            await ColumnExistsAsync(connection, "IncomingDocument", "ContactId", cancellationToken)
+                ? "[ContactId]"
+                : "CAST(NULL AS INT) AS [ContactId]";
+
+        var where = new List<string> { "[CompanyId] = @CompanyId" };
+        if (hasProcessedColumn && isProcessed.HasValue)
+            where.Add(isProcessed.Value ? "[IsProcessed] = 1" : "ISNULL([IsProcessed], 0) = 0");
+        if (!string.IsNullOrWhiteSpace(kind))
+            where.Add("[Kind] = @Kind");
+        if (!string.IsNullOrWhiteSpace(search))
+            where.Add("([DocumentNumber] LIKE @Search OR [SenderName] LIKE @Search OR [SenderTaxNumber] LIKE @Search)");
+        var whereSql = "WHERE " + string.Join(" AND ", where);
+
+        var total = 0;
+        await using (var countCmd = connection.CreateCommand())
+        {
+            countCmd.CommandText = $"SELECT COUNT(*) FROM {_tableName} {whereSql};";
+            AddPageParameters(countCmd, kind, search);
+            total = Convert.ToInt32(await countCmd.ExecuteScalarAsync(cancellationToken) ?? 0);
+        }
+
+        var items = new List<IncomingDocument>();
+        await using (var cmd = connection.CreateCommand())
+        {
+            // PayloadRaw'in yalniz ilk 1000 karakteri okunur: liste yalnizca senaryoyu
+            // (ProfileID) cikarmak icin bakiyor; tam UBL (belge basina ~150 KB) cekmek
+            // sayfayi megabaytlarca sisirirdi.
+            cmd.CommandText = $"""
+                SELECT [Id], [IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate],
+                       [SenderTaxNumber], [RecipientTaxNumber],
+                       CAST(SUBSTRING([PayloadRaw], 1, 1000) AS NVARCHAR(MAX)) AS [PayloadRaw],
+                       [ApprovalStatus], [ImportedAt], ISNULL([SenderName], N'') AS [SenderName],
+                       {isProcessedSelectSql}, {ingestSourceSelectSql}, {contactIdSelectSql}
+                  FROM {_tableName}
+                {whereSql}
+                 ORDER BY [ImportedAt] DESC, [Id] DESC
+                OFFSET @Skip ROWS FETCH NEXT @Take ROWS ONLY;
+                """;
+            AddPageParameters(cmd, kind, search);
+            cmd.Parameters.Add(CreateParameter("@Skip", (page - 1) * pageSize));
+            cmd.Parameters.Add(CreateParameter("@Take", pageSize));
+
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                items.Add(MapIncomingDocument(reader));
+            }
+        }
+
+        return (items, total);
+
+        void AddPageParameters(SqlCommand command, string? k, string? q)
+        {
+            command.Parameters.Add(CreateParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
+            if (!string.IsNullOrWhiteSpace(k)) command.Parameters.Add(CreateParameter("@Kind", k));
+            if (!string.IsNullOrWhiteSpace(q)) command.Parameters.Add(CreateParameter("@Search", "%" + q.Trim() + "%"));
+        }
     }
 
     public async Task<IncomingDocument?> GetByIdAsync(int id, CancellationToken cancellationToken)
@@ -297,12 +403,18 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         var ingestSourceSelectSql = hasIngestSourceColumn
             ? "[IngestSource]"
             : "CAST(N'Online' AS NVARCHAR(20)) AS [IngestSource]";
+        // ContactId eski musteri semalarinda YOK — kosulsuz SELECT "Invalid column
+        // name" ile kirardi (IngestSource ile ayni kalip).
+        var contactIdSelectSql =
+            await ColumnExistsAsync(connection, "IncomingDocument", "ContactId", cancellationToken)
+                ? "[ContactId]"
+                : "CAST(NULL AS INT) AS [ContactId]";
 
         await using var command = connection.CreateCommand();
         // Kiraci suzgeci: id istemciden gelir; suzgec olmadan baska sirketin gelen
         // belgesi (e-fatura icerigi dahil) okunabilirdi.
         command.CommandText = $"""
-            SELECT [Id], [IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [RecipientTaxNumber], [PayloadRaw], [ApprovalStatus], [ImportedAt], ISNULL([SenderName], N'') AS [SenderName], {isProcessedSelectSql}, {ingestSourceSelectSql}
+            SELECT [Id], [IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [RecipientTaxNumber], [PayloadRaw], [ApprovalStatus], [ImportedAt], ISNULL([SenderName], N'') AS [SenderName], {isProcessedSelectSql}, {ingestSourceSelectSql}, {contactIdSelectSql}
             FROM {_tableName}
             WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
@@ -2134,6 +2246,9 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
             ingestSource = EDocumentIngestSource.Online;
         }
 
+        // 14. ordinal — yine SELECT SONUNA eklendi (bkz. yukaridaki ordinal notu).
+        var contactId = reader.FieldCount > 14 && !reader.IsDBNull(14) ? reader.GetInt32(14) : (int?)null;
+
         var document = new IncomingDocument
         {
             Id = reader.GetInt32(0),
@@ -2148,7 +2263,8 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
             PayloadRaw = reader.GetString(8),
             ImportedAt = reader.GetFieldValue<DateTime>(10),
             IngestSource = ingestSource,
-            IsProcessed = isProcessed
+            IsProcessed = isProcessed,
+            ContactId = contactId
         };
 
         if (approvalStatus == ApprovalStatus.Approved)
@@ -2161,6 +2277,229 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         }
 
         return document;
+    }
+
+    // -- Cari (Contact) eslestirme --------------------------------------------
+    //
+    // Eslestirme YERLI semada calisir. Legacy (CBT_EBELGE*) kurulumda belgenin cari
+    // kodu zaten ERP tarafindan yazilir (CARIKOD) - orada ikinci bir baglama katmani
+    // kurmak iki kaynakli gercek uretirdi.
+
+    public async Task<EDocumentContactMatchResultDto> MatchContactsByTaxNumberAsync(
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        if (!await TableExistsAsync(connection, "IncomingDocument", cancellationToken)
+            || !await TableExistsAsync(connection, "Contact", cancellationToken)
+            || !await ColumnExistsAsync(connection, "IncomingDocument", "ContactId", cancellationToken))
+        {
+            return new EDocumentContactMatchResultDto(0, 0, 0);
+        }
+
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
+
+        await using var cmd = connection.CreateCommand();
+        // Aday sayisi COUNT(DISTINCT) ile olculur ve YALNIZ tek adayli belgeler baglanir.
+        // MIN(Id) alip "bir tanesini" secmek, binlerce belgede yanlis cari riski demekti.
+        cmd.CommandText = $"""
+            SET NOCOUNT ON;
+            DECLARE @Matched INT = 0;
+
+            WITH d AS (
+                SELECT [Id], LTRIM(RTRIM([SenderTaxNumber])) AS Vkn
+                  FROM {_tableName}
+                 WHERE [CompanyId] = @CompanyId
+                   AND [ContactId] IS NULL
+                   AND NULLIF(LTRIM(RTRIM([SenderTaxNumber])), N'') IS NOT NULL
+            ),
+            m AS (
+                SELECT d.[Id], COUNT(DISTINCT c.[Id]) AS Adet, MIN(c.[Id]) AS TekAday
+                  FROM d
+                  JOIN [{_schema}].[Contact] c
+                    ON c.[IsActive] = 1
+                   AND c.[CompanyId] = @CompanyId
+                   AND (LTRIM(RTRIM(c.[TaxNumber])) = d.Vkn
+                     OR LTRIM(RTRIM(c.[IdentityNumber])) = d.Vkn)
+                 GROUP BY d.[Id]
+            )
+            UPDATE t
+               SET t.[ContactId] = m.TekAday
+              FROM {_tableName} t
+              JOIN m ON m.[Id] = t.[Id]
+             WHERE m.Adet = 1;
+
+            -- Sayac DEGISKENE alinir: "UPDATE; SELECT @@ROWCOUNT" bicimi ExecuteScalar
+            -- ile 0 donduruyordu (guncelleme yapilmis olsa bile) — kullaniciya
+            -- "0 belge baglandi" diye YANLIS rapor ediliyordu.
+            SET @Matched = @@ROWCOUNT;
+            SELECT @Matched AS Matched;
+            """;
+        cmd.Parameters.Add(CreateParameter("@CompanyId", companyId));
+        var matched = Convert.ToInt32(await cmd.ExecuteScalarAsync(cancellationToken) ?? 0);
+
+        await using var stats = connection.CreateCommand();
+        stats.CommandText = $"""
+            WITH d AS (
+                SELECT [Id], LTRIM(RTRIM([SenderTaxNumber])) AS Vkn
+                  FROM {_tableName}
+                 WHERE [CompanyId] = @CompanyId AND [ContactId] IS NULL
+            ),
+            m AS (
+                SELECT d.[Id], COUNT(DISTINCT c.[Id]) AS Adet
+                  FROM d
+                  LEFT JOIN [{_schema}].[Contact] c
+                    ON c.[IsActive] = 1
+                   AND c.[CompanyId] = @CompanyId
+                   AND NULLIF(d.Vkn, N'') IS NOT NULL
+                   AND (LTRIM(RTRIM(c.[TaxNumber])) = d.Vkn
+                     OR LTRIM(RTRIM(c.[IdentityNumber])) = d.Vkn)
+                 GROUP BY d.[Id]
+            )
+            SELECT ISNULL(SUM(CASE WHEN Adet > 1 THEN 1 ELSE 0 END), 0) AS Ambiguous,
+                   ISNULL(SUM(CASE WHEN Adet = 0 THEN 1 ELSE 0 END), 0) AS Unmatched
+              FROM m;
+            """;
+        stats.Parameters.Add(CreateParameter("@CompanyId", companyId));
+
+        var ambiguous = 0;
+        var unmatched = 0;
+        await using (var r = await stats.ExecuteReaderAsync(cancellationToken))
+        {
+            if (await r.ReadAsync(cancellationToken))
+            {
+                ambiguous = Convert.ToInt32(r["Ambiguous"]);
+                unmatched = Convert.ToInt32(r["Unmatched"]);
+            }
+        }
+
+        return new EDocumentContactMatchResultDto(matched, ambiguous, unmatched);
+    }
+
+    public async Task<IReadOnlyDictionary<int, EDocumentContactLinkDto>> GetContactLinksAsync(
+        IReadOnlyCollection<int> documentIds, CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<int, EDocumentContactLinkDto>();
+        if (documentIds is null || documentIds.Count == 0) return result;
+
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        if (!await TableExistsAsync(connection, "IncomingDocument", cancellationToken)
+            || !await TableExistsAsync(connection, "Contact", cancellationToken)
+            || !await ColumnExistsAsync(connection, "IncomingDocument", "ContactId", cancellationToken))
+        {
+            return result;
+        }
+
+        // Id listesi SAYIYA cevrilerek gomulur (istemci metni degil; injection yolu yok).
+        var idList = string.Join(",", documentIds.Where(x => x > 0).Distinct());
+        if (idList.Length == 0) return result;
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT d.[Id], c.[Id] AS ContactId, c.[AccountCode], c.[AccountTitle]
+              FROM {_tableName} d
+              JOIN [{_schema}].[Contact] c ON c.[Id] = d.[ContactId]
+             WHERE d.[CompanyId] = @CompanyId AND d.[Id] IN ({idList});
+            """;
+        cmd.Parameters.Add(CreateParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
+
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            result[Convert.ToInt32(reader["Id"])] = new EDocumentContactLinkDto(
+                Convert.ToInt32(reader["ContactId"]),
+                NullableString(reader["AccountCode"]) ?? string.Empty,
+                NullableString(reader["AccountTitle"]) ?? string.Empty);
+        }
+
+        return result;
+    }
+
+    public async Task<IReadOnlyList<EDocumentContactCandidateDto>> GetContactCandidatesAsync(
+        int documentId, string? search, CancellationToken cancellationToken)
+    {
+        var list = new List<EDocumentContactCandidateDto>();
+        if (documentId <= 0) return list;
+
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        if (!await TableExistsAsync(connection, "Contact", cancellationToken)) return list;
+
+        var companyId = _connectionFactory.ResolveEffectiveCompanyId();
+        var hasSearch = !string.IsNullOrWhiteSpace(search);
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = hasSearch
+            ? $"""
+                SELECT TOP 50 c.[Id], c.[AccountCode], c.[AccountTitle], c.[TaxNumber],
+                       c.[IdentityNumber], c.[City],
+                       CASE WHEN LTRIM(RTRIM(c.[TaxNumber])) = d.Vkn
+                              OR LTRIM(RTRIM(c.[IdentityNumber])) = d.Vkn
+                            THEN 1 ELSE 0 END AS IsTaxMatch
+                  FROM [{_schema}].[Contact] c
+                 CROSS JOIN (SELECT LTRIM(RTRIM([SenderTaxNumber])) AS Vkn
+                               FROM {_tableName}
+                              WHERE [Id] = @DocId AND [CompanyId] = @CompanyId) d
+                 WHERE c.[IsActive] = 1 AND c.[CompanyId] = @CompanyId
+                   AND (c.[AccountCode] LIKE @Search
+                     OR c.[AccountTitle] LIKE @Search
+                     OR c.[TaxNumber] LIKE @Search
+                     OR c.[IdentityNumber] LIKE @Search)
+                 ORDER BY IsTaxMatch DESC, c.[AccountTitle];
+                """
+            : $"""
+                SELECT TOP 50 c.[Id], c.[AccountCode], c.[AccountTitle], c.[TaxNumber],
+                       c.[IdentityNumber], c.[City], CAST(1 AS INT) AS IsTaxMatch
+                  FROM [{_schema}].[Contact] c
+                  JOIN {_tableName} d
+                    ON d.[Id] = @DocId AND d.[CompanyId] = @CompanyId
+                 WHERE c.[IsActive] = 1 AND c.[CompanyId] = @CompanyId
+                   AND NULLIF(LTRIM(RTRIM(d.[SenderTaxNumber])), N'') IS NOT NULL
+                   AND (LTRIM(RTRIM(c.[TaxNumber])) = LTRIM(RTRIM(d.[SenderTaxNumber]))
+                     OR LTRIM(RTRIM(c.[IdentityNumber])) = LTRIM(RTRIM(d.[SenderTaxNumber])))
+                 ORDER BY c.[AccountTitle];
+                """;
+        cmd.Parameters.Add(CreateParameter("@DocId", documentId));
+        cmd.Parameters.Add(CreateParameter("@CompanyId", companyId));
+        if (hasSearch) cmd.Parameters.Add(CreateParameter("@Search", "%" + search!.Trim() + "%"));
+
+        await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await r.ReadAsync(cancellationToken))
+        {
+            list.Add(new EDocumentContactCandidateDto(
+                Convert.ToInt32(r["Id"]),
+                NullableString(r["AccountCode"]) ?? string.Empty,
+                NullableString(r["AccountTitle"]) ?? string.Empty,
+                NullableString(r["TaxNumber"]),
+                NullableString(r["IdentityNumber"]),
+                NullableString(r["City"]),
+                Convert.ToInt32(r["IsTaxMatch"]) == 1));
+        }
+
+        return list;
+    }
+
+    public async Task UpdateContactAsync(int documentId, int? contactId, CancellationToken cancellationToken)
+    {
+        if (documentId <= 0) return;
+
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        if (!await ColumnExistsAsync(connection, "IncomingDocument", "ContactId", cancellationToken)) return;
+
+        await using var cmd = connection.CreateCommand();
+        // Cari de kiraci suzgecinden gecer: baska sirketin carisine baglamak,
+        // kiracilar arasi veri sizintisinin ta kendisidir.
+        cmd.CommandText = $"""
+            UPDATE {_tableName}
+               SET [ContactId] = CASE
+                       WHEN @ContactId IS NULL THEN NULL
+                       ELSE (SELECT c.[Id] FROM [{_schema}].[Contact] c
+                              WHERE c.[Id] = @ContactId AND c.[CompanyId] = @CompanyId)
+                   END
+             WHERE [Id] = @DocId AND [CompanyId] = @CompanyId;
+            """;
+        cmd.Parameters.Add(CreateParameter("@DocId", documentId));
+        cmd.Parameters.Add(CreateParameter("@ContactId", contactId.HasValue ? contactId.Value : (object)DBNull.Value));
+        cmd.Parameters.Add(CreateParameter("@CompanyId", _connectionFactory.ResolveEffectiveCompanyId()));
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task UpdatePayloadRawAsync(int id, string payloadRaw, CancellationToken cancellationToken)

@@ -2335,12 +2335,56 @@ IF EXISTS (SELECT 1 FROM sys.columns
             WHERE object_id = OBJECT_ID(N'[{s}].[IncomingDocument]')
               AND name = 'IntegratorSettingsId' AND is_nullable = 0)
     ALTER TABLE [{s}].[IncomingDocument] ALTER COLUMN [IntegratorSettingsId] INT NULL;
+
 ";
             await alter.ExecuteNonQueryAsync(cancellationToken);
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[DB INIT WARN] IncomingDocument iki-kaynak uyarlamasi yapilamadi: {ex.Message}");
+        }
+
+        // ── Gelen belgenin eslestigi CARI (ContactId) ──
+        // Kolon / FK / index AYRI komutlarda calisir: hepsi TEK toplu iste olsaydi
+        // SQL Server, ayni iste EKLENEN kolona referans veren CREATE INDEX'i derleme
+        // aninda "Invalid column name" ile reddeder ve tum is geri doner — kolon da
+        // olusmaz (bu tam olarak yasandi).
+        try
+        {
+            await using var addCol = connection.CreateCommand();
+            addCol.CommandText = $@"
+IF COL_LENGTH(N'[{s}].[IncomingDocument]', N'ContactId') IS NULL
+    ALTER TABLE [{s}].[IncomingDocument] ADD [ContactId] INT NULL;
+";
+            await addCol.ExecuteNonQueryAsync(cancellationToken);
+
+            await using var addFk = connection.CreateCommand();
+            addFk.CommandText = $@"
+IF OBJECT_ID(N'[{s}].[Contact]', N'U') IS NOT NULL
+   AND COL_LENGTH(N'[{s}].[IncomingDocument]', N'ContactId') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys
+                    WHERE name = 'FK_IncomingDocument_Contact'
+                      AND parent_object_id = OBJECT_ID(N'[{s}].[IncomingDocument]'))
+    ALTER TABLE [{s}].[IncomingDocument]
+        ADD CONSTRAINT [FK_IncomingDocument_Contact]
+            FOREIGN KEY ([ContactId]) REFERENCES [{s}].[Contact]([Id]);
+";
+            await addFk.ExecuteNonQueryAsync(cancellationToken);
+
+            await using var addIx = connection.CreateCommand();
+            addIx.CommandText = $@"
+IF COL_LENGTH(N'[{s}].[IncomingDocument]', N'ContactId') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes
+                    WHERE name = 'IX_IncomingDocument_Contact'
+                      AND object_id = OBJECT_ID(N'[{s}].[IncomingDocument]'))
+    CREATE INDEX [IX_IncomingDocument_Contact]
+        ON [{s}].[IncomingDocument]([ContactId]) WHERE [ContactId] IS NOT NULL;
+";
+            await addIx.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[DB INIT WARN] IncomingDocument.ContactId kurulamadi: {ex.Message}");
         }
 
         try

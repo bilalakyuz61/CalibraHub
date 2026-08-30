@@ -35,6 +35,30 @@ public sealed class ApprovalQueueService : IApprovalQueueService
             .ToArray();
     }
 
+    public async Task<(IReadOnlyList<PendingApprovalDocumentDto> Items, int TotalCount)> GetPendingPageAsync(
+        string? kind, bool? isProcessed, string? search, int page, int pageSize,
+        CancellationToken cancellationToken)
+    {
+        var (items, total) = await _incomingDocumentRepository.GetPendingPageAsync(
+            kind, isProcessed, search, page, pageSize, cancellationToken);
+
+        return (items.Select(Map).ToArray(), total);
+    }
+
+    private static PendingApprovalDocumentDto Map(Domain.Entities.IncomingDocument x)
+        => new(
+            x.Id,
+            x.EnvelopeId,
+            x.DocumentNumber,
+            x.Kind.ToString(),
+            ExtractScenario(x.PayloadRaw),
+            x.SenderTaxNumber,
+            x.SenderName,
+            x.IssueDate,
+            x.ImportedAt,
+            x.IsProcessed,
+            x.IngestSource.ToString());
+
     public async Task ToggleProcessingStatusAsync(int documentId, bool isProcessed, CancellationToken cancellationToken)
     {
         await _incomingDocumentRepository.UpdateIsProcessedAsync(documentId, isProcessed, cancellationToken);

@@ -1,0 +1,174 @@
+@model CalibraHub.Web.Models.Approval.ContactMatchViewModel
+@{
+    var hasSearch = !string.IsNullOrWhiteSpace(Model.Search);
+}
+
+@* Belge–cari eşleştirme modalı. İçerik fetch-modal ile yüklenir; arama ve seçim de
+   aynı ucu yeniden çekip bu bloğu yerine koyar (sayfa yenilenmez). *@
+<div class="cm-root" data-doc-id="@Model.DocumentId">
+    <div class="cm-doc">
+        <div class="cm-doc-title">@(Model.SenderName ?? "-")</div>
+        <div class="cm-doc-meta">
+            <span>Belge: <b>@Model.DocumentNumber</b></span>
+            <span>VKN / TC: <b>@(string.IsNullOrWhiteSpace(Model.SenderTaxNumber) ? "-" : Model.SenderTaxNumber)</b></span>
+        </div>
+        @if (Model.Current is not null)
+        {
+            <div class="cm-current">
+                Bağlı cari: <b>@Model.Current.AccountTitle</b>
+                <span class="cm-code">@Model.Current.AccountCode</span>
+                <button type="button" class="cm-unlink" data-cm-assign="0">Bağı kaldır</button>
+            </div>
+        }
+    </div>
+
+    <div class="cm-search">
+        <input type="text" class="form-control form-control-sm" id="cmSearch"
+               placeholder="Cari kodu, unvan veya VKN ile ara…" value="@(Model.Search ?? string.Empty)" />
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="cmSearchBtn">Ara</button>
+    </div>
+
+    @if (Model.Candidates.Count == 0)
+    {
+        <div class="cm-empty">
+            @if (hasSearch)
+            {
+                <span>Aramaya uyan cari bulunamadı.</span>
+            }
+            else
+            {
+                <span>Bu VKN/TC ile eşleşen cari yok. Yukarıdan arayarak elle bağlayabilirsiniz.</span>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="cm-list">
+            <table class="table table-sm table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:120px;">Cari Kodu</th>
+                        <th>Unvan</th>
+                        <th style="width:130px;">VKN / TC</th>
+                        <th style="width:120px;">Şehir</th>
+                        <th style="width:90px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var c in Model.Candidates)
+                {
+                    var isCurrent = Model.Current is not null && Model.Current.ContactId == c.ContactId;
+                    <tr>
+                        <td class="cm-code-cell">@c.AccountCode</td>
+                        <td>
+                            @c.AccountTitle
+                            @if (c.IsTaxMatch)
+                            {
+                                <span class="cm-badge">VKN/TC eşleşti</span>
+                            }
+                        </td>
+                        <td class="cm-code-cell">@(c.TaxNumber ?? c.IdentityNumber ?? "-")</td>
+                        <td>@(c.City ?? "-")</td>
+                        <td class="text-end">
+                            @if (isCurrent)
+                            {
+                                <span class="cm-linked">Bağlı</span>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-sm btn-primary cm-pick"
+                                        data-cm-assign="@c.ContactId">Seç</button>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<style>
+    .cm-root { font-size: .85rem; }
+    .cm-doc { padding: 10px 12px; border: 1px solid var(--app-border, #e2e8f0); border-radius: 10px; margin-bottom: 12px; }
+    .cm-doc-title { font-weight: 700; font-size: .95rem; }
+    .cm-doc-meta { display: flex; gap: 18px; flex-wrap: wrap; color: var(--bs-secondary-color, #6c757d); margin-top: 2px; }
+    .cm-current { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--app-border, #e2e8f0); }
+    .cm-code, .cm-code-cell { font-family: ui-monospace, Menlo, Consolas, monospace; }
+    .cm-code { margin-left: 6px; color: var(--bs-secondary-color, #6c757d); }
+    .cm-unlink { margin-left: 10px; border: none; background: none; padding: 0; color: #dc3545; font-size: .8rem; }
+    .cm-search { display: flex; gap: 8px; margin-bottom: 10px; }
+    .cm-search input { flex: 1 1 auto; }
+    .cm-list { max-height: 380px; overflow: auto; border: 1px solid var(--app-border, #e2e8f0); border-radius: 10px; }
+    .cm-empty { padding: 24px; text-align: center; color: var(--bs-secondary-color, #6c757d); }
+    .cm-badge { margin-left: 8px; padding: 1px 6px; border-radius: 10px; font-size: .68rem; font-weight: 600;
+                background: rgba(16,185,129,.12); color: #059669; }
+    .cm-linked { font-size: .78rem; font-weight: 600; color: #059669; }
+</style>
+
+<script>
+(function () {
+    var root = document.querySelector('.cm-root[data-doc-id="@Model.DocumentId"]');
+    if (!root) return;
+    var docId = @Model.DocumentId;
+
+    function token() {
+        var el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+
+    // Modal içeriğini aynı uçtan tazeler — arama ve seçim sonrası sayfa YENİLENMEZ.
+    function reload(search) {
+        var url = '/Approval/ContactCandidates?id=' + docId +
+                  (search ? '&q=' + encodeURIComponent(search) : '');
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.text(); })
+            .then(function (html) {
+                var host = root.parentElement;
+                if (host) host.innerHTML = html;
+            });
+    }
+
+    var searchBtn = root.querySelector('#cmSearchBtn');
+    var searchInput = root.querySelector('#cmSearch');
+    if (searchBtn) searchBtn.addEventListener('click', function () { reload(searchInput.value); });
+    if (searchInput) searchInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); reload(searchInput.value); }
+    });
+
+    root.querySelectorAll('[data-cm-assign]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var contactId = parseInt(btn.getAttribute('data-cm-assign'), 10) || 0;
+            var body = new URLSearchParams();
+            body.append('id', String(docId));
+            body.append('contactId', String(contactId));
+            body.append('__RequestVerificationToken', token());
+
+            btn.disabled = true;
+            fetch('/Approval/AssignContact', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body.toString(),
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (res) {
+                    if (!res || res.success !== true) {
+                        btn.disabled = false;
+                        alert((res && res.message) || 'Cari ataması yapılamadı.');
+                        return;
+                    }
+                    // Board yerinde tazelenir (C-Grid kuralı: window.location.reload YOK).
+                    if (window.CalibraHub && typeof window.CalibraHub.refreshSmartBoard === 'function') {
+                        window.CalibraHub.refreshSmartBoard();
+                    }
+                    reload(searchInput ? searchInput.value : '');
+                })
+                .catch(function () {
+                    btn.disabled = false;
+                    alert('Cari ataması yapılamadı.');
+                });
+        });
+    });
+})();
+</script>

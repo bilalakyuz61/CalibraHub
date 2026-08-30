@@ -28,6 +28,18 @@
         background: var(--app-surface, #fff);
         border: 1px solid var(--app-border, #e2e8f0); border-radius: 8px;
     }
+    .edoc-toast {
+        position: fixed; right: 18px; bottom: 18px; z-index: 4000;
+        max-width: 460px; padding: 10px 14px; border-radius: 10px;
+        font-size: .85rem; line-height: 1.45;
+        background: var(--app-surface, #fff); color: var(--bs-body-color, #0f172a);
+        border: 1px solid var(--app-border, #e2e8f0);
+        box-shadow: 0 8px 24px rgba(0,0,0,.18);
+        transition: opacity .4s ease, transform .4s ease;
+    }
+    .edoc-toast--error { border-color: rgba(220,38,38,.4); color: var(--bs-danger, #dc2626); }
+    .edoc-toast.is-out { opacity: 0; transform: translateY(8px); }
+
     .cb-mount-error button {
         margin-top: 8px; padding: 6px 14px; cursor: pointer;
         border: 1px solid var(--app-border, #e2e8f0); border-radius: 6px;
@@ -45,6 +57,62 @@
     var el = document.getElementById('reactSmartBoard');
     if (!el) { console.error('[EDocuments] Mount elementi yok'); return; }
 
+    var boardHandle = null;
+
+    function csrfToken() {
+        var input = document.querySelector('input[name="__RequestVerificationToken"]');
+        return input ? input.value : '';
+    }
+
+    /* Board'u YERINDE tazeler (C-Grid kurali: window.location.reload YOK).
+       Config ucundan taze JSON cekilip yeniden mount edilir. */
+    function refreshBoard() {
+        var url = BOARD_CONFIG && BOARD_CONFIG.refreshUrl;
+        if (!url || !boardHandle) return;
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (cfg) { if (cfg) boardHandle.refresh(cfg); })
+            .catch(function (e) { console.warn('[EDocuments] board tazelenemedi', e); });
+    }
+
+    function toast(message, isError) {
+        var box = document.createElement('div');
+        box.className = 'edoc-toast' + (isError ? ' edoc-toast--error' : '');
+        box.textContent = message;
+        document.body.appendChild(box);
+        setTimeout(function () { box.classList.add('is-out'); }, 5200);
+        setTimeout(function () { if (box.parentNode) box.parentNode.removeChild(box); }, 5800);
+    }
+
+    /* İşlemler menusu > "Cari Eşleştir (Toplu)".
+       Cari SONRADAN acilan belgeler icin tekrar tekrar calistirilabilir; yalniz
+       bagli OLMAYAN belgelere dokunur, birden cok adayli belge kullaniciya kalir. */
+    window.CalibraHub = window.CalibraHub || {};
+    window.CalibraHub.eDocumentMatchContacts = function () {
+        var body = new URLSearchParams();
+        body.append('__RequestVerificationToken', csrfToken());
+        toast('Cari eşleştirme çalışıyor…');
+        fetch('/Approval/MatchContacts', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString(),
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || res.success !== true) {
+                    toast((res && res.message) || 'Cari eşleştirme yapılamadı.', true);
+                    return;
+                }
+                toast(res.message);
+                refreshBoard();
+            })
+            .catch(function () { toast('Cari eşleştirme yapılamadı.', true); });
+    };
+
+    /* Belge bazinda secim sonrasi modalin cagirdigi tazeleme kancasi. */
+    window.CalibraHub.refreshSmartBoard = refreshBoard;
+
     function showError(msg) {
         el.innerHTML = '<div class="cb-mount-error"><div>' + msg + '</div>'
             + '<button onclick="location.reload()">Sayfayi Yenile</button></div>';
@@ -57,7 +125,7 @@
             return;
         }
         try {
-            window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
+            boardHandle = window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
         } catch (e) {
             console.error('[EDocuments] mount hatasi', e);
             showError('Ekran yuklenemedi: ' + e.message);

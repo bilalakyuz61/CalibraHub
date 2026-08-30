@@ -42,6 +42,13 @@ public sealed class IncomingDocument
 
     public bool IsProcessed { get; set; } = false;
 
+    /// <summary>
+    /// Belgenin baglandigi CARI (FK -> Contact.Id). Gonderen VKN/TC ile otomatik
+    /// eslestirilir; BIRDEN COK aday varsa null kalir ve kullanici ekrandan secer —
+    /// aday coklugunda birini varsaymak, faturayi sessizce yanlis hesaba baglardi.
+    /// </summary>
+    public int? ContactId { get; set; }
+
     public void MarkApproved() => ApprovalStatus = ApprovalStatus.Approved;
     public void MarkRejected() => ApprovalStatus = ApprovalStatus.Rejected;
     public void SetProcessed(bool processed) => IsProcessed = processed;

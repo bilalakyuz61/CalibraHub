@@ -18,7 +18,7 @@
  *   }
  */
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-import { Search, Settings2, Loader2, ChevronDown, Filter, X, Download, FileSpreadsheet, RefreshCw, Layers, AlertTriangle } from 'lucide-react'
+import { Search, Settings2, Loader2, ChevronDown, Filter, X, Download, FileSpreadsheet, RefreshCw, Layers, AlertTriangle, Wrench } from 'lucide-react'
 import SmartCard from './SmartCard'
 import SmartTable from './SmartTable'
 import SmartBoardConfigPanel from './SmartBoardConfigPanel'
@@ -162,6 +162,13 @@ export default function SmartBoard(props) {
      icerigini degistiriyordu — kullanici "yeni bir sayfa acilmali" dedi.
      Verilmezse ikon eskisi gibi salt gorsel kalir (fail-open). */
   var iconMenu = Array.isArray(props.iconMenu) ? props.iconMenu.filter(Boolean) : []
+  /* toolbarMenu (2026-08-30, kullanici karari): STANDART buton seridine kalici bir
+     "Islemler" menusu. Ekrana ozgu toplu islemler (ornek: e-belgede "Cari Eslestir")
+     baslik ikonuna ya da yeni bir butona degil, HEP bu menunun altina eklenir —
+     islem sayisi arttikca serit buyumez ve buton sirasi ekrandan ekrana kaymaz.
+     Sozlesme header `actions` ile AYNI: [{ id, label, icon, url|trigger, openInTab? }].
+     Bos/verilmemisse buton hic cizilmez (fail-open; mevcut board'lar degismez). */
+  var toolbarMenu = Array.isArray(props.toolbarMenu) ? props.toolbarMenu.filter(Boolean) : []
   var selectable = props.selectable === true
   var bulkActions = Array.isArray(props.bulkActions) ? props.bulkActions.filter(Boolean) : []
   var detailUrlTemplate = props.detailUrl || null
@@ -873,6 +880,7 @@ export default function SmartBoard(props) {
 
   // ── Secim / detay durumu ────────────────────────────────────────────────
   var [iconMenuOpen, setIconMenuOpen] = useState(false)
+  var [toolbarMenuOpen, setToolbarMenuOpen] = useState(false)
   var [selectedIds, setSelectedIds] = useState(function () { return new Set() })
   var [expandedIds, setExpandedIds] = useState(function () { return new Set() })
   var [detailData, setDetailData] = useState({})   // id -> {loading|error|payload}
@@ -1430,6 +1438,53 @@ export default function SmartBoard(props) {
         >
           <Settings2 size={15} className="text-slate-500 dark:text-white/40 group-hover:text-indigo-600 dark:group-hover:text-indigo-400/80 transition-colors" />
         </button>
+
+        {/* Islemler — ekrana ozgu toplu islemlerin TEK yeri (bkz. toolbarMenu notu).
+            Widget/Sutun ayarlarindan sonra, ana eylemden ONCE durur: buton sirasi
+            C-Grid standardidir, ekranlar arasi kas hafizasini bozmamak icin sabittir. */}
+        {toolbarMenu.length > 0 && (
+          <div className="relative flex-shrink-0">
+            <button
+              type="button"
+              onClick={function () { setToolbarMenuOpen(function (v) { return !v }) }}
+              title="İşlemler"
+              aria-haspopup="menu"
+              aria-expanded={toolbarMenuOpen}
+              className="p-2.5 rounded-xl bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border-[1px] border-slate-200 dark:border-white/[0.06] transition-all group"
+            >
+              <Wrench size={15} className="text-slate-500 dark:text-white/40 group-hover:text-indigo-600 dark:group-hover:text-indigo-400/80 transition-colors" />
+            </button>
+            {toolbarMenuOpen && (
+              <>
+                {/* Disari tiklayinca kapanma — seffaf perde (iconMenu ile ayni desen). */}
+                <div className="fixed inset-0 z-40" onClick={function () { setToolbarMenuOpen(false) }} />
+                <div
+                  role="menu"
+                  className="absolute right-0 top-11 z-50 min-w-[230px] rounded-xl border border-slate-200 bg-[#fff] shadow-xl py-1 dark:border-white/10 dark:bg-[#171c2a]"
+                >
+                  {toolbarMenu.map(function (mi) {
+                    var MIcon = resolveIcon(mi.icon, null, null)
+                    return (
+                      <button
+                        key={mi.id || mi.label}
+                        type="button"
+                        role="menuitem"
+                        onClick={function () {
+                          setToolbarMenuOpen(false)
+                          handleActionClick(mi)
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] font-medium text-slate-700 hover:bg-slate-50 dark:text-white/80 dark:hover:bg-white/[0.06]"
+                      >
+                        <MIcon size={14} strokeWidth={2} className="flex-shrink-0 text-slate-400 dark:text-white/45" />
+                        <span className="truncate">{mi.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Actions — ikon-only, label tooltip olarak gösterilir (Onay Akışı Edit header pattern).
             Primary action indigo bg ile ayırt edilir; diğerleri Filter/Excel/Widget tarzı hayalet. */}

@@ -575,18 +575,20 @@ public sealed class ApprovalController : Controller
     /// eslestirir. Bu yuzden her kart widget'inin id/label/dataType ucusu master listesiyle
     /// BIREBIR ayni olmalidir — ayrisirsa filtre sessizce hicbir sey eslemez.</para>
     /// </summary>
+    /// <summary>SmartBoard sayfa boyutu — ilk yuk ve sonraki sayfalar bu adette gelir.</summary>
+    private const int EDocumentPageSize = 50;
+
     private async Task<object> BuildEDocumentBoardConfigAsync(
         string? kind, bool? isProcessed, CancellationToken cancellationToken)
     {
         var normalizedKind = NormalizeKind(kind);
-        var queue = await _approvalQueueService.GetPendingAsync(isProcessed, cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(normalizedKind))
-        {
-            queue = queue
-                .Where(x => string.Equals(x.Kind, normalizedKind, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-        }
+        // YALNIZ ILK SAYFA okunur. Onceden tum kuyruk (olculdu: 10.590 belge) yuklenip
+        // ~12 MB JSON uretiliyordu; e-Fatura listesi 21 saniyede aciliyordu. Sonraki
+        // sayfalar SmartBoard'un apiUrl ucundan gelir.
+        var (queue, totalCount) = await _approvalQueueService.GetPendingPageAsync(
+            normalizedKind, isProcessed, search: null, page: 1, pageSize: EDocumentPageSize,
+            cancellationToken);
 
         var (icon, color) = normalizedKind switch
         {
@@ -598,9 +600,64 @@ public sealed class ApprovalController : Controller
 
         var kindTitle = GetKindTitle(normalizedKind);
 
-        var entities = queue
-            .OrderByDescending(d => d.ImportedAt)
-            .Select(d => new
+        // Bagli cariler TEK sorguda okunur (belge basina sorgu N+1 uretirdi).
+        var contactLinks = await _incomingDocumentRepository.GetContactLinksAsync(
+            queue.Select(x => x.Id).ToArray(), cancellationToken);
+
+        var entities = BuildEDocumentEntities(queue, contactLinks);
+
+        // Filtre paneli bu listeden beslenir; kart widget'lariyla ayni id/label/dataType.
+        var masterWidgets = new object[]
+        {
+            new { id = "w_issue_date",  label = "Belge Tarihi", dataType = "date" },
+            new { id = "w_sender",      label = "Gönderen",     dataType = "text" },
+            new { id = "w_sender_vkn",  label = "Gönderen VKN", dataType = "text" },
+            new { id = "w_scenario",    label = "Senaryo",      dataType = "text" },
+            new { id = "w_status",      label = "Durum",        dataType = "text" },
+            new { id = "w_imported",    label = "Alınma",       dataType = "date" },
+            new { id = "w_contact",     label = "Cari",         dataType = "text" },
+            new { id = "w_source",      label = "Kaynak",       dataType = "text" },
+        };
+
+        return new
+        {
+            boardKey = "edocument-" + (normalizedKind ?? "all").ToLowerInvariant(),
+            title = kindTitle,
+            subtitle = $"{totalCount} belge",
+            // Sayfalama: ilk sayfa gomulu gelir (skipInitialFetch), gerisi apiUrl'den.
+            apiUrl = Url.Action(nameof(EDocumentBoardPage), "Approval",
+                                new { kind = normalizedKind, isProcessed }),
+            totalCount,
+            pageSize = EDocumentPageSize,
+            skipInitialFetch = true,
+            icon,
+            iconColor = color,
+            refreshUrl = Url.Action(nameof(EDocumentBoardConfig), "Approval",
+                                    new { kind = normalizedKind, isProcessed }),
+            searchPlaceholder = "Belge no / gönderen ara…",
+            emptyText = "Bu kuyrukta belge yok",
+            actions = Array.Empty<object>(),
+            // Ekrana ozgu TOPLU islemler standart "İşlemler" menusune baglanir —
+            // serit her ekranda ayni sirada kalsin diye yeni buton EKLENMEZ.
+            toolbarMenu = new object[]
+            {
+                new { id = "match-contacts", label = "Cari Eşleştir (Toplu)", icon = "Users",
+                      trigger = "eDocumentMatchContacts" },
+            },
+            masterWidgets,
+            entities,
+        };
+    }
+
+    /// <summary>
+    /// Kart/satir nesnelerini uretir. Config ucu (ilk sayfa) ve sayfa ucu AYNI metodu
+    /// kullanir: iki ayri uretici, kartin sayfa 2'de farkli gorunmesi demekti.
+    /// </summary>
+    private object[] BuildEDocumentEntities(
+        IReadOnlyList<PendingApprovalDocumentDto> queue,
+        IReadOnlyDictionary<int, CalibraHub.Application.Contracts.EDocumentContactLinkDto> contactLinks)
+        => queue
+            .Select(d => (object)new
             {
                 id = d.Id,
                 title = d.DocumentNumber,
@@ -632,6 +689,17 @@ public sealed class ApprovalController : Controller
                           detail = (string?)null, color = "slate" },
                     // Kaynak: karma kurulumda "bu belge entegratorden mi ERP'den mi geldi"
                     // sorusu teshiste kritik; eskiden yalniz PayloadRaw'a bakarak yanitlanabiliyordu.
+                    // Cari: VKN/TC ile otomatik baglanan cari. Bagli degilse "Eşleşmedi"
+                    // yazar — bos birakmak, eslestirmenin hic denenmedigi izlenimi verirdi.
+                    new { id = "w_contact", type = "data", dataType = "text",
+                          label = "Cari",
+                          value = contactLinks.TryGetValue(d.Id, out var link)
+                              ? link.AccountTitle
+                              : "Eşleşmedi",
+                          detail = contactLinks.TryGetValue(d.Id, out var link2)
+                              ? link2.AccountCode
+                              : (string?)null,
+                          color = contactLinks.ContainsKey(d.Id) ? "emerald" : "rose" },
                     new { id = "w_source", type = "data", dataType = "text",
                           label = "Kaynak",
                           value = string.Equals(d.IngestSource, "Offline", StringComparison.OrdinalIgnoreCase)
@@ -649,36 +717,41 @@ public sealed class ApprovalController : Controller
                     hideButton = true,   // karta tiklayinca acilir
                 },
                 secondaryAction = (object?)null,
+                extraActions = new object[]
+                {
+                    // Belge bazinda cari secimi: birden cok aday oldugunda (olculdu: 2.113
+                    // belge) otomatik baglama BILINCLI olarak yapilmaz, kullanici secer.
+                    new { label = "Cari Eşleştir", icon = "Users", color = "indigo",
+                          type = "fetch-modal",
+                          fetchUrl = Url.Action(nameof(ContactCandidates), "Approval", new { id = d.Id }),
+                          modalTitle = $"Cari Eşleştir — {d.DocumentNumber}" },
+                },
             })
             .ToArray();
 
-        // Filtre paneli bu listeden beslenir; kart widget'lariyla ayni id/label/dataType.
-        var masterWidgets = new object[]
-        {
-            new { id = "w_issue_date",  label = "Belge Tarihi", dataType = "date" },
-            new { id = "w_sender",      label = "Gönderen",     dataType = "text" },
-            new { id = "w_sender_vkn",  label = "Gönderen VKN", dataType = "text" },
-            new { id = "w_scenario",    label = "Senaryo",      dataType = "text" },
-            new { id = "w_status",      label = "Durum",        dataType = "text" },
-            new { id = "w_imported",    label = "Alınma",       dataType = "date" },
-            new { id = "w_source",      label = "Kaynak",       dataType = "text" },
-        };
+    /// <summary>
+    /// SmartBoard sayfa ucu — { entities, totalCount }. Arama da SQL tarafinda uygulanir.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> EDocumentBoardPage(
+        string? kind, bool? isProcessed, int page, int pageSize, string? search,
+        CancellationToken cancellationToken)
+    {
+        var normalizedKind = NormalizeKind(kind);
+        var (queue, totalCount) = await _approvalQueueService.GetPendingPageAsync(
+            normalizedKind, isProcessed, search,
+            page < 1 ? 1 : page,
+            pageSize < 1 ? EDocumentPageSize : pageSize,
+            cancellationToken);
 
-        return new
+        var contactLinks = await _incomingDocumentRepository.GetContactLinksAsync(
+            queue.Select(x => x.Id).ToArray(), cancellationToken);
+
+        return Json(new
         {
-            boardKey = "edocument-" + (normalizedKind ?? "all").ToLowerInvariant(),
-            title = kindTitle,
-            subtitle = $"{entities.Length} belge",
-            icon,
-            iconColor = color,
-            refreshUrl = Url.Action(nameof(EDocumentBoardConfig), "Approval",
-                                    new { kind = normalizedKind, isProcessed }),
-            searchPlaceholder = "Belge no / gönderen ara…",
-            emptyText = "Bu kuyrukta belge yok",
-            actions = Array.Empty<object>(),
-            masterWidgets,
-            entities,
-        };
+            entities = BuildEDocumentEntities(queue, contactLinks),
+            totalCount,
+        });
     }
 
     /// <summary>
@@ -936,6 +1009,79 @@ public sealed class ApprovalController : Controller
             },
             entities,
         };
+    }
+
+    // -- Cari eslestirme uclari -----------------------------------------------
+
+    /// <summary>
+    /// Toplu cari eslestirme (İşlemler menusu). Cari SONRADAN acilmis belgeler icin
+    /// tekrar tekrar calistirilabilir: yalniz bagli OLMAYAN belgelere dokunur.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> MatchContacts(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _incomingDocumentRepository.MatchContactsByTaxNumberAsync(cancellationToken);
+            return Json(new
+            {
+                success = true,
+                matched = result.Matched,
+                ambiguous = result.Ambiguous,
+                unmatched = result.Unmatched,
+                message = $"{result.Matched} belge cariye bağlandı. " +
+                          $"{result.Ambiguous} belgede birden fazla aday var (belge üzerinden seçin), " +
+                          $"{result.Unmatched} belgede eşleşen cari bulunamadı.",
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[EBelge] Toplu cari eşleştirme başarısız.");
+            return Json(new { success = false, message = "Cari eşleştirme sırasında bir hata oluştu." });
+        }
+    }
+
+    /// <summary>Belge icin cari adaylari — modal icerigi (HTML partial).</summary>
+    [HttpGet]
+    public async Task<IActionResult> ContactCandidates(int id, string? q, CancellationToken cancellationToken)
+    {
+        var document = await _incomingDocumentRepository.GetByIdAsync(id, cancellationToken);
+        if (document is null)
+            return Content("<div class='p-3 text-danger'>Belge bulunamadı.</div>", "text/html");
+
+        var candidates = await _incomingDocumentRepository.GetContactCandidatesAsync(id, q, cancellationToken);
+        var links = await _incomingDocumentRepository.GetContactLinksAsync(new[] { id }, cancellationToken);
+        links.TryGetValue(id, out var current);
+
+        return PartialView("_ContactMatch", new CalibraHub.Web.Models.Approval.ContactMatchViewModel
+        {
+            DocumentId = id,
+            DocumentNumber = document.DocumentNumber,
+            SenderName = document.SenderName,
+            SenderTaxNumber = document.SenderTaxNumber,
+            Search = q,
+            Current = current,
+            Candidates = candidates,
+        });
+    }
+
+    /// <summary>Belgeyi secilen cariye baglar (contactId=0 ise bagi kaldirir).</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AssignContact(int id, int contactId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _incomingDocumentRepository.UpdateContactAsync(
+                id, contactId > 0 ? contactId : null, cancellationToken);
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[EBelge] Cari ataması yapılamadı (id={Id}, contactId={ContactId}).", id, contactId);
+            return Json(new { success = false, message = "Cari ataması yapılamadı." });
+        }
     }
 
     [HttpPost]
