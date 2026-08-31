@@ -3,38 +3,34 @@ using System.ComponentModel;
 namespace CalibraHub.Domain.Enums;
 
 /// <summary>
-/// Items.TypeId icin sabit ID-tabanli tip rehberi. ID degerleri MaterialCardFieldCatalog.FieldOptions
-/// (MaterialType field'inin SortOrder degerleri) ile tutarli — patlatma motoru bu sabit ID'lere gore
-/// uretilebilir / sarf / hizmet ayrimini yapar.
+/// Items.TypeId icin sabit ID-tabanli tip rehberi.
+///
+/// KAYNAK-I HAKIKAT: MaterialCardEdit.cshtml'deki "Malzeme Tipi" acilir listesi
+/// (statik &lt;option value="..."&gt;) ve ItemImportHandler.MaterialTypes. Items.TypeId
+/// degerlerini fiilen YAZAN iki yol bunlardir; enum onlari yansitir, tersi degil.
+///
+/// UYARI (2026-08-31): Bu enum eskiden 1=Mamul / 3=Hammadde diye numaralanmisti —
+/// yani UI'in yazdiginin TAM TERSI. ItemTypeCatalog.IsProducible bu yuzden mamulu
+/// "uretilemez", hammaddeyi "uretilebilir" sayiyordu ve MRP sessizce yanlis
+/// calisiyordu. Numaralar burada degistirilirken MUTLAKA yukaridaki iki yazma
+/// yolu ile birebir karsilastir.
 /// </summary>
 public enum ItemType
 {
-    [Description("Mamul")]
-    FinishedGood = 1,
+    [Description("Hammadde")]
+    RawMaterial = 1,
 
     [Description("Yari Mamul")]
     SemiFinished = 2,
 
-    [Description("Hammadde")]
-    RawMaterial = 3,
-
-    [Description("Ambalaj")]
-    Packaging = 4,
-
-    [Description("Yardimci Malzeme")]
-    Auxiliary = 5,
-
-    [Description("Isletme Malzemesi")]
-    Operating = 6,
-
-    [Description("Hizmet")]
-    Service = 7,
+    [Description("Mamul")]
+    FinishedGood = 3,
 
     [Description("Ticari Mal")]
-    Merchandise = 8,
+    Merchandise = 4,
 
-    [Description("Diger")]
-    Other = 9,
+    [Description("Sarf Malzemesi")]
+    Consumable = 5,
 
     /// <summary>
     /// Kit / paket urun (phantom bundle). Fiziksel stok degil, birden fazla stogu
@@ -57,9 +53,7 @@ public static class ItemTypeCatalog
     public static readonly IReadOnlyList<int> ConsumableTypeIds =
     [
         (int)ItemType.RawMaterial,
-        (int)ItemType.Packaging,
-        (int)ItemType.Auxiliary,
-        (int)ItemType.Operating,
+        (int)ItemType.Consumable,
         (int)ItemType.Merchandise,
     ];
 
@@ -67,8 +61,5 @@ public static class ItemTypeCatalog
 
     public static bool IsConsumable(int? typeId) => typeId.HasValue && ConsumableTypeIds.Contains(typeId.Value);
 
-    /// <summary>Kit / paket urun tipi — icerik ItemKit/ItemKitLine tablolarinda; satis
-    /// satirinda tek kalem, irsaliyede bilesenlerine patlar. Ne uretilebilir ne sarf
-    /// (patlatma satis tarafinda, uretim degil).</summary>
     public static bool IsKit(int? typeId) => typeId == (int)ItemType.Kit;
 }
