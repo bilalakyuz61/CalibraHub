@@ -157,6 +157,7 @@ public sealed class ApprovalController : Controller
             EnvelopeId = document.EnvelopeId ?? string.Empty,
             XmlContent = xmlContent,
             HasXmlPayload = hasXml,
+            Ettn = ExtractDocumentUuid(xmlContent),
             RenderData = renderData
         };
 
@@ -306,6 +307,22 @@ public sealed class ApprovalController : Controller
             TaxAmount = vatAmount.HasValue ? Num(vatAmount.Value) : null,
             PayableAmount = payableAmount.HasValue ? Num(payableAmount.Value) : null,
         };
+    }
+
+    /// <summary>Belgenin ETTN'si (kok altindaki <c>cbc:UUID</c>). Yoksa null.</summary>
+    private static string? ExtractDocumentUuid(string xmlContent)
+    {
+        if (string.IsNullOrWhiteSpace(xmlContent) || !xmlContent.TrimStart().StartsWith('<')) return null;
+        try
+        {
+            var root = XDocument.Parse(xmlContent).Root;
+            var uuid = root?.Elements().FirstOrDefault(e => e.Name.LocalName == "UUID")?.Value?.Trim();
+            return string.IsNullOrWhiteSpace(uuid) ? null : uuid;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static Web.Models.Approval.InvoiceRenderData? ParseInvoiceRenderData(string xmlContent)

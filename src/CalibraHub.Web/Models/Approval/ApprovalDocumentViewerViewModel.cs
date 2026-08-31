@@ -16,5 +16,14 @@ public sealed class ApprovalDocumentViewerViewModel
     /// "Resmi (GIB) Goruntusu" ve "XML" sekmeleri anlamsizdir, gosterilmez.
     /// </summary>
     public bool HasXmlPayload { get; init; }
+
+    /// <summary>
+    /// Belgenin ETTN'si (UBL <c>cbc:UUID</c>) — GİB tarafındaki tekil belge kimliği.
+    ///
+    /// <para>Ekranda ETTN gösterilir; <see cref="EnvelopeId"/> çevrimdışı kayıtlarda
+    /// bizim ÜRETTİĞİMİZ dedup anahtarıdır (<c>NETSIS-EFAT-14154</c> gibi) ve kullanıcı
+    /// için bir anlam taşımaz — "Zarf No" diye göstermek yanlış bilgi veriyordu.</para>
+    /// </summary>
+    public string? Ettn { get; init; }
     public InvoiceRenderData? RenderData { get; init; }
 }

@@ -70,6 +70,13 @@
         .xml-tag { color: #569cd6; } .xml-attr { color: #9cdcfe; } .xml-value { color: #ce9178; }
     }
 
+    /* Zoom şeridi KOYU zeminlidir; buton yazısı/ikonu açık olmalı.
+       Bootstrap .btn-dark bu görünümde etkisiz kalıp yazıyı #333 bırakıyordu —
+       kullanıcı "buton isimleri görünmüyor" diye bildirdi. */
+    #zoomToolbar .btn, .inv-sheet-toolbar .btn { color: #fff !important; border-color: #5f6368 !important; }
+    #zoomToolbar .btn:hover, .inv-sheet-toolbar .btn:hover { background: rgba(255,255,255,.12) !important; }
+    #zoomToolbar .btn svg, .inv-sheet-toolbar .btn svg { stroke: #fff; }
+
     /* Invoice visual — kağıt (A4) görünümü.
        Kağıt her iki temada da BEYAZ kalır: bu bir belge yüzeyi, arayüz yüzeyi değil
        (GİB görüntüsü sekmesi de aynı şekilde beyaz kağıt gösterir). */
@@ -218,10 +225,23 @@
                     <span class="doc-viewer__meta-value">@Model.SenderName</span>
                 </div>
             }
-            <div class="doc-viewer__meta-item">
-                <span class="doc-viewer__meta-label">Zarf No</span>
-                <span class="doc-viewer__meta-value" style="font-size:.75rem">@Model.EnvelopeId</span>
-            </div>
+            @* ETTN belgenin GİB'deki tekil kimliğidir. EnvelopeId çevrimdışı kayıtlarda
+               bizim ürettiğimiz dedup anahtarıdır ("NETSIS-EFAT-14154") — onu "Zarf No"
+               diye göstermek yanlış bilgiydi; yalnız gerçek zarf kimliği varsa gösterilir. *@
+            @if (!string.IsNullOrWhiteSpace(Model.Ettn))
+            {
+                <div class="doc-viewer__meta-item">
+                    <span class="doc-viewer__meta-label">ETTN</span>
+                    <span class="doc-viewer__meta-value" style="font-size:.75rem">@Model.Ettn</span>
+                </div>
+            }
+            else if (!Model.EnvelopeId.StartsWith("NETSIS-", StringComparison.OrdinalIgnoreCase))
+            {
+                <div class="doc-viewer__meta-item">
+                    <span class="doc-viewer__meta-label">Zarf No</span>
+                    <span class="doc-viewer__meta-value" style="font-size:.75rem">@Model.EnvelopeId</span>
+                </div>
+            }
         </div>
         <div class="doc-viewer__actions" id="docViewerActions">
             @if (hasXml)
@@ -640,6 +660,7 @@
                 html: '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right: 4px;"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg> Kopyala', 
                 title: "XML\'i panoya kopyala" 
             });
+            }
 
             if (activeTab === 'gorsel' && document.getElementById('btnPrintInvoice')) {
                 actions.push({
