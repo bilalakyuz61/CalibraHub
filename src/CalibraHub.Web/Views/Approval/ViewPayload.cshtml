@@ -609,14 +609,33 @@
         container.style.marginBottom = '-' + diff + 'px';
     }
 
+    /* Boyut senkronu: yükseklik VE genişlik belgenin kendi ölçüsünden alınır.
+
+       Neden genişlik de: iframe 220mm (=831px) SABİTTİ, ama gönderenin GİB şablonu daha
+       geniş çizilebiliyor (ölçüldü: Aydem faturası 1015px). Kaydırma kapalı olduğu için
+       taşan kısım kırpılıyordu ve "Genişliğe Sığdır" da 831'e göre hesapladığından
+       sığdırmıyordu — kullanıcı "fatura ekrana sığmıyor" diye bildirdi. */
     function syncIframeHeight() {
         try {
             var doc = iframe.contentDocument || iframe.contentWindow.document;
+
+            var docWidth = Math.max(
+                doc.documentElement ? doc.documentElement.scrollWidth : 0,
+                doc.body ? doc.body.scrollWidth : 0);
+            // Alt sınır A4 (831px): daha dar belgeler kağıt genişliğinde kalsın.
+            // Üst sınır 2400px: bozuk bir şablon sayfayı sonsuz genişletmesin.
+            if (docWidth > 0) {
+                var target = Math.min(Math.max(docWidth, 831), 2400);
+                if (Math.abs(parseFloat(iframe.style.width) || 0) !== target) {
+                    iframe.style.width = target + 'px';
+                }
+            }
+
             var height = doc.documentElement.scrollHeight || doc.body.scrollHeight;
             if (height > 500) {
                 iframe.style.height = (height + 30) + 'px'; // add small padding below GİB footer
-                applyZoom(); // Re-apply scale margin fixes after height change
             }
+            applyZoom(); // Re-apply scale margin fixes after size change
         } catch(e) { }
     }
 
@@ -644,8 +663,11 @@
         applyZoom();
     });
     document.getElementById('btnFitWidth').addEventListener('click', function() {
-        var availableW = wrap.clientWidth - 40; 
-        currentZoom = availableW / container.offsetWidth;
+        // Ölçü, senkronlanmış GERÇEK içerik genişliğinden alınır (bkz. syncIframeHeight).
+        syncIframeHeight();
+        var availableW = wrap.clientWidth - 40;
+        var contentW = container.offsetWidth || 1;
+        currentZoom = availableW / contentW;
         if (currentZoom > 1.5) currentZoom = 1.5;
         applyZoom();
     });
