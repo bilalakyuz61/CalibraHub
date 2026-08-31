@@ -210,12 +210,15 @@ export default function FieldBehaviorModal(props) {
   var [defaultValue, setDefaultValue] = useState('')
   var [visibleIf, setVisibleIf] = useState('')
   var [requiredIf, setRequiredIf] = useState('')
+  // Alan kalem kartindan cikip Kalem Detayi modalinda mi cizilsin (yalniz kalem formlarinda).
+  var [showInModal, setShowInModal] = useState(false)
 
   useEffect(function () {
     if (!field) return
     setDefaultValue(field.defaultValue || '')
     setVisibleIf(field.visibleIf || '')
     setRequiredIf(field.requiredIf || '')
+    setShowInModal(field.showInModal === true)
   }, [field])
 
   useEffect(function () {
@@ -231,6 +234,7 @@ export default function FieldBehaviorModal(props) {
       defaultValue: defaultValue,
       visibleIf: visibleIf,
       requiredIf: requiredIf,
+      showInModal: showInModal,
     })
     onClose()
   }
@@ -267,6 +271,41 @@ export default function FieldBehaviorModal(props) {
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 flex flex-col gap-5">
+          {/* Konum — yalniz KALEM formlarinda (*_LINES) anlamli; ust bilgi formunda
+              "Kalem Detayi modali" diye bir yer yoktur, o yuzden hic cizilmez.
+              Kilitli alanlarda kapali: malzeme kodu/miktar kartta gorunmeden satir
+              girilemez (grid tarafinda da ayrica yok sayilir). */}
+          {props.allowModalPlacement && (
+            <div>
+              <div className="text-[11px] font-bold tracking-wide text-slate-600 dark:text-white/60 mb-1.5">
+                Konum
+              </div>
+              <label className={'flex items-center gap-2 text-[12px] ' + (field.locked ? 'opacity-45 cursor-not-allowed' : 'cursor-pointer')}>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={showInModal}
+                  disabled={field.locked === true}
+                  onClick={function () { if (!field.locked) setShowInModal(!showInModal) }}
+                  className={'relative w-[34px] h-[19px] rounded-full border transition-colors flex-shrink-0 ' + (
+                    showInModal ? 'bg-indigo-500 border-transparent'
+                                : 'bg-slate-200 border-slate-300 dark:bg-white/15 dark:border-white/20')}
+                >
+                  <span
+                    className="absolute top-[2px] w-[13px] h-[13px] rounded-full bg-[#fff] transition-all"
+                    style={{ left: showInModal ? 17 : 2, boxShadow: '0 1px 2px rgba(0,0,0,.3)' }}
+                  />
+                </button>
+                <span className="text-slate-600 dark:text-white/70">Kalem Detayı modalında göster</span>
+              </label>
+              <div className="text-[10.5px] text-slate-400 dark:text-white/35 mt-1">
+                {field.locked
+                  ? 'Çekirdek alan — kartta kalmak zorunda.'
+                  : 'Açıkken alan kalem kartından çıkar, satırın ⋮ menüsündeki Kalem Detayı modalında görünür.'}
+              </div>
+            </div>
+          )}
+
           <div>
             <div className="text-[11px] font-bold tracking-wide text-slate-600 dark:text-white/60 mb-1.5">
               Varsayılan Değer

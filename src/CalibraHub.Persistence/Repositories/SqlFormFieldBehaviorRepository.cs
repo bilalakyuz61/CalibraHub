@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
@@ -35,7 +35,10 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                    [CreatedById],[CreatedBy],[Created],[UpdatedById],[UpdatedBy],[Updated],
                    -- 2026-08-20 RowHeight SONA eklendi: mevcut ordinal eslemesi (0..19)
                    -- bozulmasin diye araya DEGIL sona. Okuma indeksi 20.
-                   [RowHeight],[CellWidthPx],[TargetTabKey],[TargetTab],[Align]
+                   [RowHeight],[CellWidthPx],[TargetTabKey],[TargetTab],[Align],
+                   -- 2026-08-31 ShowInModal SONA eklendi (ordinal 25) — araya eklemek
+                   -- 0..24 eslemesinin TAMAMINI kaydirirdi.
+                   [ShowInModal]
             FROM {_table}
             WHERE [FormCode]=@FormCode AND [IsActive]=1 AND [CompanyId]=@CompanyId
             ORDER BY [SortOrder],[FieldKey];
@@ -73,6 +76,7 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                 TargetTabKey = r.IsDBNull(22) ? null : r.GetString(22),
                 TargetTab = r.IsDBNull(23) ? null : r.GetString(23),
                 Align = r.IsDBNull(24) ? null : r.GetString(24),
+                ShowInModal = r.IsDBNull(25) ? null : r.GetBoolean(25),
             });
         }
         return list;
@@ -102,11 +106,11 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                     INSERT INTO {_table}
                         ([FormCode],[FieldKey],[IsVisible],[IsRequired],[DefaultValue],
                          [LabelText],[LabelStyle],[RulesJSON],[SortOrder],[CardSection],[CardOrder],[CardWidth],[IsActive],
-                         [CompanyId],[CreatedById],[CreatedBy],[RowHeight],[CellWidthPx],[TargetTabKey],[TargetTab],[Align])
+                         [CompanyId],[CreatedById],[CreatedBy],[RowHeight],[CellWidthPx],[TargetTabKey],[TargetTab],[Align],[ShowInModal])
                     VALUES
                         (@FormCode,@FieldKey,@IsVisible,@IsRequired,@DefaultValue,
                          @LabelText,@LabelStyle,@RulesJson,@SortOrder,@CardSection,@CardOrder,@CardWidth,1,
-                         @CompanyId,@CreatedById,@CreatedBy,@RowHeight,@CellWidthPx,@TargetTabKey,@TargetTab,@Align);
+                         @CompanyId,@CreatedById,@CreatedBy,@RowHeight,@CellWidthPx,@TargetTabKey,@TargetTab,@Align,@ShowInModal);
                     """;
                 ins.Parameters.Add(new SqlParameter("@FormCode", formCode));
                 ins.Parameters.Add(new SqlParameter("@CompanyId", companyId));
@@ -123,6 +127,7 @@ public sealed class SqlFormFieldBehaviorRepository : IFormFieldBehaviorRepositor
                 ins.Parameters.Add(new SqlParameter("@CardWidth", (object?)row.CardWidth ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@RowHeight", (object?)row.RowHeight ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@CellWidthPx", (object?)row.CellWidthPx ?? DBNull.Value));
+                ins.Parameters.Add(new SqlParameter("@ShowInModal", (object?)row.ShowInModal ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@Align", (object?)row.Align ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@TargetTabKey", (object?)row.TargetTabKey ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@TargetTab", (object?)row.TargetTab ?? DBNull.Value));

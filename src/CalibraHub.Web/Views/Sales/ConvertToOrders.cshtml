@@ -1,4 +1,4 @@
-@*
+﻿@*
     ConvertToOrders — "Tekliflerden Sipariş Oluştur" TAM EKRAN sayfası (2026-08-22).
 
     Geçmiş: önce Satış Siparişi listesindeki bir MODAL'dı (960px). Kullanıcı isteği
@@ -46,12 +46,83 @@
         flex: 1 1 auto;
         font-size: .9rem; color: var(--app-text-muted, #64748b);
     }
+
+    /* Kalem bazlı rezervasyon seçimi modalı.
+       Ölçü SABİT (CLAUDE.md "modal boyut sabitliği"): kalem sayısı değiştikçe
+       pencere büyüyüp küçülmez; taşan liste kendi içinde kayar. */
+    .cto-modal-backdrop {
+        position: fixed; inset: 0; z-index: 1200;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(8, 11, 20, .55); backdrop-filter: blur(3px);
+    }
+    .cto-modal {
+        display: flex; flex-direction: column;
+        width: min(760px, calc(100vw - 96px));
+        height: min(560px, calc(100vh - 64px));
+        background: var(--app-surface, #fff);
+        color: var(--bs-body-color, #0f172a);
+        border: 1px solid var(--app-border, #e2e8f0);
+        border-radius: 14px; overflow: hidden;
+        box-shadow: 0 24px 64px rgba(0, 0, 0, .42);
+    }
+    .cto-modal__head { flex: 0 0 auto; padding: 14px 18px; border-bottom: 1px solid var(--app-border, #e2e8f0); }
+    .cto-modal__title { font-size: .95rem; font-weight: 600; }
+    .cto-modal__sub   { font-size: .78rem; color: var(--app-text-muted, #64748b); margin-top: 2px; }
+    .cto-modal__body  { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px 18px; }
+    .cto-modal__foot  {
+        flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+        padding: 12px 18px; border-top: 1px solid var(--app-border, #e2e8f0);
+    }
+    .cto-row {
+        display: flex; align-items: center; gap: 10px;
+        padding: 7px 0; border-bottom: 1px solid var(--app-border, #e2e8f0);
+        font-size: .82rem;
+    }
+    .cto-row:last-child { border-bottom: none; }
+    .cto-row__main { flex: 1 1 auto; min-width: 0; }
+    .cto-row__name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cto-row__meta { display: block; font-size: .72rem; color: var(--app-text-muted, #64748b); }
+    .cto-row__qty  { flex: 0 0 auto; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .78rem; }
+    /* Boolean giris = switch (checkbox degil) — CLAUDE.md kurali. */
+    .cto-sw {
+        flex: 0 0 auto; width: 34px; height: 19px; border-radius: 999px;
+        border: 1px solid var(--app-border, #e2e8f0);
+        background: var(--app-surface-2, rgba(120,120,140,.22));
+        position: relative; cursor: pointer; padding: 0;
+        transition: background .15s, border-color .15s;
+    }
+    .cto-sw[aria-checked="true"] { background: #6366f1; border-color: transparent; }
+    .cto-sw::after {
+        content: ''; position: absolute; top: 2px; left: 2px;
+        width: 13px; height: 13px; border-radius: 50%; background: #fff;
+        box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: left .15s;
+    }
+    .cto-sw[aria-checked="true"]::after { left: 17px; }
+    .cto-msg { font-size: .78rem; color: var(--app-text-muted, #64748b); }
 </style>
 }
 
 <div class="cto-outer">
     <div class="cto-board" id="ctoBoard">
         <div class="cto-fallback" id="ctoFallback">Yükleniyor…</div>
+    </div>
+</div>
+
+<div class="cto-modal-backdrop" id="ctoResvBackdrop" style="display:none;">
+    <div class="cto-modal" role="dialog" aria-modal="true" aria-labelledby="ctoResvTitle">
+        <div class="cto-modal__head">
+            <div class="cto-modal__title" id="ctoResvTitle">Siparis Olustur - Stok Rezervasyonu</div>
+            <div class="cto-modal__sub" id="ctoResvSub">Kalemler yukleniyor...</div>
+        </div>
+        <div class="cto-modal__body" id="ctoResvBody"></div>
+        <div class="cto-modal__foot">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="ctoResvAll">Tumunu Sec</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="ctoResvNone">Temizle</button>
+            <span class="cto-msg" id="ctoResvMsg"></span>
+            <span style="flex:1 1 auto;"></span>
+            <button type="button" class="btn btn-sm btn-light" id="ctoResvCancel">Vazgec</button>
+            <button type="button" class="btn btn-sm btn-primary" id="ctoResvOk">Siparis Olustur</button>
+        </div>
     </div>
 </div>
 
@@ -77,6 +148,155 @@
         host.innerHTML = '';
         window.CalibraHub.mountSmartBoard(host, BOARD);
     }
+
+    // -- Kalem bazli rezervasyon secimi --------------------------------
+    // Board, stok rezervasyonu ACIKKEN dogrudan POST etmez; 'cto:create-orders'
+    // olayini firlatir ve secimi burada topluyoruz. Parametre kapaliysa board
+    // eski yolu (dogrudan POST) kullanir ve bu blok hic calismaz.
+    var backdrop = document.getElementById('ctoResvBackdrop');
+    var bodyEl   = document.getElementById('ctoResvBody');
+    var subEl    = document.getElementById('ctoResvSub');
+    var msgEl    = document.getElementById('ctoResvMsg');
+    var okBtn    = document.getElementById('ctoResvOk');
+    var pendingQuoteIds = [];
+    var lineState = {};
+
+    function onKey(e) { if (e.key === 'Escape') closeResv(); }
+
+    function closeResv() {
+        backdrop.style.display = 'none';
+        bodyEl.innerHTML = '';
+        lineState = {};
+        msgEl.textContent = '';
+        okBtn.disabled = false;
+        document.removeEventListener('keydown', onKey);
+    }
+
+    function csrf() {
+        try {
+            var ti = document.querySelector('input[name="__RequestVerificationToken"]');
+            if (ti) return ti.value;
+            return (window.__CALIBRA_SHELL_CONFIG__ && window.__CALIBRA_SHELL_CONFIG__.antiforgeryToken) || null;
+        } catch (e) { return null; }
+    }
+
+    function renderLines(lines) {
+        bodyEl.innerHTML = '';
+        if (!lines.length) {
+            bodyEl.innerHTML = '<div class="cto-fallback">Rezerve edilebilecek kalem yok.</div>';
+            return;
+        }
+        lines.forEach(function (ln) {
+            // Varsayilan KAPALI - kullanici bilincli isaretlesin.
+            lineState[ln.lineId] = false;
+
+            var row = document.createElement('div');
+            row.className = 'cto-row';
+
+            var sw = document.createElement('button');
+            sw.type = 'button';
+            sw.className = 'cto-sw';
+            sw.setAttribute('role', 'switch');
+            sw.setAttribute('aria-checked', 'false');
+            sw.setAttribute('aria-label', (ln.materialName || ln.materialCode || 'Kalem') + ' rezerve et');
+            sw.addEventListener('click', function () {
+                var on = sw.getAttribute('aria-checked') === 'true';
+                sw.setAttribute('aria-checked', on ? 'false' : 'true');
+                lineState[ln.lineId] = !on;
+            });
+
+            var main = document.createElement('div');
+            main.className = 'cto-row__main';
+            var nm = document.createElement('span');
+            nm.className = 'cto-row__name';
+            nm.textContent = (ln.materialCode ? ln.materialCode + ' - ' : '') + (ln.materialName || '');
+            var mt = document.createElement('span');
+            mt.className = 'cto-row__meta';
+            mt.textContent = (ln.quoteNo || '') + (ln.contactName ? ' - ' + ln.contactName : '');
+            main.appendChild(nm);
+            main.appendChild(mt);
+
+            var qty = document.createElement('span');
+            qty.className = 'cto-row__qty';
+            qty.textContent = String(ln.quantity) + (ln.unitCode ? ' ' + ln.unitCode : '');
+
+            row.appendChild(sw);
+            row.appendChild(main);
+            row.appendChild(qty);
+            bodyEl.appendChild(row);
+        });
+    }
+
+    function setAll(val) {
+        Object.keys(lineState).forEach(function (k) { lineState[k] = val; });
+        Array.prototype.forEach.call(bodyEl.querySelectorAll('.cto-sw'), function (b) {
+            b.setAttribute('aria-checked', val ? 'true' : 'false');
+        });
+    }
+
+    window.addEventListener('cto:create-orders', function (ev) {
+        var ids = (ev.detail && ev.detail.ids) || [];
+        if (!ids.length) return;
+        pendingQuoteIds = ids;
+        backdrop.style.display = 'flex';
+        document.addEventListener('keydown', onKey);
+        subEl.textContent = ids.length + ' teklif secildi. Rezerve edilecek kalemleri isaretleyin (varsayilan: rezervasyonsuz).';
+        bodyEl.innerHTML = '<div class="cto-fallback">Kalemler yukleniyor...</div>';
+
+        fetch('/Sales/ConvertibleQuoteLines?ids=' + encodeURIComponent(ids.join(',')), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d || d.ok !== true) {
+                    // Hatayi YUTMA: kullanici neden liste gelmedigini gormeli.
+                    bodyEl.innerHTML = '<div class="cto-fallback">' + ((d && d.error) || 'Kalemler okunamadi.') + '</div>';
+                    return;
+                }
+                renderLines(d.lines || []);
+            })
+            .catch(function (err) {
+                console.error('[ConvertToOrders] Kalem listesi alinamadi', err);
+                bodyEl.innerHTML = '<div class="cto-fallback">Kalemler okunamadi.</div>';
+            });
+    });
+
+    document.getElementById('ctoResvAll').addEventListener('click', function () { setAll(true); });
+    document.getElementById('ctoResvNone').addEventListener('click', function () { setAll(false); });
+    document.getElementById('ctoResvCancel').addEventListener('click', closeResv);
+    backdrop.addEventListener('click', function (e) { if (e.target === backdrop) closeResv(); });
+
+    okBtn.addEventListener('click', function () {
+        var picked = Object.keys(lineState).filter(function (k) { return lineState[k]; }).map(Number);
+        okBtn.disabled = true;
+        msgEl.textContent = 'Olusturuluyor...';
+        var headers = { 'Content-Type': 'application/json' };
+        var t = csrf();
+        if (t) headers['RequestVerificationToken'] = t;
+        fetch('/Sales/CreateOrdersFromQuotesBulk', {
+            method: 'POST', credentials: 'same-origin', headers: headers,
+            body: JSON.stringify({
+                ids: pendingQuoteIds,
+                // Hic kalem secilmediyse rezervasyon ISTENMEZ (false) - aksi halde sunucu
+                // "tum kalemler" olarak yorumlar ve secilmeyenler sessizce rezerve edilirdi.
+                reserveStock: picked.length > 0,
+                reserveLineIds: picked
+            })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!d || d.ok !== true) {
+                msgEl.textContent = (d && d.error) || 'Siparis olusturulamadi.';
+                okBtn.disabled = false;
+                return;
+            }
+            closeResv();
+            try { window.CalibraSmartBoard.refresh(BOARD.boardKey); } catch (e) { location.reload(); }
+        })
+        .catch(function (err) {
+            console.error('[ConvertToOrders] Siparis olusturulamadi', err);
+            msgEl.textContent = 'Siparis olusturulamadi.';
+            okBtn.disabled = false;
+        });
+    });
 
     if (window.CalibraHub && typeof window.CalibraHub.mountSmartBoard === 'function') {
         doMount();

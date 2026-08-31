@@ -15708,6 +15708,7 @@ END;
                     -- 2026-08-20 Serbest duzen: alan basina PIKSEL genislik (60-600).
                     -- CardWidth (1..12 izgara span) yerine gecer; izgara modunda okunmaz.
                     [CellWidthPx]  INT            NULL,
+                    [ShowInModal]  BIT            NULL,
                     [Align]        NVARCHAR(10)   NULL,
                     -- Sekme icerigi baska sekmeye tasinabilir: hedef sekme anahtari.
                     -- Yalniz 'tab:<key>' satirlarinda anlamli; null = yerinde kal.
@@ -15739,6 +15740,10 @@ END;
                     ALTER TABLE [{s}].[FormFieldBehavior] ADD [RowHeight] INT NULL;
                 IF COL_LENGTH(N'{sl}.FormFieldBehavior', N'CellWidthPx') IS NULL
                     ALTER TABLE [{s}].[FormFieldBehavior] ADD [CellWidthPx] INT NULL;
+                -- Alan kalem KARTINDAN cikip Kalem Detayi MODALINDA cizilsin mi (2026-08-31).
+                -- NULL/0 = kartta (mevcut davranis birebir korunur; fail-open).
+                IF COL_LENGTH(N'{sl}.FormFieldBehavior', N'ShowInModal') IS NULL
+                    ALTER TABLE [{s}].[FormFieldBehavior] ADD [ShowInModal] BIT NULL;
                 IF COL_LENGTH(N'{sl}.FormFieldBehavior', N'TargetTabKey') IS NULL
                     ALTER TABLE [{s}].[FormFieldBehavior] ADD [TargetTabKey] NVARCHAR(50) NULL;
                 IF COL_LENGTH(N'{sl}.FormFieldBehavior', N'TargetTab') IS NULL

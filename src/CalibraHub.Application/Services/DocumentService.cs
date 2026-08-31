@@ -1782,7 +1782,16 @@ public sealed class DocumentService : IDocumentService
                 return new CreateOrdersFromQuotesResult(false,
                     "Stok rezervasyonu servisi kullanılamıyor — rezervasyonlu sipariş oluşturulamadı.", 0, Array.Empty<int>());
 
-            var quoteLineIds = quotes.SelectMany(t => t.Lines).Select(l => l.Id).Where(id => id > 0).ToArray();
+            // Kalem bazli secim varsa yeterlilik YALNIZ secilenler icin sorulur; aksi halde
+            // secilmemis bir kalemin eksigi tum donusumu bloklardi.
+            var reserveSet = req.ReserveLineIds is { Count: > 0 }
+                ? new HashSet<int>(req.ReserveLineIds)
+                : null;
+            var quoteLineIds = quotes.SelectMany(t => t.Lines).Select(l => l.Id)
+                .Where(id => id > 0 && (reserveSet is null || reserveSet.Contains(id))).ToArray();
+            if (quoteLineIds.Length == 0)
+                return new CreateOrdersFromQuotesResult(false,
+                    "Rezervasyon istendi ancak rezerve edilecek kalem seçilmedi.", 0, Array.Empty<int>());
             var shortages = await _stockReservations.CheckLinesAvailabilityAsync(quoteLineIds, null, ct);
             if (shortages.Count > 0)
                 return new CreateOrdersFromQuotesResult(false, BuildShortageMessage(shortages), 0, Array.Empty<int>());
@@ -1956,8 +1965,15 @@ public sealed class DocumentService : IDocumentService
             // ve kopru satiri yazilmamis olur, yani gercekten "blok halinde kesme" saglanir.
             if (req.ReserveStock && _stockReservations is not null)
             {
+                // Kalem bazli secim: siparis satiri, turedigi TEKLIF satiri (SourceLineId)
+                // secilenler arasindaysa rezerve edilir. Secim yoksa eski davranis (hepsi).
+                var reserveIdSet = req.ReserveLineIds is { Count: > 0 }
+                    ? new HashSet<int>(req.ReserveLineIds)
+                    : null;
                 var reserveLines = savedByLineNo
                     .Where(l => l.Quantity > 0m)
+                    .Where(l => reserveIdSet is null
+                                || (l.SourceLineId is int src && reserveIdSet.Contains(src)))
                     .Select(l => new CreateReservationLineRequest(l.Id, l.Quantity))
                     .ToList();
                 if (reserveLines.Count > 0)

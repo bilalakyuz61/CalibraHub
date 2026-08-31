@@ -654,6 +654,8 @@ export default function StandardFieldsEditor(props) {
             cardSection: normalizeCardSection(f.cardSection),
             cardOrder: normalizeCardOrder(f.cardOrder),
             cardWidth: normalizeCardWidth(f.cardWidth),
+            // Alan kalem kartindan cikip Kalem Detayi modalinda cizilsin mi.
+            showInModal: f.showInModal === true,
           }
         })
         setFields(loadedFields)
@@ -1116,6 +1118,8 @@ export default function StandardFieldsEditor(props) {
             cellWidthPx: (typeof f.cellWidthPx === 'number') ? f.cellWidthPx : null,
             align: f.align || null,
             targetTab: f.targetTab || null,
+            // Gonderilmezse sunucu varsayilana duser ve secim SESSIZCE kaybolurdu.
+            showInModal: f.showInModal === true,
           }
         }),
         tabs: tabs.map(function (t, i) {
@@ -1716,6 +1720,8 @@ export default function StandardFieldsEditor(props) {
 
       <FieldBehaviorModal
         field={behaviorField}
+        // Kalem formu mu (*_LINES)? Yalniz orada "Kalem Detayi modali" vardir.
+        allowModalPlacement={/_LINES$/i.test(String(formCode || ''))}
         fields={fields.map(function (f) { return { key: f.key, label: f.labelText || f.label || f.key } })}
         onApply={function (patch) { patchField(behaviorKey, patch) }}
         onClose={function () { setBehaviorKey(null) }}

@@ -796,6 +796,17 @@ export default function CalibraLineItemsGrid(props) {
     if (!b || b.cardOrder === null || b.cardOrder === undefined) return null
     return (typeof b.cardOrder === 'number' && isFinite(b.cardOrder)) ? b.cardOrder : null
   }
+  /* Alan kalem KARTINDAN cikip Kalem Detayi modalinda mi cizilsin
+     (Standart Alanlar → showInModal, 2026-08-31).
+     Kilitli/zorunlu alanlar bu ayara TABI DEGILDIR: malzeme kodu ve miktar
+     kartta gorunmeden satir girilemez, dolayisiyla ayar onlarda yok sayilir.
+     lineBehaviors yoksa veya alan isaretli degilse BUGUNKU duzen birebir korunur. */
+  function isModalOnlyCol(col) {
+    if (!col || !lineBehaviors) return false
+    if (col === materialCodeCol || col.required || col.requirePositive) return false
+    var b = lineBehaviors[col.key]
+    return !!(b && b.showInModal === true)
+  }
   function isIdentityCol(col) { return resolvedCardSection(col) === 0 }
   /* Serit hucresinin ORTAK izgaradaki genisligi (kac sutun kaplar).
      2026-08-20 kullanici karari: izgaranin sutun sayisi = ilk seridin alan
@@ -936,6 +947,14 @@ export default function CalibraLineItemsGrid(props) {
     })
     return ordered
   })()
+
+  /* Modalda gosterilecek alanlar KART hesaplarindan tamamen cikarilir — aksi
+     halde seritte bos yer kaplar ve sutun genislikleri kayardi. Hicbir alan
+     isaretli degilse liste bostur ve kart bugunku gibi cizilir (fail-open). */
+  var modalOnlyItems = cardItems.filter(function (o) { return isModalOnlyCol(o.col) })
+  if (modalOnlyItems.length > 0) {
+    cardItems = cardItems.filter(function (o) { return !isModalOnlyCol(o.col) })
+  }
 
   // ── Kimlik/serit gruplama (Standart Alanlar cardSection/cardOrder, 2026-08-20) ──
   //   cardItems zaten (section, order) sirasina gore siralanmis geliyor (yukarida,
@@ -3497,6 +3516,42 @@ export default function CalibraLineItemsGrid(props) {
                 background: __bodyTint,
               }}
             >
+              {/* ── Karttan modala tasinmis standart alanlar ──
+                  Standart Alanlar ekraninda "Modalda Goster" isaretlenen alanlar.
+                  Kart hesaplarindan cikarildiklari icin izgarada bosluk birakmazlar. */}
+              {modalOnlyItems.length > 0 && (
+                <div style={{
+                  marginBottom: 18, padding: '12px 14px', borderRadius: 10,
+                  border: '1px solid ' + __sepColor, background: __bodyTint,
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--app-text)', marginBottom: 8 }}>
+                    Kalem Alanları
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                    {modalOnlyItems.map(function (o) {
+                      var col = o.col
+                      return (
+                        <div key={col.key} style={{ flex: '1 1 220px', minWidth: 180 }}>
+                          <div style={{
+                            fontSize: 10, fontWeight: 700, letterSpacing: '.02em',
+                            color: 'var(--app-text-muted)', marginBottom: 2,
+                          }}>
+                            {col.label}
+                          </div>
+                          <LineGridCell
+                            column={col}
+                            row={extrasModalRow}
+                            value={tlCellValue(col, extrasModalRow)}
+                            onChange={function (k, v, fill) { handleCellChange(extrasModalRow._uid, k, v, fill) }}
+                            siblingColumns={allColumns}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* ── Rezervasyon — YALNIZ satis siparisinde ──
                   Diger belge turlerinde bu blok hic cizilmez: irsaliyede/teklifte
                   rezervasyonun karsiligi yoktur. Modalin KENDISI genel; yalniz bu

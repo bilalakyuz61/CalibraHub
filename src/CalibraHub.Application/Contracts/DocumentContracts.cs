@@ -237,7 +237,12 @@ public sealed record CreateOrdersFromQuotesRequest(
     /// <summary>true ise oluşan sipariş kalemleri için stok rezervasyonu kurulur. Yetersiz stok
     /// BLOK eder: hiçbir sipariş oluşturulmaz ve hangi malzemenin ne kadar eksik olduğu Error
     /// metninde satır satır bildirilir (kısmi dönüştürme YOK).</summary>
-    bool ReserveStock = false);
+    bool ReserveStock = false,
+    /// <summary>Rezerve edilecek TEKLIF KALEMI id'leri. null/bos = <see cref="ReserveStock"/>
+    /// davranisi aynen korunur (TUM kalemler) — geriye donuk uyum. Dolu ise YALNIZ bu kalemler
+    /// rezerve edilir; hem on yeterlilik kontrolu hem rezervasyon kurulumu bu kumeye daralir.
+    /// Siparis kalemi ↔ teklif kalemi eslesmesi <c>DocumentLine.SourceLineId</c> uzerindendir.</summary>
+    IReadOnlyCollection<int>? ReserveLineIds = null);
 
 public sealed record CreateOrdersFromQuotesResult(
     bool Success,

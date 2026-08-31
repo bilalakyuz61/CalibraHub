@@ -2921,6 +2921,9 @@ public sealed class SalesController : Controller
     /// POST /Sales/CreateOrdersFromQuotesBulk (gövde: { ids: [...] }).</summary>
     private async Task<object> BuildConvertibleQuotesBoardAsync(CancellationToken ct)
     {
+        // Rezervasyon parametresi kapaliyken kalem secimi anlamsizdir — akis dallanir.
+        var _ctoReserveEnabled = await IsStockReservationEnabledAsync(ct);
+
         IReadOnlyCollection<DocumentListItemDto> quotes;
         try { quotes = await _quoteService.GetConvertibleQuotesAsync(null, null, null, null, ct); }
         catch (Exception ex)
@@ -2966,16 +2969,30 @@ public sealed class SalesController : Controller
             selectable = true,
             bulkActions = new object[]
             {
-                new
-                {
-                    id = "create-orders",
-                    label = "Sipariş Oluştur",
-                    icon = "ShoppingCart",
-                    variant = "primary",
-                    apiUrl = "/Sales/CreateOrdersFromQuotesBulk",
-                    apiMethod = "POST",
-                    confirm = "Seçili tekliflerden sipariş oluşturulacak. Aynı cariye ait teklifler TEK siparişte birleşir. Devam edilsin mi?",
-                },
+                // Stok rezervasyonu ACIKSA: dogrudan POST YERINE olay firlatilir; sayfa
+                // kalem bazinda "rezerve et" secimi sunan modali acar (SmartBoard
+                // type:'event' sozlesmesi — ek girdi toplayan akislar boyle baglanir).
+                // KAPALIYSA secilecek bir sey yok, eski dogrudan POST birebir korunur.
+                _ctoReserveEnabled
+                    ? new
+                    {
+                        id = "create-orders",
+                        label = "Sipariş Oluştur",
+                        icon = "ShoppingCart",
+                        variant = "primary",
+                        type = "event",
+                        @event = "cto:create-orders",
+                    }
+                    : (object)new
+                    {
+                        id = "create-orders",
+                        label = "Sipariş Oluştur",
+                        icon = "ShoppingCart",
+                        variant = "primary",
+                        apiUrl = "/Sales/CreateOrdersFromQuotesBulk",
+                        apiMethod = "POST",
+                        confirm = "Seçili tekliflerden sipariş oluşturulacak. Aynı cariye ait teklifler TEK siparişte birleşir. Devam edilsin mi?",
+                    },
             },
             masterWidgets = new object[]
             {
@@ -3015,14 +3032,71 @@ public sealed class SalesController : Controller
         // eski davranış birebir korunur.
         var reserveStock = req?.ReserveStock ?? await IsStockReservationEnabledAsync(ct);
 
+        // Kalem bazli secim: bos/null gelirse eski davranis (tum kalemler) korunur.
+        var reserveLineIds = req?.ReserveLineIds is { Count: > 0 } sel ? sel : null;
+
         var result = await _quoteService.CreateOrdersFromQuotesAsync(
-            new CreateOrdersFromQuotesRequest(ids, DateTime.Today, reserveStock), CurrentUserId(), ct);
+            new CreateOrdersFromQuotesRequest(ids, DateTime.Today, reserveStock, reserveLineIds),
+            CurrentUserId(), ct);
         if (!result.Success) return Json(new { ok = false, error = result.Error ?? "Sipariş oluşturulamadı." });
-        return Json(new { ok = true, message = $"{result.OrdersCreated} sipariş oluşturuldu." + (reserveStock ? " Kalemler stok rezervasyonlu." : "") });
+        var resvNote = !reserveStock ? ""
+            : reserveLineIds is null ? " Kalemler stok rezervasyonlu."
+            : $" {reserveLineIds.Count} kalem stok rezervasyonlu.";
+        return Json(new { ok = true, message = $"{result.OrdersCreated} sipariş oluşturuldu." + resvNote });
     }
 
     /// <param name="ReserveStock">null = şirket parametresine göre karar ver (varsayılan).</param>
-    public sealed record BulkIdsRequest(IReadOnlyCollection<int> Ids, bool? ReserveStock = null);
+    /// <param name="ReserveLineIds">Rezerve edilecek TEKLIF KALEMI id'leri; null/bos = tum kalemler.</param>
+    public sealed record BulkIdsRequest(
+        IReadOnlyCollection<int> Ids,
+        bool? ReserveStock = null,
+        IReadOnlyCollection<int>? ReserveLineIds = null);
+
+    /// <summary>
+    /// Secili tekliflerin kalemleri — donusum oncesi "hangi kalemi rezerve edelim" secimi icin.
+    /// Ekranin kendisi teklif listesidir; kalem seviyesi burada ayrica cekilir.
+    /// GET /Sales/ConvertibleQuoteLines?ids=1,2,3
+    /// </summary>
+    [HttpGet("/Sales/ConvertibleQuoteLines")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SalesOrder)]
+    public async Task<IActionResult> ConvertibleQuoteLines(string? ids, CancellationToken ct)
+    {
+        var quoteIds = (ids ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(x => int.TryParse(x, out var v) ? v : 0)
+            .Where(v => v > 0).Distinct().ToArray();
+        if (quoteIds.Length == 0) return Json(new { ok = false, error = "Teklif seçilmedi." });
+
+        try
+        {
+            var outLines = new List<object>();
+            foreach (var qid in quoteIds)
+            {
+                var q = await _quoteService.GetQuoteByIdAsync(qid, ct);
+                if (q is null) continue;
+                var qLines = await _quoteService.GetQuoteLinesAsync(qid, ct);
+                foreach (var ln in qLines.Where(l => l.Quantity > 0m))
+                    outLines.Add(new
+                    {
+                        lineId       = ln.Id,
+                        quoteId      = qid,
+                        quoteNo      = q.DocumentNumber,
+                        contactName  = q.ContactName,
+                        materialCode = ln.MaterialCode,
+                        materialName = ln.MaterialName,
+                        quantity     = ln.Quantity,
+                        unitCode     = ln.UnitCode,
+                    });
+            }
+            return Json(new { ok = true, lines = outLines });
+        }
+        catch (Exception ex)
+        {
+            // Sessiz yutma YOK: sunucuya logla, istemciye jenerik don (CLAUDE.md Madde 2).
+            _logger.LogError(ex, "ConvertibleQuoteLines: kalemler okunamadi. Ids={Ids}", ids);
+            return Json(new { ok = false, error = "Teklif kalemleri okunamadı." });
+        }
+    }
 
     /// <summary>
     /// Yükleme Planlama Merkezi ekranı. Board/veri yükü frontend tarafından

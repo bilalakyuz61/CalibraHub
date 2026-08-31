@@ -111,7 +111,8 @@ public sealed partial class FormBehaviorController : Controller
         string Key, bool IsVisible = true, bool IsRequired = false,
         string? DefaultValue = null, string? LabelText = null, string? LabelStyle = null,
         string? VisibleIf = null, string? RequiredIf = null, int? CardSection = null, int? CardOrder = null,
-        int? CardWidth = null, int? CellWidthPx = null, string? TargetTab = null, string? Align = null);
+        int? CardWidth = null, int? CellWidthPx = null, string? TargetTab = null, string? Align = null,
+        bool? ShowInModal = null);
 
     public sealed record TabBehaviorDto(
         string Key, bool IsVisible = true, int SortOrder = 0, string? LabelText = null,
@@ -223,6 +224,7 @@ public sealed partial class FormBehaviorController : Controller
                 cardOrder = b?.CardOrder,
                 cardWidth = b?.CardWidth,
                 cellWidthPx = b?.CellWidthPx,
+                showInModal = b?.ShowInModal == true,
                 targetTab = b?.TargetTab,
                 align = b?.Align,
                 movable = f.Movable,
@@ -362,7 +364,8 @@ public sealed partial class FormBehaviorController : Controller
                 var isDefault = isVisible && !f.IsRequired && defaultValue is null
                     && labelText is null && labelStyle is null && rulesJson is null
                     && f.CardSection is null && f.CardOrder is null && cardWidth is null
-                    && cellWidthPx is null && targetTab is null && align is null;
+                    && cellWidthPx is null && targetTab is null && align is null
+                    && f.ShowInModal is not true;
                 if (isDefault) continue;
 
                 rows.Add(new FormFieldBehavior
@@ -380,6 +383,7 @@ public sealed partial class FormBehaviorController : Controller
                     CardOrder = f.CardOrder,
                     CardWidth = cardWidth,
                     CellWidthPx = cellWidthPx,
+                    ShowInModal = f.ShowInModal == true ? true : null,
                     TargetTab = targetTab,
                     Align = align,
                     CreatedById = GetUserId(),

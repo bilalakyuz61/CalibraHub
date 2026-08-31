@@ -1,4 +1,4 @@
-namespace CalibraHub.Domain.Entities;
+﻿namespace CalibraHub.Domain.Entities;
 
 /// <summary>
 /// FormFieldBehavior — standart alan davranış tanımı (Form Davranış Katmanı, 2026-08-05).
@@ -66,6 +66,13 @@ public sealed class FormFieldBehavior
     /// null = tip bazli varsayilan. Izgara modunda okunmaz (orada CardWidth gecerli).
     /// </summary>
     public int? CellWidthPx { get; set; }
+
+    /// <summary>
+    /// Alan kalem kartindan cikip "Kalem Detayi" modalinda mi cizilsin (2026-08-31).
+    /// null/false = kartta (varsayilan). Kilitli alanlar (malzeme kodu, miktar) bu
+    /// ayara tabi DEGILDIR — kart onlarsiz kullanilamaz hale gelir.
+    /// </summary>
+    public bool? ShowInModal { get; set; }
 
     /// <summary>Alanin yatay hizalamasi: "left" | "center" | "right". NULL =
     /// alanin kendi varsayilani (kolon tipine gore) — fail-open (2026-08-22).</summary>
