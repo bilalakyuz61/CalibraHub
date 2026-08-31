@@ -86,7 +86,9 @@
         display: flex; justify-content: center; align-items: center; gap: 8px;
         box-shadow: 0 2px 6px rgba(0,0,0,.25);
     }
-    .inv-sheet-scroll { flex: 1 1 auto; overflow: auto; padding: 24px 16px; }
+    .inv-sheet-scroll { flex: 1 1 auto; overflow: auto; padding: 24px 16px; text-align: center; }
+    /* Olcek kagida uygulanir; kaydirma kabi degismez (GİB sekmesindeki desenin aynisi). */
+    .inv-sheet-zoom { display: inline-block; transform-origin: top center; transition: transform .15s ease-out; }
     .inv {
         width: 210mm; min-height: 297mm; box-sizing: border-box;
         margin: 0 auto; padding: 16mm 14mm; font-size: .875rem;
@@ -129,6 +131,7 @@
         }
         .inv-sheet-toolbar { display: none !important; }
         .inv-sheet-scroll { overflow: visible !important; padding: 0 !important; }
+        .inv-sheet-zoom { transform: none !important; margin: 0 !important; display: block !important; }
         .inv { box-shadow: none !important; margin: 0 !important; width: auto !important; min-height: 0 !important; padding: 0 !important; }
     }
     @@media (max-width: 600px) {
@@ -310,12 +313,22 @@
         else
         {
             <div class="inv-sheet-toolbar">
+                <button type="button" class="btn btn-sm btn-dark" id="btnInvZoomOut" style="border: 1px solid #5f6368;" title="Uzaklaş">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                </button>
+                <span id="invZoomLabel" style="color:#fff; font-size:.85rem; font-weight:500; min-width:45px; text-align:center;">100%</span>
+                <button type="button" class="btn btn-sm btn-dark" id="btnInvZoomIn" style="border: 1px solid #5f6368;" title="Yakınlaş">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                </button>
+                <button type="button" class="btn btn-sm btn-dark" id="btnInvFitWidth" style="border: 1px solid #5f6368;">Genişliğe Sığdır</button>
+                <div style="width:1px; background:#5f6368; height:20px; margin:0 4px;"></div>
                 <button type="button" class="btn btn-sm btn-dark" id="btnPrintInvoice" style="border: 1px solid #5f6368;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:4px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                     Yazdır
                 </button>
             </div>
             <div class="inv-sheet-scroll">
+            <div class="inv-sheet-zoom" id="invZoomHost">
             <div class="inv">
                 <div class="inv__head">
                     <div>
@@ -448,6 +461,7 @@
                 {
                     <p class="inv__note">Not: @rd.Note</p>
                 }
+            </div>
             </div>
             </div>
         }
@@ -604,6 +618,45 @@
     var btnPrintInvoice = document.getElementById('btnPrintInvoice');
     if (btnPrintInvoice) btnPrintInvoice.addEventListener('click', function () { window.print(); });
 
+    /* ── Fatura Gorunumu yakinlastirma ──
+       GİB sekmesindeki okuyucuyla ayni davranis: 0.2-3.0 arasi olcek, olcekten
+       dogan bosluk negatif margin ile kapatilir (transform gercek yuksekligi
+       degistirmez, yoksa kagidin altinda kocaman bos alan kalir). */
+    var invZoomHost  = document.getElementById('invZoomHost');
+    var invZoomLabel = document.getElementById('invZoomLabel');
+    var invZoom = 1.0;
+
+    function applyInvZoom() {
+        if (!invZoomHost) return;
+        if (invZoom < 0.2) invZoom = 0.2;
+        if (invZoom > 3.0) invZoom = 3.0;
+        invZoomHost.style.transform = 'scale(' + invZoom + ')';
+        if (invZoomLabel) invZoomLabel.textContent = Math.round(invZoom * 100) + '%';
+        var h = invZoomHost.offsetHeight;
+        invZoomHost.style.marginBottom = '-' + (h - h * invZoom) + 'px';
+    }
+
+    var btnInvZoomIn  = document.getElementById('btnInvZoomIn');
+    var btnInvZoomOut = document.getElementById('btnInvZoomOut');
+    var btnInvFitW    = document.getElementById('btnInvFitWidth');
+    if (btnInvZoomIn)  btnInvZoomIn.addEventListener('click',  function () { invZoom += 0.1; applyInvZoom(); });
+    if (btnInvZoomOut) btnInvZoomOut.addEventListener('click', function () { invZoom -= 0.1; applyInvZoom(); });
+    if (btnInvFitW) btnInvFitW.addEventListener('click', function () {
+        var scroll = document.querySelector('.inv-sheet-scroll');
+        if (!scroll || !invZoomHost) return;
+        invZoom = (scroll.clientWidth - 40) / invZoomHost.offsetWidth;
+        applyInvZoom();
+    });
+
+    /* Ctrl + tekerlek ile de yakinlastir (okuyucu aliskanligi). */
+    var invScrollBox = document.querySelector('.inv-sheet-scroll');
+    if (invScrollBox) invScrollBox.addEventListener('wheel', function (e) {
+        if (!e.ctrlKey) return;
+        e.preventDefault();
+        invZoom += (e.deltaY < 0 ? 0.1 : -0.1);
+        applyInvZoom();
+    }, { passive: false });
+
     // -------- PUSH ACTIONS TO GLOBAL SPA WORKSPACE TOOLBAR --------
     var isWorkspace = window !== window.top;
     var activeTab = HAS_XML ? 'resmi' : 'gorsel';
@@ -663,6 +716,10 @@
             }
 
             if (activeTab === 'gorsel' && document.getElementById('btnPrintInvoice')) {
+                actions.push({ id: "invZoomOut", className: "btn btn-light btn-sm ms-3", html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>', title: "Uzaklaş" });
+                actions.push({ id: "invZoomLabelProxy", className: "btn btn-link btn-sm text-dark text-decoration-none disabled px-1", text: Math.round(invZoom * 100) + '%' });
+                actions.push({ id: "invZoomIn", className: "btn btn-light btn-sm", html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>', title: "Yakınlaş" });
+                actions.push({ id: "invFitWidth", className: "btn btn-light btn-sm", text: "Genişliğe Sığdır" });
                 actions.push({
                     id: "printInvoice",
                     className: "btn btn-outline-secondary btn-sm",
@@ -691,6 +748,9 @@
             else if (actionId === "zoomIn") el = document.getElementById("btnZoomIn");
             else if (actionId === "fitWidth") el = document.getElementById("btnFitWidth");
             else if (actionId === "printInvoice") el = document.getElementById("btnPrintInvoice");
+            else if (actionId === "invZoomOut") el = document.getElementById("btnInvZoomOut");
+            else if (actionId === "invZoomIn") el = document.getElementById("btnInvZoomIn");
+            else if (actionId === "invFitWidth") el = document.getElementById("btnInvFitWidth");
             if (el) el.click();
         };
     }
