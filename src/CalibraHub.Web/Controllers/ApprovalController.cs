@@ -751,6 +751,11 @@ public sealed class ApprovalController : Controller
                           type = "fetch-modal",
                           fetchUrl = Url.Action(nameof(ContactCandidates), "Approval", new { id = d.Id }),
                           modalTitle = $"Cari Eşleştir — {d.DocumentNumber}" },
+                    // Faturaya aktarma: uc yol (dogrudan / siparis / irsaliye baglantili)
+                    // tek eslestirme ekraninda secilir.
+                    new { label = "Faturaya Aktar", icon = "ReceiptText", color = "emerald",
+                          type = "navigate",
+                          url = $"/Purchase/InvoiceFromEDocument?incomingId={d.Id}" },
                 },
             })
             .ToArray();

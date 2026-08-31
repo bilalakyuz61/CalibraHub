@@ -441,7 +441,13 @@ public sealed class PurchaseController : Controller
         // Gövde bağlanamadıysa jenerik "bir hata oluştu" DEMEZ: sebep açıkça söylenir,
         // aksi halde istemci hatası sunucu hatası gibi görünür (teşhis kaybı).
         if (request is null)
-            return Json(new { success = false, message = "İstek gövdesi okunamadı (geçersiz JSON veya eksik alan)." });
+        {
+            var detail = string.Join(" | ", ModelState
+                .SelectMany(kv => kv.Value!.Errors.Select(e =>
+                    $"{kv.Key}: {(string.IsNullOrWhiteSpace(e.ErrorMessage) ? e.Exception?.Message : e.ErrorMessage)}")));
+            _logger.LogWarning("[AlışFatura] İstek gövdesi bağlanamadı: {Detail}", detail);
+            return Json(new { success = false, message = "İstek gövdesi okunamadı: " + detail });
+        }
 
         try
         {

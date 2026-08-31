@@ -1,6 +1,7 @@
 @model CalibraHub.Application.Contracts.PurchaseInvoiceCandidatesDto
 @using System.Text.Json
 @{
+    ViewData["Title"] = $"Faturaya Aktar — {Model.DocumentNumber}";
     ViewData["BodyClass"] = "page-einvoice-match";
     var jsonOpts = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     var dataJson = JsonSerializer.Serialize(Model, jsonOpts);
@@ -209,7 +210,11 @@
             var qDiff = tot.qty - l.quantity;
             var aDiff = tot.amount - eAmount;
             // Kuruş farkı (≤0,01) sessiz geçilir; üstü kırmızı gösterilir (kullanıcı kuralı).
-            var bad = state.mode !== 'direct' && (Math.abs(qDiff) > 0.0001 || Math.abs(aDiff) > 0.01);
+            // Fark yalnız EŞLEŞTİRME YAPILMIŞ kalemde anlamlıdır; hiç atama yokken kırmızı
+            // fark göstermek ilk açılışta yanlış alarm veriyordu.
+            var matched = tot.qty !== 0;
+            var bad = state.mode !== 'direct' && matched &&
+                      (Math.abs(qDiff) > 0.0001 || Math.abs(aDiff) > 0.01);
             var tr = document.createElement('tr');
             tr.dataset.line = l.lineNumber;
             tr.innerHTML =
@@ -222,7 +227,7 @@
                 '<td class="num">' + fmt(eAmount) + '</td>' +
                 '<td class="num">' + (state.mode === 'direct' ? '—' : fmt(tot.qty)) + '</td>' +
                 '<td class="num ' + (bad ? 'em-diff-warn' : 'em-diff-ok') + '">' +
-                    (state.mode === 'direct' ? '—' : (fmt(qDiff) + ' / ' + fmt(aDiff))) + '</td>';
+                    (state.mode === 'direct' || !matched ? '—' : (fmt(qDiff) + ' / ' + fmt(aDiff))) + '</td>';
             tr.addEventListener('click', function () { selectELine(l.lineNumber); });
             tb.appendChild(tr);
         });
