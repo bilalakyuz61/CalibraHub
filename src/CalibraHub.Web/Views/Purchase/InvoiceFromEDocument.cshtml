@@ -71,6 +71,48 @@
     }
     .em-alert--info { background: rgba(99,102,241,.08); color: #4338ca; border-color: rgba(99,102,241,.25); }
 
+    /* Stok seçim modalı — sonuçlar satır satır listelenir (eski satır-içi bağlantı
+       listesi okunaksızdı; kullanıcı "bu şekilde kötü görünüyor" dedi). */
+    .em-pick { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+    .em-pick-value {
+        flex: 1 1 auto; min-width: 0; padding: 4px 8px; border-radius: 6px;
+        border: 1px solid var(--app-border, #e2e8f0); font-size: .8rem;
+        background: var(--app-surface-2, #f8fafc); color: var(--bs-body-color, #0f172a);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .em-pick-value.is-empty { color: #b91c1c; border-color: rgba(220,38,38,.35); background: rgba(220,38,38,.06); }
+
+    .em-modal-backdrop {
+        position: fixed; inset: 0; z-index: 3000; display: flex; align-items: center; justify-content: center;
+        background: rgba(15,23,42,.55); backdrop-filter: blur(2px);
+    }
+    .em-modal {
+        width: min(720px, calc(100vw - 64px)); height: min(560px, calc(100vh - 96px));
+        display: flex; flex-direction: column;
+        background: var(--app-surface, #fff); color: var(--bs-body-color, #0f172a);
+        border: 1px solid var(--app-border, #e2e8f0); border-radius: 12px;
+        box-shadow: 0 18px 48px rgba(0,0,0,.28); overflow: hidden;
+    }
+    .em-modal-head {
+        display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+        border-bottom: 1px solid var(--app-border, #e2e8f0);
+    }
+    .em-modal-title { font-weight: 700; font-size: .92rem; }
+    .em-modal-sub { font-size: .78rem; color: var(--bs-secondary-color, #6c757d); }
+    .em-modal-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+    .em-modal-foot { padding: 10px 14px; border-top: 1px solid var(--app-border, #e2e8f0); display: flex; justify-content: flex-end; gap: 8px; }
+    .em-modal .em-table tbody tr { cursor: pointer; }
+    .em-modal .em-table tbody tr:hover { background: rgba(99,102,241,.08); }
+
+    .em-badge {
+        display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 10px;
+        font-size: .68rem; font-weight: 600; background: rgba(245,158,11,.15); color: #b45309;
+    }
+
+    body.app-theme-dark .em-pick-value { background: #0f172a; border-color: rgba(255,255,255,.1); color: rgba(255,255,255,.85); }
+    body.app-theme-dark .em-modal { background: #111827; border-color: rgba(255,255,255,.1); color: rgba(255,255,255,.9); }
+    body.app-theme-dark .em-modal-head, body.app-theme-dark .em-modal-foot { border-color: rgba(255,255,255,.08); }
+
     body.app-theme-dark .em-head,
     body.app-theme-dark .em-pane,
     body.app-theme-dark .em-foot { background: #111827; border-color: rgba(255,255,255,.08); }
@@ -94,12 +136,17 @@
         <div class="em-head-item">
             <span class="em-head-label">CARİ</span>
             <span class="em-head-value" id="emContact">
+                @if (!string.IsNullOrWhiteSpace(Model.ContactCode))
+                {
+                    <span class="em-muted" style="font-family:ui-monospace,Menlo,Consolas,monospace">@Model.ContactCode</span>
+                    <span> · </span>
+                }
                 @(Model.ContactTitle ?? ("VKN " + (Model.SenderTaxNumber ?? "-")))
             </span>
         </div>
         <div class="em-head-spacer"></div>
         <div class="em-modes" id="emModes">
-            <button type="button" class="em-mode" data-mode="direct">Doğrudan (stok)</button>
+            <button type="button" class="em-mode" data-mode="direct">Doğrudan fatura</button>
             <button type="button" class="em-mode" data-mode="order">Sipariş bağlantılı</button>
             <button type="button" class="em-mode" data-mode="delivery">İrsaliye bağlantılı</button>
         </div>
@@ -164,6 +211,34 @@
     </div>
 </div>
 
+@* Stok seçim modalı — sayfa yüklenirken gizli durur, kalem seçiminde açılır. *@
+<div class="em-modal-backdrop" id="emPickBackdrop" style="display:none;">
+    <div class="em-modal">
+        <div class="em-modal-head">
+            <div style="flex:1 1 auto; min-width:0;">
+                <div class="em-modal-title">Stok Kartı Seç</div>
+                <div class="em-modal-sub" id="emPickFor"></div>
+            </div>
+            <input type="text" class="form-control form-control-sm" style="max-width:280px"
+                   id="emPickSearch" placeholder="Kod veya ad ile ara…" autocomplete="off" />
+        </div>
+        <div class="em-modal-body">
+            <table class="em-table" id="emPickTable">
+                <thead>
+                    <tr>
+                        <th style="width:9rem;">Kod</th>
+                        <th>Ad</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div class="em-modal-foot">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="emPickCancel">Vazgeç</button>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
 <script>
 (function () {
@@ -178,6 +253,16 @@
         if (n === null || n === undefined || isNaN(n)) return '-';
         return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
+    // Birim etiketi: e-belgedeki uluslararası kodun (C62) bizdeki karşılığı varsa onu
+    // gösterir; yoksa ham kodu bırakır (yanlış birim uydurmaktansa ham kod dürüsttür).
+    function unitLabel(l) {
+        if (l.unitLocalCode) {
+            return l.unitLocalCode + (l.unitCode && l.unitCode !== l.unitLocalCode
+                ? ' <span style="opacity:.6">(' + l.unitCode + ')</span>' : '');
+        }
+        return l.unitCode || '';
+    }
+
     function notice(msg, kind) {
         var box = document.getElementById('emNotice');
         box.innerHTML = msg ? '<div class="em-alert' + (kind === 'info' ? ' em-alert--info' : '') + '">' + msg + '</div>' : '';
@@ -220,9 +305,8 @@
             tr.innerHTML =
                 '<td>' + l.lineNumber + '</td>' +
                 '<td>' + (l.itemName || l.itemCode || '-') +
-                    (l.itemCode ? ' <span class="em-muted">(' + l.itemCode + ')</span>' : '') +
-                    (state.mode === 'direct' ? '<div class="mt-1" id="pickWrap_' + l.lineNumber + '"></div>' : '') + '</td>' +
-                '<td class="num">' + fmt(l.quantity) + ' <span class="em-muted">' + (l.unitCode || '') + '</span></td>' +
+                    (l.itemCode ? ' <span class="em-muted">(' + l.itemCode + ')</span>' : '') + '</td>' +
+                '<td class="num">' + fmt(l.quantity) + ' <span class="em-muted">' + unitLabel(l) + '</span></td>' +
                 '<td class="num">' + fmt(l.unitPrice) + '</td>' +
                 '<td class="num">' + fmt(eAmount) + '</td>' +
                 '<td class="num">' + (state.mode === 'direct' ? '—' : fmt(tot.qty)) + '</td>' +
@@ -232,62 +316,127 @@
             tb.appendChild(tr);
         });
 
-        if (state.mode === 'direct') renderItemPickers();
+        // Doğrudan modda stok seçimi SAĞ panelde yapılır (kullanıcı isteği): sol taraf
+        // yalnız e-belgenin kendi verisini gösterir, karışmaz.
+        if (state.mode === 'direct') renderRight();
         highlightTarget();
         renderTotals();
     }
 
-    // ── Doğrudan mod: kalem → stok kartı seçimi ──────────────────────────
-    function renderItemPickers() {
+    // ── Doğrudan mod: kalem → stok kartı seçimi (MODAL) ──────────────────
+    function renderDirectMatching() {
+        var head = document.getElementById('emRightHead');
+        var tb = document.querySelector('#emRight tbody');
+        document.getElementById('emRightTitle').textContent = 'STOK EŞLEŞTİRME';
+        head.innerHTML =
+            '<tr><th style="width:2.2rem;">#</th><th>E-belge kalemi</th>' +
+            '<th style="width:15rem;">Stok kartı</th>' +
+            '<th class="num" style="width:5.5rem;">Miktar</th></tr>';
+        tb.innerHTML = '';
+
         DATA.eDocumentLines.forEach(function (l) {
-            var wrap = document.getElementById('pickWrap_' + l.lineNumber);
-            if (!wrap) return;
-            var picked = state.itemPick[l.lineNumber];
-            var label = picked ? (picked.code + ' — ' + picked.name)
-                               : (l.suggestedItemId ? (l.suggestedItemCode + ' — ' + l.suggestedItemName) : 'stok kartı seçin');
-            if (!picked && l.suggestedItemId) {
-                state.itemPick[l.lineNumber] = { id: l.suggestedItemId, code: l.suggestedItemCode, name: l.suggestedItemName };
+            // Öneri varsa ilk açılışta seçili sayılır (kullanıcı değiştirebilir).
+            if (!state.itemPick[l.lineNumber] && l.suggestedItemId) {
+                state.itemPick[l.lineNumber] = {
+                    id: l.suggestedItemId, code: l.suggestedItemCode, name: l.suggestedItemName
+                };
             }
-            wrap.innerHTML =
-                '<input type="text" class="form-control form-control-sm" style="max-width:320px" ' +
-                'id="item_' + l.lineNumber + '" placeholder="Stok kodu/adı ara…" value="' +
-                (state.itemPick[l.lineNumber] ? String(label).replace(/"/g, '&quot;') : '') + '" ' +
-                'data-line="' + l.lineNumber + '" autocomplete="off" />' +
-                '<div class="em-muted" style="font-size:.72rem" id="itemHint_' + l.lineNumber + '"></div>';
+            var picked = state.itemPick[l.lineNumber];
+            var label = picked ? (picked.code + ' — ' + picked.name) : 'Stok kartı seçilmedi';
 
-            var input = document.getElementById('item_' + l.lineNumber);
-            input.addEventListener('input', function () { searchItem(l.lineNumber, input.value); });
-            input.addEventListener('click', function (e) { e.stopPropagation(); });
+            var tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td>' + l.lineNumber + '</td>' +
+                '<td>' + (l.itemName || l.itemCode || '-') +
+                    (l.itemCode ? '<br><span class="em-muted">' + l.itemCode + '</span>' : '') + '</td>' +
+                '<td><div class="em-pick">' +
+                    '<span class="em-pick-value' + (picked ? '' : ' is-empty') + '" title="' +
+                        String(label).replace(/"/g, '&quot;') + '">' + label + '</span>' +
+                    '<button type="button" class="btn btn-sm btn-outline-secondary" data-pick="' +
+                        l.lineNumber + '">' + (picked ? 'Değiştir' : 'Seç') + '</button>' +
+                '</div></td>' +
+                '<td class="num">' + fmt(l.quantity) + ' <span class="em-muted">' + unitLabel(l) + '</span></td>';
+            tb.appendChild(tr);
+            tr.querySelector('[data-pick]').addEventListener('click', function (e) {
+                e.stopPropagation();
+                openPicker(l);
+            });
         });
+
+        var eksik = DATA.eDocumentLines.filter(function (l) { return !state.itemPick[l.lineNumber]; }).length;
+        document.getElementById('emRightInfo').textContent =
+            eksik ? (eksik + ' kalem eşleştirilmedi') : 'tüm kalemler eşleşti';
     }
 
-    var searchTimer = null;
-    function searchItem(lineNo, term) {
-        clearTimeout(searchTimer);
-        var hint = document.getElementById('itemHint_' + lineNo);
-        if (!term || term.length < 2) { hint.textContent = ''; return; }
-        searchTimer = setTimeout(function () {
-            fetch('/Purchase/InvoiceItemSearch?term=' + encodeURIComponent(term), { credentials: 'same-origin' })
-                .then(function (r) { return r.json(); })
-                .then(function (res) {
-                    var items = (res && res.items) || [];
-                    if (items.length === 0) { hint.textContent = 'Eşleşen stok yok'; return; }
-                    hint.innerHTML = items.slice(0, 6).map(function (it) {
-                        return '<a href="#" data-id="' + it.id + '" data-code="' + it.code + '" data-name="' +
-                               String(it.name).replace(/"/g, '&quot;') + '">' + it.code + ' — ' + it.name + '</a>';
-                    }).join(' · ');
-                    hint.querySelectorAll('a').forEach(function (a) {
-                        a.addEventListener('click', function (e) {
-                            e.preventDefault(); e.stopPropagation();
-                            state.itemPick[lineNo] = { id: Number(a.dataset.id), code: a.dataset.code, name: a.dataset.name };
-                            document.getElementById('item_' + lineNo).value = a.dataset.code + ' — ' + a.dataset.name;
-                            hint.textContent = '';
-                            renderTotals();
-                        });
-                    });
-                });
-        }, 250);
+    // ── Stok seçim modalı ────────────────────────────────────────────────
+    var pickerLine = null;
+    var pickerTimer = null;
+
+    function openPicker(line) {
+        pickerLine = line;
+        document.getElementById('emPickFor').textContent =
+            '#' + line.lineNumber + '  ' + (line.itemName || line.itemCode || '');
+        var input = document.getElementById('emPickSearch');
+        input.value = line.itemCode || (line.itemName || '').slice(0, 20);
+        document.getElementById('emPickBackdrop').style.display = 'flex';
+        input.focus();
+        input.select();
+        searchPicker(input.value);
     }
+
+    function closePicker() {
+        document.getElementById('emPickBackdrop').style.display = 'none';
+        pickerLine = null;
+    }
+
+    function searchPicker(term) {
+        var tb = document.querySelector('#emPickTable tbody');
+        if (!term || term.trim().length < 2) {
+            tb.innerHTML = '<tr><td colspan="2" class="em-muted" style="padding:16px">' +
+                           'Aramak için en az 2 karakter yazın.</td></tr>';
+            return;
+        }
+        tb.innerHTML = '<tr><td colspan="2" class="em-muted" style="padding:16px">Aranıyor…</td></tr>';
+        fetch('/Purchase/InvoiceItemSearch?term=' + encodeURIComponent(term), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                var items = (res && res.items) || [];
+                if (!items.length) {
+                    tb.innerHTML = '<tr><td colspan="2" class="em-muted" style="padding:16px">Eşleşen stok kartı yok.</td></tr>';
+                    return;
+                }
+                tb.innerHTML = '';
+                items.forEach(function (it) {
+                    var tr = document.createElement('tr');
+                    tr.innerHTML = '<td><span class="em-muted">' + it.code + '</span></td><td>' + it.name + '</td>';
+                    tr.addEventListener('click', function () {
+                        if (pickerLine) {
+                            state.itemPick[pickerLine.lineNumber] = { id: it.id, code: it.code, name: it.name };
+                        }
+                        closePicker();
+                        renderDirectMatching();
+                        renderELines();
+                    });
+                    tb.appendChild(tr);
+                });
+            })
+            .catch(function () {
+                tb.innerHTML = '<tr><td colspan="2" class="em-muted" style="padding:16px">Arama yapılamadı.</td></tr>';
+            });
+    }
+
+    document.getElementById('emPickSearch').addEventListener('input', function (e) {
+        clearTimeout(pickerTimer);
+        var v = e.target.value;
+        pickerTimer = setTimeout(function () { searchPicker(v); }, 250);
+    });
+    document.getElementById('emPickCancel').addEventListener('click', closePicker);
+    document.getElementById('emPickBackdrop').addEventListener('click', function (e) {
+        if (e.target.id === 'emPickBackdrop') closePicker();   // dışarı tıklayınca kapan
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && pickerLine) closePicker();
+    });
 
     // ── Sağ panel: kaynak satırlar ───────────────────────────────────────
     var activeELine = null;
@@ -304,25 +453,19 @@
         var title = document.getElementById('emRightTitle');
         tb.innerHTML = '';
 
-        if (state.mode === 'direct') {
-            title.textContent = 'STOK EŞLEŞTİRME';
-            head.innerHTML = '';
-            tb.innerHTML = '<tr><td class="em-muted" style="padding:18px">' +
-                'Doğrudan modda fatura satırları e-belge kalemlerinden üretilir. ' +
-                'Soldaki her kalem için stok kartı seçin.</td></tr>';
-            document.getElementById('emRightInfo').textContent = '';
-            return;
-        }
+        if (state.mode === 'direct') { renderDirectMatching(); return; }
 
         title.textContent = state.mode === 'order' ? 'SİPARİŞ SATIRLARI' : 'İRSALİYE SATIRLARI';
         head.innerHTML =
             '<tr><th style="width:6.5rem;">Belge</th><th>Ürün</th>' +
-            '<th class="num" style="width:6rem;">Kalan</th>' +
+            '<th class="num" style="width:5.5rem;">Miktar</th>' +
+            '<th class="num" style="width:6rem;">Faturalanan</th>' +
+            '<th class="num" style="width:5.5rem;">Kalan</th>' +
             '<th class="num" style="width:7rem;">Faturalanacak</th>' +
             '<th style="width:9rem;">E-belge kalemi</th></tr>';
 
         if (!DATA.sourceLines.length) {
-            tb.innerHTML = '<tr><td colspan="5" class="em-muted" style="padding:18px">' +
+            tb.innerHTML = '<tr><td colspan="7" class="em-muted" style="padding:18px">' +
                 'Bu cariye ait açık ' + (state.mode === 'order' ? 'sipariş' : 'irsaliye') + ' satırı bulunamadı.</td></tr>';
             document.getElementById('emRightInfo').textContent = '';
             return;
@@ -336,12 +479,18 @@
                     return '<option value="' + e.lineNumber + '"' + sel + '>#' + e.lineNumber + ' ' +
                            String(e.itemName || e.itemCode || '').slice(0, 24) + '</option>';
                 })).join('');
+            // Kısmi faturalama: "Faturalanacak" kalandan KÜÇÜK girilebilir; artan miktar
+            // satırda açık kalır ve sonraki faturada tekrar aday olur.
             tr.innerHTML =
                 '<td><span class="em-muted">' + s.documentNumber + '</span><br><span class="em-muted">#' + s.lineNo + '</span></td>' +
-                '<td>' + (s.itemName || '-') + (s.itemCode ? ' <span class="em-muted">(' + s.itemCode + ')</span>' : '') + '</td>' +
-                '<td class="num">' + fmt(s.remainingQuantity) + ' <span class="em-muted">' + (s.unitCode || '') + '</span></td>' +
-                '<td class="num"><input type="number" step="0.0001" min="0" class="form-control form-control-sm" ' +
-                    'style="width:6.5rem;text-align:right" id="q_' + s.lineId + '" value="' + s.remainingQuantity + '"></td>' +
+                '<td>' + (s.itemName || '-') + (s.itemCode ? ' <span class="em-muted">(' + s.itemCode + ')</span>' : '') +
+                    '<span id="pb_' + s.lineId + '"></span></td>' +
+                '<td class="num">' + fmt(s.quantity) + ' <span class="em-muted">' + (s.unitCode || '') + '</span></td>' +
+                '<td class="num">' + (s.invoicedQuantity > 0 ? fmt(s.invoicedQuantity) : '—') + '</td>' +
+                '<td class="num">' + fmt(s.remainingQuantity) + '</td>' +
+                '<td class="num"><input type="number" step="0.0001" min="0" max="' + s.remainingQuantity + '" ' +
+                    'class="form-control form-control-sm" style="width:6.5rem;text-align:right" ' +
+                    'id="q_' + s.lineId + '" value="' + s.remainingQuantity + '"></td>' +
                 '<td><select class="form-select form-select-sm" id="a_' + s.lineId + '">' + opts + '</select></td>';
             tb.appendChild(tr);
 
@@ -351,7 +500,15 @@
                 tr.classList.toggle('is-selected', !!v);
                 renderELines();
             });
-            tr.querySelector('#q_' + s.lineId).addEventListener('input', function () { renderELines(); });
+            tr.querySelector('#q_' + s.lineId).addEventListener('input', function (e) {
+                var v = Number(e.target.value || 0);
+                // Kalandan fazlası yazılamaz: fazla faturalama satırı eksiye düşürürdü.
+                if (v > s.remainingQuantity + 0.00001) { e.target.value = s.remainingQuantity; v = s.remainingQuantity; }
+                var badge = document.getElementById('pb_' + s.lineId);
+                badge.innerHTML = (v > 0 && v < s.remainingQuantity - 0.00001)
+                    ? '<span class="em-badge">kısmi</span>' : '';
+                renderELines();
+            });
             tr.classList.toggle('is-selected', !!state.assign[s.lineId]);
         });
         document.getElementById('emRightInfo').textContent = DATA.sourceLines.length + ' açık satır';
@@ -365,7 +522,7 @@
                 var pick = state.itemPick[l.lineNumber];
                 if (!pick) return;
                 out.push({
-                    eDocumentLineNumber: l.lineNumber, sourceLineId: null, itemId: pick.id, unitId: null,
+                    eDocumentLineNumber: l.lineNumber, sourceLineId: null, itemId: pick.id, unitId: l.unitId || null,
                     quantity: l.quantity, unitPrice: l.unitPrice, vatRate: l.vatRate || 0,
                     notes: l.itemName || null
                 });
@@ -508,8 +665,15 @@
             .then(function (res) {
                 btn.disabled = false;
                 if (!res || !res.success) { notice((res && res.message) || 'Fatura oluşturulamadı.'); return; }
+                var partial = 0;
+                DATA.sourceLines.forEach(function (s) {
+                    if (!state.assign[s.lineId]) return;
+                    var q = Number(document.getElementById('q_' + s.lineId)?.value || 0);
+                    if (q > 0 && q < s.remainingQuantity - 0.00001) partial++;
+                });
                 notice('Fatura oluşturuldu: <b>' + res.documentNumber + '</b> (' + res.lineCount + ' satır' +
-                       (res.stockAffected ? ', stok girişi yapıldı' : ', stok hareketi üretilmedi — irsaliye zaten girmişti') + ')', 'info');
+                       (res.stockAffected ? ', stok girişi yapıldı' : ', stok hareketi üretilmedi — irsaliye zaten girmişti') +
+                       (partial ? ', ' + partial + ' satır KISMİ faturalandı — kalanı açık kaldı' : '') + ')', 'info');
                 setTimeout(function () { window.location.href = res.editUrl; }, 900);
             })
             .catch(function () { btn.disabled = false; notice('Fatura oluşturulamadı.'); });

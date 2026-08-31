@@ -17,7 +17,15 @@ public sealed record EDocumentInvoiceLineDto(
     decimal? VatAmount,
     int? SuggestedItemId,
     string? SuggestedItemCode,
-    string? SuggestedItemName);
+    string? SuggestedItemName,
+    /// <summary>
+    /// e-belgedeki birim kodunun (UBL'de UN/ECE kodu: <c>C62</c>, <c>KGM</c>…) bizdeki
+    /// karşılığı — <c>Unit.IntlCode</c> ile eşleşir, olmazsa <c>Unit.Code</c>. Faturaya bu
+    /// birim yazılır; eşleşmezse null kalır ve ekranda ham kod gösterilir.
+    /// </summary>
+    int? UnitId,
+    string? UnitLocalCode,
+    string? UnitLocalName);
 
 /// <summary>
 /// Sipariş / irsaliye tarafındaki aday satır — eşleştirme ekranının SAĞ tarafı.

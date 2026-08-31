@@ -99,7 +99,8 @@ public sealed class SqlPurchaseInvoiceRepository : IPurchaseInvoiceRepository
                          WHERE t.[IncomingDocumentLineId] = l.[Id]) AS VatAmount,
                        ci.[ItemId] AS VendorItemId, i2.[Id] AS CodeItemId,
                        ISNULL(i1.[Code], i2.[Code]) AS SugCode,
-                       ISNULL(i1.[Name], i2.[Name]) AS SugName
+                       ISNULL(i1.[Name], i2.[Name]) AS SugName,
+                       u.[Id] AS UnitId, u.[Code] AS UnitLocalCode, u.[Name] AS UnitLocalName
                   FROM {T("IncomingDocumentLine")} l
                   LEFT JOIN {T("ContactItem")} ci
                          ON ci.[ContactId] = @ContactId AND ci.[IsActive] = 1
@@ -110,6 +111,13 @@ public sealed class SqlPurchaseInvoiceRepository : IPurchaseInvoiceRepository
                          ON i2.[IsActive] = 1
                         AND NULLIF(LTRIM(RTRIM(l.[ItemCode])), N'') IS NOT NULL
                         AND LTRIM(RTRIM(i2.[Code])) = LTRIM(RTRIM(l.[ItemCode]))
+                  -- Birim eşleşmesi: e-belge UBL'de ULUSLARARASI kodu taşır (C62 = adet,
+                  -- KGM = kg). Bizdeki karşılığı Unit.IntlCode; o boşsa Unit.Code denenir.
+                  LEFT JOIN {T("Unit")} u
+                         ON u.[IsActive] = 1
+                        AND NULLIF(LTRIM(RTRIM(l.[UnitCode])), N'') IS NOT NULL
+                        AND (LTRIM(RTRIM(u.[IntlCode])) = LTRIM(RTRIM(l.[UnitCode]))
+                          OR LTRIM(RTRIM(u.[Code]))     = LTRIM(RTRIM(l.[UnitCode])))
                  WHERE l.[IncomingDocumentId] = @Id AND l.[CompanyId] = @Cid
                  ORDER BY l.[LineNumber];
                 """;
@@ -134,7 +142,10 @@ public sealed class SqlPurchaseInvoiceRepository : IPurchaseInvoiceRepository
                     VatAmount: r.IsDBNull(8) ? null : r.GetDecimal(8),
                     SuggestedItemId: vendorItemId ?? codeItemId,
                     SuggestedItemCode: r.IsDBNull(11) ? null : r.GetString(11),
-                    SuggestedItemName: r.IsDBNull(12) ? null : r.GetString(12)));
+                    SuggestedItemName: r.IsDBNull(12) ? null : r.GetString(12),
+                    UnitId: r.IsDBNull(13) ? null : r.GetInt32(13),
+                    UnitLocalCode: r.IsDBNull(14) ? null : r.GetString(14),
+                    UnitLocalName: r.IsDBNull(15) ? null : r.GetString(15)));
             }
         }
 
