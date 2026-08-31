@@ -164,6 +164,18 @@ function computeColumns(masterWidgets, visibleIds, order, widgetMeta, columnConf
 
       candidates.forEach(function (w) {
         if (!w || !w.id || usedIds[w.id]) return
+
+        /* SONRADAN EKLENEN sutun GORUNUR olur (2026-08-31 duzeltmesi).
+           visibleIds bir beyaz listeydi: kullanici ayarini kaydettikten SONRA eklenen
+           her yeni sutun (ornek: e-belge listesine eklenen "Fatura No") o listede
+           olmadigi icin SESSIZCE gizli kaliyordu — kullanici "kolon gelmedi" diye
+           bildirdi. Ayrim mumkun: elle gizlenen sutun `order` icinde KALIR
+           (SmartColumnSettings gizlerken yalniz visibleIds'ten cikarir), hic
+           bilinmeyen sutun ise iki listede de YOKTUR. */
+        var known = (visibleIds && visibleIds.indexOf(w.id) !== -1)
+                 || (order && order.indexOf(w.id) !== -1)
+        if (!known) { result.push(w); return }
+
         if (visibleIds && visibleIds.indexOf(w.id) === -1) return
         result.push(w)
       })

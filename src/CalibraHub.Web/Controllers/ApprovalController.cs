@@ -641,7 +641,8 @@ public sealed class ApprovalController : Controller
             new { id = "w_scenario",    label = "Senaryo",      dataType = "text" },
             new { id = "w_status",      label = "Durum",        dataType = "text" },
             new { id = "w_imported",    label = "Alınma",       dataType = "date" },
-            new { id = "w_contact",     label = "Cari",         dataType = "text" },
+            new { id = "w_docno",       label = "Fatura No",    dataType = "text" },
+            new { id = "w_contact",     label = "Cari Eşleşme", dataType = "text" },
             new { id = "w_source",      label = "Kaynak",       dataType = "text" },
         };
 
@@ -687,10 +688,12 @@ public sealed class ApprovalController : Controller
             {
                 id = d.Id,
                 // C-Grid sozlesmesi: tablo modunda "Kod" = subtitle, "Ad" = title.
-                // Ters yazilmisti; listede Kod sutununda CARI ADI goruunuyordu (kullanici
-                // bildirdi). Belgenin kimligi belge numarasidir -> Kod; gonderen -> Ad.
-                title = string.IsNullOrWhiteSpace(d.SenderName) ? d.SenderTaxNumber : d.SenderName,
-                subtitle = d.DocumentNumber,
+                // Kod = ESLESEN CARI KODU, Ad = cari unvani (kullanici karari 2026-08-31).
+                // Belge numarasi ayri bir kolondur (w_docno) — kod alanina sigdirilmaz.
+                title = contactLinks.TryGetValue(d.Id, out var link0)
+                    ? link0.AccountTitle
+                    : (string.IsNullOrWhiteSpace(d.SenderName) ? d.SenderTaxNumber : d.SenderName),
+                subtitle = contactLinks.TryGetValue(d.Id, out var link1) ? link1.AccountCode : "—",
                 description = (string?)null,
                 imageUrl = (string?)null,
                 statusBadge = d.IsProcessed
@@ -698,6 +701,9 @@ public sealed class ApprovalController : Controller
                     : new { label = "Bekliyor", color = "amber" },
                 widgets = new object[]
                 {
+                    new { id = "w_docno", type = "data", dataType = "text",
+                          label = "Fatura No", value = d.DocumentNumber,
+                          detail = (string?)null, color = "slate" },
                     new { id = "w_issue_date", type = "data", dataType = "date",
                           label = "Belge Tarihi", value = d.IssueDate.ToString("dd.MM.yyyy"),
                           detail = (string?)null, color = "indigo" },
@@ -718,16 +724,12 @@ public sealed class ApprovalController : Controller
                           detail = (string?)null, color = "slate" },
                     // Kaynak: karma kurulumda "bu belge entegratorden mi ERP'den mi geldi"
                     // sorusu teshiste kritik; eskiden yalniz PayloadRaw'a bakarak yanitlanabiliyordu.
-                    // Cari: VKN/TC ile otomatik baglanan cari. Bagli degilse "Eşleşmedi"
-                    // yazar — bos birakmak, eslestirmenin hic denenmedigi izlenimi verirdi.
+                    // Cari kod/unvan artik Kod-Ad sutunlarinda; burada yalniz ESLESME DURUMU
+                    // kalir — filtrelemede "eslesmeyenleri getir" icin gerekli sinyal budur.
                     new { id = "w_contact", type = "data", dataType = "text",
-                          label = "Cari",
-                          value = contactLinks.TryGetValue(d.Id, out var link)
-                              ? link.AccountTitle
-                              : "Eşleşmedi",
-                          detail = contactLinks.TryGetValue(d.Id, out var link2)
-                              ? link2.AccountCode
-                              : (string?)null,
+                          label = "Cari Eşleşme",
+                          value = contactLinks.ContainsKey(d.Id) ? "Eşleşti" : "Eşleşmedi",
+                          detail = (string?)null,
                           color = contactLinks.ContainsKey(d.Id) ? "emerald" : "rose" },
                     new { id = "w_source", type = "data", dataType = "text",
                           label = "Kaynak",
