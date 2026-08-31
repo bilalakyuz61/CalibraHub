@@ -1,4 +1,4 @@
-namespace CalibraHub.Application.Contracts;
+﻿namespace CalibraHub.Application.Contracts;
 
 /// <summary>
 /// Yükleme Planlama Merkezi + Stok Rezervasyonu — Faz 1 (2026-07-28), kit desteği Faz 1.5 (2026-08-03).
@@ -84,7 +84,10 @@ public sealed record StockReservationDto(
 /// <summary>Tek bir sipariş kalemi için rezervasyon talebi (gösterim biriminde miktar — kalemin kendi
 /// UnitId'si; kit satırında (IsKit=true) bu alan SET SAYISI olarak yorumlanır — ayrı bir alan yoktur,
 /// ayrım OpenOrderLineForReservationDto.IsKit ile satır bazında yapılır).</summary>
-public sealed record CreateReservationLineRequest(int OrderLineId, decimal Qty);
+/// <param name="SerialId">Seri rezervasyonu: rezerve edilecek ItemSerial. null = miktar bazli
+/// rezervasyon (hangi seri oldugu sevkiyatta belirlenir). Dolu ise miktar 1 kabul edilir —
+/// bir seri tek bir fiziksel parcadir.</param>
+public sealed record CreateReservationLineRequest(int OrderLineId, decimal Qty, int? SerialId = null);
 
 /// <param name="Lines">Rezerve edilecek kalemler.</param>
 /// <param name="LocationId">Verilirse tüm kalemler bu depoya rezerve edilir; null ise her kalemin kendi deposu (LocationId ?? Document.LocationId) kullanılır.</param>

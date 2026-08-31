@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using CalibraHub.Domain.Common;
 
 namespace CalibraHub.Domain.Entities;
@@ -43,6 +43,15 @@ public sealed class DocumentLine
 
     [Description("Kalem bazlı teslim süresi (gün). UI'da DeliveryDate ile çift yönlü senkron. NULL ise üst belge Document.DeliveryDays geçerli olur.")]
     public int? DeliveryDays { get; set; }
+
+    /// <summary>
+    /// Kalem bazinda seri girisi. UC DURUMLU:
+    /// <c>null</c> = sirket parametresini izle (varsayilan, geriye donuk uyum),
+    /// <c>false/true</c> = kullanicinin bu kalem icin ACIK secimi.
+    /// bool'a duzlestirilirse mevcut tum kalemler "acikca kapali" olur ve
+    /// parametreyi sonradan acan musterinin gecmis satirlari sessizce kapali kalir.
+    /// </summary>
+    public bool? SerialEntryEnabled { get; set; }
 
     public string? Notes { get; set; }
 

@@ -7290,6 +7290,7 @@ END;
                     [Status]            TINYINT        NOT NULL CONSTRAINT [DF_StockReservation_Status] DEFAULT 1,
                     [PlannedShipDate]   DATETIME       NULL,
                     [ShippedDocumentId] INT            NULL,
+                    [SerialId]          INT            NULL,   -- Seri rezervasyonu: rezerve edilen ItemSerial. NULL = miktar bazli rezervasyon (seri secilmemis).
                     [KitOrderLineId]    INT            NULL,   -- Faz 1.5: kit bilesen rezervasyonu → ait oldugu KIT siparis kalemi (grup+tip ayrimi; NULL = normal rezervasyon, ItemId=bilesen)
                     [Notes]             NVARCHAR(1000) NULL,
                     [IsActive]          BIT            NOT NULL CONSTRAINT [DF_StockReservation_IsActive] DEFAULT 1,
@@ -7340,6 +7341,24 @@ END;
                     CREATE INDEX [IX_StockReservation_KitOrderLine]
                         ON [{s}].[StockReservation]([KitOrderLineId])
                         WHERE [KitOrderLineId] IS NOT NULL AND [IsActive] = 1;
+                ';
+
+            -- Seri rezervasyonu (2026-08-31): kalem bazinda "seriyi rezerve et".
+            -- KitOrderLineId ile AYNI desen: once ALTER, filtered index AYRI EXEC batch'te
+            -- (yeni kolon ayni batch'te compile-time 207 vermesin).
+            IF COL_LENGTH(N'[{s}].[StockReservation]', N'SerialId') IS NULL
+                ALTER TABLE [{s}].[StockReservation] ADD [SerialId] INT NULL;
+            -- TEKILLIK: bir seri ayni anda YALNIZ BIR aktif rezervasyona ait olabilir.
+            -- Bu index olmasaydi ayni seri iki siparise rezerve edilir ve catisma ancak
+            -- sevkiyatta, iki musteriden biri malsiz kaldiginda fark edilirdi.
+            -- WHERE yalniz AND icerir (OR'lu filtreli index yasak — DocumentLineLink dersi).
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE object_id = OBJECT_ID(N'[{s}].[StockReservation]') AND name = N'UX_StockReservation_Serial')
+               AND COL_LENGTH(N'[{s}].[StockReservation]', N'SerialId') IS NOT NULL
+                EXEC sp_executesql N'
+                    CREATE UNIQUE INDEX [UX_StockReservation_Serial]
+                        ON [{s}].[StockReservation]([SerialId])
+                        WHERE [SerialId] IS NOT NULL AND [Status] = 1 AND [IsActive] = 1;
                 ';
             """;
 
@@ -10343,6 +10362,16 @@ END;
             IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
                AND COL_LENGTH(N'[{s}].[DocumentLine]', N'LotId') IS NULL
                 ALTER TABLE [{s}].[DocumentLine] ADD [LotId] INT NULL;
+
+            -- Kalem bazinda seri girisi (2026-08-31). Uc durumlu BILEREK:
+            --   NULL  = sirket parametresini izle (mevcut davranis — geriye donuk uyum)
+            --   0/1   = bu kalem icin kullanicinin ACIK secimi
+            -- BIT NOT NULL DEFAULT 0 yapilsaydi mevcut tum kalemler "acikca kapali"
+            -- olur ve parametreyi acan musterinin gecmis siparisleri sessizce
+            -- kapali kalirdi. Index YOK: kolon her zaman satirla birlikte okunur.
+            IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocumentLine]', N'SerialEntryEnabled') IS NULL
+                ALTER TABLE [{s}].[DocumentLine] ADD [SerialEntryEnabled] BIT NULL;
             IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
                AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_DocumentLine_Lot'
                                AND parent_object_id = OBJECT_ID(N'[{s}].[DocumentLine]'))

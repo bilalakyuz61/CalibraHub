@@ -442,6 +442,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    l.[Quantity],l.[UnitPrice],l.[DiscountRate],l.[LineTotal],
                    l.[CombinationId],l.[LocationId],l.[Notes],ISNULL(l.[NotesPinned], 0) AS [NotesPinned],
                    l.[RevisedFromId], l.[SourceLineId], l.[KitParentLineId], l.[DeliveryDate], l.[DeliveryDays],
+                   l.[SerialEntryEnabled],
                    ISNULL(l.[FulfilledFromStock], 0) AS [FulfilledFromStock],
                    ISNULL(l.[FulfilledByPurchase], 0) AS [FulfilledByPurchase],
                    CAST(ISNULL(l.[FulfillmentStatus], 0) AS INT) AS [FulfillmentStatus],
@@ -649,7 +650,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                             [RevisedFromId] = @RevisedFromId,
                             [SourceLineId]  = @SourceLineId,
                             [DeliveryDate]  = @DeliveryDate,
-                            [DeliveryDays]  = @DeliveryDays
+                            [DeliveryDays]  = @DeliveryDays,
+                            [SerialEntryEnabled] = @SerialEntryEnabled
                         WHERE [Id] = @Id AND [DocumentId] = @DocumentId
                           AND [CompanyId] = (SELECT d.[CompanyId] FROM {_quoteTable} d WHERE d.[Id] = @DocumentId);
                         """;
@@ -661,11 +663,11 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                         INSERT INTO {_lineTable}
                             ([DocumentId],[LineNo],[ItemId],[UnitId],
                              [Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
-                             [CombinationId],[LocationId],[Notes],[NotesPinned],[RevisedFromId],[SourceLineId],[DeliveryDate],[DeliveryDays],[CompanyId])
+                             [CombinationId],[LocationId],[Notes],[NotesPinned],[RevisedFromId],[SourceLineId],[DeliveryDate],[DeliveryDays],[SerialEntryEnabled],[CompanyId])
                         VALUES
                             (@DocumentId,@LineNo,@ItemId,@UnitId,
                              @Quantity,{baseQtyExpr},@UnitPrice,@DiscountRate,@LineTotal,
-                             @CombinationId,@LocationId,@Notes,@NotesPinned,@RevisedFromId,@SourceLineId,@DeliveryDate,@DeliveryDays,
+                             @CombinationId,@LocationId,@Notes,@NotesPinned,@RevisedFromId,@SourceLineId,@DeliveryDate,@DeliveryDays,@SerialEntryEnabled,
                              (SELECT d.[CompanyId] FROM {_quoteTable} d WHERE d.[Id] = @DocumentId));
                         """;
                 }
@@ -685,6 +687,9 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 cmd.Parameters.Add(new SqlParameter("@SourceLineId", (object?)ln.SourceLineId ?? DBNull.Value));
                 cmd.Parameters.Add(new SqlParameter("@DeliveryDate", (object?)ln.DeliveryDate ?? DBNull.Value));
                 cmd.Parameters.Add(new SqlParameter("@DeliveryDays", (object?)ln.DeliveryDays ?? DBNull.Value));
+                // NULL = sirket parametresini izle. Uc durumlu oldugu icin bool? ; false'a
+                // duzlestirmek "kullanici acikca kapatti" demek olurdu (bkz. sema yorumu).
+                cmd.Parameters.Add(new SqlParameter("@SerialEntryEnabled", (object?)ln.SerialEntryEnabled ?? DBNull.Value));
                 await cmd.ExecuteNonQueryAsync(ct);
             }
 
@@ -1123,6 +1128,9 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         var revisedFromIdOrd = TryGetOrdinal(r, "RevisedFromId");
         var sourceLineIdOrd = TryGetOrdinal(r, "SourceLineId");
         var kitParentIdOrd = TryGetOrdinal(r, "KitParentLineId");
+        // TryGetOrdinal: kolonu SELECT etmeyen diger sorgular da ayni MapLine'i
+        // kullaniyor — yoksa -1 doner ve alan null kalir (patlamaz).
+        var serialEntryOrd = TryGetOrdinal(r, "SerialEntryEnabled");
         return new()
         {
             Id = r.GetInt32(r.GetOrdinal("Id")),
@@ -1139,6 +1147,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             Notes = r.IsDBNull(r.GetOrdinal("Notes")) ? null : r.GetString(r.GetOrdinal("Notes")),
             NotesPinned = notesPinnedOrd >= 0 && !r.IsDBNull(notesPinnedOrd) && r.GetBoolean(notesPinnedOrd),
             RevisedFromId = revisedFromIdOrd >= 0 && !r.IsDBNull(revisedFromIdOrd) ? r.GetInt32(revisedFromIdOrd) : null,
+            SerialEntryEnabled = serialEntryOrd >= 0 && !r.IsDBNull(serialEntryOrd) ? r.GetBoolean(serialEntryOrd) : null,
             SourceLineId = sourceLineIdOrd >= 0 && !r.IsDBNull(sourceLineIdOrd) ? r.GetInt32(sourceLineIdOrd) : null,
             KitParentLineId = kitParentIdOrd >= 0 && !r.IsDBNull(kitParentIdOrd) ? r.GetInt32(kitParentIdOrd) : null,
             DeliveryDate = SafeOrdinalDate(r, "DeliveryDate"),
