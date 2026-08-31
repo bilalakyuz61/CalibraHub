@@ -603,8 +603,28 @@ export default function SmartBoard(props) {
       return el.offsetParent !== null && el.clientHeight > 0
     }
 
+    /* Workspace sekmeleri IFRAME'dir ve Shell sekmeyi gizlerken IFRAME ELEMANINI
+       display:none yapar. Iframe'in ICINDEKI dokuman bunu bilmez: kendi elemanlari
+       icin offsetParent hala dolu, clientHeight hala gercek deger. Bu yuzden yukaridaki
+       gorunurluk kontrolu ARKA PLANDAKI sekmede sessizce basarisiz oluyordu ve
+       "icerik ekrani doldurmadi -> bir sayfa daha" dongusu kullanici baska sekmedeyken
+       durmadan calisip binlerce kaydi sayfa sayfa cekiyordu (39 bin malzemede saniyede
+       bir istek gozlendi). Cozum: kendi frame elemanimizin gorunurlugune bak. */
+    function isFrameVisible() {
+      try {
+        var fe = window.frameElement
+        if (!fe) return true                       // gomulu degiliz
+        if (fe.offsetParent === null) return false // kendisi ya da atasi display:none
+        var st = fe.ownerDocument.defaultView.getComputedStyle(fe)
+        return st.display !== 'none' && st.visibility !== 'hidden'
+      } catch (e) {
+        return true   // cross-origin: eski davranisa don, engelleme
+      }
+    }
+
     function maybeLoad() {
       if (!hasMore || loading) return
+      if (!isFrameVisible()) return
 
       var visible = targets.filter(isVisible)
       if (visible.length === 0) return          // gizli sekme: hicbir sey yukleme

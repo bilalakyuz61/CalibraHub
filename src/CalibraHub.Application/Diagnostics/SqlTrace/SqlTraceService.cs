@@ -41,8 +41,13 @@ public sealed class SqlTraceService : ISqlTraceService, IDisposable
     private readonly ConcurrentDictionary<Guid, (DateTime StartedUtc, long StartTicks)> _pendingCommands = new();
     private readonly ConcurrentDictionary<(Type Type, string Name), PropertyInfo?> _propCache = new();
 
-    private DiagnosticListener? _sqlListener;
-    private IDisposable? _sqlSubscription;
+    // SqlClient, "SqlClientDiagnosticListener" adiyla BIRDEN FAZLA DiagnosticListener
+    // ornegi yayinlayabiliyor (uygulamada 3 ornek gozlendi). Yalniz sonuncusuna abone
+    // olmak, sorgularin digerlerinden akmasi halinde HIC olay yakalamamak demekti —
+    // izleme "calisiyor" gorunup bos kaliyordu. Bu yuzden hepsi tutulur ve hepsine
+    // abone olunur.
+    private readonly List<DiagnosticListener> _sqlListeners = new();
+    private readonly List<IDisposable> _sqlSubscriptions = new();
     private CancellationTokenSource? _sessionCts;
     private volatile bool _running;
     private DateTime? _expiresAtUtc;
@@ -69,17 +74,15 @@ public sealed class SqlTraceService : ISqlTraceService, IDisposable
             // Onceki oturumdan kalan varsa gercekten sok, yeniden basla.
             _sessionCts?.Cancel();
             _sessionCts?.Dispose();
-            _sqlSubscription?.Dispose();
+            DisposeSubscriptionsNoLock();
             _pendingCommands.Clear();
             _buffer.Reset();
 
             _running = true;
             _expiresAtUtc = DateTime.UtcNow.AddMinutes(minutes);
 
-            if (_sqlListener != null)
-                _sqlSubscription = _sqlListener.Subscribe(new SqlEventObserver(this), IsEnabledForCommandEvents);
-            _logger.LogInformation("[SqlTrace] Start: listenerBulundu={Found}, aboneKuruldu={Subscribed}",
-                _sqlListener != null, _sqlSubscription != null);
+            foreach (var listener in _sqlListeners)
+                _sqlSubscriptions.Add(listener.Subscribe(new SqlEventObserver(this), IsEnabledForCommandEvents));
 
             var cts = new CancellationTokenSource();
             _sessionCts = cts;
@@ -122,9 +125,19 @@ public sealed class SqlTraceService : ISqlTraceService, IDisposable
     {
         _running = false;
         _expiresAtUtc = null;
-        _sqlSubscription?.Dispose();
-        _sqlSubscription = null;
+        DisposeSubscriptionsNoLock();
         _pendingCommands.Clear();
+    }
+
+    /// <summary>Tum dinleyici aboneliklerini soker — cagiran _stateLock icinde olmali.</summary>
+    private void DisposeSubscriptionsNoLock()
+    {
+        foreach (var sub in _sqlSubscriptions)
+        {
+            try { sub.Dispose(); }
+            catch (Exception ex) { _logger.LogWarning(ex, "SQL izleme aboneligi sokulemedi."); }
+        }
+        _sqlSubscriptions.Clear();
     }
 
     public SqlTraceEventsResult GetEvents(long afterSeq)
@@ -147,15 +160,15 @@ public sealed class SqlTraceService : ISqlTraceService, IDisposable
 
     private void OnSqlListenerDiscovered(DiagnosticListener listener)
     {
-        _logger.LogInformation("[SqlTrace] Listener gorundu: {Name}", listener.Name);
         if (listener.Name != "SqlClientDiagnosticListener") return;
         lock (_stateLock)
         {
-            _sqlListener = listener;
-            // Nadir sira farki: Start() bu kesiften ONCE cagrilmis olabilir (kesif normalde
-            // uygulama acilisinda gerceklesir, ama garanti degil) — o durumda hemen abone ol.
-            if (_running && _sqlSubscription == null)
-                _sqlSubscription = listener.Subscribe(new SqlEventObserver(this), IsEnabledForCommandEvents);
+            if (_sqlListeners.Contains(listener)) return;
+            _sqlListeners.Add(listener);
+            // Nadir sira farki: Start() bu kesiften ONCE cagrilmis olabilir — o durumda
+            // yeni gelen dinleyiciye de hemen abone ol, yoksa o kaynaktan akan sorgular kacar.
+            if (_running)
+                _sqlSubscriptions.Add(listener.Subscribe(new SqlEventObserver(this), IsEnabledForCommandEvents));
         }
     }
 
@@ -286,7 +299,7 @@ public sealed class SqlTraceService : ISqlTraceService, IDisposable
     {
         _sessionCts?.Cancel();
         _sessionCts?.Dispose();
-        _sqlSubscription?.Dispose();
+        lock (_stateLock) { DisposeSubscriptionsNoLock(); }
     }
 
     // ── Kucuk yardimci observer'lar ─────────────────────────────────────────
