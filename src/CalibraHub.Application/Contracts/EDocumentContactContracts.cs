@@ -11,7 +11,13 @@ public sealed record EDocumentContactCandidateDto(
     string? TaxNumber,
     string? IdentityNumber,
     string? City,
-    bool IsTaxMatch);
+    bool IsTaxMatch,
+    /// <summary>
+    /// Eslesmenin HANGI alandan geldigi: <c>"VKN"</c> | <c>"TC"</c>. VKN ve TCKN ayri
+    /// alanlardir; "VKN/TC eslesti" demek hangisinin tuttugunu gizliyordu (kullanici
+    /// bildirdi). Eslesme yoksa null.
+    /// </summary>
+    string? MatchedOn);
 
 /// <summary>Toplu eslestirme sonucu.</summary>
 public sealed record EDocumentContactMatchResultDto(int Matched, int Ambiguous, int Unmatched);

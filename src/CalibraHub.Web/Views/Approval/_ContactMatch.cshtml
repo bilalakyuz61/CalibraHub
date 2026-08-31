@@ -67,7 +67,8 @@
                             @c.AccountTitle
                             @if (c.IsTaxMatch)
                             {
-                                <span class="cm-badge">VKN/TC eşleşti</span>
+                                @* VKN ve TCKN AYRI alanlar; hangisinin tuttugu yazilir. *@
+                                <span class="cm-badge">@(c.MatchedOn == "TC" ? "TC eşleşti" : "VKN eşleşti")</span>
                             }
                         </td>
                         <td class="cm-code-cell">@(c.TaxNumber ?? c.IdentityNumber ?? "-")</td>

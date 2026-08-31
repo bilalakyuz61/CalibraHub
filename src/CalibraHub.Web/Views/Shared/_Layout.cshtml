@@ -367,6 +367,17 @@
                 runMode = Env.IsDevelopment() ? "DEV"
                         : !System.Environment.UserInteractive ? "SVC"
                         : (string?)null,
+                // "Hakkinda" penceresi icin ek meta (2026-08-31). Destek cagrilarinda
+                // ilk sorulan seyler; kullanicinin dosya sistemine bakmadan okuyabilmesi
+                // gerekiyor. Makine adi / baglanti dizesi gibi HASSAS bilgi KOYULMAZ.
+                environment = Env.EnvironmentName,
+                framework   = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
+                os          = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
+                startedAt   = System.Diagnostics.Process.GetCurrentProcess()
+                                  .StartTime.ToString("o"),
+                buildDate   = System.IO.File.Exists(typeof(Program).Assembly.Location)
+                                  ? System.IO.File.GetLastWriteTime(typeof(Program).Assembly.Location).ToString("o")
+                                  : null,
             },
             menu = await BuildMenuForCurrentUserAsync(),
             theme = uiRuntime.ThemeCode,

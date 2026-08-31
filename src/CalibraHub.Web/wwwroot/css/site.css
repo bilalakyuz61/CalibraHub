@@ -8694,6 +8694,15 @@ body.app-theme-dark .calibra-grid tbody tr.is-selected td {
   background: rgba(99, 102, 241, 0.22) !important;
 }
 
+/* Hover da yalniz acik tema degeriyle yazilmisti (color-mix ile ACIK bir mavi) —
+   koyu temada satirin uzerine gelince zemin acilip beyaz yazi okunmaz oluyordu
+   (kullanici bildirdi). Zebra kurallariyla ayni gerekce: dark override kaynakta. */
+body.app-theme-dark .integrator-table tbody tr:hover td,
+body.app-theme-dark .calibra-grid tbody tr:hover td {
+  background: rgba(99, 102, 241, 0.16) !important;
+  color: rgba(255, 255, 255, 0.92);
+}
+
 .integrator-table tbody tr:hover td,
 .calibra-grid tbody tr:hover td {
   background: color-mix(in srgb, var(--theme-accent-soft) 62%, var(--integrator-card-bg) 38%) !important;

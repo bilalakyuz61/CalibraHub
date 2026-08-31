@@ -2433,7 +2433,10 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
                        c.[IdentityNumber], c.[City],
                        CASE WHEN LTRIM(RTRIM(c.[TaxNumber])) = d.Vkn
                               OR LTRIM(RTRIM(c.[IdentityNumber])) = d.Vkn
-                            THEN 1 ELSE 0 END AS IsTaxMatch
+                            THEN 1 ELSE 0 END AS IsTaxMatch,
+                       CASE WHEN LTRIM(RTRIM(c.[TaxNumber]))      = d.Vkn THEN N'VKN'
+                            WHEN LTRIM(RTRIM(c.[IdentityNumber])) = d.Vkn THEN N'TC'
+                            ELSE NULL END AS MatchedOn
                   FROM [{_schema}].[Contact] c
                  CROSS JOIN (SELECT LTRIM(RTRIM([SenderTaxNumber])) AS Vkn
                                FROM {_tableName}
@@ -2447,7 +2450,10 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
                 """
             : $"""
                 SELECT TOP 50 c.[Id], c.[AccountCode], c.[AccountTitle], c.[TaxNumber],
-                       c.[IdentityNumber], c.[City], CAST(1 AS INT) AS IsTaxMatch
+                       c.[IdentityNumber], c.[City], CAST(1 AS INT) AS IsTaxMatch,
+                       CASE WHEN LTRIM(RTRIM(c.[TaxNumber]))      = LTRIM(RTRIM(d.[SenderTaxNumber])) THEN N'VKN'
+                            WHEN LTRIM(RTRIM(c.[IdentityNumber])) = LTRIM(RTRIM(d.[SenderTaxNumber])) THEN N'TC'
+                            ELSE NULL END AS MatchedOn
                   FROM [{_schema}].[Contact] c
                   JOIN {_tableName} d
                     ON d.[Id] = @DocId AND d.[CompanyId] = @CompanyId
@@ -2471,7 +2477,8 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
                 NullableString(r["TaxNumber"]),
                 NullableString(r["IdentityNumber"]),
                 NullableString(r["City"]),
-                Convert.ToInt32(r["IsTaxMatch"]) == 1));
+                Convert.ToInt32(r["IsTaxMatch"]) == 1,
+                NullableString(r["MatchedOn"])));
         }
 
         return list;
