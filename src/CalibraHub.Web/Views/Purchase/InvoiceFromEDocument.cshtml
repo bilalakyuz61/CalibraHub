@@ -380,7 +380,11 @@
         document.getElementById('emPickFor').textContent =
             '#' + line.lineNumber + '  ' + (line.itemName || line.itemCode || '');
         var input = document.getElementById('emPickSearch');
-        input.value = line.itemCode || (line.itemName || '').slice(0, 20);
+        // Arama kutusu YALNIZ tedarikçi stok koduyla dolar. Uzun hizmet adıyla doldurmak
+        // ("SOL ARKA KAPI BOYASIZ ONARIM İŞÇİLİĞİ") hiçbir zaman eşleşmiyor ve ekran
+        // "sonuç yok" ile açılıyordu; kod yoksa liste boş aramayla açılır ve kullanıcı
+        // ilk kartları görüp göz atarak seçebilir.
+        input.value = line.itemCode || '';
         document.getElementById('emPickBackdrop').style.display = 'flex';
         input.focus();
         input.select();
@@ -394,18 +398,17 @@
 
     function searchPicker(term) {
         var tb = document.querySelector('#emPickTable tbody');
-        if (!term || term.trim().length < 2) {
-            tb.innerHTML = '<tr><td colspan="2" class="em-muted" style="padding:16px">' +
-                           'Aramak için en az 2 karakter yazın.</td></tr>';
-            return;
-        }
-        tb.innerHTML = '<tr><td colspan="2" class="em-muted" style="padding:16px">Aranıyor…</td></tr>';
+        // Boş terim de sorgulanır: sunucu ilk 20 stok kartını döner (boş ekran yerine
+        // göz atılabilir liste).
+        tb.innerHTML = '<tr><td colspan="2" class="em-muted" style="padding:16px">Yükleniyor…</td></tr>';
         fetch('/Purchase/InvoiceItemSearch?term=' + encodeURIComponent(term), { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(function (res) {
                 var items = (res && res.items) || [];
                 if (!items.length) {
-                    tb.innerHTML = '<tr><td colspan="2" class="em-muted" style="padding:16px">Eşleşen stok kartı yok.</td></tr>';
+                    tb.innerHTML = '<tr><td colspan="2" class="em-muted" style="padding:16px">' +
+                        (term && term.trim() ? 'Eşleşen stok kartı yok — aramayı değiştirin.' : 'Stok kartı bulunamadı.') +
+                        '</td></tr>';
                     return;
                 }
                 tb.innerHTML = '';
