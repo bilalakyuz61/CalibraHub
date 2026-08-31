@@ -30,6 +30,7 @@ public static class DocumentTypeFormMap
             ["alis_siparisi"]      = new("PURCHASE_ORDER_EDIT",   "PURCHASE_ORDER_NEW",   "PURCHASE_ORDER_LINES",   "/Purchase/Orders",           "PURCHASE_ORDER"),
             ["satin_alma_talebi"]  = new("PURCHASE_DEMAND_EDIT",  "PURCHASE_DEMAND_NEW",  "PURCHASE_DEMAND_LINES",  "/Purchase/PurchaseDemands",  "PURCHASE_DEMAND"),
             ["alis_irsaliyesi"]    = new("PURCHASE_DELIVERY_EDIT","PURCHASE_DELIVERY_NEW","PURCHASE_DELIVERY_LINES","/Purchase/Deliveries",       "PURCHASE_DELIVERY"),
+            ["alis_faturasi"]      = new("PURCHASE_INVOICE_EDIT", "PURCHASE_INVOICE_NEW", "PURCHASE_INVOICE_LINES", "/Purchase/Invoices",         "PURCHASE_INVOICE"),
         };
 
     /// <summary>

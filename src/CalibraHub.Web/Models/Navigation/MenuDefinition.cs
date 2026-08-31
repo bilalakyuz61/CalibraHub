@@ -186,6 +186,8 @@ public static class MenuDefinition
                         PermissionFormCode: FormCodes.PurchaseOrder),
                     new("logistics.purchasedeliveries", isEn ? "Purchase Delivery" : "Alış İrsaliyesi", "Truck", "/Purchase/Deliveries", null,
                         PermissionFormCode: FormCodes.PurchaseDelivery),
+                    new("logistics.purchaseinvoices", isEn ? "Purchase Invoice" : "Alış Faturası", "ReceiptText", "/Purchase/Invoices", null,
+                        PermissionFormCode: FormCodes.PurchaseInvoice),
                 }),
                 // Depo
                 new("logistics.warehouse", isEn ? "Warehouse" : "Depo", "Warehouse", null, new List<MenuNode>

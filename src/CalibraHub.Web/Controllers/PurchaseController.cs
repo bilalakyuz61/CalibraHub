@@ -383,6 +383,22 @@ public sealed class PurchaseController : Controller
                         "irsaliye", "/Purchase/Edit?type=purchase_delivery", "rose", ct,
                         helpKey: "purchase-deliveries");
 
+    [HttpGet("/Purchase/Invoices")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseInvoice)]
+    public Task<IActionResult> Invoices(CancellationToken ct) =>
+        RenderListAsync("alis_faturasi", "PURCHASE_INVOICE_EDIT", "Alış Faturaları",
+                        "fatura", "/Purchase/Edit?type=purchase_invoice", "emerald", ct,
+                        helpKey: "purchase-invoices");
+
+    [HttpGet("/Purchase/InvoicesBoardConfig")]
+    public async Task<IActionResult> InvoicesBoardConfig(CancellationToken ct)
+    {
+        var config = await BuildPurchaseBoardAsync(
+            "alis_faturasi", "PURCHASE_INVOICE_EDIT", "Alış Faturaları",
+            "fatura", "/Purchase/Edit?type=purchase_invoice", "emerald", ct);
+        return Json(config);
+    }
+
     [HttpGet("/Purchase/DeliveriesBoardConfig")]
     public async Task<IActionResult> DeliveriesBoardConfig(CancellationToken ct)
     {
@@ -449,6 +465,7 @@ public sealed class PurchaseController : Controller
             "purchase_order"    or "alis_siparisi"      => "purchase_order",
             "purchase_demand"   or "satin_alma_talebi"  => "purchase_demand",
             "purchase_delivery" or "alis_irsaliyesi"    => "purchase_delivery",
+            "purchase_invoice"  or "alis_faturasi"      => "purchase_invoice",
             _                                            => "purchase_request",
         };
         var idQ  = id.HasValue && id.Value > 0 ? $"&id={id.Value}" : "";
@@ -705,6 +722,7 @@ public sealed class PurchaseController : Controller
             "alis_talebi"       => "/Purchase/RequestsBoardConfig",
             "satin_alma_talebi" => "/Purchase/PurchaseDemandsBoardConfig",
             "alis_irsaliyesi"   => "/Purchase/DeliveriesBoardConfig",
+            "alis_faturasi"     => "/Purchase/InvoicesBoardConfig",
             _ => (string?)null,
         };
 

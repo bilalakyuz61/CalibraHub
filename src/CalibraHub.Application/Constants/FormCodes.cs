@@ -108,6 +108,13 @@ public static class FormCodes
     public const string PurchaseDeliveryEdit  = "PURCHASE_DELIVERY_EDIT";
     public const string PurchaseDeliveryLines = "PURCHASE_DELIVERY_LINES";
 
+    // Alış Faturası (alis_faturasi) — zincirin mali halkası. Gelen e-faturadan üç yolla
+    // üretilir: doğrudan (stok eşleştirme), sipariş bağlantılı, irsaliye bağlantılı.
+    public const string PurchaseInvoice      = "PURCHASE_INVOICE";
+    public const string PurchaseInvoiceNew   = "PURCHASE_INVOICE_NEW";
+    public const string PurchaseInvoiceEdit  = "PURCHASE_INVOICE_EDIT";
+    public const string PurchaseInvoiceLines = "PURCHASE_INVOICE_LINES";
+
     public const string PurchaseFulfillment  = "PURCHASE_FULFILLMENT";
 
     // Yükleme Planlama Merkezi + Stok Rezervasyonu (Faz 1, 2026-07-28) — Fulfillment Center'ın satış-tarafı analoğu.

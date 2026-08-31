@@ -1139,6 +1139,7 @@ public sealed class SalesController : Controller
                 "purchase_order"   or "alis_siparisi"         => "alis_siparisi",
                 "purchase_demand"  or "satin_alma_talebi"     => "satin_alma_talebi",
                 "purchase_delivery" or "alis_irsaliyesi"      => "alis_irsaliyesi",
+                "purchase_invoice"  or "alis_faturasi"        => "alis_faturasi",
                 _ => typeCode,  // tanimsiz — varsayilani koru
             };
         }
@@ -1224,6 +1225,7 @@ public sealed class SalesController : Controller
                 "alis_siparisi"    => "Satın Alma Sipariş",
                 "satin_alma_talebi" => "Satın Alma Talebi",
                 "alis_irsaliyesi"  => "Alış İrsaliyesi",
+                "alis_faturasi"    => "Alış Faturası",
                 _                   => "Satış Teklifi",
             },
             DocumentTypeIcon      = formMeta?.Icon,

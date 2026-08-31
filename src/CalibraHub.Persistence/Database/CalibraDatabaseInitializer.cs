@@ -811,6 +811,13 @@ END;";
             await SeedDefaultDocLayoutsAsync(connection, cancellationToken);
             await EnsureFormsTableAsync(connection, cancellationToken);
             await SeedFormsAsync(connection, cancellationToken);
+            // EnsureFormsTableAsync ikinci kez CAGRILIR — icindeki UI metadata UPDATE'leri
+            // (BaseTable / LinesFormCode / ListUrl / Icon...) satirlar SEED EDILDIKTEN sonra
+            // uygulanabilsin diye. Ilk cagri tabloyu/kolonlari kurar ama yeni bir form ailesi
+            // eklendiginde o satirlar HENUZ YOKTUR: sifirdan kurulan bir veritabaninda metadata
+            // bos kalir ve ancak ikinci acilista dolardi (yeni Alis Faturasi ailesinde goruldu).
+            // Metodun tamami idempotent (IF NOT EXISTS / ISNULL kalibi), tekrar cagirmak guvenli.
+            await EnsureFormsTableAsync(connection, cancellationToken);
             await EnsureWidgetEavTablesAsync(connection, cancellationToken);
             // 2026-08-05 — Kalem kartı düzeni (konum/boyut) tablosu.
             await EnsureLineCardLayoutTableAsync(connection, cancellationToken);
@@ -13182,6 +13189,7 @@ END;
         ("satin_alma_talebi", "Satin Alma Talebi", "vw_ReportDocument", "BelgeId", "Birden fazla ihtiyac kaydindan olusturulan resmi satin alma talebi"),
         // 2026-07-11: Alis Irsaliyesi — talep→teklif→siparis→irsaliye zincirinin son halkasi (mal kabul).
         ("alis_irsaliyesi", "Alis Irsaliyesi", "vw_DeliveryNote", "BelgeId", "Tedarikciden mal kabul irsaliyesi (siparisten turetilir)"),
+        ("alis_faturasi", "Alis Faturasi", "vw_Invoice", "BelgeId", "Tedarikciden gelen alis faturasi — dogrudan / siparis / irsaliye baglantili"),
         // 2026-05-20: Uretim is emri — DocumentNumberRule ile numara turetilebilir
         // (OrderNumber kolonu). Print sablonu icin SqlViewName/RequiredKeyColumn ileride
         // vw_WorkOrder eklenince doldurulur; numara kurali icin gerekli degil.
@@ -14351,6 +14359,30 @@ END;
                 [IconColor] = ISNULL([IconColor], N'rose')
              WHERE [FormCode] = N'PURCHASE_DELIVERY_EDIT';
 
+            -- 2026-08-31: Alış Faturası form ailesi (alis_faturasi) — irsaliye deseninin aynısı.
+            UPDATE dbo.Forms
+               SET [BaseTable]       = N'dbo.Document',
+                   [BaseRecordKey]   = N'DocumentNumber',
+                   [BaseTableFilter] = N'[DocumentTypeId] IN (SELECT [Id] FROM [dbo].[DocumentType] WHERE [Code] = ''alis_faturasi'')'
+             WHERE [FormCode] IN (N'PURCHASE_INVOICE_NEW', N'PURCHASE_INVOICE_EDIT')
+               AND ([BaseTable] IS NULL OR [BaseTable] = N'');
+            UPDATE dbo.Forms
+               SET [BaseTable]     = N'dbo.DocumentLine',
+                   [BaseRecordKey] = N'id'
+             WHERE [FormCode] = N'PURCHASE_INVOICE_LINES'
+               AND ([BaseTable] IS NULL OR [BaseTable] = N'');
+            UPDATE dbo.Forms
+               SET [LinesFormCode] = N'PURCHASE_INVOICE_LINES', [LinesParentColumn] = N'DocumentId'
+             WHERE [FormCode] IN (N'PURCHASE_INVOICE_NEW', N'PURCHASE_INVOICE_EDIT')
+               AND ([LinesFormCode] IS NULL OR [LinesFormCode] = N'');
+            UPDATE dbo.Forms SET
+                [ListUrl]   = ISNULL([ListUrl],   N'/Purchase/Invoices'),
+                [NewUrl]    = ISNULL([NewUrl],    N'/Purchase/Edit?type=purchase_invoice'),
+                [EditUrl]   = ISNULL([EditUrl],   N'/Purchase/Edit'),
+                [Icon]      = ISNULL([Icon],      N'ReceiptText'),
+                [IconColor] = ISNULL([IconColor], N'emerald')
+             WHERE [FormCode] = N'PURCHASE_INVOICE_EDIT';
+
             UPDATE dbo.Forms
                SET [BaseTable] = N'dbo.DocumentLine',
                    [BaseRecordKey] = N'id'
@@ -14975,6 +15007,10 @@ END;
             ("PURCHASE_DELIVERY_NEW",   "Yeni",                         "Satın Alma",           "Alış İrsaliyesi",          491,  false), // navigasyon formu
             ("PURCHASE_DELIVERY_EDIT",  "Üst Bilgi",                    "Satın Alma",           "Alış İrsaliyesi",          492,  true),
             ("PURCHASE_DELIVERY_LINES", "Kalem Bilgisi",               "Satın Alma",           "Alış İrsaliyesi",          493,  true),
+            ("PURCHASE_INVOICE",        "Alış Faturası",                "Satın Alma",           "Alış Faturası",            494,  true),  // SmartBoard liste
+            ("PURCHASE_INVOICE_NEW",    "Yeni",                         "Satın Alma",           "Alış Faturası",            495,  false), // navigasyon formu
+            ("PURCHASE_INVOICE_EDIT",   "Üst Bilgi",                    "Satın Alma",           "Alış Faturası",            496,  true),
+            ("PURCHASE_INVOICE_LINES",  "Kalem Bilgisi",               "Satın Alma",           "Alış Faturası",            497,  true),
 
             // ── Üretim ───────────────────────────────────────────────────────
             // BOM_EDIT → "Ürün Ağacı": sol menüdeki "Ürün Ağacı" kartı BomController([PermissionScope("BOM_EDIT")]) tarafından korunur.
