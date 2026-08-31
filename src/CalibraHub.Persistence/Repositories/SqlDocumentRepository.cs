@@ -442,7 +442,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    l.[Quantity],l.[UnitPrice],l.[DiscountRate],l.[LineTotal],
                    l.[CombinationId],l.[LocationId],l.[Notes],ISNULL(l.[NotesPinned], 0) AS [NotesPinned],
                    l.[RevisedFromId], l.[SourceLineId], l.[KitParentLineId], l.[DeliveryDate], l.[DeliveryDays],
-                   l.[SerialEntryEnabled], l.[SerialReservationEnabled],
+                   l.[SerialEntryEnabled], l.[SerialReservationEnabled], l.[StockReservationEnabled],
                    ISNULL(l.[FulfilledFromStock], 0) AS [FulfilledFromStock],
                    ISNULL(l.[FulfilledByPurchase], 0) AS [FulfilledByPurchase],
                    CAST(ISNULL(l.[FulfillmentStatus], 0) AS INT) AS [FulfillmentStatus],
@@ -652,7 +652,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                             [DeliveryDate]  = @DeliveryDate,
                             [DeliveryDays]  = @DeliveryDays,
                             [SerialEntryEnabled] = @SerialEntryEnabled,
-                            [SerialReservationEnabled] = @SerialReservationEnabled
+                            [SerialReservationEnabled] = @SerialReservationEnabled,
+                            [StockReservationEnabled] = @StockReservationEnabled
                         WHERE [Id] = @Id AND [DocumentId] = @DocumentId
                           AND [CompanyId] = (SELECT d.[CompanyId] FROM {_quoteTable} d WHERE d.[Id] = @DocumentId);
                         """;
@@ -664,11 +665,11 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                         INSERT INTO {_lineTable}
                             ([DocumentId],[LineNo],[ItemId],[UnitId],
                              [Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
-                             [CombinationId],[LocationId],[Notes],[NotesPinned],[RevisedFromId],[SourceLineId],[DeliveryDate],[DeliveryDays],[SerialEntryEnabled],[SerialReservationEnabled],[CompanyId])
+                             [CombinationId],[LocationId],[Notes],[NotesPinned],[RevisedFromId],[SourceLineId],[DeliveryDate],[DeliveryDays],[SerialEntryEnabled],[SerialReservationEnabled],[StockReservationEnabled],[CompanyId])
                         VALUES
                             (@DocumentId,@LineNo,@ItemId,@UnitId,
                              @Quantity,{baseQtyExpr},@UnitPrice,@DiscountRate,@LineTotal,
-                             @CombinationId,@LocationId,@Notes,@NotesPinned,@RevisedFromId,@SourceLineId,@DeliveryDate,@DeliveryDays,@SerialEntryEnabled,@SerialReservationEnabled,
+                             @CombinationId,@LocationId,@Notes,@NotesPinned,@RevisedFromId,@SourceLineId,@DeliveryDate,@DeliveryDays,@SerialEntryEnabled,@SerialReservationEnabled,@StockReservationEnabled,
                              (SELECT d.[CompanyId] FROM {_quoteTable} d WHERE d.[Id] = @DocumentId));
                         """;
                 }
@@ -692,6 +693,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 // duzlestirmek "kullanici acikca kapatti" demek olurdu (bkz. sema yorumu).
                 cmd.Parameters.Add(new SqlParameter("@SerialEntryEnabled", (object?)ln.SerialEntryEnabled ?? DBNull.Value));
                 cmd.Parameters.Add(new SqlParameter("@SerialReservationEnabled", (object?)ln.SerialReservationEnabled ?? DBNull.Value));
+                cmd.Parameters.Add(new SqlParameter("@StockReservationEnabled", (object?)ln.StockReservationEnabled ?? DBNull.Value));
                 await cmd.ExecuteNonQueryAsync(ct);
             }
 
@@ -1134,6 +1136,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         // kullaniyor — yoksa -1 doner ve alan null kalir (patlamaz).
         var serialEntryOrd = TryGetOrdinal(r, "SerialEntryEnabled");
         var serialResvOrd  = TryGetOrdinal(r, "SerialReservationEnabled");
+        var stockResvOrd   = TryGetOrdinal(r, "StockReservationEnabled");
         return new()
         {
             Id = r.GetInt32(r.GetOrdinal("Id")),
@@ -1152,6 +1155,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             RevisedFromId = revisedFromIdOrd >= 0 && !r.IsDBNull(revisedFromIdOrd) ? r.GetInt32(revisedFromIdOrd) : null,
             SerialEntryEnabled = serialEntryOrd >= 0 && !r.IsDBNull(serialEntryOrd) ? r.GetBoolean(serialEntryOrd) : null,
             SerialReservationEnabled = serialResvOrd >= 0 && !r.IsDBNull(serialResvOrd) ? r.GetBoolean(serialResvOrd) : null,
+            StockReservationEnabled = stockResvOrd >= 0 && !r.IsDBNull(stockResvOrd) ? r.GetBoolean(stockResvOrd) : null,
             SourceLineId = sourceLineIdOrd >= 0 && !r.IsDBNull(sourceLineIdOrd) ? r.GetInt32(sourceLineIdOrd) : null,
             KitParentLineId = kitParentIdOrd >= 0 && !r.IsDBNull(kitParentIdOrd) ? r.GetInt32(kitParentIdOrd) : null,
             DeliveryDate = SafeOrdinalDate(r, "DeliveryDate"),

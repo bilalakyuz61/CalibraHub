@@ -1477,7 +1477,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
     // sıfırlanır, sonra payload'dan yeniden kurulur — diff bug'ı ve orphan rezervasyon yok.
     public async Task<(bool Ok, string? Error)> ReconcileOrderSerialsAsync(
         int documentId,
-        IReadOnlyList<(int LineId, int ItemId, IReadOnlyList<string> Serials)> lineSerials,
+        IReadOnlyList<(int LineId, int ItemId, IReadOnlyList<string> Serials, bool Reserve)> lineSerials,
         bool reserve, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
@@ -1506,8 +1506,12 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             // parça iki satırda birden sevk edilebilir görünüyordu. Rezervasyon satır bazına
             // çekildiğinden bu çakışma artık açıkça reddedilir.
             var claimedByLine = new Dictionary<int, int>();   // serialId → lineId
-            foreach (var (lineId, itemId, serials) in lineSerials)
+            foreach (var (lineId, itemId, serials, lineReserve) in lineSerials)
             {
+                // Etkin rezervasyon: SIRKET izni VE kalemin secimi. Sirket parametresi
+                // kapaliyken kalem bayragi tek basina rezerve EDEMEZ.
+                var reserveThisLine = reserve && lineReserve;
+            
                 if (serials == null || lineId <= 0 || itemId <= 0) continue;
                 foreach (var sn in serials.Where(x => !string.IsNullOrWhiteSpace(x))
                                           .Select(x => x.Trim())
@@ -1534,7 +1538,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     { await tx.RollbackAsync(ct); return (false, $"'{sn}' aynı belgede birden fazla kaleme eklenemez — tek bir kaleme bağlanmalı."); }
                     claimedByLine[serialId] = lineId;
 
-                    if (reserve)
+                    if (reserveThisLine)
                     {
                         if (status == 2)
                         { await tx.RollbackAsync(ct); return (false, $"'{sn}' zaten çıkış yapılmış; rezerve edilemez."); }
@@ -1554,7 +1558,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                         link.Parameters.AddWithValue("@Sr", serialId);
                         await link.ExecuteNonQueryAsync(ct);
                     }
-                    if (reserve)
+                    if (reserveThisLine)
                     {
                         await using var upd = conn.CreateCommand();
                         upd.Transaction = tx;

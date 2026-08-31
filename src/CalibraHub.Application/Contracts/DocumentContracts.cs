@@ -103,7 +103,13 @@ public sealed record DocumentLineDto(
     // Bu satırın malzemesi kit/paket ürün mü (Items.TypeId = ItemType.Kit = 10)? Grid, kit
     // satırının bileşenlerini KitLineComponents(lineId) ile açılır gösterir. Salt-okuma
     // display alanı — tabloda tutulmaz, Items JOIN'inden türetilir (MaterialCode/Name gibi).
-    bool IsKit = false);
+    bool IsKit = false,
+    // Kalem bazli seri girisi / seri rezervasyonu secimi (2026-08-31). UC DURUMLU:
+    // null = sirket parametresini izle, false/true = kullanicinin bu kalemdeki ACIK secimi.
+    // Pozisyonel record — yeni alanlar SONA eklenir (ordinal kaymasi riski).
+    bool? SerialEntryEnabled = null,
+    bool? SerialReservationEnabled = null,
+    bool? StockReservationEnabled = null);
 
 public sealed record DocumentLineDetailDto(
     int Id, int QuoteLineId,
@@ -198,7 +204,19 @@ public sealed record SaveDocumentLineRequest(
     /// kayit sonrasi DocumentLineSerial'e baglanir; ORDER_SERIAL_RESERVATION + stok rez.
     /// acikken InStock→Reserved yapilir (ReconcileOrderSerialsAsync).
     /// </summary>
-    IReadOnlyList<string>? Serials = null);
+    IReadOnlyList<string>? Serials = null,
+    /// <summary>
+    /// Kalem bazinda seri girisi secimi. UC DURUMLU: null = sirket parametresini izle
+    /// (varsayilan), false/true = kullanicinin bu kalemdeki ACIK secimi.
+    /// </summary>
+    bool? SerialEntryEnabled = null,
+    /// <summary>
+    /// Kalem bazinda seri REZERVASYONU secimi. Seri girisini GEREKTIRIR; sirket parametresi
+    /// kapaliyken tek basina rezerve edemez (hiyerarsi sunucuda da uygulanir).
+    /// </summary>
+    bool? SerialReservationEnabled = null,
+    /// <summary>Kalem bazinda stok rezervasyonu secimi (uc durumlu).</summary>
+    bool? StockReservationEnabled = null);
 
 public sealed record SaveQuoteLineDetailItem(
     string FeatureName,

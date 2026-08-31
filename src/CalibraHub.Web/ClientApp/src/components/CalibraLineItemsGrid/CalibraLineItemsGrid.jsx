@@ -3497,6 +3497,94 @@ export default function CalibraLineItemsGrid(props) {
                 background: __bodyTint,
               }}
             >
+              {/* ── Rezervasyon — YALNIZ satis siparisinde ──
+                  Diger belge turlerinde bu blok hic cizilmez: irsaliyede/teklifte
+                  rezervasyonun karsiligi yoktur. Modalin KENDISI genel; yalniz bu
+                  bolum belge turune baglidir.
+
+                  UC DURUMLU alanlar: deger null iken "sirket parametresini izliyor"
+                  yazilir. Kapali gostermek YANLIS olurdu — parametre acikken satir
+                  gercekte rezerve ediliyor olabilir ve arayuz tersini soylerdi. */}
+              {__lineFormCode === 'SALES_ORDER_LINES' && (function () {
+                var row = extrasModalRow
+                var locked = !canModify(row)
+
+                function setFlag(key, val) {
+                  handleCellChange(row._uid, key, val)
+                  // Hiyerarsi: seri girisi kapatilirsa seri rezervasyonu da kapanir.
+                  // Sunucu da ayni kurali uygular; burasi yalniz kullaniciya anlik geri bildirim.
+                  if (key === 'serialEntryEnabled' && val !== true) {
+                    handleCellChange(row._uid, 'serialReservationEnabled', false)
+                  }
+                }
+
+                function Toggle(p) {
+                  var on = p.value === true
+                  var inherits = (p.value !== true && p.value !== false)
+                  var off = !!p.disabled || locked
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '7px 0', opacity: off ? 0.45 : 1 }}>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={on}
+                        aria-label={p.label}
+                        disabled={off}
+                        onClick={function () { if (!off) p.onChange(!on) }}
+                        style={{
+                          width: 34, height: 19, borderRadius: 999, flexShrink: 0, marginTop: 1,
+                          border: '1px solid ' + (on ? 'transparent' : 'var(--app-border)'),
+                          background: on ? '#6366f1' : 'var(--app-surface-2, rgba(120,120,140,.22))',
+                          cursor: off ? 'not-allowed' : 'pointer',
+                          position: 'relative', transition: 'background .15s',
+                        }}
+                      >
+                        <span style={{
+                          position: 'absolute', top: 2, left: on ? 17 : 2,
+                          width: 13, height: 13, borderRadius: '50%', background: '#fff',
+                          boxShadow: '0 1px 2px rgba(0,0,0,.3)', transition: 'left .15s',
+                        }} />
+                      </button>
+                      <span style={{ minWidth: 0 }}>
+                        <span style={{ display: 'block', fontSize: 12.5, color: 'var(--app-text)' }}>{p.label}</span>
+                        <span style={{ display: 'block', fontSize: 11, color: 'var(--app-text-muted)', marginTop: 1 }}>
+                          {p.hint || (inherits ? 'Şirket parametresini izliyor' : (on ? 'Bu kalem için açık' : 'Bu kalem için kapalı'))}
+                        </span>
+                      </span>
+                    </div>
+                  )
+                }
+
+                var serialOn = row.serialEntryEnabled === true
+                return (
+                  <div style={{
+                    marginBottom: 18, padding: '12px 14px', borderRadius: 10,
+                    border: '1px solid ' + __sepColor, background: __bodyTint,
+                  }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--app-text)', marginBottom: 4 }}>
+                      Rezervasyon
+                    </div>
+                    <Toggle
+                      label="Stoktan Ayır"
+                      value={row.stockReservationEnabled}
+                      onChange={function (v) { setFlag('stockReservationEnabled', v) }}
+                    />
+                    <Toggle
+                      label="Seri Girişi"
+                      value={row.serialEntryEnabled}
+                      onChange={function (v) { setFlag('serialEntryEnabled', v) }}
+                    />
+                    <Toggle
+                      label="Seri Rezervasyonu"
+                      value={row.serialReservationEnabled}
+                      disabled={!serialOn}
+                      hint={!serialOn ? 'Önce Seri Girişi açılmalı' : undefined}
+                      onChange={function (v) { setFlag('serialReservationEnabled', v) }}
+                    />
+                  </div>
+                )
+              })()}
+
               <DynamicWidgetRenderer
                 ref={extrasRendererRef}
                 formCode={__lineFormCode}

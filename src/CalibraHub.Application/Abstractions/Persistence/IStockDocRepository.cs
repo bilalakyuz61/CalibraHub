@@ -1,4 +1,4 @@
-using CalibraHub.Application.Contracts;
+﻿using CalibraHub.Application.Contracts;
 
 namespace CalibraHub.Application.Abstractions.Persistence;
 
@@ -59,9 +59,14 @@ public interface IStockDocRepository
     /// payload'dan yeniden kurulur (orphan/diff bug yok). Seri stokta yoksa / başka siparişte rezerve
     /// ise hata döner (Ok=false, tx geri alınır).
     /// </summary>
+    /// <param name="reserve">SIRKET seviyesi yetkilendirici (parametre hiyerarsisi). false ise
+    /// hicbir kalem rezerve edilmez — kalem bayragi bunu asamaz.</param>
+    /// <param name="lineSerials">Her kalemin <c>Reserve</c> alani o KALEMIN secimi; etkin
+    /// rezervasyon <c>reserve &amp;&amp; Reserve</c>. Kalem bayragi null gelirse cagiran
+    /// <c>true</c> gecer (= sirket parametresini izle), boylece mevcut belgelerin davranisi degismez.</param>
     Task<(bool Ok, string? Error)> ReconcileOrderSerialsAsync(
         int documentId,
-        IReadOnlyList<(int LineId, int ItemId, IReadOnlyList<string> Serials)> lineSerials,
+        IReadOnlyList<(int LineId, int ItemId, IReadOnlyList<string> Serials, bool Reserve)> lineSerials,
         bool reserve, CancellationToken ct);
 
     /// <summary>Sipariş iptal/silmede rezerve serileri serbest bırakır (Reserved→InStock). Bağlar iz olarak kalır.</summary>

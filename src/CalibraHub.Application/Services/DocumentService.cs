@@ -935,6 +935,9 @@ public sealed class DocumentService : IDocumentService
                 Notes = ln.Notes,
                 NotesPinned = ln.NotesPinned,
                 RevisedFromId = ln.RevisedFromId,
+                SerialEntryEnabled = ln.SerialEntryEnabled,
+                SerialReservationEnabled = ln.SerialReservationEnabled,
+                StockReservationEnabled = ln.StockReservationEnabled,
             });
         }
 
@@ -1132,6 +1135,10 @@ public sealed class DocumentService : IDocumentService
             Notes = ln.Notes,
             NotesPinned = ln.NotesPinned,
             RevisedFromId = ln.RevisedFromId,
+            // Kopyalanmazsa bayraklar SaveLinesAsync'e ULASMAZ (sessiz kayip).
+            SerialEntryEnabled = ln.SerialEntryEnabled,
+            SerialReservationEnabled = ln.SerialReservationEnabled,
+            StockReservationEnabled = ln.StockReservationEnabled,
         }).ToArray();
 
         // 2026-07-20 (Madde 2): fulfillmentEntries verilmişse (bu belge bir İhtiyaç Kaydı'nı
@@ -2195,5 +2202,8 @@ public sealed class DocumentService : IDocumentService
         FulfilledByPurchase: ln.FulfilledByPurchase,
         FulfillmentStatus:   ln.FulfillmentStatus,
         KitParentLineId:     ln.KitParentLineId,
-        IsKit:               ItemTypeCatalog.IsKit(ln.ItemTypeId));
+        IsKit:               ItemTypeCatalog.IsKit(ln.ItemTypeId),
+        SerialEntryEnabled:       ln.SerialEntryEnabled,
+        SerialReservationEnabled: ln.SerialReservationEnabled,
+        StockReservationEnabled:  ln.StockReservationEnabled);
 }

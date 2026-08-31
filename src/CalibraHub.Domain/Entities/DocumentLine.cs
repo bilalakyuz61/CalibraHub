@@ -60,6 +60,12 @@ public sealed class DocumentLine
     /// </summary>
     public bool? SerialReservationEnabled { get; set; }
 
+    /// <summary>
+    /// Kalem bazinda STOK rezervasyonu secimi (uc durumlu). Rezervasyonun kendisi
+    /// StockReservation satirlarindadir; bu alan yalniz kullanicinin NIYETINI tasir.
+    /// </summary>
+    public bool? StockReservationEnabled { get; set; }
+
     public string? Notes { get; set; }
 
     [Description("Not panelinin satir acilislarinda otomatik acik gelmesi icin pinli mi?")]

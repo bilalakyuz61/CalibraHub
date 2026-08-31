@@ -10362,6 +10362,13 @@ END;
             IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
                AND COL_LENGTH(N'[{s}].[DocumentLine]', N'SerialReservationEnabled') IS NULL
                 ALTER TABLE [{s}].[DocumentLine] ADD [SerialReservationEnabled] BIT NULL;
+
+            -- Kalem bazinda STOK rezervasyonu NIYETI. Rezervasyonun KENDISI StockReservation
+            -- satirlaridir; bu kolon kullanicinin secimini kayittan ONCE tasir (girisde tiklanir,
+            -- kayitta satirlar kurulur/iptal edilir). Kolon olmasaydi secim kaydetmede kaybolurdu.
+            IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocumentLine]', N'StockReservationEnabled') IS NULL
+                ALTER TABLE [{s}].[DocumentLine] ADD [StockReservationEnabled] BIT NULL;
             IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
                AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_DocumentLine_Lot'
                                AND parent_object_id = OBJECT_ID(N'[{s}].[DocumentLine]'))

@@ -2093,15 +2093,62 @@ public sealed class SalesController : Controller
 
                     var reqLines = (request.Lines ?? Array.Empty<SaveDocumentLineRequest>()).ToList();
                     var ordered  = savedLines.OrderBy(l => l.LineNo).ToList();
-                    var lineSerials = new List<(int, int, IReadOnlyList<string>)>();
+                    var lineSerials = new List<(int, int, IReadOnlyList<string>, bool)>();
                     for (int i = 0; i < ordered.Count && i < reqLines.Count; i++)
                         if (reqLines[i].Serials is { Count: > 0 } sers && ordered[i].ItemId > 0)
-                            lineSerials.Add((ordered[i].Id, ordered[i].ItemId, sers));
+                            // Kalem bayragi UC DURUMLU: null = sirket parametresini izle (true gecilir,
+                            // etkin deger yine serialRes ile AND'lenir) → mevcut belgelerin davranisi
+                            // birebir korunur. false = kullanici bu kalemde ACIKCA istemedi.
+                            lineSerials.Add((ordered[i].Id, ordered[i].ItemId, sers,
+                                             ordered[i].SerialReservationEnabled ?? true));
 
                     var (serOk, serErr) = await _stockDocRepo.ReconcileOrderSerialsAsync(
                         quote.Id, lineSerials, serialRes, ct);
                     if (!serOk)
                         return Json(new { success = false, message = serErr, quote });
+
+                    // ── Kalem bazlı STOK rezervasyonu ──────────────────────────────
+                    // Kalemin StockReservationEnabled bayrağı yalnız NİYETİ taşır; asıl kayıt
+                    // StockReservation satırlarıdır. Burada niyet ile gerçek durum eşitlenir:
+                    // açıldıysa rezervasyon kurulur, kapatıldıysa aktif olanlar iptal edilir.
+                    // Bu blok olmasaydı anahtar kaydedilir ama HİÇBİR ŞEY YAPMAZDI (sessiz no-op).
+                    // null = "şirket parametresini izle" → dokunulmaz, mevcut davranış korunur.
+                    if (stockRes)
+                    {
+                        var resvUserId = GetUserId() > 0 ? GetUserId() : (int?)null;
+                        var resvNotes  = new List<string>();
+                        foreach (var ln in ordered)
+                        {
+                            if (ln.StockReservationEnabled is not bool want || ln.Id <= 0) continue;
+                            var active = (await _stockReservationRepo.GetReservationsAsync(null, ln.Id, ct))
+                                         .Where(r => r.Status == 1).ToList();
+
+                            if (want && active.Count == 0)
+                            {
+                                var res = await _stockReservationRepo.CreateReservationsAsync(
+                                    new CreateReservationRequest(
+                                        new List<CreateReservationLineRequest> { new(ln.Id, ln.Quantity) },
+                                        LocationId: null, PlannedShipDate: null, Notes: null, AllOrNothing: false),
+                                    resvUserId, ct);
+                                // Atlanan kalem SESSİZ GEÇİLMEZ — kullanıcı neyin rezerve
+                                // EDİLEMEDİĞİNİ görmeli (CLAUDE.md "sessiz continue" kuralı).
+                                foreach (var sk in res.Skipped)
+                                    resvNotes.Add($"{ln.MaterialCode ?? ln.ItemId.ToString()}: {sk.Reason}");
+                            }
+                            else if (!want && active.Count > 0)
+                            {
+                                await _stockReservationRepo.CancelReservationsAsync(
+                                    active.Select(r => r.Id).ToList(), resvUserId, ct);
+                            }
+                        }
+                        if (resvNotes.Count > 0)
+                        {
+                            // Belge KAYDEDİLDİ; yalnız rezervasyon kısmen kurulamadı — bu yüzden
+                            // success=true, ama uyarı kullanıcıya iletilir.
+                            return Json(new { success = true, quote,
+                                message = "Belge kaydedildi. Rezerve edilemeyen kalemler: " + string.Join(" · ", resvNotes) });
+                        }
+                    }
                 }
             }
 

@@ -5738,7 +5738,13 @@
                     notesPinned:        r.notesPinned === true,
                     revisedFromId:      r.revisedFromId != null && Number(r.revisedFromId) > 0 ? Number(r.revisedFromId) : null,
                     // Seri-takipli kalemde siparişe seçilen seriler (satış siparişi rezervasyonu)
-                    serials:            Array.isArray(r.serials) && r.serials.length > 0 ? r.serials : null
+                    serials:            Array.isArray(r.serials) && r.serials.length > 0 ? r.serials : null,
+                    // Kalem bazlı seri girişi / rezervasyon seçimi. ÜÇ DURUMLU: undefined/null
+                    // gönderilirse sunucu "şirket parametresini izle" olarak yorumlar — bu yüzden
+                    // false'a düzleştirmiyoruz (düzleştirmek "kullanıcı açıkça kapattı" demek olurdu).
+                    serialEntryEnabled:       (r.serialEntryEnabled === true || r.serialEntryEnabled === false) ? r.serialEntryEnabled : null,
+                    serialReservationEnabled: (r.serialReservationEnabled === true || r.serialReservationEnabled === false) ? r.serialReservationEnabled : null,
+                    stockReservationEnabled:  (r.stockReservationEnabled === true || r.stockReservationEnabled === false) ? r.stockReservationEnabled : null
                 };
             });
         var custIdVal  = document.getElementById('sqCustomerId').value;
