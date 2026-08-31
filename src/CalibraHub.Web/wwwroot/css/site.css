@@ -8674,6 +8674,26 @@ body.calibra-grid-resizing * {
   background: color-mix(in srgb, var(--theme-accent-soft) 56%, #dbeafe 44%) !important;
 }
 
+/* ── Koyu tema: zebra satırların dark karşılığı (2026-08-31) ──
+   Yukarıdaki zebra kuralları YALNIZ açık tema değerleriyle yazılmıştı; koyu temada
+   tek/çift satırlar #ffffff ve açık mavi kalıyor, üstündeki açık renk yazı okunmuyordu
+   (Cari Eşleştir modalında görüldü: beyaz zemin + beyaz yazı). site.css'te bu iki kural
+   için hiçbir dark override YOKTU — düzeltme kaynağa yazılır, ekran başına yamalanmaz. */
+body.app-theme-dark .integrator-table tbody tr:nth-child(even) td,
+body.app-theme-dark .calibra-grid tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+body.app-theme-dark .integrator-table tbody tr:nth-child(odd) td,
+body.app-theme-dark .calibra-grid tbody tr:nth-child(odd) td {
+  background: transparent;
+}
+
+body.app-theme-dark .integrator-table tbody tr.is-selected td,
+body.app-theme-dark .calibra-grid tbody tr.is-selected td {
+  background: rgba(99, 102, 241, 0.22) !important;
+}
+
 .integrator-table tbody tr:hover td,
 .calibra-grid tbody tr:hover td {
   background: color-mix(in srgb, var(--theme-accent-soft) 62%, var(--integrator-card-bg) 38%) !important;

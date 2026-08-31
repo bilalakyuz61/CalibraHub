@@ -9,9 +9,28 @@
     }
 }
 
+@* Renkler ve grid-enhancer davranışı Cari Eşleştir modalıyla aynı gerekçelerle sabitlenir. *@
+<style>
+    .dl-table { color: var(--bs-body-color, #0f172a); --bs-table-color: inherit; --bs-table-bg: transparent; }
+    .dl-table > :not(caption) > * > * { background-color: transparent; color: inherit; }
+    .dl-table thead th {
+        background: var(--app-surface-2, #f8fafc) !important;
+        color: var(--bs-secondary-color, #6c757d) !important;
+        border-bottom: 1px solid var(--app-border, #e2e8f0);
+    }
+    .dl-table tbody td { border-bottom-color: var(--app-border-soft, #eef1f4); }
+    .dl-table tbody tr:hover > * { background: rgba(99,102,241,.10) !important; }
+    body.app-theme-dark .dl-table { color: rgba(255,255,255,.88); }
+    body.app-theme-dark .dl-table thead th { background: #0f172a !important; color: rgba(255,255,255,.55) !important; border-bottom-color: rgba(255,255,255,.10); }
+    body.app-theme-dark .dl-table tbody td { border-bottom-color: rgba(255,255,255,.06); }
+    body.app-theme-dark .dl-table .text-muted { color: rgba(255,255,255,.5) !important; }
+    body.app-theme-dark .dl-table .text-dark { color: rgba(255,255,255,.92) !important; }
+</style>
+
 <div class="table-responsive mb-0" style="max-height: 480px;">
-    <table class="table table-hover table-sm align-middle mb-0" style="font-size: 0.85rem;">
-        <thead class="table-light sticky-top">
+    <table class="table table-hover table-sm align-middle mb-0 dl-table" style="font-size: 0.85rem;"
+           data-grid-actions-skip="1">
+        <thead class="sticky-top">
             <tr>
                 <th style="width: 2.5rem;" class="text-center">#</th>
                 <th style="min-width: 250px;">Ürün / Hizmet Ayrıntısı</th>

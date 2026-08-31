@@ -147,6 +147,7 @@ var SHELL_I18N = {
   shortcuts_picker_selected_suffix:          { TR: 'seçili',                      EN: 'selected' },
   // İşlemler menüsü — 2026-08-01
   actions:                       { TR: 'İşlemler',                     EN: 'Actions' },
+  session:                       { TR: 'Oturum',                       EN: 'Session' },
   help:                          { TR: 'Yardım',                       EN: 'Help' },
   help_none:                     { TR: 'Bu sayfa için yardım bulunmuyor.', EN: 'No help available for this page.' },
 }
@@ -1192,6 +1193,7 @@ export default function Shell(props) {
           isDark={isDark}
           lang={lang}
           user={user}
+          system={system}
           tabsCount={tabs.length}
           sidebarOpen={sidebarOpen && !forceSidebarHidden}
           onToggleSidebar={toggleSidebar}
@@ -2195,6 +2197,8 @@ function Header(props) {
       <ShortcutsBar
         isDark={isDark}
         lang={lang}
+        user={props.user}
+        system={props.system}
         menu={props.menu}
         onNavigate={props.onNavigate}
         onGoHome={props.onGoHome}
@@ -2591,9 +2595,9 @@ function ShortcutsBar(props) {
 
   return (
     <div className="flex-1 min-w-0 flex items-center gap-1.5">
-      {loaded && (
-        <div className={'w-px h-5 flex-shrink-0 ' + (isDark ? 'bg-white/10' : 'bg-slate-200')} />
-      )}
+      {/* Baştaki ayraç KALDIRILDI (2026-08-31): şeridin ilk öğesi bir ayraçtı ve
+          gap ile birlikte İşlemler düğmesinin solunda boşluk bırakıyordu. Ayraç
+          iki grubu ayırmak içindir; solunda ayıracak bir şey yok. */}
 
       {/* İşlemler — çark ikonu (yazısız), Ana Sayfa'nın SOLUNDA. Menü portal ile
           body'ye render edilir → ShortcutsBar overflow'u kırpmaz, buton altından açılır. */}
@@ -2622,11 +2626,32 @@ function ShortcutsBar(props) {
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }} onClick={function() { setActionsOpen(false) }} />
           <div
             className={
-              'shell-actions-menu min-w-[164px] rounded-lg border overflow-hidden py-0.5 ' +
+              'shell-actions-menu min-w-[232px] rounded-lg border overflow-hidden py-0.5 ' +
               (isDark ? 'bg-[#15182b] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-800')
             }
             style={{ position: 'fixed', top: actionsPos.top, left: actionsPos.left, zIndex: 1001, boxShadow: '0 10px 32px rgba(0,0,0,0.32)' }}
           >
+            {/* Oturum — kim giriş yapmış. Profil menüsünde de var ama oraya ulaşmak
+                için ekranın diğer ucuna gitmek gerekiyordu. */}
+            {props.user && (
+              <div className={'px-2.5 py-2 flex items-center gap-2 ' + (isDark ? 'border-b border-white/10' : 'border-b border-slate-200')}>
+                <span className={
+                  'w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 ' +
+                  (isDark ? 'bg-indigo-500/25 text-indigo-200' : 'bg-indigo-100 text-indigo-700')
+                }>
+                  {props.user.initials || '?'}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[12px] font-medium truncate">{props.user.name || '—'}</span>
+                  {props.user.email && (
+                    <span className={'block text-[10.5px] truncate ' + (isDark ? 'text-white/45' : 'text-slate-500')}>
+                      {props.user.email}
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
+
             <button
               type="button"
               onClick={function() { setActionsOpen(false); if (onOpenHelp) onOpenHelp() }}
@@ -2639,6 +2664,28 @@ function ShortcutsBar(props) {
               <span>{tShell('help', lang)}</span>
               <kbd className={'ml-auto text-[9px] px-1 py-0.5 rounded border ' + (isDark ? 'border-white/15 text-white/50' : 'border-slate-300 text-slate-400')}>F1</kbd>
             </button>
+
+            {/* Program bilgisi — şirket, sürüm, çalışma modu, yıl.
+                Sürüm/mod destek çağrılarında ilk sorulan şey; alt şeritte küçük
+                puntoyla duruyordu, buradan da okunabilsin. */}
+            {props.system && (
+              <div className={
+                'px-2.5 py-1.5 text-[10.5px] leading-relaxed ' +
+                (isDark ? 'border-t border-white/10 text-white/45' : 'border-t border-slate-200 text-slate-500')
+              }>
+                <div className="truncate">{props.system.company || '—'}</div>
+                <div className="flex items-center gap-1.5">
+                  <span>{'v' + (props.system.appVersion || '?')}</span>
+                  {props.system.runMode && (
+                    <span className={
+                      'px-1 rounded text-[9px] font-semibold ' +
+                      (isDark ? 'bg-amber-400/15 text-amber-300' : 'bg-amber-100 text-amber-700')
+                    }>{props.system.runMode}</span>
+                  )}
+                  {props.system.year && <span className="ml-auto">{props.system.year}</span>}
+                </div>
+              </div>
+            )}
           </div>
         </>,
         document.body

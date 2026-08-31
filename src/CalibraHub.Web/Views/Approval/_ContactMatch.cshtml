@@ -44,7 +44,10 @@
     else
     {
         <div class="cm-list">
-            <table class="table table-sm table-hover align-middle mb-0">
+            @* data-grid-actions-skip: site.js tüm tablolara "İşlem" sütunu + Düzenle/Sil
+               düğmesi enjekte ediyor. Bu bir SEÇİM listesi; oradaki Sil düğmesi hem anlamsız
+               hem tehlikeliydi (kullanıcı bildirdi). *@
+            <table class="table table-sm table-hover align-middle mb-0 cm-table" data-grid-actions-skip="1">
                 <thead>
                     <tr>
                         <th style="width:120px;">Cari Kodu</th>
@@ -89,7 +92,19 @@
 </div>
 
 <style>
-    .cm-root { font-size: .85rem; }
+    /* Renkler AÇIKÇA verilir: modal içeriği Bootstrap tablo değişkenlerini miras alıyor ve
+       koyu temada yazı #212529 kalıyordu (koyu zemin üstünde okunmuyordu). */
+    .cm-root { font-size: .85rem; color: var(--bs-body-color, #0f172a); }
+    .cm-root .cm-table { color: inherit; --bs-table-color: inherit; --bs-table-bg: transparent; }
+    .cm-root .cm-table > :not(caption) > * > * { background-color: transparent; color: inherit; }
+    .cm-root .cm-table thead th {
+        color: var(--bs-secondary-color, #6c757d);
+        border-bottom: 1px solid var(--app-border, #e2e8f0);
+        background: var(--app-surface-2, #f8fafc);
+        position: sticky; top: 0; z-index: 1;
+    }
+    .cm-root .cm-table tbody td { border-bottom-color: var(--app-border-soft, #eef1f4); }
+    .cm-root .cm-table tbody tr:hover > * { background: rgba(99,102,241,.10) !important; }
     .cm-doc { padding: 10px 12px; border: 1px solid var(--app-border, #e2e8f0); border-radius: 10px; margin-bottom: 12px; }
     .cm-doc-title { font-weight: 700; font-size: .95rem; }
     .cm-doc-meta { display: flex; gap: 18px; flex-wrap: wrap; color: var(--bs-secondary-color, #6c757d); margin-top: 2px; }
@@ -104,6 +119,25 @@
     .cm-badge { margin-left: 8px; padding: 1px 6px; border-radius: 10px; font-size: .68rem; font-weight: 600;
                 background: rgba(16,185,129,.12); color: #059669; }
     .cm-linked { font-size: .78rem; font-weight: 600; color: #059669; }
+
+    /* ── Koyu tema ── */
+    body.app-theme-dark .cm-root { color: rgba(255,255,255,.88); }
+    body.app-theme-dark .cm-doc,
+    body.app-theme-dark .cm-list { border-color: rgba(255,255,255,.10); }
+    body.app-theme-dark .cm-root .cm-table thead th {
+        background: #0f172a; color: rgba(255,255,255,.55); border-bottom-color: rgba(255,255,255,.10);
+    }
+    body.app-theme-dark .cm-root .cm-table tbody td { border-bottom-color: rgba(255,255,255,.06); }
+    body.app-theme-dark .cm-doc-meta,
+    body.app-theme-dark .cm-code,
+    body.app-theme-dark .cm-empty { color: rgba(255,255,255,.55); }
+    body.app-theme-dark .cm-current { border-top-color: rgba(255,255,255,.12); }
+    body.app-theme-dark .cm-badge { background: rgba(16,185,129,.18); color: #34d399; }
+    body.app-theme-dark .cm-linked { color: #34d399; }
+    body.app-theme-dark .cm-search input.form-control {
+        background: #0f172a; border-color: rgba(255,255,255,.12); color: rgba(255,255,255,.9);
+    }
+    body.app-theme-dark .cm-search input.form-control::placeholder { color: rgba(255,255,255,.4); }
 </style>
 
 <script>

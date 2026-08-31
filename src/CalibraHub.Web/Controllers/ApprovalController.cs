@@ -686,8 +686,11 @@ public sealed class ApprovalController : Controller
             .Select(d => (object)new
             {
                 id = d.Id,
-                title = d.DocumentNumber,
-                subtitle = string.IsNullOrWhiteSpace(d.SenderName) ? d.SenderTaxNumber : d.SenderName,
+                // C-Grid sozlesmesi: tablo modunda "Kod" = subtitle, "Ad" = title.
+                // Ters yazilmisti; listede Kod sutununda CARI ADI goruunuyordu (kullanici
+                // bildirdi). Belgenin kimligi belge numarasidir -> Kod; gonderen -> Ad.
+                title = string.IsNullOrWhiteSpace(d.SenderName) ? d.SenderTaxNumber : d.SenderName,
+                subtitle = d.DocumentNumber,
                 description = (string?)null,
                 imageUrl = (string?)null,
                 statusBadge = d.IsProcessed
