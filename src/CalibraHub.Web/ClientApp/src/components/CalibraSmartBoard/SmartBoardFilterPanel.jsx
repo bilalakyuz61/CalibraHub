@@ -49,6 +49,16 @@ function parseOptionsValue(v) {
   return String(v).split(',').map(function(s){ return s.trim() }).filter(Boolean)
 }
 
+/* Turkce duyarli arama normalizasyonu.
+   toLowerCase() TR'de yaniltir: "İ" -> "i̇" (birlesik nokta) ve "I" -> "i" olmaz.
+   Kullanici "ISLEM" yazip "İşlem"i bulamazsa arama iseyaramaz gorunur. */
+function normSearch(v) {
+  return String(v == null ? '' : v)
+    .replace(/İ/g, 'i').replace(/I/g, 'ı')
+    .toLocaleLowerCase('tr')
+    .trim()
+}
+
 function saveFilters(boardKey, filters) {
   if (!boardKey || typeof window === 'undefined') return
   try {
@@ -343,6 +353,10 @@ export default function SmartBoardFilterPanel(props) {
   // Sunucu filtresi degerleri. KAYNAK her zaman board config'idir (localStorage'a
   // yazilmaz): deger sunucu sorgusunu belirledigi icin, listede gorunen veri ile
   // panelde secili gorunen sik ayrisamamalidir. Panel her acilista yeniden tohumlanir.
+  // Secenek listesi icindeki arama metni — SATIR BAZINDA ({ rowId: 'metin' }).
+  // Tek bir string olsaydi bir alanda yazilan arama digerini de suzerdi.
+  var [optSearch, setOptSearch] = useState({})
+
   var serverSignature = JSON.stringify(serverFilters.map(function (sf) { return [sf.id, sf.value] }))
   var [serverValues, setServerValues] = useState(function () {
     var init = {}
@@ -783,7 +797,82 @@ export default function SmartBoardFilterPanel(props) {
                             boxShadow: '0 8px 20px rgba(0,0,0,0.25)',
                             padding: 4,
                           }}>
-                            {opts.map(function (o) {
+                            {/* Arama — uzun secenek listelerinde (senaryo, durum kodlari)
+                                kaydirarak aramak yerine yazarak daralt. */}
+                            <div style={{ position: 'sticky', top: -4, zIndex: 1, background: 'var(--app-surface)', paddingBottom: 4 }}>
+                              <input
+                                type="text"
+                                value={optSearch[f.id] || ''}
+                                placeholder="Ara..."
+                                onChange={function (e) {
+                                  var v = e.target.value
+                                  setOptSearch(function (prev) {
+                                    var n = Object.assign({}, prev); n[f.id] = v; return n
+                                  })
+                                }}
+                                // details icinde: Enter formu gondermesin, Space listeyi kapatmasin.
+                                onKeyDown={function (e) { if (e.key === 'Enter') e.preventDefault(); e.stopPropagation() }}
+                                onClick={function (e) { e.stopPropagation() }}
+                                style={{
+                                  width: '100%', boxSizing: 'border-box',
+                                  padding: '5px 8px', borderRadius: 6, fontSize: 11,
+                                  background: inputBg, border: '1px solid ' + inputBorder,
+                                  color: textPrimary, outline: 'none',
+                                }}
+                              />
+                              {(function () {
+                                var q = normSearch(optSearch[f.id])
+                                var shown = q ? opts.filter(function (o) {
+                                  return normSearch(o && o.label).indexOf(q) >= 0
+                                      || normSearch(o && o.value).indexOf(q) >= 0
+                                }) : opts
+                                if (shown.length === 0) return null
+                                var shownVals = shown.map(function (o) { return String(o.value) })
+                                var allSel = shownVals.every(function (v) { return !!selSet[v] })
+                                return (
+                                  <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                                    <button
+                                      type="button"
+                                      onClick={function (e) {
+                                        e.preventDefault(); e.stopPropagation()
+                                        // GORUNEN secenekler uzerinde calisir: arama varken
+                                        // "tumunu sec" gizli olanlari da secseydi kullanici
+                                        // ne sectigini goremezdi.
+                                        var next = allSel
+                                          ? sel.filter(function (v) { return shownVals.indexOf(v) < 0 })
+                                          : sel.concat(shownVals.filter(function (v) { return !selSet[v] }))
+                                        updateRow(f.id, { value: next.join(',') })
+                                      }}
+                                      style={{
+                                        flex: 1, padding: '3px 6px', borderRadius: 5, fontSize: 10,
+                                        cursor: 'pointer', color: textMuted,
+                                        background: 'transparent', border: '1px solid ' + inputBorder,
+                                      }}>
+                                      {allSel ? 'Seçimi kaldır' : 'Görünenleri seç'}
+                                      {q ? ' (' + shown.length + ')' : ''}
+                                    </button>
+                                  </div>
+                                )
+                              })()}
+                            </div>
+                            {(function () {
+                              var q = normSearch(optSearch[f.id])
+                              var shown = q ? opts.filter(function (o) {
+                                return normSearch(o && o.label).indexOf(q) >= 0
+                                    || normSearch(o && o.value).indexOf(q) >= 0
+                              }) : opts
+                              if (shown.length === 0) {
+                                // Arama varsa "eslesme yok", yoksa asagidaki
+                                // "(tanimli secenek yok)" blogu devreye girer —
+                                // ikisini ayni mesajla gostermek yaniltirdi.
+                                if (!q) return null
+                                return (
+                                  <div style={{ padding: '8px 6px', fontSize: 11, color: textMuted, fontStyle: 'italic' }}>
+                                    "{optSearch[f.id]}" ile eşleşen seçenek yok.
+                                  </div>
+                                )
+                              }
+                              return shown.map(function (o) {
                               var v = (o && o.value != null) ? String(o.value) : ''
                               var lab = (o && o.label) ? o.label : v
                               var selected = !!selSet[v]
@@ -813,8 +902,9 @@ export default function SmartBoardFilterPanel(props) {
                                     flex: 1,
                                   }}>{lab}</span>
                                 </label>
-                              )
-                            })}
+                                )
+                              })
+                            })()}
                             {opts.length === 0 && (
                               <div style={{ padding: 8, color: textSubtle, fontSize: 11, fontStyle: 'italic' }}>
                                 (tanımlı seçenek yok)

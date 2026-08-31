@@ -797,19 +797,31 @@ public sealed class PurchaseController : Controller
         // ile aynı openInTab desteği eklendi (bkz. o dosyanın XML doc'u) — matchPath = "/Purchase/
         // FulfillmentCenter" sayesinde ekran zaten açık bir sekmede ise yeni sekme yerine o sekmeye
         // odaklanılır, değilse yeni sekme açılır.
-        var boardActions = string.Equals(typeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase)
+        // 2026-08-31 (kullanici karari): "Karsilama Merkezi" ARTIK AYRI BIR HEADER BUTONU
+        // DEGIL. Ihtiyac Karsilama zaten sol menude kendi ekrani; serit uzerinde ikinci
+        // bir giris yolu hem tekrar hem de C-Grid buton sirasini kaydiriyordu
+        // (CLAUDE.md: "ekrana ozel toplu is yeni buton olarak SERIDE EKLENMEZ,
+        // Islemler menusunun altina girer"). Standart Islemler menusune tasindi.
+        var boardActions = new object[]
+        {
+            new { id = "new", label = $"Yeni {Capitalize(entityWord)}", icon = "Plus", variant = "primary", url = effectiveNewUrl },
+        };
+
+        // Islemler menusu — yalnizca ihtiyac kaydi listesinde dolu. Bos birakilirsa
+        // SmartBoard butonu HIC cizmez (fail-open), diger listeler etkilenmez.
+        // Ogeler header actions ile AYNI sozlesmeden gecer (handleActionClick), bu
+        // yuzden openInTab/matchPath aynen calisir: ekran acik bir sekmedeyse o
+        // sekmeye odaklanilir, degilse yeni sekme acilir.
+        var boardToolbarMenu = string.Equals(typeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase)
             ? new object[]
             {
                 new {
-                    id = "center", label = "Karşılama Merkezi", icon = "Layers", variant = "secondary", url = "/Purchase/FulfillmentCenter",
+                    id = "center", label = "Karşılama Merkezi", icon = "Layers",
+                    url = "/Purchase/FulfillmentCenter",
                     openInTab = new { title = "İhtiyaç Karşılama", matchPath = "/Purchase/FulfillmentCenter" },
                 },
-                new { id = "new",    label = $"Yeni {Capitalize(entityWord)}", icon = "Plus", variant = "primary", url = effectiveNewUrl },
             }
-            : (object[])new object[]
-            {
-                new { id = "new", label = $"Yeni {Capitalize(entityWord)}", icon = "Plus", variant = "primary", url = effectiveNewUrl },
-            };
+            : System.Array.Empty<object>();
 
         var refreshUrl = typeCode.ToLowerInvariant() switch
         {
@@ -831,6 +843,7 @@ public sealed class PurchaseController : Controller
             searchPlaceholder = $"Hizli ara... ({entityWord} no, tedarikci)",
             emptyText         = $"Henuz {entityWord} olusturulmamis",
             actions           = boardActions,
+            toolbarMenu       = boardToolbarMenu,
             masterWidgets,
             entities,
         };
