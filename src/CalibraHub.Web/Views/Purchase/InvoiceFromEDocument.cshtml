@@ -73,7 +73,9 @@
 
     /* Stok seçim modalı — sonuçlar satır satır listelenir (eski satır-içi bağlantı
        listesi okunaksızdı; kullanıcı "bu şekilde kötü görünüyor" dedi). */
-    .em-pick { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+    .em-pick { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .em-pick:hover .em-pick-value { border-color: #6366f1; }
+    .em-pick:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; border-radius: 8px; }
     .em-pick-value {
         flex: 1 1 auto; min-width: 0; padding: 4px 8px; border-radius: 6px;
         border: 1px solid var(--app-border, #e2e8f0); font-size: .8rem;
@@ -253,14 +255,11 @@
         if (n === null || n === undefined || isNaN(n)) return '-';
         return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
-    // Birim etiketi: e-belgedeki uluslararası kodun (C62) bizdeki karşılığı varsa onu
-    // gösterir; yoksa ham kodu bırakır (yanlış birim uydurmaktansa ham kod dürüsttür).
+    // Birim etiketi: e-belgedeki uluslararası kod (C62) bizdeki birime çevrilmişse YALNIZ
+    // yerel kod yazılır — ham kodu parantez içinde göstermek ekranı kirletiyordu (kullanıcı
+    // bildirdi). Karşılığı YOKSA ham kod kalır: yanlış birim uydurmaktansa dürüst davranır.
     function unitLabel(l) {
-        if (l.unitLocalCode) {
-            return l.unitLocalCode + (l.unitCode && l.unitCode !== l.unitLocalCode
-                ? ' <span style="opacity:.6">(' + l.unitCode + ')</span>' : '');
-        }
-        return l.unitCode || '';
+        return l.unitLocalCode || l.unitCode || '';
     }
 
     function notice(msg, kind) {
@@ -349,17 +348,21 @@
                 '<td>' + l.lineNumber + '</td>' +
                 '<td>' + (l.itemName || l.itemCode || '-') +
                     (l.itemCode ? '<br><span class="em-muted">' + l.itemCode + '</span>' : '') + '</td>' +
-                '<td><div class="em-pick">' +
+                // Hem kutucuk hem düğme tıklanabilir; seçilmemişken düğme BİRİNCİL renkte
+                // olur ki ne yapılacağı bakışta anlaşılsın.
+                '<td><div class="em-pick" data-pick="' + l.lineNumber + '" role="button" tabindex="0">' +
                     '<span class="em-pick-value' + (picked ? '' : ' is-empty') + '" title="' +
                         String(label).replace(/"/g, '&quot;') + '">' + label + '</span>' +
-                    '<button type="button" class="btn btn-sm btn-outline-secondary" data-pick="' +
-                        l.lineNumber + '">' + (picked ? 'Değiştir' : 'Seç') + '</button>' +
+                    '<button type="button" class="btn btn-sm ' +
+                        (picked ? 'btn-outline-secondary' : 'btn-primary') + '">' +
+                        (picked ? 'Değiştir' : 'Stok Seç') + '</button>' +
                 '</div></td>' +
                 '<td class="num">' + fmt(l.quantity) + ' <span class="em-muted">' + unitLabel(l) + '</span></td>';
             tb.appendChild(tr);
-            tr.querySelector('[data-pick]').addEventListener('click', function (e) {
-                e.stopPropagation();
-                openPicker(l);
+            var pickCell = tr.querySelector('[data-pick]');
+            pickCell.addEventListener('click', function (e) { e.stopPropagation(); openPicker(l); });
+            pickCell.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(l); }
             });
         });
 

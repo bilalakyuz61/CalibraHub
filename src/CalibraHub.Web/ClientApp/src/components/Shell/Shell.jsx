@@ -42,6 +42,7 @@ import {
   Layers, MessageSquare, Languages, UserCircle, LogOut, Bot, Menu,
   X, LayoutGrid, Building2, Check, Home, Plus, Pencil, Pin, PinOff, Trash2,
   HelpCircle,
+  Info,
   // Menu icons (MenuDefinition'dan gelir)
   LayoutList, FileText, Files, Archive, Truck,
   Package, Folder, Boxes, Sliders, TrendingUp,
@@ -148,6 +149,7 @@ var SHELL_I18N = {
   // İşlemler menüsü — 2026-08-01
   actions:                       { TR: 'İşlemler',                     EN: 'Actions' },
   session:                       { TR: 'Oturum',                       EN: 'Session' },
+  about:                         { TR: 'Hakkında',                     EN: 'About' },
   help:                          { TR: 'Yardım',                       EN: 'Help' },
   help_none:                     { TR: 'Bu sayfa için yardım bulunmuyor.', EN: 'No help available for this page.' },
 }
@@ -2174,7 +2176,7 @@ function Header(props) {
   return (
     <header
       className={
-        'relative z-20 flex items-center gap-4 h-14 px-5 border-b backdrop-blur-xl flex-shrink-0 transition-colors duration-500 ' +
+        'relative z-20 flex items-center gap-4 h-14 pl-1.5 pr-5 border-b backdrop-blur-xl flex-shrink-0 transition-colors duration-500 ' +
         borderColor + ' ' + bgColor
       }
     >
@@ -2500,6 +2502,136 @@ function MiniSwitch(props) {
 // URL/DOM sezgisine dayali kontroller adres degisince sessizce devre disi
 // kalir, tek davranis olmasi hem tutarli hem bakimi kolay.
 
+/**
+ * Hakkında penceresi — program ve oturum meta verisi.
+ *
+ * Destek çağrılarında ilk sorulanlar burada tek yerde: sürüm, çalışma modu, ortam,
+ * çalışma zamanı, sunucunun ne zamandır ayakta olduğu. Sunucu tarafı bilgiler
+ * shell config'ten (_Layout) gelir; tarayıcı tarafı bilgiler burada okunur.
+ *
+ * HASSAS BİLGİ YOK: makine adı, bağlantı dizesi, dosya yolu gösterilmez — bu pencere
+ * ekran görüntüsü alınıp paylaşılan bir yerdir.
+ */
+function AboutDialog(props) {
+  var isDark = props.isDark
+  var sys = props.system || {}
+  var user = props.user || {}
+
+  useEffect(function() {
+    function onKey(e) { if (e.key === 'Escape') props.onClose() }
+    document.addEventListener('keydown', onKey)
+    return function() { document.removeEventListener('keydown', onKey) }
+  }, [props])
+
+  function fmt(iso) {
+    if (!iso) return '—'
+    var d = new Date(iso)
+    if (isNaN(d.getTime())) return iso
+    return d.toLocaleString()
+  }
+  function uptime(iso) {
+    if (!iso) return null
+    var t = new Date(iso).getTime()
+    if (isNaN(t)) return null
+    var mins = Math.max(0, Math.floor((Date.now() - t) / 60000))
+    var d = Math.floor(mins / 1440), h = Math.floor((mins % 1440) / 60), m = mins % 60
+    return (d ? d + 'g ' : '') + (d || h ? h + 's ' : '') + m + 'dk'
+  }
+
+  var rows = [
+    ['Uygulama',        'CalibraHub — Premium ERP'],
+    ['Sürüm',           'v' + (sys.appVersion || '?') + (sys.runMode ? '  (' + sys.runMode + ')' : '')],
+    ['Ortam',           sys.environment || '—'],
+    ['Çalışma zamanı',  sys.framework || '—'],
+    ['İşletim sistemi', sys.os || '—'],
+    ['Derleme tarihi',  fmt(sys.buildDate)],
+    ['Sunucu başlangıcı', fmt(sys.startedAt) + (uptime(sys.startedAt) ? '  ·  ' + uptime(sys.startedAt) : '')],
+    ['Şirket',          sys.company || '—'],
+    ['Oturum',          (user.name || '—') + (user.email ? '  ·  ' + user.email : '')],
+    ['Arayüz',          (props.lang || '—') + '  ·  ' + (isDark ? 'koyu' : 'açık') + ' tema'],
+    ['Tarayıcı',        (navigator.language || '') + '  ·  ' + window.innerWidth + '×' + window.innerHeight],
+  ]
+
+  var text = rows.map(function(r) { return r[0] + ': ' + r[1] }).join('\n')
+  var [copied, setCopied] = useState(false)
+  function copyAll() {
+    // Destek ekibine yapıştırmak için. Pano yoksa sessizce geçme — düğme
+    // "kopyalandı" demezse kullanıcı zaten anlar, ama hatayı da yutmayalım.
+    try {
+      navigator.clipboard.writeText(text).then(
+        function() { setCopied(true); setTimeout(function() { setCopied(false) }, 1600) },
+        function(err) { console.error('[Hakkinda] Pano yazilamadi', err) }
+      )
+    } catch (err) { console.error('[Hakkinda] Pano kullanilamiyor', err) }
+  }
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={function(e) { if (e.target === e.currentTarget) props.onClose() }}
+    >
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(8,11,20,.55)', backdropFilter: 'blur(3px)' }} />
+      <div
+        className={
+          'relative rounded-xl border overflow-hidden ' +
+          (isDark ? 'bg-[#15182b] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-800')
+        }
+        style={{ width: 'min(480px, 92vw)', boxShadow: '0 24px 64px rgba(0,0,0,.42)' }}
+      >
+        <div className={'flex items-center gap-2 px-4 py-3 ' + (isDark ? 'border-b border-white/10' : 'border-b border-slate-200')}>
+          <Info size={15} strokeWidth={1.8} className="text-indigo-400" />
+          <span className="text-[13px] font-semibold">{tShell('about', props.lang)}</span>
+          <button
+            type="button"
+            onClick={props.onClose}
+            aria-label="Kapat"
+            className={'ml-auto p-1 rounded ' + (isDark ? 'hover:bg-white/10 text-white/60' : 'hover:bg-slate-100 text-slate-500')}
+          >
+            <X size={14} strokeWidth={2} />
+          </button>
+        </div>
+
+        <div className="px-4 py-3" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+          <table className="w-full text-[12px]" style={{ borderCollapse: 'collapse' }}>
+            <tbody>
+              {rows.map(function(r) {
+                return (
+                  <tr key={r[0]}>
+                    <td className={'py-1 pr-3 align-top whitespace-nowrap ' + (isDark ? 'text-white/45' : 'text-slate-500')}>
+                      {r[0]}
+                    </td>
+                    <td className="py-1" style={{ wordBreak: 'break-word' }}>{r[1]}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className={'flex items-center gap-2 px-4 py-2.5 ' + (isDark ? 'border-t border-white/10' : 'border-t border-slate-200')}>
+          <button
+            type="button"
+            onClick={copyAll}
+            className={
+              'px-2.5 py-1 rounded-lg text-[12px] border transition-colors ' +
+              (isDark ? 'border-white/15 hover:bg-white/[0.06]' : 'border-slate-300 hover:bg-slate-100')
+            }
+          >
+            {copied ? 'Kopyalandı' : 'Bilgileri kopyala'}
+          </button>
+          <button
+            type="button"
+            onClick={props.onClose}
+            className="ml-auto px-3 py-1 rounded-lg text-[12px] bg-indigo-500 hover:bg-indigo-600 text-white transition-colors"
+          >
+            Kapat
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ShortcutsBar(props) {
   var isDark = props.isDark
   var lang = props.lang || 'TR'
@@ -2512,6 +2644,8 @@ function ShortcutsBar(props) {
   var [actionsOpen, setActionsOpen] = useState(false)
   var [actionsPos, setActionsPos] = useState({ top: 0, left: 0 })
   var [shortcutKeys, setShortcutKeys] = useState([])
+
+  var [aboutOpen, setAboutOpen] = useState(false)
 
   // İşlemler menüsü: butonun altına konumlandır (portal ile body'ye render → overflow kırpmaz)
   function toggleActions() {
@@ -2665,29 +2799,35 @@ function ShortcutsBar(props) {
               <kbd className={'ml-auto text-[9px] px-1 py-0.5 rounded border ' + (isDark ? 'border-white/15 text-white/50' : 'border-slate-300 text-slate-400')}>F1</kbd>
             </button>
 
-            {/* Program bilgisi — şirket, sürüm, çalışma modu, yıl.
-                Sürüm/mod destek çağrılarında ilk sorulan şey; alt şeritte küçük
-                puntoyla duruyordu, buradan da okunabilsin. */}
-            {props.system && (
-              <div className={
-                'px-2.5 py-1.5 text-[10.5px] leading-relaxed ' +
-                (isDark ? 'border-t border-white/10 text-white/45' : 'border-t border-slate-200 text-slate-500')
-              }>
-                <div className="truncate">{props.system.company || '—'}</div>
-                <div className="flex items-center gap-1.5">
-                  <span>{'v' + (props.system.appVersion || '?')}</span>
-                  {props.system.runMode && (
-                    <span className={
-                      'px-1 rounded text-[9px] font-semibold ' +
-                      (isDark ? 'bg-amber-400/15 text-amber-300' : 'bg-amber-100 text-amber-700')
-                    }>{props.system.runMode}</span>
-                  )}
-                  {props.system.year && <span className="ml-auto">{props.system.year}</span>}
-                </div>
-              </div>
-            )}
+            {/* Hakkında — ayrıntılı meta MODALDA. Menüde tutmak satır satır
+                büyüyen bir bilgi yığını demekti; menü seçim yeri, okuma yeri değil. */}
+            <button
+              type="button"
+              onClick={function() { setActionsOpen(false); setAboutOpen(true) }}
+              className={
+                'w-full flex items-center gap-2 px-2.5 py-1.5 text-[12px] transition-colors ' +
+                (isDark ? 'hover:bg-white/[0.06] border-t border-white/10' : 'hover:bg-slate-100 border-t border-slate-200')
+              }
+            >
+              <Info size={13} strokeWidth={1.8} className="text-indigo-400" />
+              <span>{tShell('about', lang)}</span>
+              <span className={'ml-auto text-[10px] ' + (isDark ? 'text-white/40' : 'text-slate-400')}>
+                {'v' + ((props.system && props.system.appVersion) || '?')}
+              </span>
+            </button>
           </div>
         </>,
+        document.body
+      )}
+
+      {aboutOpen && createPortal(
+        <AboutDialog
+          isDark={isDark}
+          lang={lang}
+          user={props.user}
+          system={props.system}
+          onClose={function() { setAboutOpen(false) }}
+        />,
         document.body
       )}
 
