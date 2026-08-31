@@ -386,6 +386,11 @@ function GroupHeaderRow(props) {
 }
 
 export default function SmartTable(props) {
+  // Surukleme sirasinda genislik YERELDE tutulur; her piksel icin sunucuya
+  // yazmak yerine birakildiginda TEK kayit yapilir.
+  var [resizing, setResizing] = useState(null)     // { id, startX, startW }
+  var [liveWidth, setLiveWidth] = useState(null)   // { id, w }
+
   var entities = Array.isArray(props.entities) ? props.entities : []
   var masterWidgets = Array.isArray(props.masterWidgets) ? props.masterWidgets : []
   var visibleIds = Array.isArray(props.visibleIds) ? props.visibleIds : null
@@ -400,6 +405,9 @@ export default function SmartTable(props) {
   // index.css bunlari var(--cst-*, <mevcut-deger>) fallback ile tuketir.
   var tableFormat = (props.tableFormat && typeof props.tableFormat === 'object') ? props.tableFormat : null
   var onRefresh = typeof props.onRefresh === 'function' ? props.onRefresh : null
+  // Sutun genisligini ELLE ayarlama (2026-08-31). Verilmezse tutamak hic cizilmez —
+  // bu prop'u gecmeyen board'lar icin davranis birebir eskisi gibi kalir.
+  var onColumnResize = typeof props.onColumnResize === 'function' ? props.onColumnResize : null
   var recentIds = props.recentIds instanceof Set ? props.recentIds : new Set()
   var isDark = !!props.isDark
   // groupBy — SmartBoard'dan (effectiveGroupBy) gelen, gecerli alanlara zaten
@@ -520,6 +528,30 @@ export default function SmartTable(props) {
     }
   }
 
+  useEffect(function () {
+    if (!resizing) return undefined
+    function widthAt(clientX) {
+      // Alt sinir 60px: altina inince sutun okunamaz hale gelir VE tutamak da
+      // daralacagi icin kullanici geri buyutmek istedigine ulasamaz.
+      return Math.max(60, Math.round(resizing.startW + (clientX - resizing.startX)))
+    }
+    function onMove(e) { setLiveWidth({ id: resizing.id, w: widthAt(e.clientX) }) }
+    function onUp(e) {
+      var w = widthAt(e.clientX)
+      setResizing(null)
+      setLiveWidth(null)
+      if (onColumnResize) onColumnResize(resizing.id, w)   // TEK kayit — birakildiginda
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    document.body.classList.add('cst-resizing')
+    return function () {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      document.body.classList.remove('cst-resizing')
+    }
+  }, [resizing, onColumnResize])
+
   return (
     // cst-root--pick: secim sutunu acikken "Islemler" sutununun sticky-left
     // ofseti secim sutunu kadar kayar (bkz. index.css) — pinlenmis sutunlarin
@@ -531,7 +563,9 @@ export default function SmartTable(props) {
             {selectable && <col style={{ width: PICK_COL_WIDTH }} />}
             <col style={{ width: MENU_COL_WIDTH }} />
             {columns.map(function (c) {
-              return <col key={c.id} style={{ width: c.width }} />
+              // Surukleme sirasinda canli deger; birakilinca c.width'e doner.
+              var liveW = (liveWidth && liveWidth.id === c.id) ? liveWidth.w : c.width
+              return <col key={c.id} style={{ width: liveW }} />
             })}
             {expandable && <col style={{ width: EXP_COL_WIDTH }} />}
           </colgroup>
@@ -576,6 +610,22 @@ export default function SmartTable(props) {
                       <Icon size={12} strokeWidth={2} className="cst-th__icon" />
                       <span className="cst-th__label">{c.label}</span>
                     </span>
+                    {onColumnResize && (
+                      <span
+                        className={'cst-th__resizer' + (resizing && resizing.id === c.id ? ' is-active' : '')}
+                        title="Sürükleyerek genişliği ayarlayın · çift tıkla otomatik"
+                        onMouseDown={function (e) {
+                          // preventDefault: metin secimini engeller.
+                          // stopPropagation: basliktaki diger tiklama islevlerine sizmasin.
+                          e.preventDefault(); e.stopPropagation()
+                          setResizing({ id: c.id, startX: e.clientX, startW: c.width })
+                        }}
+                        onDoubleClick={function (e) {
+                          e.preventDefault(); e.stopPropagation()
+                          onColumnResize(c.id, null)   // null = OTOMATIK genislige don
+                        }}
+                      />
+                    )}
                   </th>
                 )
               })}

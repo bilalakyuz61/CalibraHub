@@ -396,6 +396,15 @@ builder.Services.AddScoped<CalibraHub.Application.Auditing.IAuditQueryService,
                            CalibraHub.Application.Auditing.AuditQueryService>();
 builder.Services.AddHostedService<CalibraHub.Application.Auditing.AuditFileWriter>();
 
+// 2026-08-31 (PageComment Seq 1132) Canlı SQL izleme ("sql profiler" benzeri) — /AuditLog
+// ekranının "İzlemeyi Başlat" butonuyla açılan, kendiliğinden kapanan, süreç BELLEĞİNDE
+// (sabit boyutlu halka tampon) tutulan oturum. DB'ye/dosyaya YAZILMAZ (audit trail'den farklı
+// bilinçli karar — parametre değerleri gerçek veri taşıyor). Singleton: DiagnosticListener
+// aboneliği ve tampon uygulama ömrü boyunca tek örnek olmalı. Bkz. CalibraHub.Application/
+// Diagnostics/SqlTrace/SqlTraceService.cs.
+builder.Services.AddSingleton<CalibraHub.Application.Diagnostics.SqlTrace.ISqlTraceService,
+                              CalibraHub.Application.Diagnostics.SqlTrace.SqlTraceService>();
+
 // 2026-08-23 Yazılım/DB hata log modülü — audit trail ile PARALEL ama BAĞIMSIZ bir dosya-JSONL
 // akışı ({ContentRoot}/App_Data/ErrorLogs). Tüm ILogger LogError/LogCritical çağrıları
 // SystemErrorLoggerProvider (ILoggerProvider, DI'dan otomatik toplanır) aracılığıyla otomatik

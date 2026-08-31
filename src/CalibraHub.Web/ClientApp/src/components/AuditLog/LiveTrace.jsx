@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Play, Square, AlertTriangle, Search, X, ChevronDown, ChevronRight,
   Database, Globe, ServerCrash, Timer,
@@ -45,6 +45,26 @@ function formatTime(iso) {
   return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
+/**
+ * Yanıtı güvenle JSON'a çevirir. Sunucu 404/500 döndüğünde ya da gövde boşsa
+ * ham `r.json()` "Unexpected end of JSON input" gibi teşhis edilemez bir hata
+ * firlatiyordu — kullanıcı bunu ekranda görüyordu. Artık HTTP durumunu içeren
+ * anlaşılır bir mesaj üretiliyor.
+ */
+function readJson(r) {
+  return r.text().then(function (txt) {
+    if (!r.ok) {
+      var hint = r.status === 404
+        ? 'Sunucu ucu bulunamadı (HTTP 404) — bu özellik henüz yüklenmemiş olabilir.'
+        : 'Sunucu hatası (HTTP ' + r.status + ').'
+      throw new Error(hint)
+    }
+    if (!txt) throw new Error('Sunucu boş yanıt döndü.')
+    try { return JSON.parse(txt) }
+    catch (e) { throw new Error('Sunucu yanıtı okunamadı (geçersiz biçim).') }
+  })
+}
+
 export default function LiveTrace({ apiBase }) {
   const [duration, setDuration] = useState(10)
   const [running, setRunning] = useState(false)
@@ -70,7 +90,7 @@ export default function LiveTrace({ apiBase }) {
   const fetchEvents = useCallback(() => {
     if (typeof document !== 'undefined' && document.hidden) return // sekme arka plandayken poll etme
     fetch(apiBase + '/Trace/Events?after=' + lastSeqRef.current, { credentials: 'same-origin' })
-      .then(r => r.json())
+      .then(readJson)
       .then(d => {
         if (!d || !d.ok) { setError('İzleme akışı okunamadı.'); return }
         setError('')
@@ -126,7 +146,7 @@ export default function LiveTrace({ apiBase }) {
       headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken() },
       body: JSON.stringify({ durationMinutes: duration }),
     })
-      .then(r => r.json())
+      .then(readJson)
       .then(d => {
         if (!d || !d.ok) { setError((d && d.error) || 'İzleme başlatılamadı.'); return }
         setEvents([]); lastSeqRef.current = 0; setDroppedCount(0); setExpanded(null)
@@ -143,7 +163,7 @@ export default function LiveTrace({ apiBase }) {
       method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken() },
     })
-      .then(r => r.json())
+      .then(readJson)
       .then(d => {
         if (!d || !d.ok) { setError((d && d.error) || 'İzleme durdurulamadı.'); return }
         setRunning(false); stopPolling()

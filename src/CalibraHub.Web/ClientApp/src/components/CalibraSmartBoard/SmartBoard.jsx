@@ -27,7 +27,7 @@ import SmartGroupPanel from './SmartGroupPanel'
 import SmartBoardFilterPanel, { describeFilter, entityMatchesFilters } from './SmartBoardFilterPanel'
 import { resolveIcon, resolveColor } from './DynamicWidgetFactory'
 import { loadWidgetConfig } from '../../services/widgetConfigService'
-import { loadBoardColumnConfig, readBoardColumnConfigLocal } from '../../services/columnConfigService'
+import { loadBoardColumnConfig, readBoardColumnConfigLocal, saveBoardColumnConfig } from '../../services/columnConfigService'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
 import { openActionUrl } from './openActionUrl'
 
@@ -201,6 +201,26 @@ export default function SmartBoard(props) {
   var [tableColumnConfig, setTableColumnConfig] = useState(function () {
     return readBoardColumnConfigLocal(props.boardKey)
   })
+  /* Sutun genisligini ELLE ayarlama — SmartTable basliktaki tutamaktan cagirir.
+     width === null ise override KALDIRILIR (otomatik genislige donus).
+     Kayit SmartColumnSettings ile AYNI depoya gider (user_settings
+     "ui.board.columns.{boardKey}"): panelden ve elle yapilan ayar tek kaynakta
+     bulusur. Ayri bir yere yazsaydik biri digerini sessizce ezerdi. */
+  var handleColumnResize = useCallback(function (id, width) {
+    setTableColumnConfig(function (prev) {
+      var base = prev || { visibleIds: [], order: [], columns: {}, table: {} }
+      var columns = Object.assign({}, base.columns || {})
+      var entry = Object.assign({}, columns[id] || {})
+      if (width == null) delete entry.width
+      else entry.width = width
+      if (Object.keys(entry).length > 0) columns[id] = entry
+      else delete columns[id]
+      var next = Object.assign({}, base, { columns: columns })
+      saveBoardColumnConfig(boardKey, next)
+      return next
+    })
+  }, [boardKey])
+
   useEffect(function () {
     if (viewMode !== 'table') return undefined
     var cancelled = false
@@ -1629,6 +1649,7 @@ export default function SmartBoard(props) {
               visibleIds={visibleIds}
               order={order}
               columnConfig={tableColumnFormats}
+              onColumnResize={handleColumnResize}
               tableFormat={tableGeneralFormat}
               groupBy={effectiveGroupBy}
               onRefresh={refreshUrl ? refreshBoard : undefined}

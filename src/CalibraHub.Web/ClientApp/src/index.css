@@ -4209,6 +4209,33 @@ body.app-theme-dark .cst-root {
 .cst-th--menu { z-index: 4; left: 0; text-align: center; }
 .cst-th--pinned { z-index: 4; }
 .cst-th__inner { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; }
+
+/* Sütun genişliği — başlığın sağ kenarından sürükleme tutamağı (2026-08-31).
+   .cst-th zaten position:sticky olduğu için konumlandırma bağlamı var; ek bir
+   position tanımı GEREKMEZ (eklemek sticky davranışını bozardı).
+   Tutamak 7px geniş ama çizgi 1px: hedef alan görünenden büyük olmalı, yoksa
+   kenarı yakalamak için piksel avı gerekir. */
+.cst-th__resizer {
+  position: absolute;
+  top: 0; right: -3px; bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+  user-select: none;
+  z-index: 5;
+}
+.cst-th__resizer::after {
+  content: '';
+  position: absolute;
+  top: 20%; bottom: 20%; left: 3px;
+  width: 1px;
+  background: transparent;
+  transition: background .12s;
+}
+.cst-th__resizer:hover::after,
+.cst-th__resizer.is-active::after { background: var(--accent, #6366f1); }
+/* Sürükleme sırasında tüm tabloda imleç sabit kalsın (hücre üstünde text
+   imlecine dönmesin) — gövdeye sınıf eklenir. */
+body.cst-resizing, body.cst-resizing * { cursor: col-resize !important; user-select: none !important; }
 .cst-th__icon { flex-shrink: 0; opacity: 0.75; }
 .cst-th__label { overflow: hidden; text-overflow: ellipsis; }
 
