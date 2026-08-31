@@ -405,6 +405,12 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
         )}
       </div>
 
+      {/* Arşiv görünümü (stat kartları + filtreler + tablo + sayfalama) — yalnız "Loglar"
+          sekmesinde. "Canlı İzleme" ayrı bir görünüm (LiveTrace), aşağıda her zaman mount
+          edilir ama mode !== 'trace' iken CSS ile gizlenir — sekme geçişinde izleme
+          oturumu (poll/geri sayım) kesilmesin diye. */}
+      {mode === 'logs' && (
+      <>
       {/* Stat kartları — tıklanınca liste ilgili işlem türüne filtrelenir (yalnızca tam izleme modu) */}
       {!locked && (
       <div className="al-stats">
@@ -645,6 +651,15 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
           </button>
         </div>
       </div>
+      </>
+      )}
+
+      {/* Canlı İzleme — her zaman mount, yalnız görünürlüğü mode ile değişir (bkz. yukarıdaki not) */}
+      {!locked && (
+        <div className="al-trace-view" style={{ display: mode === 'trace' ? 'flex' : 'none' }}>
+          <LiveTrace apiBase={apiBase} />
+        </div>
+      )}
     </div>
   )
 }
