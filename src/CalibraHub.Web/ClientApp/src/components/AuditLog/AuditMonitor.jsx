@@ -2,10 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ScrollText, Search, RefreshCw, Download, X, ChevronDown, ChevronRight,
   ChevronLeft, PlusCircle, PencilLine, Trash2, LogIn, LogOut, ShieldAlert,
-  Users, Activity, Sparkles, ServerCrash,
+  Users, Activity, Sparkles, ServerCrash, Radio,
 } from 'lucide-react'
 import './auditLog.css'
 import { ACTION_META, formatTs, changePreview } from './auditShared'
+import LiveTrace from './LiveTrace'
 
 const RANGE_PRESETS = [
   { id: 'today', label: 'Bugün', days: 0 },
@@ -72,6 +73,11 @@ function readLockedParams() {
  */
 export default function AuditMonitor({ apiBase = '/AuditLog' }) {
   const locked = useMemo(readLockedParams, [])
+
+  // 'logs' = mevcut arşiv/rapor görünümü, 'trace' = SQL Profiler benzeri canlı izleme
+  // (bkz. LiveTrace.jsx). Kayıt-kilitli modda (deep-link) canlı izleme anlamsız — sekme
+  // gösterilmez, mode her zaman 'logs' kalır.
+  const [mode, setMode] = useState('logs')
 
   const [preset, setPreset] = useState('7d')
   const [range, setRange] = useState(() => presetRange('7d'))
@@ -349,6 +355,22 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
               : (data.total.toLocaleString('tr-TR') + ' kayıt · ' + range.from.split('-').reverse().join('.') + ' – ' + range.to.split('-').reverse().join('.'))}
           </div>
         </div>
+        {/* Kayıt-kilitli deep-link modunda canlı izleme sekmesi anlamsız — gizli. */}
+        {!locked && (
+          <div className="al-mode-tabs">
+            <button type="button" className={'al-mode-tab' + (mode === 'logs' ? ' is-active' : '')}
+              onClick={() => setMode('logs')}>
+              <ScrollText size={13} /> Loglar
+            </button>
+            <button type="button" className={'al-mode-tab' + (mode === 'trace' ? ' is-active' : '')}
+              onClick={() => setMode('trace')}>
+              <Radio size={13} /> Canlı İzleme
+            </button>
+          </div>
+        )}
+        {/* Arama/Yenile/Excel/Oto-Yenile arşiv listesine özgü — canlı izleme sekmesinde
+            kendi araç çubuğu var (LiveTrace.jsx), bu şerit orada gizlenir. */}
+        {mode === 'logs' && (
         <div className="al-header-actions">
           {locked && (
             <a className="al-btn al-back-btn" href="/AuditLog" title="Tüm işlem loglarına dön">
@@ -365,9 +387,9 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
             {text ? <X size={13} style={{ cursor: 'pointer' }} onClick={() => setText('')} /> : null}
           </div>
           {/* Standart araclar ONCE, ekrana OZEL olanlar SONRA (C-Grid serit kurali,
-              CLAUDE.md). "Canlı" bu ekrana ozgu bir kip anahtaridir; arama ile Yenile
-              arasinda dururken standart ikili (Yenile → Excel) her ekranda ayni yerde
-              olmaktan cikiyordu. */}
+              CLAUDE.md). "Oto Yenile" bu ekrana ozgu bir kip anahtaridir (15sn'de bir
+              arşiv listesini tazeler — "Canlı İzleme" sekmesindeki SQL/istek akışıyla
+              KARIŞTIRILMASIN diye adı değiştirildi, 2026-08-31). */}
           <button type="button" className="al-btn" onClick={() => (locked ? loadLocked(false) : load(false))} disabled={viewLoading} title="Yenile">
             <RefreshCw size={14} className={viewLoading ? 'al-spin' : ''} />
           </button>
@@ -377,9 +399,10 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
           <button type="button" className={'al-btn' + (autoRefresh ? ' is-on' : '')}
             title="15 saniyede bir otomatik yenile"
             onClick={() => setAutoRefresh(v => !v)}>
-            <Activity size={14} /> Canlı
+            <Activity size={14} /> Oto Yenile
           </button>
         </div>
+        )}
       </div>
 
       {/* Stat kartları — tıklanınca liste ilgili işlem türüne filtrelenir (yalnızca tam izleme modu) */}
