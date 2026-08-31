@@ -657,103 +657,16 @@
         applyInvZoom();
     }, { passive: false });
 
-    // -------- PUSH ACTIONS TO GLOBAL SPA WORKSPACE TOOLBAR --------
-    var isWorkspace = window !== window.top;
-    var activeTab = HAS_XML ? 'resmi' : 'gorsel';
-    
-    function triggerToolbarSync() {
-        if (isWorkspace && window.parent && typeof window.parent.calibraGetWorkspaceToolbarContext !== "undefined") {
-            // This forces the Site.js in root parent to re-evaluate our Proxy Object
-            // Actually site.js uses a private function, let's just dispatch the custom event if it exists or 
-            // call a known function if exposed. However, we can simply rely on the parent clicking.
-            // There's no exposed sync right now on parent window, so we'll just let manual tab change sync wait.
-        }
-    }
+    /* NOT (2026-08-31): Araç şeritlerini gizleyip eylemleri workspace üst çubuğuna
+       devreden köprü KALDIRILDI.
 
-    if (isWorkspace) {
-        // Hedefi SPA içinde yüklediğimizden "Gösterişsiz" olmak için menüleri görünmez yapıyoruz. 
-        var actDiv = document.getElementById("docViewerActions");
-        if (actDiv) actDiv.style.display = "none";
-        
-        var zoomDiv = document.getElementById("zoomToolbar");
-        if (zoomDiv) zoomDiv.style.display = "none";
+       Neden: üst çerçeve (site.js renderActionProxy) bu sayfanın
+       calibraGetWorkspaceToolbarContext fonksiyonunu sekme etkinleşirken BİR KEZ okur.
+       Fonksiyon iframe script'i çalışmadan önce okunursa bağlam null döner, çubuk gizli
+       kalır ve bir daha yenilenmez — sonuç: workspace içinde yakınlaştırma/sığdırma/
+       yazdır düğmeleri HİÇ görünmüyordu (kullanıcı bildirdi). Şeritler artık sayfanın
+       kendi içinde durur; iki modda da aynı arayüz, yarış durumu yok. */
 
-        var sheetBar = document.querySelector(".inv-sheet-toolbar");
-        if (sheetBar) sheetBar.style.display = "none";
-        
-        // Tab değişimini yakala (Hangi eylemlerin gösterileceğine karar ver)
-        document.querySelectorAll('.doc-viewer__tab').forEach(function(b) {
-            b.addEventListener('click', function() {
-                activeTab = b.getAttribute('data-tab');
-                // Tab değiştiğinde babaya Toolbar'ını yenilemesi için sinyal yolla (Sadece Parent içindeyse çalışır)
-                if(window.parent && window.parent.document.querySelector('.workspace-action-bar')) {
-                   // Because parent's requestWorkspaceToolbarSync is private in an IIFE, 
-                   // we just assume the user will see it update when they tab or click.
-                   // Actually creating a resize event on the body forces parent polling in some SPA logic!
-                   document.body.dispatchEvent(new Event("resize"));
-                }
-            });
-        });
-
-        // 1. Köprü Oluşturma Fonksiyonu: Üst ebeveyn bu iframe içinden bu fonksiyonu çağırır
-        window.calibraGetWorkspaceToolbarContext = function() {
-            var actions = [];
-
-            // XML yoksa XML indir/kopyala eylemleri de yoktur (tiklaninca hicbir sey yapmazdi).
-            if (HAS_XML) {
-            actions.push({ 
-                id: "downloadXml", 
-                className: "btn btn-outline-primary btn-sm", 
-                html: '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right: 4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> XML İndir',
-                title: "XML olarak İndir" 
-            });
-            actions.push({ 
-                id: "copyXml", 
-                className: "btn btn-outline-secondary btn-sm", 
-                html: '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right: 4px;"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg> Kopyala', 
-                title: "XML\'i panoya kopyala" 
-            });
-            }
-
-            if (activeTab === 'gorsel' && document.getElementById('btnPrintInvoice')) {
-                actions.push({ id: "invZoomOut", className: "btn btn-light btn-sm ms-3", html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>', title: "Uzaklaş" });
-                actions.push({ id: "invZoomLabelProxy", className: "btn btn-link btn-sm text-dark text-decoration-none disabled px-1", text: Math.round(invZoom * 100) + '%' });
-                actions.push({ id: "invZoomIn", className: "btn btn-light btn-sm", html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>', title: "Yakınlaş" });
-                actions.push({ id: "invFitWidth", className: "btn btn-light btn-sm", text: "Genişliğe Sığdır" });
-                actions.push({
-                    id: "printInvoice",
-                    className: "btn btn-outline-secondary btn-sm",
-                    html: '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right: 4px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Yazdır',
-                    title: "Fatura görünümünü yazdır"
-                });
-            }
-
-            // Resimaktif olduğunda gösterilecek ekstra Zoom kontrolleri!
-            if (activeTab === 'resmi') {
-                actions.push({ id: "zoomOut", className: "btn btn-light btn-sm ms-3", html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>', title: "Uzaklaş" });
-                actions.push({ id: "zoomLabelProxy", className: "btn btn-link btn-sm text-dark text-decoration-none disabled px-1", text: Math.round(currentZoom * 100) + '%' });
-                actions.push({ id: "zoomIn", className: "btn btn-light btn-sm", html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>', title: "Yakınlaş" });
-                actions.push({ id: "fitWidth", className: "btn btn-light btn-sm", text: "Genişliğe Sığdır" });
-            }
-
-            return { actions: actions };
-        };
-
-        // 2. Köprü Tetikleme Fonksiyonu: Ana Çubuktan bir şeye basıldığında Buraya Döner!
-        window.calibraInvokeWorkspaceToolbarAction = function(actionId) {
-            var el = null;
-            if (actionId === "copyXml") el = document.getElementById("btnCopyXml");
-            else if (actionId === "downloadXml") el = document.getElementById("btnDownloadXml");
-            else if (actionId === "zoomOut") el = document.getElementById("btnZoomOut");
-            else if (actionId === "zoomIn") el = document.getElementById("btnZoomIn");
-            else if (actionId === "fitWidth") el = document.getElementById("btnFitWidth");
-            else if (actionId === "printInvoice") el = document.getElementById("btnPrintInvoice");
-            else if (actionId === "invZoomOut") el = document.getElementById("btnInvZoomOut");
-            else if (actionId === "invZoomIn") el = document.getElementById("btnInvZoomIn");
-            else if (actionId === "invFitWidth") el = document.getElementById("btnInvFitWidth");
-            if (el) el.click();
-        };
-    }
 })();
 </script>
 }
