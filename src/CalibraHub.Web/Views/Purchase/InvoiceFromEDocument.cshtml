@@ -7,6 +7,16 @@
     var dataJson = JsonSerializer.Serialize(Model, jsonOpts);
 }
 
+@*  Gelen e-belge → alış faturası eşleştirme ekranı.
+
+    MODEL (2026-08-31 kullanıcı kararı): SOLDAN kalem seçilir, SAĞDA yalnız O KALEMİN
+    eşleşmeleri düzenlenir. Bir e-belge kalemi BİRDEN ÇOK hedefe bölünebilir:
+      • Doğrudan modda birden çok stok kartına,
+      • Sipariş/İrsaliye modunda birden çok sipariş/irsaliye satırına.
+    Her hedefin miktarı ayrı ayrı girilebilir (kısmi eşleşme); toplam ile e-belge
+    kalemi arasındaki fark anında gösterilir.
+*@
+
 @section Styles {
 <style>
     .em-root { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 12px; padding: 12px 16px; }
@@ -42,6 +52,10 @@
         display: flex; align-items: center; justify-content: space-between; gap: 8px;
     }
     .em-scroll { flex: 1 1 auto; overflow: auto; }
+    .em-pane-foot {
+        flex: 0 0 auto; padding: 8px 12px; border-top: 1px solid var(--app-border, #e2e8f0);
+        display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: .8rem;
+    }
 
     table.em-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
     .em-table th {
@@ -52,12 +66,19 @@
     }
     .em-table td { padding: 6px 8px; border-bottom: 1px solid var(--app-border-soft, #eef1f4); vertical-align: middle; }
     .em-table td.num, .em-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
-    .em-table tr.is-selected { background: rgba(99,102,241,.08); }
-    .em-table tr.is-target { outline: 2px solid rgba(99,102,241,.35); outline-offset: -2px; }
+    .em-table tbody tr.is-pick { cursor: pointer; }
+    .em-table tbody tr.is-selected > td { background: rgba(99,102,241,.10); }
+    .em-table tbody tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 #6366f1; }
 
     .em-diff-ok   { color: #059669; font-weight: 600; }
     .em-diff-warn { color: #dc2626; font-weight: 600; }
     .em-muted { color: var(--bs-secondary-color, #6c757d); }
+    .em-qty { width: 6.5rem; text-align: right; }
+    .em-badge {
+        display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 10px;
+        font-size: .68rem; font-weight: 600; background: rgba(245,158,11,.15); color: #b45309;
+    }
+    .em-badge--ok { background: rgba(16,185,129,.15); color: #059669; }
 
     .em-foot {
         display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
@@ -70,20 +91,9 @@
         background: rgba(220,38,38,.08); color: #b91c1c; border: 1px solid rgba(220,38,38,.25);
     }
     .em-alert--info { background: rgba(99,102,241,.08); color: #4338ca; border-color: rgba(99,102,241,.25); }
+    .em-empty { padding: 22px; text-align: center; color: var(--bs-secondary-color, #6c757d); font-size: .82rem; }
 
-    /* Stok seçim modalı — sonuçlar satır satır listelenir (eski satır-içi bağlantı
-       listesi okunaksızdı; kullanıcı "bu şekilde kötü görünüyor" dedi). */
-    .em-pick { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-    .em-pick:hover .em-pick-value { border-color: #6366f1; }
-    .em-pick:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; border-radius: 8px; }
-    .em-pick-value {
-        flex: 1 1 auto; min-width: 0; padding: 4px 8px; border-radius: 6px;
-        border: 1px solid var(--app-border, #e2e8f0); font-size: .8rem;
-        background: var(--app-surface-2, #f8fafc); color: var(--bs-body-color, #0f172a);
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .em-pick-value.is-empty { color: #b91c1c; border-color: rgba(220,38,38,.35); background: rgba(220,38,38,.06); }
-
+    /* Stok seçim modalı — sonuçlar satır satır listelenir. */
     .em-modal-backdrop {
         position: fixed; inset: 0; z-index: 3000; display: flex; align-items: center; justify-content: center;
         background: rgba(15,23,42,.55); backdrop-filter: blur(2px);
@@ -104,24 +114,23 @@
     .em-modal-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
     .em-modal-foot { padding: 10px 14px; border-top: 1px solid var(--app-border, #e2e8f0); display: flex; justify-content: flex-end; gap: 8px; }
     .em-modal .em-table tbody tr { cursor: pointer; }
-    .em-modal .em-table tbody tr:hover { background: rgba(99,102,241,.08); }
+    .em-modal .em-table tbody tr:hover > td { background: rgba(99,102,241,.10); }
 
-    .em-badge {
-        display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 10px;
-        font-size: .68rem; font-weight: 600; background: rgba(245,158,11,.15); color: #b45309;
-    }
-
-    body.app-theme-dark .em-pick-value { background: #0f172a; border-color: rgba(255,255,255,.1); color: rgba(255,255,255,.85); }
-    body.app-theme-dark .em-modal { background: #111827; border-color: rgba(255,255,255,.1); color: rgba(255,255,255,.9); }
-    body.app-theme-dark .em-modal-head, body.app-theme-dark .em-modal-foot { border-color: rgba(255,255,255,.08); }
-
+    /* ── Koyu tema ── */
     body.app-theme-dark .em-head,
     body.app-theme-dark .em-pane,
-    body.app-theme-dark .em-foot { background: #111827; border-color: rgba(255,255,255,.08); }
-    body.app-theme-dark .em-table th { background: #0f172a; border-bottom-color: rgba(255,255,255,.08); color: rgba(255,255,255,.5); }
-    body.app-theme-dark .em-table td { border-bottom-color: rgba(255,255,255,.05); }
+    body.app-theme-dark .em-foot,
+    body.app-theme-dark .em-modal { background: #111827; border-color: rgba(255,255,255,.10); color: rgba(255,255,255,.9); }
+    body.app-theme-dark .em-table th { background: #0f172a; border-bottom-color: rgba(255,255,255,.10); color: rgba(255,255,255,.55); }
+    body.app-theme-dark .em-table td { border-bottom-color: rgba(255,255,255,.06); }
+    body.app-theme-dark .em-pane-title,
+    body.app-theme-dark .em-pane-foot,
+    body.app-theme-dark .em-modal-head,
+    body.app-theme-dark .em-modal-foot { border-color: rgba(255,255,255,.08); }
     body.app-theme-dark .em-mode { background: #111827; border-color: rgba(255,255,255,.1); color: rgba(255,255,255,.8); }
     body.app-theme-dark .em-mode.is-active { background: #6366f1; border-color: #6366f1; color: #fff; }
+    body.app-theme-dark .em-head-value { color: rgba(255,255,255,.9); }
+    body.app-theme-dark .em-muted, body.app-theme-dark .em-empty { color: rgba(255,255,255,.55); }
 </style>
 }
 
@@ -129,7 +138,7 @@
     <div class="em-head">
         <div class="em-head-item">
             <span class="em-head-label">E-BELGE</span>
-            <span class="em-head-value" id="emDocNo">@Model.DocumentNumber</span>
+            <span class="em-head-value">@Model.DocumentNumber</span>
         </div>
         <div class="em-head-item">
             <span class="em-head-label">TARİH</span>
@@ -137,7 +146,7 @@
         </div>
         <div class="em-head-item">
             <span class="em-head-label">CARİ</span>
-            <span class="em-head-value" id="emContact">
+            <span class="em-head-value">
                 @if (!string.IsNullOrWhiteSpace(Model.ContactCode))
                 {
                     <span class="em-muted" style="font-family:ui-monospace,Menlo,Consolas,monospace">@Model.ContactCode</span>
@@ -160,7 +169,7 @@
         <div class="em-pane">
             <div class="em-pane-title">
                 <span>E-BELGE KALEMLERİ</span>
-                <span class="em-muted" id="emELineInfo"></span>
+                <span class="em-muted" id="emLeftInfo"></span>
             </div>
             <div class="em-scroll">
                 <table class="em-table" id="emELines">
@@ -180,7 +189,7 @@
             </div>
         </div>
 
-        <div class="em-pane" id="emRightPane">
+        <div class="em-pane">
             <div class="em-pane-title">
                 <span id="emRightTitle">EŞLEŞTİRME</span>
                 <span class="em-muted" id="emRightInfo"></span>
@@ -190,7 +199,9 @@
                     <thead id="emRightHead"></thead>
                     <tbody></tbody>
                 </table>
+                <div id="emRightEmpty"></div>
             </div>
+            <div class="em-pane-foot" id="emRightFoot"></div>
         </div>
     </div>
 
@@ -213,7 +224,7 @@
     </div>
 </div>
 
-@* Stok seçim modalı — sayfa yüklenirken gizli durur, kalem seçiminde açılır. *@
+@* Stok seçim modalı — doğrudan modda "Stok Ekle" ile açılır. *@
 <div class="em-modal-backdrop" id="emPickBackdrop" style="display:none;">
     <div class="em-modal">
         <div class="em-modal-head">
@@ -226,12 +237,7 @@
         </div>
         <div class="em-modal-body">
             <table class="em-table" id="emPickTable">
-                <thead>
-                    <tr>
-                        <th style="width:9rem;">Kod</th>
-                        <th>Ad</th>
-                    </tr>
-                </thead>
+                <thead><tr><th style="width:9rem;">Kod</th><th>Ad</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
@@ -245,7 +251,11 @@
 <script>
 (function () {
     var DATA = @Html.Raw(dataJson);
-    var state = { mode: DATA.mode || 'direct', assign: {}, itemPick: {}, locations: [] };
+
+    /* state.direct[eLineNo] = [ { itemId, code, name, unitId, qty } ]   → doğrudan mod
+       state.src[sourceLineId] = { eNo, qty }                            → sipariş/irsaliye
+       Bir e-belge kalemi birden çok hedefe bölünebilir; her hedefin miktarı ayrıdır. */
+    var state = { mode: DATA.mode || 'direct', selected: null, direct: {}, src: {}, diffsAccepted: false };
 
     function token() {
         var el = document.querySelector('input[name="__RequestVerificationToken"]');
@@ -255,153 +265,251 @@
         if (n === null || n === undefined || isNaN(n)) return '-';
         return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
-    // Birim etiketi: e-belgedeki uluslararası kod (C62) bizdeki birime çevrilmişse YALNIZ
-    // yerel kod yazılır — ham kodu parantez içinde göstermek ekranı kirletiyordu (kullanıcı
-    // bildirdi). Karşılığı YOKSA ham kod kalır: yanlış birim uydurmaktansa dürüst davranır.
-    function unitLabel(l) {
-        return l.unitLocalCode || l.unitCode || '';
-    }
-
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
     function notice(msg, kind) {
-        var box = document.getElementById('emNotice');
-        box.innerHTML = msg ? '<div class="em-alert' + (kind === 'info' ? ' em-alert--info' : '') + '">' + msg + '</div>' : '';
+        document.getElementById('emNotice').innerHTML =
+            msg ? '<div class="em-alert' + (kind === 'info' ? ' em-alert--info' : '') + '">' + msg + '</div>' : '';
     }
+    // Birim: e-belgedeki uluslararası kodun (C62) bizdeki karşılığı varsa o yazılır.
+    function unitLabel(l) { return l.unitLocalCode || l.unitCode || ''; }
 
-    // ── E-belge kalemleri + eşleşme toplamları ───────────────────────────
-    function eLineTotals(lineNo) {
-        var qty = 0, amount = 0;
+    function eLine(no) {
+        return DATA.eDocumentLines.filter(function (x) { return x.lineNumber === no; })[0] || null;
+    }
+    function eAmount(l) { return l.lineAmount != null ? l.lineAmount : (l.quantity * l.unitPrice); }
+
+    /** Bir e-belge kalemine eşleşen toplam miktar/tutar. */
+    function matched(no) {
+        var l = eLine(no); if (!l) return { qty: 0, amount: 0, rows: 0 };
+        var qty = 0, rows = 0;
         if (state.mode === 'direct') {
-            var el = DATA.eDocumentLines.find(function (x) { return x.lineNumber === lineNo; });
-            if (el) { qty = el.quantity; amount = el.lineAmount != null ? el.lineAmount : el.quantity * el.unitPrice; }
-            return { qty: qty, amount: amount };
+            (state.direct[no] || []).forEach(function (r) { qty += Number(r.qty) || 0; rows++; });
+        } else {
+            Object.keys(state.src).forEach(function (id) {
+                var a = state.src[id];
+                if (a.eNo !== no) return;
+                qty += Number(a.qty) || 0; rows++;
+            });
         }
-        DATA.sourceLines.forEach(function (s) {
-            if (state.assign[s.lineId] !== lineNo) return;
-            var q = Number(document.getElementById('q_' + s.lineId)?.value || s.remainingQuantity);
-            var el = DATA.eDocumentLines.find(function (x) { return x.lineNumber === lineNo; });
-            qty += q;
-            amount += q * (el ? el.unitPrice : s.unitPrice);
-        });
-        return { qty: qty, amount: amount };
+        return { qty: qty, amount: qty * l.unitPrice, rows: rows };
     }
 
-    function renderELines() {
+    // ── SOL: e-belge kalemleri ───────────────────────────────────────────
+    function renderLeft() {
         var tb = document.querySelector('#emELines tbody');
         tb.innerHTML = '';
+        var eksik = 0;
+
         DATA.eDocumentLines.forEach(function (l) {
-            var tot = eLineTotals(l.lineNumber);
-            var eAmount = l.lineAmount != null ? l.lineAmount : l.quantity * l.unitPrice;
-            var qDiff = tot.qty - l.quantity;
-            var aDiff = tot.amount - eAmount;
-            // Kuruş farkı (≤0,01) sessiz geçilir; üstü kırmızı gösterilir (kullanıcı kuralı).
-            // Fark yalnız EŞLEŞTİRME YAPILMIŞ kalemde anlamlıdır; hiç atama yokken kırmızı
-            // fark göstermek ilk açılışta yanlış alarm veriyordu.
-            var matched = tot.qty !== 0;
-            var bad = state.mode !== 'direct' && matched &&
-                      (Math.abs(qDiff) > 0.0001 || Math.abs(aDiff) > 0.01);
+            var t = matched(l.lineNumber);
+            var qDiff = t.qty - l.quantity;
+            var aDiff = t.amount - eAmount(l);
+            var hasRows = t.rows > 0;
+            // Fark yalnız eşleştirme yapılmış kalemde anlamlıdır; kuruş farkı sessiz.
+            var bad = hasRows && (Math.abs(qDiff) > 0.0001 || Math.abs(aDiff) > 0.01);
+            if (!hasRows) eksik++;
+
             var tr = document.createElement('tr');
-            tr.dataset.line = l.lineNumber;
+            tr.className = 'is-pick' + (state.selected === l.lineNumber ? ' is-selected' : '');
             tr.innerHTML =
                 '<td>' + l.lineNumber + '</td>' +
-                '<td>' + (l.itemName || l.itemCode || '-') +
-                    (l.itemCode ? ' <span class="em-muted">(' + l.itemCode + ')</span>' : '') + '</td>' +
+                '<td>' + esc(l.itemName || l.itemCode || '-') +
+                    (l.itemCode ? ' <span class="em-muted">(' + esc(l.itemCode) + ')</span>' : '') +
+                    (hasRows ? '<span class="em-badge' + (bad ? '' : ' em-badge--ok') + '">' +
+                        t.rows + ' eşleşme</span>' : '') + '</td>' +
                 '<td class="num">' + fmt(l.quantity) + ' <span class="em-muted">' + unitLabel(l) + '</span></td>' +
                 '<td class="num">' + fmt(l.unitPrice) + '</td>' +
-                '<td class="num">' + fmt(eAmount) + '</td>' +
-                '<td class="num">' + (state.mode === 'direct' ? '—' : fmt(tot.qty)) + '</td>' +
+                '<td class="num">' + fmt(eAmount(l)) + '</td>' +
+                '<td class="num">' + (hasRows ? fmt(t.qty) : '—') + '</td>' +
                 '<td class="num ' + (bad ? 'em-diff-warn' : 'em-diff-ok') + '">' +
-                    (state.mode === 'direct' || !matched ? '—' : (fmt(qDiff) + ' / ' + fmt(aDiff))) + '</td>';
-            tr.addEventListener('click', function () { selectELine(l.lineNumber); });
+                    (hasRows ? fmt(qDiff) : '—') + '</td>';
+            tr.addEventListener('click', function () { selectLine(l.lineNumber); });
             tb.appendChild(tr);
         });
 
-        // Doğrudan modda stok seçimi SAĞ panelde yapılır (kullanıcı isteği): sol taraf
-        // yalnız e-belgenin kendi verisini gösterir, karışmaz.
-        if (state.mode === 'direct') renderRight();
-        highlightTarget();
-        renderTotals();
-    }
-
-    // ── Doğrudan mod: kalem → stok kartı seçimi (MODAL) ──────────────────
-    function renderDirectMatching() {
-        var head = document.getElementById('emRightHead');
-        var tb = document.querySelector('#emRight tbody');
-        document.getElementById('emRightTitle').textContent = 'STOK EŞLEŞTİRME';
-        head.innerHTML =
-            '<tr><th style="width:2.2rem;">#</th><th>E-belge kalemi</th>' +
-            '<th style="width:15rem;">Stok kartı</th>' +
-            '<th class="num" style="width:5.5rem;">Miktar</th></tr>';
-        tb.innerHTML = '';
-
-        DATA.eDocumentLines.forEach(function (l) {
-            // Öneri varsa ilk açılışta seçili sayılır (kullanıcı değiştirebilir).
-            if (!state.itemPick[l.lineNumber] && l.suggestedItemId) {
-                state.itemPick[l.lineNumber] = {
-                    id: l.suggestedItemId, code: l.suggestedItemCode, name: l.suggestedItemName
-                };
-            }
-            var picked = state.itemPick[l.lineNumber];
-            var label = picked ? (picked.code + ' — ' + picked.name) : 'Stok kartı seçilmedi';
-
-            var tr = document.createElement('tr');
-            tr.innerHTML =
-                '<td>' + l.lineNumber + '</td>' +
-                '<td>' + (l.itemName || l.itemCode || '-') +
-                    (l.itemCode ? '<br><span class="em-muted">' + l.itemCode + '</span>' : '') + '</td>' +
-                // Hem kutucuk hem düğme tıklanabilir; seçilmemişken düğme BİRİNCİL renkte
-                // olur ki ne yapılacağı bakışta anlaşılsın.
-                '<td><div class="em-pick" data-pick="' + l.lineNumber + '" role="button" tabindex="0">' +
-                    '<span class="em-pick-value' + (picked ? '' : ' is-empty') + '" title="' +
-                        String(label).replace(/"/g, '&quot;') + '">' + label + '</span>' +
-                    '<button type="button" class="btn btn-sm ' +
-                        (picked ? 'btn-outline-secondary' : 'btn-primary') + '">' +
-                        (picked ? 'Değiştir' : 'Stok Seç') + '</button>' +
-                '</div></td>' +
-                '<td class="num">' + fmt(l.quantity) + ' <span class="em-muted">' + unitLabel(l) + '</span></td>';
-            tb.appendChild(tr);
-            var pickCell = tr.querySelector('[data-pick]');
-            pickCell.addEventListener('click', function (e) { e.stopPropagation(); openPicker(l); });
-            pickCell.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(l); }
-            });
-        });
-
-        var eksik = DATA.eDocumentLines.filter(function (l) { return !state.itemPick[l.lineNumber]; }).length;
-        document.getElementById('emRightInfo').textContent =
+        document.getElementById('emLeftInfo').textContent =
             eksik ? (eksik + ' kalem eşleştirilmedi') : 'tüm kalemler eşleşti';
     }
 
+    function selectLine(no) {
+        state.selected = no;
+        renderLeft();
+        renderRight();
+    }
+
+    // ── SAĞ: seçili kalemin eşleşmeleri ──────────────────────────────────
+    function renderRight() {
+        var head = document.getElementById('emRightHead');
+        var tb = document.querySelector('#emRight tbody');
+        var empty = document.getElementById('emRightEmpty');
+        var foot = document.getElementById('emRightFoot');
+        var title = document.getElementById('emRightTitle');
+        var info = document.getElementById('emRightInfo');
+        head.innerHTML = ''; tb.innerHTML = ''; empty.innerHTML = ''; foot.innerHTML = '';
+
+        var l = state.selected ? eLine(state.selected) : null;
+        if (!l) {
+            title.textContent = 'EŞLEŞTİRME';
+            info.textContent = '';
+            empty.innerHTML = '<div class="em-empty">Soldan bir e-belge kalemi seçin.</div>';
+            return;
+        }
+
+        title.textContent = 'EŞLEŞTİRME — #' + l.lineNumber + '  ' + (l.itemName || l.itemCode || '');
+        var t = matched(l.lineNumber);
+        var kalan = l.quantity - t.qty;
+        info.innerHTML = 'Kalem miktarı ' + fmt(l.quantity) + ' · eşleşen ' + fmt(t.qty) +
+            ' · <span class="' + (Math.abs(kalan) < 0.0001 ? 'em-diff-ok' : 'em-diff-warn') + '">kalan ' + fmt(kalan) + '</span>';
+
+        if (state.mode === 'direct') { renderDirectRows(l, kalan, head, tb, empty, foot); }
+        else { renderSourceRows(l, kalan, head, tb, empty, foot); }
+    }
+
+    /** Doğrudan mod: seçili kalem birden çok stok kartına bölünebilir. */
+    function renderDirectRows(l, kalan, head, tb, empty, foot) {
+        var rows = state.direct[l.lineNumber] || [];
+        head.innerHTML = '<tr><th>Stok kartı</th><th class="num" style="width:7rem;">Miktar</th>' +
+                         '<th class="num" style="width:8rem;">Tutar</th><th style="width:3rem;"></th></tr>';
+
+        if (rows.length === 0) {
+            empty.innerHTML = '<div class="em-empty">Bu kalem için stok kartı seçilmedi.<br>' +
+                              'Aşağıdaki <b>Stok Ekle</b> ile bir veya birden çok stok kartına bölerek eşleştirin.</div>';
+        }
+
+        rows.forEach(function (r, idx) {
+            var tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td><b>' + esc(r.code) + '</b> <span class="em-muted">' + esc(r.name) + '</span></td>' +
+                '<td class="num"><input type="number" step="0.0001" min="0" class="form-control form-control-sm em-qty" value="' + r.qty + '"></td>' +
+                '<td class="num">' + fmt((Number(r.qty) || 0) * l.unitPrice) + '</td>' +
+                '<td class="num"><button type="button" class="btn btn-sm btn-link text-danger p-0">Kaldır</button></td>';
+            tb.appendChild(tr);
+
+            tr.querySelector('input').addEventListener('input', function (e) {
+                r.qty = Number(e.target.value) || 0;
+                renderLeft(); renderTotals();
+                // tutar hücresini yerinde güncelle (tam yeniden çizim odağı kaybettirirdi)
+                tr.children[2].textContent = fmt(r.qty * l.unitPrice);
+                document.getElementById('emRightInfo').innerHTML = infoText(l);
+            });
+            tr.querySelector('button').addEventListener('click', function () {
+                rows.splice(idx, 1);
+                renderLeft(); renderRight(); renderTotals();
+            });
+        });
+
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn btn-sm btn-primary';
+        b.textContent = 'Stok Ekle';
+        b.addEventListener('click', function () { openPicker(l); });
+        foot.appendChild(b);
+
+        var hint = document.createElement('span');
+        hint.className = 'em-muted';
+        hint.textContent = 'Aynı kalemi birden çok stok kartına bölebilirsiniz; miktarları elle düzenleyin.';
+        foot.appendChild(hint);
+    }
+
+    function infoText(l) {
+        var t = matched(l.lineNumber);
+        var kalan = l.quantity - t.qty;
+        return 'Kalem miktarı ' + fmt(l.quantity) + ' · eşleşen ' + fmt(t.qty) +
+            ' · <span class="' + (Math.abs(kalan) < 0.0001 ? 'em-diff-ok' : 'em-diff-warn') + '">kalan ' + fmt(kalan) + '</span>';
+    }
+
+    /** Sipariş/irsaliye modu: seçili kalem birden çok kaynak satırla eşleşebilir. */
+    function renderSourceRows(l, kalan, head, tb, empty, foot) {
+        head.innerHTML =
+            '<tr><th style="width:6.5rem;">Belge</th><th>Ürün</th>' +
+            '<th class="num" style="width:5rem;">Kalan</th>' +
+            '<th class="num" style="width:7rem;">Faturalanacak</th>' +
+            '<th style="width:5rem;"></th></tr>';
+
+        if (!DATA.sourceLines.length) {
+            empty.innerHTML = '<div class="em-empty">Bu cariye ait açık ' +
+                (state.mode === 'order' ? 'sipariş' : 'irsaliye') + ' satırı bulunamadı.</div>';
+            return;
+        }
+
+        DATA.sourceLines.forEach(function (s) {
+            var a = state.src[s.lineId];
+            var mine = a && a.eNo === l.lineNumber;
+            var baskaKalemde = a && a.eNo !== l.lineNumber;
+
+            var tr = document.createElement('tr');
+            if (mine) tr.className = 'is-selected';
+            tr.innerHTML =
+                '<td><span class="em-muted">' + esc(s.documentNumber) + '</span><br>' +
+                    '<span class="em-muted">#' + s.lineNo + '</span></td>' +
+                '<td>' + esc(s.itemName || '-') +
+                    (s.itemCode ? ' <span class="em-muted">(' + esc(s.itemCode) + ')</span>' : '') +
+                    (baskaKalemde ? '<span class="em-badge">#' + a.eNo + ' kalemine bağlı</span>' : '') + '</td>' +
+                '<td class="num">' + fmt(s.remainingQuantity) + ' <span class="em-muted">' + esc(s.unitCode || '') + '</span></td>' +
+                '<td class="num">' + (mine
+                    ? '<input type="number" step="0.0001" min="0" max="' + s.remainingQuantity +
+                      '" class="form-control form-control-sm em-qty" value="' + a.qty + '">'
+                    : '<span class="em-muted">—</span>') + '</td>' +
+                '<td class="num">' + (mine
+                    ? '<button type="button" class="btn btn-sm btn-link text-danger p-0">Kaldır</button>'
+                    : (baskaKalemde ? '' : '<button type="button" class="btn btn-sm btn-outline-primary">Ekle</button>')) + '</td>';
+            tb.appendChild(tr);
+
+            var btn = tr.querySelector('button');
+            if (mine) {
+                tr.querySelector('input').addEventListener('input', function (e) {
+                    var v = Number(e.target.value) || 0;
+                    // Kalandan fazlası yazılamaz: fazla faturalama satırı eksiye düşürürdü.
+                    if (v > s.remainingQuantity + 0.00001) { v = s.remainingQuantity; e.target.value = v; }
+                    a.qty = v;
+                    renderLeft(); renderTotals();
+                    document.getElementById('emRightInfo').innerHTML = infoText(l);
+                });
+                if (btn) btn.addEventListener('click', function () {
+                    delete state.src[s.lineId];
+                    renderLeft(); renderRight(); renderTotals();
+                });
+            } else if (btn) {
+                btn.addEventListener('click', function () {
+                    // Varsayılan miktar: kalemin AÇIK kalanı ile satırın kalanının küçüğü
+                    // (kısmi eşleşme kendiliğinden doğru başlar, kullanıcı yine düzenleyebilir).
+                    var acik = Math.max(0, l.quantity - matched(l.lineNumber).qty);
+                    var q = acik > 0 ? Math.min(acik, s.remainingQuantity) : s.remainingQuantity;
+                    state.src[s.lineId] = { eNo: l.lineNumber, qty: q };
+                    renderLeft(); renderRight(); renderTotals();
+                });
+            }
+        });
+
+        var hint = document.createElement('span');
+        hint.className = 'em-muted';
+        hint.textContent = 'Bir kalemi birden çok ' + (state.mode === 'order' ? 'sipariş' : 'irsaliye') +
+                           ' satırıyla eşleştirebilir, miktarı azaltarak kısmi faturalayabilirsiniz.';
+        foot.appendChild(hint);
+    }
+
     // ── Stok seçim modalı ────────────────────────────────────────────────
-    var pickerLine = null;
-    var pickerTimer = null;
+    var pickerLine = null, pickerTimer = null;
 
     function openPicker(line) {
         pickerLine = line;
         document.getElementById('emPickFor').textContent =
             '#' + line.lineNumber + '  ' + (line.itemName || line.itemCode || '');
         var input = document.getElementById('emPickSearch');
-        // Arama kutusu YALNIZ tedarikçi stok koduyla dolar. Uzun hizmet adıyla doldurmak
-        // ("SOL ARKA KAPI BOYASIZ ONARIM İŞÇİLİĞİ") hiçbir zaman eşleşmiyor ve ekran
-        // "sonuç yok" ile açılıyordu; kod yoksa liste boş aramayla açılır ve kullanıcı
-        // ilk kartları görüp göz atarak seçebilir.
+        // Yalnız tedarikçi stok kodu ile doldurulur; uzun hizmet adı hiçbir zaman eşleşmez.
         input.value = line.itemCode || '';
         document.getElementById('emPickBackdrop').style.display = 'flex';
-        input.focus();
-        input.select();
+        input.focus(); input.select();
         searchPicker(input.value);
     }
-
     function closePicker() {
         document.getElementById('emPickBackdrop').style.display = 'none';
         pickerLine = null;
     }
-
     function searchPicker(term) {
         var tb = document.querySelector('#emPickTable tbody');
-        // Boş terim de sorgulanır: sunucu ilk 20 stok kartını döner (boş ekran yerine
-        // göz atılabilir liste).
         tb.innerHTML = '<tr><td colspan="2" class="em-muted" style="padding:16px">Yükleniyor…</td></tr>';
-        fetch('/Purchase/InvoiceItemSearch?term=' + encodeURIComponent(term), { credentials: 'same-origin' })
+        fetch('/Purchase/InvoiceItemSearch?term=' + encodeURIComponent(term || ''), { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(function (res) {
                 var items = (res && res.items) || [];
@@ -414,14 +522,10 @@
                 tb.innerHTML = '';
                 items.forEach(function (it) {
                     var tr = document.createElement('tr');
-                    tr.innerHTML = '<td><span class="em-muted">' + it.code + '</span></td><td>' + it.name + '</td>';
+                    tr.innerHTML = '<td><span class="em-muted">' + esc(it.code) + '</span></td><td>' + esc(it.name) + '</td>';
                     tr.addEventListener('click', function () {
-                        if (pickerLine) {
-                            state.itemPick[pickerLine.lineNumber] = { id: it.id, code: it.code, name: it.name };
-                        }
+                        if (pickerLine) addDirectRow(pickerLine, it);
                         closePicker();
-                        renderDirectMatching();
-                        renderELines();
                     });
                     tb.appendChild(tr);
                 });
@@ -429,6 +533,14 @@
             .catch(function () {
                 tb.innerHTML = '<tr><td colspan="2" class="em-muted" style="padding:16px">Arama yapılamadı.</td></tr>';
             });
+    }
+    function addDirectRow(line, item) {
+        var rows = state.direct[line.lineNumber] || (state.direct[line.lineNumber] = []);
+        if (rows.some(function (r) { return r.itemId === item.id; })) return;   // aynı kart iki kez eklenmez
+        var acik = Math.max(0, line.quantity - matched(line.lineNumber).qty);
+        rows.push({ itemId: item.id, code: item.code, name: item.name, unitId: line.unitId || null,
+                    qty: rows.length === 0 ? line.quantity : acik });
+        renderLeft(); renderRight(); renderTotals();
     }
 
     document.getElementById('emPickSearch').addEventListener('input', function (e) {
@@ -438,111 +550,33 @@
     });
     document.getElementById('emPickCancel').addEventListener('click', closePicker);
     document.getElementById('emPickBackdrop').addEventListener('click', function (e) {
-        if (e.target.id === 'emPickBackdrop') closePicker();   // dışarı tıklayınca kapan
+        if (e.target.id === 'emPickBackdrop') closePicker();
     });
-    document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape' && pickerLine) closePicker();
-    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && pickerLine) closePicker(); });
 
-    // ── Sağ panel: kaynak satırlar ───────────────────────────────────────
-    var activeELine = null;
-    function selectELine(no) { activeELine = no; highlightTarget(); }
-    function highlightTarget() {
-        document.querySelectorAll('#emELines tbody tr').forEach(function (tr) {
-            tr.classList.toggle('is-target', Number(tr.dataset.line) === activeELine);
-        });
-    }
-
-    function renderRight() {
-        var head = document.getElementById('emRightHead');
-        var tb = document.querySelector('#emRight tbody');
-        var title = document.getElementById('emRightTitle');
-        tb.innerHTML = '';
-
-        if (state.mode === 'direct') { renderDirectMatching(); return; }
-
-        title.textContent = state.mode === 'order' ? 'SİPARİŞ SATIRLARI' : 'İRSALİYE SATIRLARI';
-        head.innerHTML =
-            '<tr><th style="width:6.5rem;">Belge</th><th>Ürün</th>' +
-            '<th class="num" style="width:5.5rem;">Miktar</th>' +
-            '<th class="num" style="width:6rem;">Faturalanan</th>' +
-            '<th class="num" style="width:5.5rem;">Kalan</th>' +
-            '<th class="num" style="width:7rem;">Faturalanacak</th>' +
-            '<th style="width:9rem;">E-belge kalemi</th></tr>';
-
-        if (!DATA.sourceLines.length) {
-            tb.innerHTML = '<tr><td colspan="7" class="em-muted" style="padding:18px">' +
-                'Bu cariye ait açık ' + (state.mode === 'order' ? 'sipariş' : 'irsaliye') + ' satırı bulunamadı.</td></tr>';
-            document.getElementById('emRightInfo').textContent = '';
-            return;
-        }
-
-        DATA.sourceLines.forEach(function (s) {
-            var tr = document.createElement('tr');
-            var opts = ['<option value="">— seçilmedi —</option>'].concat(
-                DATA.eDocumentLines.map(function (e) {
-                    var sel = state.assign[s.lineId] === e.lineNumber ? ' selected' : '';
-                    return '<option value="' + e.lineNumber + '"' + sel + '>#' + e.lineNumber + ' ' +
-                           String(e.itemName || e.itemCode || '').slice(0, 24) + '</option>';
-                })).join('');
-            // Kısmi faturalama: "Faturalanacak" kalandan KÜÇÜK girilebilir; artan miktar
-            // satırda açık kalır ve sonraki faturada tekrar aday olur.
-            tr.innerHTML =
-                '<td><span class="em-muted">' + s.documentNumber + '</span><br><span class="em-muted">#' + s.lineNo + '</span></td>' +
-                '<td>' + (s.itemName || '-') + (s.itemCode ? ' <span class="em-muted">(' + s.itemCode + ')</span>' : '') +
-                    '<span id="pb_' + s.lineId + '"></span></td>' +
-                '<td class="num">' + fmt(s.quantity) + ' <span class="em-muted">' + (s.unitCode || '') + '</span></td>' +
-                '<td class="num">' + (s.invoicedQuantity > 0 ? fmt(s.invoicedQuantity) : '—') + '</td>' +
-                '<td class="num">' + fmt(s.remainingQuantity) + '</td>' +
-                '<td class="num"><input type="number" step="0.0001" min="0" max="' + s.remainingQuantity + '" ' +
-                    'class="form-control form-control-sm" style="width:6.5rem;text-align:right" ' +
-                    'id="q_' + s.lineId + '" value="' + s.remainingQuantity + '"></td>' +
-                '<td><select class="form-select form-select-sm" id="a_' + s.lineId + '">' + opts + '</select></td>';
-            tb.appendChild(tr);
-
-            tr.querySelector('#a_' + s.lineId).addEventListener('change', function (e) {
-                var v = e.target.value;
-                if (v) state.assign[s.lineId] = Number(v); else delete state.assign[s.lineId];
-                tr.classList.toggle('is-selected', !!v);
-                renderELines();
-            });
-            tr.querySelector('#q_' + s.lineId).addEventListener('input', function (e) {
-                var v = Number(e.target.value || 0);
-                // Kalandan fazlası yazılamaz: fazla faturalama satırı eksiye düşürürdü.
-                if (v > s.remainingQuantity + 0.00001) { e.target.value = s.remainingQuantity; v = s.remainingQuantity; }
-                var badge = document.getElementById('pb_' + s.lineId);
-                badge.innerHTML = (v > 0 && v < s.remainingQuantity - 0.00001)
-                    ? '<span class="em-badge">kısmi</span>' : '';
-                renderELines();
-            });
-            tr.classList.toggle('is-selected', !!state.assign[s.lineId]);
-        });
-        document.getElementById('emRightInfo').textContent = DATA.sourceLines.length + ' açık satır';
-    }
-
-    // ── Toplamlar ────────────────────────────────────────────────────────
+    // ── Kaydedilecek satırlar ────────────────────────────────────────────
     function buildLines() {
         var out = [];
         if (state.mode === 'direct') {
             DATA.eDocumentLines.forEach(function (l) {
-                var pick = state.itemPick[l.lineNumber];
-                if (!pick) return;
-                out.push({
-                    eDocumentLineNumber: l.lineNumber, sourceLineId: null, itemId: pick.id, unitId: l.unitId || null,
-                    quantity: l.quantity, unitPrice: l.unitPrice, vatRate: l.vatRate || 0,
-                    notes: l.itemName || null
+                (state.direct[l.lineNumber] || []).forEach(function (r) {
+                    if (!(Number(r.qty) > 0)) return;
+                    out.push({
+                        eDocumentLineNumber: l.lineNumber, sourceLineId: null, itemId: r.itemId,
+                        unitId: r.unitId || null, quantity: Number(r.qty), unitPrice: l.unitPrice,
+                        vatRate: l.vatRate || 0, notes: l.itemName || null
+                    });
                 });
             });
         } else {
             DATA.sourceLines.forEach(function (s) {
-                var eNo = state.assign[s.lineId];
-                if (!eNo) return;
-                var el = DATA.eDocumentLines.find(function (x) { return x.lineNumber === eNo; });
-                var q = Number(document.getElementById('q_' + s.lineId)?.value || 0);
-                if (!(q > 0)) return;
+                var a = state.src[s.lineId];
+                if (!a || !(Number(a.qty) > 0)) return;
+                var l = eLine(a.eNo);
                 out.push({
-                    eDocumentLineNumber: eNo, sourceLineId: s.lineId, itemId: s.itemId, unitId: s.unitId,
-                    quantity: q, unitPrice: el ? el.unitPrice : s.unitPrice, vatRate: el && el.vatRate ? el.vatRate : 0,
+                    eDocumentLineNumber: a.eNo, sourceLineId: s.lineId, itemId: s.itemId,
+                    unitId: s.unitId, quantity: Number(a.qty),
+                    unitPrice: l ? l.unitPrice : s.unitPrice, vatRate: (l && l.vatRate) ? l.vatRate : 0,
                     notes: s.documentNumber + ' #' + s.lineNo
                 });
             });
@@ -553,40 +587,35 @@
     function renderTotals() {
         var lines = buildLines();
         var sub = 0, vat = 0;
-        lines.forEach(function (l) {
-            var t = l.quantity * l.unitPrice;
-            sub += t; vat += t * (l.vatRate / 100);
-        });
+        lines.forEach(function (l) { var t = l.quantity * l.unitPrice; sub += t; vat += t * (l.vatRate / 100); });
         document.getElementById('emTotals').textContent =
             lines.length + ' satır · ' + fmt(sub) + ' + KDV ' + fmt(vat) + ' = ' + fmt(sub + vat);
+        state.diffsAccepted = false;   // her değişiklikten sonra fark onayı tazelenir
     }
 
-    // ── Depo listesi (stok girişi gereken modlarda) ──────────────────────
+    // ── Depo listesi ─────────────────────────────────────────────────────
     function loadLocations() {
-        // Mevcut uç: karşılama depo listesi (raf/hücre hariç, depo seviyesi dahil).
         fetch('/Purchase/FulfillmentLocationOptions', { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(function (res) {
-                state.locations = Array.isArray(res) ? res : [];
-                var sel = document.getElementById('emLocation');
-                sel.innerHTML = state.locations.map(function (l) {
-                    return '<option value="' + l.id + '">' + (l.locationName || l.locationCode) + '</option>';
+                var items = Array.isArray(res) ? res : [];
+                document.getElementById('emLocation').innerHTML = items.map(function (l) {
+                    return '<option value="' + l.id + '">' + esc(l.locationName || l.locationCode) + '</option>';
                 }).join('');
             })
-            .catch(function () { /* depo listesi alınamazsa kaydetmede uyarı verilir */ });
+            .catch(function () { /* depo alınamazsa kaydetmede uyarı verilir */ });
     }
 
     function applyModeUi() {
         document.querySelectorAll('.em-mode').forEach(function (b) {
             b.classList.toggle('is-active', b.dataset.mode === state.mode);
         });
-        // İrsaliye bağlantılı faturada stok hareketi ÜRETİLMEZ (irsaliye zaten üretti),
-        // dolayısıyla depo seçimi de gösterilmez.
+        // İrsaliye bağlantılı faturada stok hareketi ÜRETİLMEZ → depo seçimi de yok.
         document.getElementById('emLocationWrap').style.display = state.mode === 'delivery' ? 'none' : '';
     }
 
     function switchMode(mode) {
-        state.mode = mode; state.assign = {};
+        state.mode = mode; state.src = {}; state.direct = {}; state.selected = null;
         applyModeUi();
         fetch('/Purchase/EDocumentInvoiceCandidates?incomingId=' + DATA.incomingDocumentId + '&mode=' + mode,
               { credentials: 'same-origin' })
@@ -600,12 +629,25 @@
 
     function render() {
         applyModeUi();
-        renderRight();
-        renderELines();
+        // İlk kalem seçili gelir: sağ panel boş açılıp "ne yapmalıyım" sorusu doğmasın.
+        if (state.selected === null && DATA.eDocumentLines.length) state.selected = DATA.eDocumentLines[0].lineNumber;
+        // Doğrudan modda önerilen stok kartı varsa ilk satır hazır gelir (kullanıcı değiştirebilir).
+        if (state.mode === 'direct') {
+            DATA.eDocumentLines.forEach(function (l) {
+                if (!state.direct[l.lineNumber] && l.suggestedItemId) {
+                    state.direct[l.lineNumber] = [{
+                        itemId: l.suggestedItemId, code: l.suggestedItemCode, name: l.suggestedItemName,
+                        unitId: l.unitId || null, qty: l.quantity
+                    }];
+                }
+            });
+        }
+        renderLeft(); renderRight(); renderTotals();
+
         if (!DATA.contactId) {
             notice('Bu e-belge bir cariye bağlı değil. Önce e-Fatura listesinden "Cari Eşleştir" ile cariyi seçin.');
         } else if (DATA.existingInvoiceId) {
-            notice('Bu e-belge zaten faturalanmış: <b>' + DATA.existingInvoiceNumber + '</b>', 'info');
+            notice('Bu e-belge zaten faturalanmış: <b>' + esc(DATA.existingInvoiceNumber) + '</b>', 'info');
         } else {
             notice('');
         }
@@ -615,7 +657,6 @@
         var btn = e.target.closest('.em-mode');
         if (btn) switchMode(btn.dataset.mode);
     });
-
     document.getElementById('emBack').addEventListener('click', function () { history.back(); });
 
     document.getElementById('emSave').addEventListener('click', function () {
@@ -623,20 +664,16 @@
         if (!DATA.contactId) { notice('Cari eşleşmeden fatura oluşturulamaz.'); return; }
         if (lines.length === 0) { notice('Faturaya yazılacak satır yok — eşleştirme yapın.'); return; }
 
-        // Fark kontrolü: kullanıcı onaylarsa kayıt yine yapılır (kullanıcı kararı).
+        // Fark kontrolü: kuruş farkı sessiz, üstü kullanıcı onayına sunulur.
         var diffs = [];
-        if (state.mode !== 'direct') {
-            DATA.eDocumentLines.forEach(function (l) {
-                var t = eLineTotals(l.lineNumber);
-                if (t.qty === 0) return;
-                var eAmount = l.lineAmount != null ? l.lineAmount : l.quantity * l.unitPrice;
-                if (Math.abs(t.qty - l.quantity) > 0.0001 || Math.abs(t.amount - eAmount) > 0.01) {
-                    diffs.push('#' + l.lineNumber + ' (miktar ' + fmt(t.qty) + '/' + fmt(l.quantity) +
-                               ', tutar ' + fmt(t.amount) + '/' + fmt(eAmount) + ')');
-                }
-            });
-        }
-        // Fark varsa native confirm YOK (proje kuralı): uyarı şeridinde açık onay istenir.
+        DATA.eDocumentLines.forEach(function (l) {
+            var t = matched(l.lineNumber);
+            if (t.rows === 0) return;
+            if (Math.abs(t.qty - l.quantity) > 0.0001 || Math.abs(t.amount - eAmount(l)) > 0.01) {
+                diffs.push('#' + l.lineNumber + ' (miktar ' + fmt(t.qty) + '/' + fmt(l.quantity) +
+                           ', tutar ' + fmt(t.amount) + '/' + fmt(eAmount(l)) + ')');
+            }
+        });
         if (diffs.length && !state.diffsAccepted) {
             notice('Şu kalemlerde fark var: ' + diffs.join(' · ') +
                    ' <button type="button" class="btn btn-sm btn-danger ms-2" id="emAcceptDiff">Farkı kabul et ve oluştur</button>');
@@ -670,22 +707,22 @@
             .then(function (r) { return r.json(); })
             .then(function (res) {
                 btn.disabled = false;
-                if (!res || !res.success) { notice((res && res.message) || 'Fatura oluşturulamadı.'); return; }
-                var partial = 0;
-                DATA.sourceLines.forEach(function (s) {
-                    if (!state.assign[s.lineId]) return;
-                    var q = Number(document.getElementById('q_' + s.lineId)?.value || 0);
-                    if (q > 0 && q < s.remainingQuantity - 0.00001) partial++;
-                });
-                notice('Fatura oluşturuldu: <b>' + res.documentNumber + '</b> (' + res.lineCount + ' satır' +
+                if (!res || res.success !== true) { notice((res && res.message) || 'Fatura oluşturulamadı.'); return; }
+                var kismi = 0;
+                if (state.mode !== 'direct') {
+                    DATA.sourceLines.forEach(function (s) {
+                        var a = state.src[s.lineId];
+                        if (a && a.qty > 0 && a.qty < s.remainingQuantity - 0.00001) kismi++;
+                    });
+                }
+                notice('Fatura oluşturuldu: <b>' + esc(res.documentNumber) + '</b> (' + res.lineCount + ' satır' +
                        (res.stockAffected ? ', stok girişi yapıldı' : ', stok hareketi üretilmedi — irsaliye zaten girmişti') +
-                       (partial ? ', ' + partial + ' satır KISMİ faturalandı — kalanı açık kaldı' : '') + ')', 'info');
+                       (kismi ? ', ' + kismi + ' satır KISMİ faturalandı — kalanı açık kaldı' : '') + ')', 'info');
                 setTimeout(function () { window.location.href = res.editUrl; }, 900);
             })
             .catch(function () { btn.disabled = false; notice('Fatura oluşturulamadı.'); });
     });
 
-    // ilk kurulum
     document.getElementById('emInvoiceDate').value = (DATA.issueDate || '').substring(0, 10);
     loadLocations();
     render();
