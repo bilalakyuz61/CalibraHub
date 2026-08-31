@@ -128,15 +128,6 @@ public static class MenuDefinition
             {
                 new("approval.pending",   isEn ? "Pending Approvals"       : "Onayda Bekleyenler",   "Inbox",    "/PendingApproval", null,
                     PermissionFormCode: FormCodes.ApprovalPending),
-                new("approval.documents", isEn ? "Electronic Documents"    : "Elektronik Belgeler",  "Files",    null, new List<MenuNode>
-                {
-                    new("approval.einvoice",  isEn ? "e-Invoice"  : "e-Fatura",   "FileText", "/Approval/EInvoice",  null,
-                        PermissionFormCode: FormCodes.EInvoice),
-                    new("approval.earchive",  isEn ? "e-Archive"  : "e-Arşiv",    "Archive",  "/Approval/EArchive",  null,
-                        PermissionFormCode: FormCodes.EArchive),
-                    new("approval.edispatch", isEn ? "e-Dispatch" : "e-İrsaliye", "Truck",    "/Approval/EDispatch", null,
-                        PermissionFormCode: FormCodes.EDispatch),
-                }),
                 new("approval.flows", isEn ? "Approval Flow Definitions" : "Onay Akış Tanımları", "GitBranch", "/ApprovalFlow", null,
                     PermissionFormCode: FormCodes.ApprovalFlows),
             }),
@@ -188,6 +179,22 @@ public static class MenuDefinition
                         PermissionFormCode: FormCodes.PurchaseDelivery),
                     new("logistics.purchaseinvoices", isEn ? "Purchase Invoice" : "Alış Faturası", "ReceiptText", "/Purchase/Invoices", null,
                         PermissionFormCode: FormCodes.PurchaseInvoice),
+                }),
+                // 2026-08-31 (kullanici istegi): Elektronik Belgeler "Onay Islemleri"
+                // altindan LOJISTIK altina tasindi — gelen tedarikci belgeleri (e-fatura/
+                // e-arsiv/e-irsaliye) satin alma akisinin parcasi, onay surecinin degil.
+                // ROTA ve IZIN KODLARI DEGISMEDI (/Approval/E*, FormCodes.E*); dugum
+                // ANAHTARLARI da ayni birakildi (approval.*) — anahtarlar kullanicinin
+                // kayitli kisayollarinda ve acik sekmelerinde saklanir, degistirmek
+                // onlari sessizce kirardi. Yalnizca menudeki YERI degisti.
+                new("approval.documents", isEn ? "Electronic Documents" : "Elektronik Belgeler", "Files", null, new List<MenuNode>
+                {
+                    new("approval.einvoice",  isEn ? "e-Invoice"  : "e-Fatura",   "FileText", "/Approval/EInvoice",  null,
+                        PermissionFormCode: FormCodes.EInvoice),
+                    new("approval.earchive",  isEn ? "e-Archive"  : "e-Arşiv",    "Archive",  "/Approval/EArchive",  null,
+                        PermissionFormCode: FormCodes.EArchive),
+                    new("approval.edispatch", isEn ? "e-Dispatch" : "e-İrsaliye", "Truck",    "/Approval/EDispatch", null,
+                        PermissionFormCode: FormCodes.EDispatch),
                 }),
                 // Depo
                 new("logistics.warehouse", isEn ? "Warehouse" : "Depo", "Warehouse", null, new List<MenuNode>
