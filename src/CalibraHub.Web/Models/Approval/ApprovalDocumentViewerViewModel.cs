@@ -1,4 +1,4 @@
-namespace CalibraHub.Web.Models.Approval;
+﻿namespace CalibraHub.Web.Models.Approval;
 
 public sealed class ApprovalDocumentViewerViewModel
 {
@@ -10,6 +10,15 @@ public sealed class ApprovalDocumentViewerViewModel
     public string? SenderName { get; init; }
     public required string EnvelopeId { get; init; }
     public required string XmlContent { get; init; }
+
+    /// <summary>
+    /// "Geri" hedefi — belgenin TÜRÜNE ait liste ekranı.
+    ///
+    /// <para>Önceden <c>history.back()</c> kullanılıyordu; belge doğrudan bağlantıyla,
+    /// yeni sekmede veya sayfa yenilendikten sonra açıldığında geçmiş boş olduğu için
+    /// düğme ya hiçbir şey yapmıyor ya da uygulamanın dışına çıkıyordu.</para>
+    /// </summary>
+    public required string BackUrl { get; init; }
 
     /// <summary>
     /// Belgede gercek UBL XML var mi. OFFLINE (ERP) kayitlarda YOKTUR — o durumda

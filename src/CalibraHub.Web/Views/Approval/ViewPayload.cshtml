@@ -1,4 +1,4 @@
-@model CalibraHub.Web.Models.Approval.ApprovalDocumentViewerViewModel
+﻿@model CalibraHub.Web.Models.Approval.ApprovalDocumentViewerViewModel
 @{
     var kindLabel = Model.Kind switch {
         "EInvoice"  => "e-Fatura",
@@ -70,19 +70,63 @@
         .xml-tag { color: #569cd6; } .xml-attr { color: #9cdcfe; } .xml-value { color: #ce9178; }
     }
 
-    /* Zoom şeridi KOYU zeminlidir; buton yazısı/ikonu açık olmalı.
-       Bootstrap .btn-dark bu görünümde etkisiz kalıp yazıyı #333 bırakıyordu —
-       kullanıcı "buton isimleri görünmüyor" diye bildirdi. */
-    #zoomToolbar .btn, .inv-sheet-toolbar .btn { color: #fff !important; border-color: #5f6368 !important; }
-    #zoomToolbar .btn:hover, .inv-sheet-toolbar .btn:hover { background: rgba(255,255,255,.12) !important; }
-    #zoomToolbar .btn svg, .inv-sheet-toolbar .btn svg { stroke: #fff; }
+    /* Buton yazısı/ikonu ŞERİDİN zeminine göre. Önceden sabit #fff !important idi
+       (Bootstrap .btn-dark etkisiz kalınca yazı #333 kalıyor, kullanıcı "buton
+       isimleri görünmüyor" demişti). Şerit artık açık temada AÇIK olduğu için sabit
+       beyaz, yazıyı görünmez yapardı — jetona bağlandı. !important korunuyor:
+       Bootstrap'in kendi .btn kuralını yenmesi gerekiyor.
+       svg'de currentColor: ikon yazı rengini kendiliğinden izler. */
+    #zoomToolbar .btn, .inv-sheet-toolbar .btn {
+        color: var(--dv-bar-fg) !important;
+        border-color: var(--dv-bar-line) !important;
+    }
+    #zoomToolbar .btn:hover, .inv-sheet-toolbar .btn:hover {
+        background: var(--dv-bar-hover) !important;
+    }
+    #zoomToolbar .btn svg, .inv-sheet-toolbar .btn svg { stroke: currentColor; }
 
     /* Invoice visual — kağıt (A4) görünümü.
        Kağıt her iki temada da BEYAZ kalır: bu bir belge yüzeyi, arayüz yüzeyi değil
        (GİB görüntüsü sekmesi de aynı şekilde beyaz kağıt gösterir). */
-    #pane-gorsel { background: #525659; }
+    /* Çerçeve jetonları — açık tema varsayılan, koyu tema aşağıda ezer.
+       Kağıdın kendisi (.inv / GİB görüntüsü) bunlara BAĞLI DEĞİLDİR. */
+    .doc-viewer {
+        --dv-stage-bg:  #e9ecef;   /* belgenin arkasındaki zemin */
+        --dv-bar-bg:    #f1f3f5;   /* zum şeridi */
+        --dv-bar-fg:    #212529;   /* şerit metni/ikonları */
+        --dv-bar-line:  rgba(0,0,0,.18);
+        --dv-bar-hover: #e2e6ea;
+    }
+    body.app-theme-dark .doc-viewer {
+        --dv-stage-bg:  #525659;
+        --dv-bar-bg:    #323639;
+        --dv-bar-fg:    #e9ecef;
+        --dv-bar-line:  #5f6368;
+        --dv-bar-hover: #3f4448;
+    }
+
+    /* Zum şeridi butonları — Bootstrap btn-dark sabit koyudur, temaya uymaz. */
+    .dv-btn {
+        background: transparent; color: var(--dv-bar-fg);
+        border: 1px solid var(--dv-bar-line);
+        display: inline-flex; align-items: center;
+    }
+    .dv-btn:hover { background: var(--dv-bar-hover); color: var(--dv-bar-fg); }
+    .dv-sep { width: 1px; height: 20px; margin: 0 4px; background: var(--dv-bar-line); }
+    .dv-zoomlabel {
+        color: var(--dv-bar-fg); font-size: .85rem; font-weight: 500;
+        display: inline-flex; align-items: center; min-width: 45px; justify-content: center;
+    }
+    .dv-stage { background: var(--dv-stage-bg); overflow: hidden; }
+    .dv-bar {
+        flex: 0 0 auto; background: var(--dv-bar-bg); padding: 8px 16px;
+        display: flex; justify-content: center; align-items: center; gap: 8px;
+        box-shadow: 0 2px 6px rgba(0,0,0,.18); z-index: 10;
+    }
+
+    #pane-gorsel { background: var(--dv-stage-bg); }
     .inv-sheet-toolbar {
-        flex: 0 0 auto; background: #323639; padding: 8px 16px;
+        flex: 0 0 auto; background: var(--dv-bar-bg); padding: 8px 16px;
         display: flex; justify-content: center; align-items: center; gap: 8px;
         box-shadow: 0 2px 6px rgba(0,0,0,.25);
     }
@@ -259,7 +303,7 @@
                 XML Indir
             </a>
             }
-            <a href="javascript:history.back()" class="btn btn-secondary btn-sm" id="btnGoBack">Geri</a>
+            <a href="@Model.BackUrl" class="btn btn-secondary btn-sm" id="btnGoBack">Geri</a>
         </div>
     </div>
 
@@ -280,18 +324,18 @@
     @* ---- Resmi Görünüm pane ---- *@
     @if (hasXml)
     {
-    <div class="doc-viewer__tab-pane is-active" id="pane-resmi" style="background-color: #525659; overflow: hidden;">
-        <div id="zoomToolbar" style="flex: 0 0 auto; background: #323639; padding: 8px 16px; display: flex; justify-content: center; align-items: center; gap: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.25); z-index: 10;">
-            <button type="button" class="btn btn-sm btn-dark" id="btnZoomOut" style="border: 1px solid #5f6368;" title="Uzaklaş">
+    <div class="doc-viewer__tab-pane is-active dv-stage" id="pane-resmi">
+        <div id="zoomToolbar" class="dv-bar">
+            <button type="button" class="btn btn-sm dv-btn" id="btnZoomOut" title="Uzaklaş">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </button>
-            <span id="zoomLabel" style="color: #fff; font-size: 0.85rem; font-weight: 500; display: inline-flex; align-items: center; min-width: 45px; justify-content: center;">100%</span>
-            <button type="button" class="btn btn-sm btn-dark" id="btnZoomIn" style="border: 1px solid #5f6368;" title="Yakınlaş">
+            <span id="zoomLabel" class="dv-zoomlabel">100%</span>
+            <button type="button" class="btn btn-sm dv-btn" id="btnZoomIn" title="Yakınlaş">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </button>
-            <div style="width: 1px; background: #5f6368; height: 20px; margin: 0 4px;"></div>
-            <button type="button" class="btn btn-sm btn-dark" id="btnFitWidth" style="border: 1px solid #5f6368;">Genişliğe Sığdır</button>
-            <button type="button" class="btn btn-sm btn-dark" id="btnFitPage" style="border: 1px solid #5f6368;">Sıkıştır (Ekrana Sığdır)</button>
+            <div class="dv-sep"></div>
+            <button type="button" class="btn btn-sm dv-btn" id="btnFitWidth">Genişliğe Sığdır</button>
+            <button type="button" class="btn btn-sm dv-btn" id="btnFitPage">Sıkıştır (Ekrana Sığdır)</button>
         </div>
 
         <div id="iframeWrapper" style="flex: 1 1 auto; overflow: auto; padding: 24px 16px; text-align: center;">
@@ -313,16 +357,16 @@
         else
         {
             <div class="inv-sheet-toolbar">
-                <button type="button" class="btn btn-sm btn-dark" id="btnInvZoomOut" style="border: 1px solid #5f6368;" title="Uzaklaş">
+                <button type="button" class="btn btn-sm dv-btn" id="btnInvZoomOut" title="Uzaklaş">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 </button>
                 <span id="invZoomLabel" style="color:#fff; font-size:.85rem; font-weight:500; min-width:45px; text-align:center;">100%</span>
-                <button type="button" class="btn btn-sm btn-dark" id="btnInvZoomIn" style="border: 1px solid #5f6368;" title="Yakınlaş">
+                <button type="button" class="btn btn-sm dv-btn" id="btnInvZoomIn" title="Yakınlaş">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 </button>
-                <button type="button" class="btn btn-sm btn-dark" id="btnInvFitWidth" style="border: 1px solid #5f6368;">Genişliğe Sığdır</button>
-                <div style="width:1px; background:#5f6368; height:20px; margin:0 4px;"></div>
-                <button type="button" class="btn btn-sm btn-dark" id="btnPrintInvoice" style="border: 1px solid #5f6368;">
+                <button type="button" class="btn btn-sm dv-btn" id="btnInvFitWidth">Genişliğe Sığdır</button>
+                <div class="dv-sep"></div>
+                <button type="button" class="btn btn-sm dv-btn" id="btnPrintInvoice">
                     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:4px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                     Yazdır
                 </button>

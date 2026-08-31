@@ -47,6 +47,8 @@ public sealed class PurchaseController : Controller
     private readonly string _schema;
     private const string FlatColCfgKey = "ui.fc3.col-cfg-flat";
 
+    private readonly IPurchaseInvoiceRepository _purchaseInvoices;
+
     public PurchaseController(
         IDocumentService documentService,
         IDocumentRepository documentRepo,
@@ -60,9 +62,11 @@ public sealed class PurchaseController : Controller
         IUserSettingRepository userSettingRepo,
         IApprovalFlowService approvalFlowService,
         CalibraDatabaseOptions dbOptions,
+        IPurchaseInvoiceRepository purchaseInvoices,
         ILogger<PurchaseController> logger)
     {
         _logger = logger;
+        _purchaseInvoices  = purchaseInvoices;
         _documentService   = documentService;
         _documentRepo      = documentRepo;
         _documentTypeRepo  = documentTypeRepo;
@@ -382,6 +386,90 @@ public sealed class PurchaseController : Controller
         RenderListAsync("alis_irsaliyesi", "PURCHASE_DELIVERY_EDIT", "Alış İrsaliyeleri",
                         "irsaliye", "/Purchase/Edit?type=purchase_delivery", "rose", ct,
                         helpKey: "purchase-deliveries");
+
+    // ── Gelen e-belgeden alış faturası (3 yol) ───────────────────────────────
+
+    /// <summary>
+    /// Eşleştirme ekranındaki stok seçici için hafif arama ucu — ItemDocumentLockSearchItems
+    /// ile AYNI servis metodunu kullanır (yeni bir arama mantığı türetilmez).
+    /// </summary>
+    [HttpGet("/Purchase/InvoiceItemSearch")]
+    public async Task<IActionResult> InvoiceItemSearch(string? term, CancellationToken ct)
+    {
+        try
+        {
+            var (items, _) = await _logisticsService.GetItemsPagedAsync(term, 0, 20, ct);
+            return Json(new { items = items.Select(x => new { id = x.Id, code = x.Code, name = x.Name }) });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[AlışFatura] Stok arama başarısız (term={Term}).", term);
+            return Json(new { items = Array.Empty<object>() });
+        }
+    }
+
+
+    /// <summary>Eşleştirme ekranı. incomingId = gelen e-belge kaydı.</summary>
+    [HttpGet("/Purchase/InvoiceFromEDocument")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseInvoice)]
+    public async Task<IActionResult> InvoiceFromEDocument(int incomingId, string? mode, CancellationToken ct)
+    {
+        var data = await _purchaseInvoices.GetCandidatesAsync(incomingId, mode ?? "direct", ct);
+        if (data is null) return NotFound();
+
+        ViewData["Title"] = $"Faturaya Aktar — {data.DocumentNumber}";
+        ViewData["HelpKey"] = "purchase-invoices";
+        return View("~/Views/Purchase/InvoiceFromEDocument.cshtml", data);
+    }
+
+    /// <summary>Mod değişince ekran bu uçtan tazelenir (sayfa yeniden yüklenmez).</summary>
+    [HttpGet("/Purchase/EDocumentInvoiceCandidates")]
+    public async Task<IActionResult> EDocumentInvoiceCandidates(int incomingId, string? mode, CancellationToken ct)
+    {
+        var data = await _purchaseInvoices.GetCandidatesAsync(incomingId, mode ?? "direct", ct);
+        return data is null
+            ? Json(new { success = false, message = "e-Belge bulunamadı." })
+            : Json(new { success = true, data });
+    }
+
+    [HttpPost("/Purchase/CreateInvoiceFromEDocument")]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseInvoice)]
+    public async Task<IActionResult> CreateInvoiceFromEDocument(
+        [FromBody] CalibraHub.Application.Contracts.CreatePurchaseInvoiceRequest request, CancellationToken ct)
+    {
+        // Gövde bağlanamadıysa jenerik "bir hata oluştu" DEMEZ: sebep açıkça söylenir,
+        // aksi halde istemci hatası sunucu hatası gibi görünür (teşhis kaybı).
+        if (request is null)
+            return Json(new { success = false, message = "İstek gövdesi okunamadı (geçersiz JSON veya eksik alan)." });
+
+        try
+        {
+            var userId = int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var uid)
+                ? uid : (int?)null;
+            var result = await _purchaseInvoices.CreateAsync(request, userId, ct);
+            return Json(new
+            {
+                success = true,
+                documentId = result.DocumentId,
+                documentNumber = result.DocumentNumber,
+                lineCount = result.LineCount,
+                stockAffected = result.StockAffected,
+                editUrl = $"/Purchase/Edit?type=purchase_invoice&id={result.DocumentId}",
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // İş kuralı ihlali — mesaj kullanıcıya AÇIKÇA gösterilir (sessiz jenerik hata yok).
+            return Json(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[AlışFatura] e-Belgeden fatura oluşturulamadı (IncomingId={Id}).",
+                request?.IncomingDocumentId);
+            return Json(new { success = false, message = "Fatura oluşturulurken bir hata oluştu." });
+        }
+    }
 
     [HttpGet("/Purchase/Invoices")]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseInvoice)]

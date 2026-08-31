@@ -1000,6 +1000,9 @@ else
     builder.Services.AddScoped<IUiLabelTranslationRepository, SqlUiLabelTranslationRepository>();
     builder.Services.AddScoped<IScreenLayoutRepository, SqlScreenLayoutRepository>();
     builder.Services.AddScoped<IIncomingDocumentRepository, SqlIncomingDocumentRepository>();
+    // Gelen e-belgeden alış faturası üretimi (doğrudan / sipariş / irsaliye bağlantılı).
+    builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IPurchaseInvoiceRepository,
+                               CalibraHub.Persistence.Repositories.SqlPurchaseInvoiceRepository>();
     // E-Belge CEVRIMDISI kaynagi (ERP). Bugun tek saglayici Netsis; yeni bir ERP
     // eklendiginde burada saglayiciya gore secim yapilir (bkz. EDocumentSourceCatalog).
     builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IOfflineEDocumentSource,

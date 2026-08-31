@@ -1,6 +1,7 @@
 ﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Domain.Enums;
 using CalibraHub.Web.Helpers;
 using CalibraHub.Web.Models.Approval;
 using Microsoft.AspNetCore.Authorization;
@@ -156,6 +157,14 @@ public sealed class ApprovalController : Controller
             SenderName = document.SenderName,
             EnvelopeId = document.EnvelopeId ?? string.Empty,
             XmlContent = xmlContent,
+            // Geri: belgenin TURUNE ait liste. Bilinmeyen turde e-Fatura listesine duser
+            // — bos bir hedefe gondermektense en yakin anlamli ekran.
+            BackUrl = document.Kind switch
+            {
+                DocumentKind.EArchive  => "/Approval/EArchive",
+                DocumentKind.EDispatch => "/Approval/EDispatch",
+                _                      => "/Approval/EInvoice",
+            },
             HasXmlPayload = hasXml,
             Ettn = ExtractDocumentUuid(xmlContent),
             RenderData = renderData

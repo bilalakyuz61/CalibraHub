@@ -2351,6 +2351,36 @@ IF EXISTS (SELECT 1 FROM sys.columns
             Console.Error.WriteLine($"[DB INIT WARN] IncomingDocument iki-kaynak uyarlamasi yapilamadi: {ex.Message}");
         }
 
+        // ── Gelen e-belgeden uretilen ALIS FATURASI (InvoiceDocumentId) ──
+        // Bagli olmasi hem izlenebilirlik hem MUKERRER faturalama korumasi saglar:
+        // ayni e-belge ikinci kez faturalanmak istendiginde uc reddeder.
+        try
+        {
+            await using var addInv = connection.CreateCommand();
+            addInv.CommandText = $@"
+IF COL_LENGTH(N'[{s}].[IncomingDocument]', N'InvoiceDocumentId') IS NULL
+    ALTER TABLE [{s}].[IncomingDocument] ADD [InvoiceDocumentId] INT NULL;
+";
+            await addInv.ExecuteNonQueryAsync(cancellationToken);
+
+            await using var addInvFk = connection.CreateCommand();
+            addInvFk.CommandText = $@"
+IF OBJECT_ID(N'[{s}].[Document]', N'U') IS NOT NULL
+   AND COL_LENGTH(N'[{s}].[IncomingDocument]', N'InvoiceDocumentId') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys
+                    WHERE name = 'FK_IncomingDocument_Invoice'
+                      AND parent_object_id = OBJECT_ID(N'[{s}].[IncomingDocument]'))
+    ALTER TABLE [{s}].[IncomingDocument]
+        ADD CONSTRAINT [FK_IncomingDocument_Invoice]
+            FOREIGN KEY ([InvoiceDocumentId]) REFERENCES [{s}].[Document]([id]);
+";
+            await addInvFk.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[DB INIT WARN] IncomingDocument.InvoiceDocumentId kurulamadi: {ex.Message}");
+        }
+
         // ── Gelen belgenin eslestigi CARI (ContactId) ──
         // Kolon / FK / index AYRI komutlarda calisir: hepsi TEK toplu iste olsaydi
         // SQL Server, ayni iste EKLENEN kolona referans veren CREATE INDEX'i derleme
@@ -20620,9 +20650,9 @@ END;
             var s2 = _schema.Replace("]", "]]");
             await using var m = conn.CreateCommand();
             m.CommandText = $"""
-                IF COL_LENGTH(N'[{s2}].[BpmFormField]', N'LayoutRow') IS NULL
+                IF COL_LENGTH(N'[{s}].[BpmFormField]', N'LayoutRow') IS NULL
                 BEGIN
-                    ALTER TABLE [{s2}].[BpmFormField]
+                    ALTER TABLE [{s}].[BpmFormField]
                         ADD [LayoutRow]     INT NOT NULL CONSTRAINT [DF_BpmFormField_LayoutRow]     DEFAULT 0,
                             [LayoutCol]     INT NOT NULL CONSTRAINT [DF_BpmFormField_LayoutCol]     DEFAULT 0,
                             [LayoutColSpan] INT NOT NULL CONSTRAINT [DF_BpmFormField_LayoutColSpan] DEFAULT 12;

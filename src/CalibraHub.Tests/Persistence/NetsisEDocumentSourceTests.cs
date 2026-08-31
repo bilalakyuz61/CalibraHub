@@ -111,8 +111,14 @@ public sealed class NetsisEDocumentSourceTests
             Assert.Null(d.Header.IntegratorSettingsId);
             Assert.False(string.IsNullOrWhiteSpace(d.Header.EnvelopeId));
             Assert.False(string.IsNullOrWhiteSpace(d.Header.DocumentNumber));
-            // PayloadRaw offline'da UBL DEGIL, kaynak satirin JSON izdusumudur.
-            Assert.StartsWith("{", d.Header.PayloadRaw);
+            // PayloadRaw sozlesmesi (2026-08-30'da genisletildi): zarf UBL'i bulunabiliyorsa
+            // ONU tasir (resmi GIB goruntusu icin), bulunamiyorsa kaynak satirin JSON
+            // izdusumunu. Test ESKIDEN yalniz JSON bekliyordu; o dar beklenti artik
+            // gecerli tasarimi degil, eski bir ani dondurur.
+            // Onemli olan BOS/BOZUK olmamasi:
+            var payload = (d.Header.PayloadRaw ?? "").TrimStart();
+            Assert.True(payload.StartsWith('<') || payload.StartsWith('{'),
+                $"PayloadRaw ne UBL ne JSON: '{payload[..Math.Min(40, payload.Length)]}'");
         });
 
         var invoices = docs.Where(d => d.Header.Kind == DocumentKind.EInvoice).ToList();
@@ -172,7 +178,12 @@ public sealed class NetsisEDocumentSourceTests
             .DefaultIfEmpty(0).Max();
         Assert.True(lastInvoiceKey > 0);
 
-        var second = await src.ReadAsync(ErpConnection(), new DateTime(2000, 1, 1), 5,
+        // Pencere fatura VE irsaliye ile paylasilir. Kucuk bir pencere (5) ikinci
+        // okumada tamamen irsaliyeye denk gelebilir; "fatura gelmedi" bunu ilerleme
+        // hatasi saymak YANLIS olurdu — test veri karisimina bagimli hale gelir.
+        // Pencere buyutuldu ve asil ozellik ayrica dogrulanir.
+        const int window = 40;
+        var second = await src.ReadAsync(ErpConnection(), new DateTime(2000, 1, 1), window,
             new OfflineSourceWatermark(lastInvoiceKey, 0), CancellationToken.None);
 
         var secondInvoiceKeys = second
@@ -180,9 +191,20 @@ public sealed class NetsisEDocumentSourceTests
             .Select(d => int.Parse(d.Header.EnvelopeId.Replace("NETSIS-EFAT-", "")))
             .ToList();
 
-        Assert.NotEmpty(secondInvoiceKeys);
-        // Ikinci tur SADECE isaretten SONRAKI kayitlari getirmeli — ortusme = sonsuz dongu.
+        // ASIL OZELLIK: isaretten ONCEKI hicbir kayit tekrar GELMEMELI.
+        // Orijinal hata buydu — her tur ayni kayitlar donuyor, kuyruk hic ilerlemiyordu.
         Assert.All(secondInvoiceKeys, k => Assert.True(k > lastInvoiceKey,
             $"Ilerleme isareti calismiyor: {k} <= {lastInvoiceKey}"));
+
+        // Bos donmek yalniz KAYNAK TUKENDIYSE mesrudur. Bunu VARSAYMIYORUZ, olcuyoruz:
+        // isaretten sonra gercekten fatura kalmis mi diye genis bir pencereyle bakariz.
+        if (secondInvoiceKeys.Count == 0)
+        {
+            var probe = await src.ReadAsync(ErpConnection(), new DateTime(2000, 1, 1), 500,
+                new OfflineSourceWatermark(lastInvoiceKey, 0), CancellationToken.None);
+            var remaining = probe.Count(d => d.Header.Kind == DocumentKind.EInvoice);
+            Assert.True(remaining == 0,
+                $"Isaretten sonra {remaining} fatura var ama {window}'lik pencerede hicbiri gelmedi.");
+        }
     }
 }
