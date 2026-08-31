@@ -1189,6 +1189,17 @@ catch (Exception ex)
     app.Logger.LogError(ex, "[EndpointCatalog] Yukleme basarisiz — combobox bos kalir.");
 }
 
+// SqlTraceService'i erken olustur ki DiagnosticListener.AllListeners kesif aboneligi ilk HTTP
+// istegini beklemeden aktif olsun (kesif zaten replay-safe'tir, bu sadece garanti amaclidir).
+try
+{
+    app.Services.GetRequiredService<CalibraHub.Application.Diagnostics.SqlTrace.ISqlTraceService>();
+}
+catch (Exception ex)
+{
+    app.Logger.LogError(ex, "[SqlTrace] Servis baslatilamadi — izleme ekrani calismayacak.");
+}
+
 using (var scope = app.Services.CreateScope())
 {
     if (useInMemoryPersistence)
@@ -1526,6 +1537,50 @@ app.UseRouting();
 app.UseSession();  // GateController'in Session'a erisimi icin
 app.UseAuthentication();
 app.UseAuthorization();
+
+// 2026-08-31 (PageComment Seq 1132) Canlı SQL izleme — istek↔SQL eşleştirmesi. UseStaticFiles
+// bu noktadan ÖNCE pipeline'ı sonlandırdığı için statik dosya istekleri buraya hiç ulaşmaz
+// (gürültü azaltan doğal yan etki). /AuditLog/Trace/* uçları KENDİNİ İZLEMESİN diye ayrı
+// yoldan geçer: SqlTraceContext.Excluded set edilir, hem bu istek hem içindeki SQL'ler
+// tampona YAZILMAZ — aksi halde "izlemeyi sorgula → kaydı tamponu büyüt → bir sonraki
+// sorguda o kaydı da göster" sonsuz döngüsü oluşur.
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value ?? string.Empty;
+    if (path.StartsWith("/AuditLog/Trace", StringComparison.OrdinalIgnoreCase))
+    {
+        CalibraHub.Application.Diagnostics.SqlTrace.SqlTraceContext.Current =
+            CalibraHub.Application.Diagnostics.SqlTrace.SqlTraceContext.Excluded;
+        try { await next(); }
+        finally { CalibraHub.Application.Diagnostics.SqlTrace.SqlTraceContext.Current = null; }
+        return;
+    }
+
+    var traceService = context.RequestServices
+        .GetRequiredService<CalibraHub.Application.Diagnostics.SqlTrace.ISqlTraceService>();
+    if (!traceService.IsRunning)
+    {
+        // Kapaliyken: tek maliyet yukaridaki path string karsilastirmasi + bu bool okuma.
+        // Zamanlama/string olusturma/GC hicbir sekilde yapilmaz.
+        await next();
+        return;
+    }
+
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    var requestId = context.TraceIdentifier;
+    CalibraHub.Application.Diagnostics.SqlTrace.SqlTraceContext.Current = requestId;
+    try
+    {
+        await next();
+    }
+    finally
+    {
+        sw.Stop();
+        CalibraHub.Application.Diagnostics.SqlTrace.SqlTraceContext.Current = null;
+        traceService.RecordRequest(requestId, path, context.Request.Method,
+            context.Response.StatusCode, sw.Elapsed.TotalMilliseconds);
+    }
+});
 
 // Gecici parolayla acilan hesap, parolasini degistirene kadar kilitli (2026-08-26).
 // Sirasi: kimlik dogrulamadan SONRA (claim'e ihtiyaci var), endpoint calismadan ONCE.

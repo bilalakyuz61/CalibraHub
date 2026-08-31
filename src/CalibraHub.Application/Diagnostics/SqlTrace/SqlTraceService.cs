@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
@@ -78,6 +78,8 @@ public sealed class SqlTraceService : ISqlTraceService, IDisposable
 
             if (_sqlListener != null)
                 _sqlSubscription = _sqlListener.Subscribe(new SqlEventObserver(this), IsEnabledForCommandEvents);
+            _logger.LogInformation("[SqlTrace] Start: listenerBulundu={Found}, aboneKuruldu={Subscribed}",
+                _sqlListener != null, _sqlSubscription != null);
 
             var cts = new CancellationTokenSource();
             _sessionCts = cts;
@@ -145,6 +147,7 @@ public sealed class SqlTraceService : ISqlTraceService, IDisposable
 
     private void OnSqlListenerDiscovered(DiagnosticListener listener)
     {
+        _logger.LogInformation("[SqlTrace] Listener gorundu: {Name}", listener.Name);
         if (listener.Name != "SqlClientDiagnosticListener") return;
         lock (_stateLock)
         {

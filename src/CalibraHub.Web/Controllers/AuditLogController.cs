@@ -2,6 +2,7 @@
 using CalibraHub.Application.Auditing;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
+using CalibraHub.Application.Diagnostics.SqlTrace;
 using CalibraHub.Application.Security;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Web.Authorization;
@@ -35,15 +36,18 @@ public sealed class AuditLogController : Controller
     private readonly IWidgetService _widgetService;
     private readonly IPermissionService _permService;
     private readonly CalibraHub.Application.Diagnostics.ISystemErrorLogQueryService _errorLogQuery;
+    private readonly ISqlTraceService _sqlTrace;
 
     public AuditLogController(
         IAuditQueryService auditQuery, IWidgetService widgetService, IPermissionService permService,
-        CalibraHub.Application.Diagnostics.ISystemErrorLogQueryService errorLogQuery)
+        CalibraHub.Application.Diagnostics.ISystemErrorLogQueryService errorLogQuery,
+        ISqlTraceService sqlTrace)
     {
         _auditQuery = auditQuery;
         _widgetService = widgetService;
         _permService = permService;
         _errorLogQuery = errorLogQuery;
+        _sqlTrace = sqlTrace;
     }
 
     /// <summary>
@@ -290,6 +294,72 @@ public sealed class AuditLogController : Controller
             },
         });
     }
+
+    // ── Canlı SQL izleme (PageComment Seq 1132) ────────────────────────────────
+    // Erişim: ekranın mevcut yetkisi ile AYNI (AUDIT_LOG:VIEW|VIEW_OWN, Index'in tam-izleme
+    // modundaki manuel kontrolle birebir) — yeni yetki kodu icat edilmedi. Sınıf [Authorize]
+    // taşıdığı için kimliksiz erişim zaten engelli; buradaki kontrol ek olarak yetkisiz
+    // GİRİŞ YAPMIŞ kullanıcıyı da bloklar.
+
+    /// <summary>POST body: { "durationMinutes": 10 }. Süre 1-60 dk aralığına kırpılır (servis içinde).</summary>
+    public sealed record TraceStartRequest(int DurationMinutes);
+
+    [HttpPost("/AuditLog/Trace/Start")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> TraceStart([FromBody] TraceStartRequest? request, CancellationToken ct)
+    {
+        if (!await CanTraceAsync(ct)) return MakeForbidResult();
+        var expiresAt = _sqlTrace.Start(request?.DurationMinutes ?? 10);
+        return Json(new { ok = true, expiresAt = expiresAt.ToString("O") });
+    }
+
+    [HttpPost("/AuditLog/Trace/Stop")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> TraceStop(CancellationToken ct)
+    {
+        if (!await CanTraceAsync(ct)) return MakeForbidResult();
+        _sqlTrace.Stop();
+        return Json(new { ok = true });
+    }
+
+    [HttpGet("/AuditLog/Trace/Events")]
+    public async Task<IActionResult> TraceEvents(long after = 0, CancellationToken ct = default)
+    {
+        if (!await CanTraceAsync(ct)) return MakeForbidResult();
+        var result = _sqlTrace.GetEvents(after);
+        return Json(new
+        {
+            ok = true,
+            running = result.Running,
+            expiresAt = result.ExpiresAtUtc?.ToString("O"),
+            droppedCount = result.DroppedCount,
+            events = result.Events.Select(ToTraceDto),
+        });
+    }
+
+    private async Task<bool> CanTraceAsync(CancellationToken ct)
+    {
+        var (userId, role, departmentId) = GetCurrentUser();
+        return await _permService.CheckAnyAsync(
+            userId, role, departmentId, FormCodes.AuditLog, new[] { "VIEW", "VIEW_OWN" }, ct);
+    }
+
+    private static object ToTraceDto(SqlTraceEvent e) => new
+    {
+        seq = e.Seq,
+        ts = e.TsUtc,
+        kind = e.Kind,
+        requestId = e.RequestId,
+        durationMs = e.DurationMs,
+        text = e.Text,
+        parameters = e.Parameters?.Select(p => new { name = p.Name, value = p.Value }),
+        path = e.Path,
+        method = e.Method,
+        statusCode = e.StatusCode,
+        error = e.Error,
+        database = e.Database,
+        truncated = e.Truncated,
+    };
 
     /// <summary>
     /// Tek kaydın değişiklik geçmişi. <paramref name="widgetFormCode"/> verilirse
