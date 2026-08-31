@@ -746,6 +746,10 @@ public sealed class ApprovalController : Controller
                     color = "indigo",
                     url = Url.Action(nameof(ViewPayload), "Approval", new { id = d.Id }),
                     hideButton = true,   // karta tiklayinca acilir
+                    // Sekme adi ACIKCA belge numarasidir. Varsayilan ad satirin "Kod"
+                    // alanindan gelir; o alan artik CARI KODU oldugu icin eslesmemis
+                    // belgede sekme "—" olarak aciliyordu (kullanici bildirdi).
+                    openInTab = new { asChild = true, title = d.DocumentNumber },
                 },
                 secondaryAction = (object?)null,
                 extraActions = new object[]
@@ -760,7 +764,8 @@ public sealed class ApprovalController : Controller
                     // tek eslestirme ekraninda secilir.
                     new { label = "Faturaya Aktar", icon = "ReceiptText", color = "emerald",
                           type = "navigate",
-                          url = $"/Purchase/InvoiceFromEDocument?incomingId={d.Id}" },
+                          url = $"/Purchase/InvoiceFromEDocument?incomingId={d.Id}",
+                          openInTab = new { asChild = true, title = $"Faturaya Aktar — {d.DocumentNumber}" } },
                 },
             })
             .ToArray();
