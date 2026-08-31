@@ -469,11 +469,11 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
                     ins.CommandText = $"""
                         INSERT INTO {T("StockReservation")}
                             ([OrderDocumentId],[OrderLineId],[ItemId],[LocationId],[CombinationId],[UnitId],
-                             [Quantity],[BaseQuantity],[Status],[SerialId],[PlannedShipDate],[Notes],[IsActive],
+                             [Quantity],[BaseQuantity],[Status],[PlannedShipDate],[Notes],[IsActive],
                              [CreatedById],[Created])
                         VALUES
                             (@OrderDocumentId,@OrderLineId,@ItemId,@LocationId,@CombinationId,@UnitId,
-                             @Quantity,@BaseQuantity,1,@SerialId,@PlannedShipDate,@Notes,1,
+                             @Quantity,@BaseQuantity,1,@PlannedShipDate,@Notes,1,
                              @CreatedById,SYSUTCDATETIME());
                         """;
                     ins.Parameters.AddWithValue("@OrderDocumentId", row.OrderDocumentId);
@@ -484,7 +484,6 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
                     ins.Parameters.Add(new SqlParameter("@UnitId", (object?)row.UnitId ?? DBNull.Value));
                     ins.Parameters.AddWithValue("@Quantity", req.Qty);
                     ins.Parameters.AddWithValue("@BaseQuantity", baseQtyForRequest);
-                    ins.Parameters.Add(new SqlParameter("@SerialId", (object?)req.SerialId ?? DBNull.Value));
                     ins.Parameters.Add(new SqlParameter("@PlannedShipDate", (object?)request!.PlannedShipDate ?? DBNull.Value));
                     ins.Parameters.Add(new SqlParameter("@Notes", (object?)request!.Notes ?? DBNull.Value));
                     ins.Parameters.Add(new SqlParameter("@CreatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));

@@ -53,6 +53,13 @@ public sealed class DocumentLine
     /// </summary>
     public bool? SerialEntryEnabled { get; set; }
 
+    /// <summary>
+    /// Kalem bazinda seri rezervasyonu (uc durumlu, <see cref="SerialEntryEnabled"/> ile ayni mantik).
+    /// ON OLMASI seri girisini GEREKTIRIR — rezerve edilecek seri yoksa anlamsizdir; hiyerarsi
+    /// hem istemcide hem sunucuda uygulanir.
+    /// </summary>
+    public bool? SerialReservationEnabled { get; set; }
+
     public string? Notes { get; set; }
 
     [Description("Not panelinin satir acilislarinda otomatik acik gelmesi icin pinli mi?")]
